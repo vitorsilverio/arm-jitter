@@ -2,7 +2,7 @@ package dev.vitorsilverio.armjitter.decoder;
 
 import dev.vitorsilverio.armjitter.arch.ArmArchitecture;
 import dev.vitorsilverio.armjitter.core.Condition;
-import dev.vitorsilverio.armjitter.ir.IrOp.WideShiftOperation;
+import dev.vitorsilverio.armjitter.ir.MveIntegerOp.WideShiftOperation;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;

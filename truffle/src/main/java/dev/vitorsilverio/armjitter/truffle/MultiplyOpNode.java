@@ -3,6 +3,7 @@ package dev.vitorsilverio.armjitter.truffle;
 import com.oracle.truffle.api.CompilerDirectives.CompilationFinal;
 import dev.vitorsilverio.armjitter.codegen.executor.IrAluExecutor;
 import dev.vitorsilverio.armjitter.core.ArmCore;
+import dev.vitorsilverio.armjitter.ir.IntegerOp;
 import dev.vitorsilverio.armjitter.ir.IrOp;
 
 /// Nó Truffle para a categoria de multiplicação (task A6): `Multiply`, `LongMultiply`,
@@ -24,12 +25,12 @@ final class MultiplyOpNode extends IrOpNode {
     @Override
     boolean doExecute(ArmCore core, int blockEndPc) {
         switch (op) {
-            case IrOp.Multiply multiply -> executor.executeMultiply(core, multiply);
-            case IrOp.LongMultiply longMultiply -> executor.executeLongMultiply(core, longMultiply);
-            case IrOp.DspMultiply dspMultiply -> executor.executeDspMultiply(core, dspMultiply);
-            case IrOp.ParallelAlu parallelAlu -> executor.executeParallelAlu(core, parallelAlu);
-            case IrOp.DspDualMultiply dspDualMultiply -> executor.executeDspDualMultiply(core, dspDualMultiply);
-            case IrOp.DspTopWordMultiply dspTopWordMultiply -> executor.executeDspTopWordMultiply(core, dspTopWordMultiply);
+            case IntegerOp.Multiply multiply -> executor.executeMultiply(core, multiply);
+            case IntegerOp.LongMultiply longMultiply -> executor.executeLongMultiply(core, longMultiply);
+            case IntegerOp.DspMultiply dspMultiply -> executor.executeDspMultiply(core, dspMultiply);
+            case IntegerOp.ParallelAlu parallelAlu -> executor.executeParallelAlu(core, parallelAlu);
+            case IntegerOp.DspDualMultiply dspDualMultiply -> executor.executeDspDualMultiply(core, dspDualMultiply);
+            case IntegerOp.DspTopWordMultiply dspTopWordMultiply -> executor.executeDspTopWordMultiply(core, dspTopWordMultiply);
             default -> throw new IllegalStateException("MultiplyOpNode não cobre: " + op);
         }
         return false;

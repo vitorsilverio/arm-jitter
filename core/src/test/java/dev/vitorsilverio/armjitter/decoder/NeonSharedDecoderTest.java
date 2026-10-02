@@ -7,6 +7,7 @@ import dev.vitorsilverio.armjitter.codegen.executor.IrBlockExecutor;
 import dev.vitorsilverio.armjitter.core.ArmCore;
 import dev.vitorsilverio.armjitter.ir.IrBlock;
 import dev.vitorsilverio.armjitter.ir.IrOp;
+import dev.vitorsilverio.armjitter.ir.NeonFpOp;
 import dev.vitorsilverio.armjitter.ir.StandardIrBuilder;
 import dev.vitorsilverio.armjitter.support.TestAddressSpace;
 import dev.vitorsilverio.armjitter.swi.SwiDispatcher;
@@ -18,7 +19,7 @@ import java.util.List;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
 /// `neon-shared.decode` — `VCMLA`/`VCADD`/`VCMLA_scalar` (task B13.17, `FEAT_FCMA`) → {@link
-/// IrOp.NeonComplex}/{@link IrOp.NeonComplexByElement} → execução pelo núcleo vetorial
+/// NeonFpOp.Complex}/{@link NeonFpOp.ComplexByElement} → execução pelo núcleo vetorial
 /// COMPARTILHADO ({@code AdvSimdLanes.fpComplexAdd}/`fpComplexMultiplyAccumulate`/
 /// `fpComplexMultiplyAccumulateByElement}).
 ///
@@ -190,29 +191,29 @@ class NeonSharedDecoderTest {
 
     @Test
     void vcmlaVectorDecodesRotationAndSize() {
-        assertEquals(new IrOp.NeonComplex(true, 0, true, 2, 0, 2, 4), liftedOf(vcmlaVector(0, 1, true, 0, 2, 4)));
-        assertEquals(new IrOp.NeonComplex(true, 90, true, 2, 0, 2, 4), liftedOf(vcmlaVector(1, 1, true, 0, 2, 4)));
-        assertEquals(new IrOp.NeonComplex(true, 180, true, 2, 0, 2, 4), liftedOf(vcmlaVector(2, 1, true, 0, 2, 4)));
-        assertEquals(new IrOp.NeonComplex(true, 270, true, 2, 0, 2, 4), liftedOf(vcmlaVector(3, 1, true, 0, 2, 4)));
-        assertEquals(new IrOp.NeonComplex(true, 0, false, 1, 0, 1, 2), liftedOf(vcmlaVector(0, 0, false, 0, 1, 2)));
+        assertEquals(new NeonFpOp.Complex(true, 0, true, 2, 0, 2, 4), liftedOf(vcmlaVector(0, 1, true, 0, 2, 4)));
+        assertEquals(new NeonFpOp.Complex(true, 90, true, 2, 0, 2, 4), liftedOf(vcmlaVector(1, 1, true, 0, 2, 4)));
+        assertEquals(new NeonFpOp.Complex(true, 180, true, 2, 0, 2, 4), liftedOf(vcmlaVector(2, 1, true, 0, 2, 4)));
+        assertEquals(new NeonFpOp.Complex(true, 270, true, 2, 0, 2, 4), liftedOf(vcmlaVector(3, 1, true, 0, 2, 4)));
+        assertEquals(new NeonFpOp.Complex(true, 0, false, 1, 0, 1, 2), liftedOf(vcmlaVector(0, 0, false, 0, 1, 2)));
     }
 
     @Test
     void vcaddVectorDecodesRotationAndSize() {
-        assertEquals(new IrOp.NeonComplex(false, 90, true, 2, 0, 2, 4), liftedOf(vcaddVector(0, 1, true, 0, 2, 4)));
-        assertEquals(new IrOp.NeonComplex(false, 270, true, 2, 0, 2, 4), liftedOf(vcaddVector(1, 1, true, 0, 2, 4)));
-        assertEquals(new IrOp.NeonComplex(false, 90, false, 1, 0, 1, 2), liftedOf(vcaddVector(0, 0, false, 0, 1, 2)));
+        assertEquals(new NeonFpOp.Complex(false, 90, true, 2, 0, 2, 4), liftedOf(vcaddVector(0, 1, true, 0, 2, 4)));
+        assertEquals(new NeonFpOp.Complex(false, 270, true, 2, 0, 2, 4), liftedOf(vcaddVector(1, 1, true, 0, 2, 4)));
+        assertEquals(new NeonFpOp.Complex(false, 90, false, 1, 0, 1, 2), liftedOf(vcaddVector(0, 0, false, 0, 1, 2)));
     }
 
     @Test
     void vcmlaScalarDecodesIndexAndSize() {
         // F32: índice sempre 0 (um complexo simples ocupa o D inteiro).
-        assertEquals(new IrOp.NeonComplexByElement(0, true, 2, 0, 2, 4, 0),
+        assertEquals(new NeonFpOp.ComplexByElement(0, true, 2, 0, 2, 4, 0),
                 liftedOf(vcmlaScalarSingle(0, true, 0, 2, 4)));
         // F16: índice extraído do bit5, vm é nibble direto (sem M-ext).
-        assertEquals(new IrOp.NeonComplexByElement(90, false, 1, 0, 1, 2, 1),
+        assertEquals(new NeonFpOp.ComplexByElement(90, false, 1, 0, 1, 2, 1),
                 liftedOf(vcmlaScalarHalf(1, false, 0, 1, 2, 1)));
-        assertEquals(new IrOp.NeonComplexByElement(0, false, 1, 0, 1, 9, 0),
+        assertEquals(new NeonFpOp.ComplexByElement(0, false, 1, 0, 1, 9, 0),
                 liftedOf(vcmlaScalarHalf(0, false, 0, 1, 9, 0)));
     }
 

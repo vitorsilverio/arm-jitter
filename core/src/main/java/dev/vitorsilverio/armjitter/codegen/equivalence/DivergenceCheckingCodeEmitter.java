@@ -7,6 +7,7 @@ import dev.vitorsilverio.armjitter.core.ArmCore;
 import dev.vitorsilverio.armjitter.core.MProfileExceptionModel;
 import dev.vitorsilverio.armjitter.ir.IrBlock;
 import dev.vitorsilverio.armjitter.ir.IrOp;
+import dev.vitorsilverio.armjitter.ir.SystemOp;
 import dev.vitorsilverio.armjitter.jit.CompiledBlock;
 import dev.vitorsilverio.armjitter.memory.AddressSpace;
 import dev.vitorsilverio.armjitter.memory.MemoryAccessType;
@@ -33,8 +34,8 @@ import java.util.Objects;
 /// (inclusive seus próprios stores via espelho) sem poluir o load do oráculo, que então roda
 /// no core real pristino e dirige a trajetória. Usa {@link ArmCore#saveState}/{@link ArmCore#loadState}.
 ///
-/// Blocos com {@link IrOp.Swi}, {@link IrOp.Coprocessor}, {@link IrOp.CoprocessorDouble} (F3) ou
-/// {@link IrOp.Breakpoint} (B7.5) são
+/// Blocos com {@link SystemOp.Swi}, {@link SystemOp.Coprocessor}, {@link SystemOp.CoprocessorDouble} (F3) ou
+/// {@link SystemOp.Breakpoint} (B7.5) são
 /// executados só pelo oráculo (sem comparação): dependem de colaboradores do host (SWI
 /// dispatcher, CP15, BKPT dispatcher) que o core scratch não replica; suas emissões ASM
 /// espelham o interpretador.
@@ -138,8 +139,8 @@ public final class DivergenceCheckingCodeEmitter implements CodeEmitter {
 
     private static boolean usesHostCollaborators(IrBlock block) {
         for (IrOp op : block.operations()) {
-            if (op instanceof IrOp.Swi || op instanceof IrOp.Coprocessor || op instanceof IrOp.CoprocessorDouble
-                    || op instanceof IrOp.Breakpoint) {
+            if (op instanceof SystemOp.Swi || op instanceof SystemOp.Coprocessor || op instanceof SystemOp.CoprocessorDouble
+                    || op instanceof SystemOp.Breakpoint) {
                 return true;
             }
         }

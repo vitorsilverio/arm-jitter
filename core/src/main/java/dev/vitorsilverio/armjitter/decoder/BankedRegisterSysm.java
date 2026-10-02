@@ -7,7 +7,7 @@ import dev.vitorsilverio.armjitter.core.CpuMode;
 /// modo/registrador alvo, e empacota o resultado num único `int` guardado em
 /// `DecodedInstruction#immediate()` — layout compartilhado entre {@link ArmDecoder} (A32) e
 /// {@link Thumb2MiscDecoder} (T32) na hora de decodificar, e desempacotado por
-/// `dev.vitorsilverio.armjitter.ir.StandardIrBuilder` na hora de montar `IrOp.MrsBank`/`MsrBank`.
+/// `dev.vitorsilverio.armjitter.ir.StandardIrBuilder` na hora de montar `SystemOp.MrsBank`/`MsrBank`.
 ///
 /// Tabela conferida contra `target/arm/tcg/translate.c` real do QEMU
 /// (`msr_banked_access_decode`) — ver `b9.8-plano-hyp-monitor-32bit.md` para a tabela completa e a

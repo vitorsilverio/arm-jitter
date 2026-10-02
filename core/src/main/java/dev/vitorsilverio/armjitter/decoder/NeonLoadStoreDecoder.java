@@ -4,7 +4,7 @@ import dev.vitorsilverio.armjitter.arch.ArmArchitecture;
 import dev.vitorsilverio.armjitter.arch.ArmFeature;
 import dev.vitorsilverio.armjitter.arch.DecoderExtension;
 import dev.vitorsilverio.armjitter.core.Condition;
-import dev.vitorsilverio.armjitter.ir.IrOp;
+import dev.vitorsilverio.armjitter.ir.NeonMoveOp;
 
 /// Decodifica o espaço NEON/Advanced SIMD de LOAD/STORE do encoding A32 (task B13.3) — as 5 linhas
 /// de `target/isa-decode/neon-ls.decode`: `VLDST_multiple` (estruturas múltiplas), `VLD_all_lanes`
@@ -118,7 +118,7 @@ public final class NeonLoadStoreDecoder implements DecoderExtension {
             return undefined(address, raw, condition);
         }
         return DecodedInstruction.lifted(address, raw, InstructionSet.ARM, Condition.AL,
-                new IrOp.NeonLoadStoreMultiple(load, vd, rn, rm, esz, nregs, interleave, spacing));
+                new NeonMoveOp.LoadStoreMultiple(load, vd, rn, rm, esz, nregs, interleave, spacing));
     }
 
     // ── VLDST_single: 1111 0100 1 D l 0 rn:4 vd:4 <size marker> n:2 <reg_idx/stride/align> rm:4 ──
@@ -183,7 +183,7 @@ public final class NeonLoadStoreDecoder implements DecoderExtension {
             return undefined(address, raw, condition);
         }
         return DecodedInstruction.lifted(address, raw, InstructionSet.ARM, Condition.AL,
-                new IrOp.NeonLoadStoreSingle(load, vd, rn, rm, esz, selem, stride, index));
+                new NeonMoveOp.LoadStoreSingle(load, vd, rn, rm, esz, selem, stride, index));
     }
 
     // ── VLD_all_lanes: 1111 0100 1 D 1 0 rn:4 vd:4 11 n:2 size:2 t a rm:4 ──
@@ -230,7 +230,7 @@ public final class NeonLoadStoreDecoder implements DecoderExtension {
             return undefined(address, raw, condition);
         }
         return DecodedInstruction.lifted(address, raw, InstructionSet.ARM, Condition.AL,
-                new IrOp.NeonLoadAllLanes(vd, rn, rm, esz, selem, stride, quad));
+                new NeonMoveOp.LoadAllLanes(vd, rn, rm, esz, selem, stride, quad));
     }
 
     private static int doubleRegister(int raw) {

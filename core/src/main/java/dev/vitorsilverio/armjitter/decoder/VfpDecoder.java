@@ -6,6 +6,7 @@ import dev.vitorsilverio.armjitter.arch.ArmFeature;
 import dev.vitorsilverio.armjitter.arch.DecoderExtension;
 import dev.vitorsilverio.armjitter.core.Condition;
 import dev.vitorsilverio.armjitter.ir.IrOp;
+import dev.vitorsilverio.armjitter.ir.VfpOp;
 
 /// Decodifica o espaço de coprocessador VFP (CP10 single-precision / CP11 double-precision) do
 /// encoding ARM (B3.5). Oráculo: QEMU `target/arm/tcg/vfp.decode` — cada bloco de bits abaixo cita
@@ -34,7 +35,7 @@ import dev.vitorsilverio.armjitter.ir.IrOp;
 /// Ordem de registro: esta classe precisa vir ANTES de {@link CoprocessorDecoder} na lista de
 /// extensões — `VMOV_single`/`VMSR_VMRS` e `VMOV_64_dp` usam o MESMO formato de bits (`bit4=1`) que
 /// `MRC`/`MRRC` genérico; sem a ordem correta, `CoprocessorDecoder` capturaria essas instruções
-/// primeiro e as decodificaria (erradamente) como `IrOp.Coprocessor` para o `CoprocessorBus`.
+/// primeiro e as decodificaria (erradamente) como `SystemOp.Coprocessor` para o `CoprocessorBus`.
 public final class VfpDecoder implements DecoderExtension {
     private final ArmArchitecture architecture;
 
@@ -228,7 +229,7 @@ public final class VfpDecoder implements DecoderExtension {
 
     /// `VMAXNM_sp`/`VMINNM_sp`/`VMAXNM_dp`/`VMINNM_dp` — `bit6` seleciona MAX(`0`)/MIN(`1`), mesmo
     /// layout de vn/vd/vm de {@link #decodeVsel}. Reusa {@link InstructionKind#VFP_ALU} (nenhum
-    /// `Kind` novo) delegando a {@link IrOp.VfpOperation#MAXNM}/{@link IrOp.VfpOperation#MINNM}.
+    /// `Kind` novo) delegando a {@link VfpOp.VfpOperation#MAXNM}/{@link VfpOp.VfpOperation#MINNM}.
     private DecodedInstruction decodeMaxNmMinNm(int raw, int address, Condition condition, boolean doublePrecision) {
         int vn = registerNumber(raw, VN_NIBBLE_SHIFT, VN_EXTENSION_BIT, doublePrecision);
         int vd = vd(raw, doublePrecision);
@@ -238,7 +239,7 @@ public final class VfpDecoder implements DecoderExtension {
             return null;
         }
         boolean isMin = (raw & BIT6_MASK) != 0;
-        return vfpAlu(isMin ? IrOp.VfpOperation.MINNM : IrOp.VfpOperation.MAXNM, doublePrecision, vd, vn, vm,
+        return vfpAlu(isMin ? VfpOp.VfpOperation.MINNM : VfpOp.VfpOperation.MAXNM, doublePrecision, vd, vn, vm,
                 address, raw, condition);
     }
 
@@ -358,7 +359,7 @@ public final class VfpDecoder implements DecoderExtension {
         int vd = vd(raw, false);
         int vm = vm(raw, false);
         boolean isMin = (raw & BIT6_MASK) != 0;
-        return vfpAluHalf(isMin ? IrOp.VfpOperation.MINNM : IrOp.VfpOperation.MAXNM, vd, vn, vm, address, raw, condition);
+        return vfpAluHalf(isMin ? VfpOp.VfpOperation.MINNM : VfpOp.VfpOperation.MAXNM, vd, vn, vm, address, raw, condition);
     }
 
     /// `VRINT_hp`/`VCVT_hp` — espelho de {@link #decodeRoundOrConvert} sem `doublePrecision`
@@ -441,8 +442,8 @@ public final class VfpDecoder implements DecoderExtension {
 
     /// B14.6b: espelho de {@link #decodeDataProcessing} em meia precisão — mesma extração de
     /// `op1`, mas todo registrador é `%vX_sp` (nunca `%vX_dp`: meia precisão SEMPRE mora num `S`
-    /// inteiro, nunca combina num `D`) e o resultado é {@link IrOp.VfpAluHalf}, não
-    /// {@link IrOp.VfpAlu} (Armadilha 2 de B14.6).
+    /// inteiro, nunca combina num `D`) e o resultado é {@link VfpOp.AluHalf}, não
+    /// {@link VfpOp.Alu} (Armadilha 2 de B14.6).
     private DecodedInstruction decodeHalfPrecisionDataProcessing(int raw, int address, Condition condition) {
         int op1 = ((raw & BIT23_MASK) != 0 ? 0b100 : 0)
                 | ((raw & BIT21_MASK) != 0 ? 0b010 : 0)
@@ -455,16 +456,16 @@ public final class VfpDecoder implements DecoderExtension {
         int vm = vm(raw, false);
         boolean bit6 = (raw & BIT6_MASK) != 0;
         return switch (op1) {
-            case 0b000 -> vfpAluHalf(bit6 ? IrOp.VfpOperation.MLS : IrOp.VfpOperation.MLA, vd, vn, vm, address, raw, condition);
-            case 0b010 -> vfpAluHalf(bit6 ? IrOp.VfpOperation.NMUL : IrOp.VfpOperation.MUL, vd, vn, vm, address, raw, condition);
-            case 0b011 -> vfpAluHalf(bit6 ? IrOp.VfpOperation.SUB : IrOp.VfpOperation.ADD, vd, vn, vm, address, raw, condition);
-            case 0b100 -> bit6 ? null : vfpAluHalf(IrOp.VfpOperation.DIV, vd, vn, vm, address, raw, condition);
+            case 0b000 -> vfpAluHalf(bit6 ? VfpOp.VfpOperation.MLS : VfpOp.VfpOperation.MLA, vd, vn, vm, address, raw, condition);
+            case 0b010 -> vfpAluHalf(bit6 ? VfpOp.VfpOperation.NMUL : VfpOp.VfpOperation.MUL, vd, vn, vm, address, raw, condition);
+            case 0b011 -> vfpAluHalf(bit6 ? VfpOp.VfpOperation.SUB : VfpOp.VfpOperation.ADD, vd, vn, vm, address, raw, condition);
+            case 0b100 -> bit6 ? null : vfpAluHalf(VfpOp.VfpOperation.DIV, vd, vn, vm, address, raw, condition);
             // VNMLS_hp (bit6=0) / VNMLA_hp (bit6=1) — mesma ordem invertida de `decodeDataProcessing`.
-            case 0b001 -> vfpAluHalf(bit6 ? IrOp.VfpOperation.NMLA : IrOp.VfpOperation.NMLS, vd, vn, vm, address, raw, condition);
+            case 0b001 -> vfpAluHalf(bit6 ? VfpOp.VfpOperation.NMLA : VfpOp.VfpOperation.NMLS, vd, vn, vm, address, raw, condition);
             case 0b110 -> !architecture.has(ArmFeature.VFP_FUSED_MULTIPLY_ACCUMULATE) ? null
-                    : vfpAluHalf(bit6 ? IrOp.VfpOperation.FMS : IrOp.VfpOperation.FMA, vd, vn, vm, address, raw, condition);
+                    : vfpAluHalf(bit6 ? VfpOp.VfpOperation.FMS : VfpOp.VfpOperation.FMA, vd, vn, vm, address, raw, condition);
             case 0b101 -> !architecture.has(ArmFeature.VFP_FUSED_MULTIPLY_ACCUMULATE) ? null
-                    : vfpAluHalf(bit6 ? IrOp.VfpOperation.FNMA : IrOp.VfpOperation.FNMS, vd, vn, vm, address, raw, condition);
+                    : vfpAluHalf(bit6 ? VfpOp.VfpOperation.FNMA : VfpOp.VfpOperation.FNMS, vd, vn, vm, address, raw, condition);
             default -> null;
         };
     }
@@ -484,8 +485,8 @@ public final class VfpDecoder implements DecoderExtension {
         boolean bit7 = (raw & BIT7_MASK) != 0;
         int vm = vm(raw, false);
         return switch (opc2) {
-            case 0x0 -> !bit7 ? null : vfpAluHalf(IrOp.VfpOperation.ABS, vd, -1, vm, address, raw, condition);
-            case 0x1 -> vfpAluHalf(bit7 ? IrOp.VfpOperation.SQRT : IrOp.VfpOperation.NEG, vd, -1, vm, address, raw, condition);
+            case 0x0 -> !bit7 ? null : vfpAluHalf(VfpOp.VfpOperation.ABS, vd, -1, vm, address, raw, condition);
+            case 0x1 -> vfpAluHalf(bit7 ? VfpOp.VfpOperation.SQRT : VfpOp.VfpOperation.NEG, vd, -1, vm, address, raw, condition);
             case 0x4, 0x5 -> {
                 boolean compareWithZero = opc2 == 0x5;
                 boolean signalOnQuietNaN = bit7;
@@ -493,7 +494,7 @@ public final class VfpDecoder implements DecoderExtension {
                         vd, -1, compareWithZero ? -1 : vm, (compareWithZero ? 1 : 0) | (signalOnQuietNaN ? 2 : 0), false, false, false);
             }
             // VCVT_int_hp: inteiro de 32 bits (`%vm_sp`, banco S comum) -> meia precisão; bit7=sinal.
-            case 0x8 -> vfpConvert(bit7 ? IrOp.VfpConversion.S32_TO_F16 : IrOp.VfpConversion.U32_TO_F16, vd, vm, address, raw, condition);
+            case 0x8 -> vfpConvert(bit7 ? VfpOp.VfpConversion.S32_TO_F16 : VfpOp.VfpConversion.U32_TO_F16, vd, vm, address, raw, condition);
             // VCVT_hp_int: meia precisão -> inteiro de 32 bits; opc2 bit0=sinal. `bit7=rz=1` é o
             // `VCVT` (trunca); `rz=0` é `VCVTR_hp` (B22.7), que arredonda pelo `FPSCR.RMode`.
             case 0xC, 0xD -> {
@@ -503,14 +504,14 @@ public final class VfpDecoder implements DecoderExtension {
                     yield new DecodedInstruction(address, raw, InstructionSet.ARM, condition,
                             InstructionKind.VFP_CONVERT_ROUNDED_HALF, vd, -1, vm, packed, false, false, false);
                 }
-                yield vfpConvert(signedConvert ? IrOp.VfpConversion.F16_TO_S32 : IrOp.VfpConversion.F16_TO_U32,
+                yield vfpConvert(signedConvert ? VfpOp.VfpConversion.F16_TO_S32 : VfpOp.VfpConversion.F16_TO_U32,
                         vd, vm, address, raw, condition);
             }
             // VCVTB/VCVTT.BF16.F32 (`FEAT_BF16`, B22.7): `sz=1001` no espaço `_hp`, `bit7=t`. Só chega
             // aqui sob `FP16_ARITHMETIC` OU `BFLOAT16` (ver `isBf16ConvertEncoding` em `tryDecode`);
             // sem `BFLOAT16` cai em `null` → `UNIMPLEMENTED` (G8).
             case 0x3 -> !architecture.has(ArmFeature.BFLOAT16) ? null
-                    : halfPrecisionConvert(IrOp.HalfPrecisionConversion.F32_TO_BF16, bit7, vd, vm(raw, false),
+                    : halfPrecisionConvert(VfpOp.HalfPrecisionConversion.F32_TO_BF16, bit7, vd, vm(raw, false),
                             address, raw, condition);
             // VRINTR_hp (bit7=0) / VRINTZ_hp (bit7=1) e VRINTX_hp (opc2=0x7, bit7=0) (B22.7).
             case 0x6 -> vrintHalf(bit7 ? AdvSimdLanes.RoundingMode.TOWARD_ZERO.ordinal()
@@ -543,7 +544,7 @@ public final class VfpDecoder implements DecoderExtension {
     }
 
     /// `VCVTB`/`VCVTT` (B22.7): `t`=`top` (metade alta do `S` envolvido).
-    private static DecodedInstruction halfPrecisionConvert(IrOp.HalfPrecisionConversion conversion, boolean top,
+    private static DecodedInstruction halfPrecisionConvert(VfpOp.HalfPrecisionConversion conversion, boolean top,
             int vd, int vm, int address, int raw, Condition condition) {
         return new DecodedInstruction(address, raw, InstructionSet.ARM, condition,
                 InstructionKind.VFP_CONVERT_HALF_PRECISION, vd, -1, vm,
@@ -597,7 +598,7 @@ public final class VfpDecoder implements DecoderExtension {
     /// `Sn[31:16]` inalterado. Reaproveita {@link InstructionKind#VFP_CORE_TRANSFER} (mesma
     /// transferência crua de `VMOV_single`, só que 16 bits) marcando `immediate=1` — o
     /// {@link dev.vitorsilverio.armjitter.ir.StandardIrBuilder} traduz isso para
-    /// {@link dev.vitorsilverio.armjitter.ir.IrOp.VfpCoreTransfer#halfWidth}. Sem
+    /// {@link dev.vitorsilverio.armjitter.ir.VfpOp.CoreTransfer#halfWidth}. Sem
     /// {@link ArmFeature#HALF_PRECISION_FP} → `UNIMPLEMENTED` explícito.
     private DecodedInstruction decodeVmovHalf(int raw, int address, Condition condition) {
         // B22.10: `FEAT_FP16` (`FP16_ARITHMETIC`, ARMv8.2-A) implica a transferência de 16 bits, como já
@@ -658,22 +659,22 @@ public final class VfpDecoder implements DecoderExtension {
         boolean bit6 = (raw & BIT6_MASK) != 0;
         return switch (op1) {
             // VMLA_{sp,dp} (bit6=0) / VMLS_{sp,dp} (bit6=1).
-            case 0b000 -> vfpAlu(bit6 ? IrOp.VfpOperation.MLS : IrOp.VfpOperation.MLA,
+            case 0b000 -> vfpAlu(bit6 ? VfpOp.VfpOperation.MLS : VfpOp.VfpOperation.MLA,
                     doublePrecision, vd, vn, vm, address, raw, condition);
             // VMUL_{sp,dp} (bit6=0) / VNMUL_{sp,dp} (bit6=1).
-            case 0b010 -> vfpAlu(bit6 ? IrOp.VfpOperation.NMUL : IrOp.VfpOperation.MUL,
+            case 0b010 -> vfpAlu(bit6 ? VfpOp.VfpOperation.NMUL : VfpOp.VfpOperation.MUL,
                     doublePrecision, vd, vn, vm, address, raw, condition);
             // VADD_{sp,dp} (bit6=0) / VSUB_{sp,dp} (bit6=1).
-            case 0b011 -> vfpAlu(bit6 ? IrOp.VfpOperation.SUB : IrOp.VfpOperation.ADD,
+            case 0b011 -> vfpAlu(bit6 ? VfpOp.VfpOperation.SUB : VfpOp.VfpOperation.ADD,
                     doublePrecision, vd, vn, vm, address, raw, condition);
             // VDIV_{sp,dp}: sem forma "bit6=1" (fora de escopo se bit6 estiver setado).
             case 0b100 -> bit6 ? null
-                    : vfpAlu(IrOp.VfpOperation.DIV, doublePrecision, vd, vn, vm, address, raw, condition);
+                    : vfpAlu(VfpOp.VfpOperation.DIV, doublePrecision, vd, vn, vm, address, raw, condition);
             // VNMLS_{sp,dp} (bit6=0) / VNMLA_{sp,dp} (bit6=1) — ordem INVERTIDA em relação a
             // VMLA/VMLS (ARM ARM A8.8.337: `op` seleciona VNMLA quando 1). Conferido contra
             // `vfp.decode` do QEMU e contra o encoding real emitido pelo gcc do devkitARM
             // (`ee171b0c` = `vnmls.f64 d1, d7, d12`, achado no `textured_cube` dos exemplos 3DS).
-            case 0b001 -> vfpAlu(bit6 ? IrOp.VfpOperation.NMLA : IrOp.VfpOperation.NMLS,
+            case 0b001 -> vfpAlu(bit6 ? VfpOp.VfpOperation.NMLA : VfpOp.VfpOperation.NMLS,
                     doublePrecision, vd, vn, vm, address, raw, condition);
             // VFMA_{sp,dp} (bit6=0) / VFMS_{sp,dp} (bit6=1) — FUNDIDAS, VFPv4 (B9.6). MESMO campo
             // bit6 dos vizinhos MLA/MLS/NMLA/NMLS acima (confirmado contra `vfp.decode` real do
@@ -683,13 +684,13 @@ public final class VfpDecoder implements DecoderExtension {
             // sem VFP_FUSED_MULTIPLY_ACCUMULATE, cai em `null` → UNDEFINED explícito (G8) — este
             // encoding nunca foi reivindicado por nenhum outro dispatch antes da B9.6.
             case 0b110 -> !architecture.has(ArmFeature.VFP_FUSED_MULTIPLY_ACCUMULATE) ? null
-                    : vfpAlu(bit6 ? IrOp.VfpOperation.FMS : IrOp.VfpOperation.FMA,
+                    : vfpAlu(bit6 ? VfpOp.VfpOperation.FMS : VfpOp.VfpOperation.FMA,
                     doublePrecision, vd, vn, vm, address, raw, condition);
             // VFNMS_{sp,dp} (bit6=0) / VFNMA_{sp,dp} (bit6=1) — FUNDIDAS, VFPv4 (B9.6). Mesma
             // ordem invertida de VNMLS/VNMLA (ver o comentário do case 0b001 acima) confirmada
             // contra `MAKE_ONE_VFM_TRANS_FN(VFNMS,...,false,true)`/`(VFNMA,...,true,true)`.
             case 0b101 -> !architecture.has(ArmFeature.VFP_FUSED_MULTIPLY_ACCUMULATE) ? null
-                    : vfpAlu(bit6 ? IrOp.VfpOperation.FNMA : IrOp.VfpOperation.FNMS,
+                    : vfpAlu(bit6 ? VfpOp.VfpOperation.FNMA : VfpOp.VfpOperation.FNMS,
                     doublePrecision, vd, vn, vm, address, raw, condition);
             default -> null;
         };
@@ -720,10 +721,10 @@ public final class VfpDecoder implements DecoderExtension {
         }
         return switch (opc2) {
             // VMOV_reg (bit7=0) / VABS (bit7=1): Vd/Vm mesma precisão (`@vfp_dm_ss`/`@vfp_dm_dd`).
-            case 0x0 -> vfpAlu(bit7 ? IrOp.VfpOperation.ABS : IrOp.VfpOperation.COPY,
+            case 0x0 -> vfpAlu(bit7 ? VfpOp.VfpOperation.ABS : VfpOp.VfpOperation.COPY,
                     doublePrecision, vd, -1, vmSamePrecision, address, raw, condition);
             // VNEG (bit7=0) / VSQRT (bit7=1): idem.
-            case 0x1 -> vfpAlu(bit7 ? IrOp.VfpOperation.SQRT : IrOp.VfpOperation.NEG,
+            case 0x1 -> vfpAlu(bit7 ? VfpOp.VfpOperation.SQRT : VfpOp.VfpOperation.NEG,
                     doublePrecision, vd, -1, vmSamePrecision, address, raw, condition);
             // VCMP_{sp,dp} (z=0, opc2=0b0100) / VCMP_{sp,dp} #0.0 (z=1, opc2=0b0101): Vd/Vm mesma
             // precisão.
@@ -754,7 +755,7 @@ public final class VfpDecoder implements DecoderExtension {
                 if (!validDoubleRegister(vdConvert, !doublePrecision) || !validDoubleRegister(vmConvert, doublePrecision)) {
                     yield null;
                 }
-                yield vfpConvert(doublePrecision ? IrOp.VfpConversion.F64_TO_F32 : IrOp.VfpConversion.F32_TO_F64,
+                yield vfpConvert(doublePrecision ? VfpOp.VfpConversion.F64_TO_F32 : VfpOp.VfpConversion.F32_TO_F64,
                         vdConvert, vmConvert, address, raw, condition);
             }
             // VCVT_int_{sp,dp} (inteiro -> ponto flutuante): Vm é SEMPRE simples (fonte inteira de
@@ -764,9 +765,9 @@ public final class VfpDecoder implements DecoderExtension {
                 if (!validDoubleRegister(vd, doublePrecision)) {
                     yield null;
                 }
-                IrOp.VfpConversion conversion = bit7
-                        ? (doublePrecision ? IrOp.VfpConversion.S32_TO_F64 : IrOp.VfpConversion.S32_TO_F32)
-                        : (doublePrecision ? IrOp.VfpConversion.U32_TO_F64 : IrOp.VfpConversion.U32_TO_F32);
+                VfpOp.VfpConversion conversion = bit7
+                        ? (doublePrecision ? VfpOp.VfpConversion.S32_TO_F64 : VfpOp.VfpConversion.S32_TO_F32)
+                        : (doublePrecision ? VfpOp.VfpConversion.U32_TO_F64 : VfpOp.VfpConversion.U32_TO_F32);
                 yield vfpConvert(conversion, vd, vm, address, raw, condition);
             }
             // VCVT_{sp,dp}_int (ponto flutuante -> inteiro): Vd é SEMPRE simples (destino inteiro
@@ -786,9 +787,9 @@ public final class VfpDecoder implements DecoderExtension {
                             InstructionKind.VFP_CONVERT_ROUNDED, vdSingle, -1, vmSource, packed, false, false, false,
                             0, doublePrecision);
                 }
-                IrOp.VfpConversion conversion = signedConvert
-                        ? (doublePrecision ? IrOp.VfpConversion.F64_TO_S32 : IrOp.VfpConversion.F32_TO_S32)
-                        : (doublePrecision ? IrOp.VfpConversion.F64_TO_U32 : IrOp.VfpConversion.F32_TO_U32);
+                VfpOp.VfpConversion conversion = signedConvert
+                        ? (doublePrecision ? VfpOp.VfpConversion.F64_TO_S32 : VfpOp.VfpConversion.F32_TO_S32)
+                        : (doublePrecision ? VfpOp.VfpConversion.F64_TO_U32 : VfpOp.VfpConversion.F32_TO_U32);
                 yield vfpConvert(conversion, vdSingle, vmSource, address, raw, condition);
             }
             // VCVT_fix_{sp,dp} (B9.5, VFPv3, ARM DDI 0406C A8.8.397): `opc2` aqui vale
@@ -826,16 +827,16 @@ public final class VfpDecoder implements DecoderExtension {
                 if (!validDoubleRegister(vdWide, doublePrecision)) {
                     yield null;
                 }
-                yield halfPrecisionConvert(doublePrecision ? IrOp.HalfPrecisionConversion.F16_TO_F64
-                        : IrOp.HalfPrecisionConversion.F16_TO_F32, bit7, vdWide, vm(raw, false), address, raw,
+                yield halfPrecisionConvert(doublePrecision ? VfpOp.HalfPrecisionConversion.F16_TO_F64
+                        : VfpOp.HalfPrecisionConversion.F16_TO_F32, bit7, vdWide, vm(raw, false), address, raw,
                         condition);
             }
             case 0x3 -> {
                 if (!supportsHalfPrecisionConversion() || !validDoubleRegister(vmSamePrecision, doublePrecision)) {
                     yield null;
                 }
-                yield halfPrecisionConvert(doublePrecision ? IrOp.HalfPrecisionConversion.F64_TO_F16
-                        : IrOp.HalfPrecisionConversion.F32_TO_F16, bit7, vd(raw, false), vmSamePrecision, address,
+                yield halfPrecisionConvert(doublePrecision ? VfpOp.HalfPrecisionConversion.F64_TO_F16
+                        : VfpOp.HalfPrecisionConversion.F32_TO_F16, bit7, vd(raw, false), vmSamePrecision, address,
                         raw, condition);
             }
             // VRINTR (bit7=0) / VRINTZ (bit7=1) `sp`/`dp` (B22.7, ARMv8-A) — `VRINTX` é `opc2=0x7`.
@@ -1109,20 +1110,20 @@ public final class VfpDecoder implements DecoderExtension {
         return doublePrecision ? (extension << 4) | nibble : (nibble << 1) | extension;
     }
 
-    private static DecodedInstruction vfpAlu(IrOp.VfpOperation op, boolean doublePrecision, int vd, int vn, int vm,
+    private static DecodedInstruction vfpAlu(VfpOp.VfpOperation op, boolean doublePrecision, int vd, int vn, int vm,
             int address, int raw, Condition condition) {
         return new DecodedInstruction(address, raw, InstructionSet.ARM, condition, InstructionKind.VFP_ALU,
                 vd, vn, vm, op.ordinal(), false, false, false, 0, doublePrecision);
     }
 
-    private static DecodedInstruction vfpConvert(IrOp.VfpConversion conversion, int vd, int vm,
+    private static DecodedInstruction vfpConvert(VfpOp.VfpConversion conversion, int vd, int vm,
             int address, int raw, Condition condition) {
         return new DecodedInstruction(address, raw, InstructionSet.ARM, condition, InstructionKind.VFP_CONVERT,
                 vd, vm, -1, conversion.ordinal(), false, false, false);
     }
 
     /// B14.6b: espelho de {@link #vfpAlu} sem `doublePrecision` (sempre meia precisão).
-    private static DecodedInstruction vfpAluHalf(IrOp.VfpOperation op, int vd, int vn, int vm,
+    private static DecodedInstruction vfpAluHalf(VfpOp.VfpOperation op, int vd, int vn, int vm,
             int address, int raw, Condition condition) {
         return new DecodedInstruction(address, raw, InstructionSet.ARM, condition, InstructionKind.VFP_ALU_HALF,
                 vd, vn, vm, op.ordinal(), false, false, false);

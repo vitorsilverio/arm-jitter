@@ -9,6 +9,7 @@ import dev.vitorsilverio.armjitter.core.ArmCore;
 import dev.vitorsilverio.armjitter.core.VfpRegisters;
 import dev.vitorsilverio.armjitter.ir.IrBlock;
 import dev.vitorsilverio.armjitter.ir.IrOp;
+import dev.vitorsilverio.armjitter.ir.NeonCryptoOp;
 import dev.vitorsilverio.armjitter.ir.StandardIrBuilder;
 import dev.vitorsilverio.armjitter.support.TestAddressSpace;
 import dev.vitorsilverio.armjitter.swi.SwiDispatcher;
@@ -107,19 +108,19 @@ class NeonThreeSameCryptoDecoderTest {
 
     @Test
     void decodesAllSevenMnemonics() {
-        assertEquals(new IrOp.NeonCryptoShaThree(AdvSimdCryptoShaThreeRegisterOp.SHA1C, 0, 2, 4),
+        assertEquals(new NeonCryptoOp.ShaThree(AdvSimdCryptoShaThreeRegisterOp.SHA1C, 0, 2, 4),
                 liftedOf(shaThreeReg(0, 0, true, 0, 2, 4)));
-        assertEquals(new IrOp.NeonCryptoShaThree(AdvSimdCryptoShaThreeRegisterOp.SHA1P, 0, 2, 4),
+        assertEquals(new NeonCryptoOp.ShaThree(AdvSimdCryptoShaThreeRegisterOp.SHA1P, 0, 2, 4),
                 liftedOf(shaThreeReg(0, 1, true, 0, 2, 4)));
-        assertEquals(new IrOp.NeonCryptoShaThree(AdvSimdCryptoShaThreeRegisterOp.SHA1M, 0, 2, 4),
+        assertEquals(new NeonCryptoOp.ShaThree(AdvSimdCryptoShaThreeRegisterOp.SHA1M, 0, 2, 4),
                 liftedOf(shaThreeReg(0, 2, true, 0, 2, 4)));
-        assertEquals(new IrOp.NeonCryptoShaThree(AdvSimdCryptoShaThreeRegisterOp.SHA1SU0, 0, 2, 4),
+        assertEquals(new NeonCryptoOp.ShaThree(AdvSimdCryptoShaThreeRegisterOp.SHA1SU0, 0, 2, 4),
                 liftedOf(shaThreeReg(0, 3, true, 0, 2, 4)));
-        assertEquals(new IrOp.NeonCryptoShaThree(AdvSimdCryptoShaThreeRegisterOp.SHA256H, 0, 2, 4),
+        assertEquals(new NeonCryptoOp.ShaThree(AdvSimdCryptoShaThreeRegisterOp.SHA256H, 0, 2, 4),
                 liftedOf(shaThreeReg(1, 0, true, 0, 2, 4)));
-        assertEquals(new IrOp.NeonCryptoShaThree(AdvSimdCryptoShaThreeRegisterOp.SHA256H2, 0, 2, 4),
+        assertEquals(new NeonCryptoOp.ShaThree(AdvSimdCryptoShaThreeRegisterOp.SHA256H2, 0, 2, 4),
                 liftedOf(shaThreeReg(1, 1, true, 0, 2, 4)));
-        assertEquals(new IrOp.NeonCryptoShaThree(AdvSimdCryptoShaThreeRegisterOp.SHA256SU1, 0, 2, 4),
+        assertEquals(new NeonCryptoOp.ShaThree(AdvSimdCryptoShaThreeRegisterOp.SHA256SU1, 0, 2, 4),
                 liftedOf(shaThreeReg(1, 2, true, 0, 2, 4)));
     }
 

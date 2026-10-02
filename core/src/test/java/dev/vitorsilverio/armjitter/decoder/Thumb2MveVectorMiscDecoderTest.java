@@ -5,7 +5,9 @@ import dev.vitorsilverio.armjitter.advsimd.AdvSimdUnaryOp;
 import dev.vitorsilverio.armjitter.arch.ArmArchitecture;
 import dev.vitorsilverio.armjitter.arch.ArmFeature;
 import dev.vitorsilverio.armjitter.core.Condition;
-import dev.vitorsilverio.armjitter.ir.IrOp;
+import dev.vitorsilverio.armjitter.ir.MveFpOp;
+import dev.vitorsilverio.armjitter.ir.MveIntegerOp;
+import dev.vitorsilverio.armjitter.ir.MveMoveOp;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -41,29 +43,29 @@ class Thumb2MveVectorMiscDecoderTest {
 
     @Test
     void decodesClsAndClz() {
-        IrOp.MveVectorUnary cls = assertInstanceOf(IrOp.MveVectorUnary.class,
+        MveIntegerOp.VectorUnary cls = assertInstanceOf(MveIntegerOp.VectorUnary.class,
                 tryDecode(oneOpRaw(0b00, 1, 0b0100, 0b01, 2, 3)).liftedOp());
         assertEquals(AdvSimdUnaryOp.CLS, cls.op());
         assertEquals(1, cls.esz());
         assertEquals(2, cls.qd());
         assertEquals(3, cls.qm());
 
-        IrOp.MveVectorUnary clz = assertInstanceOf(IrOp.MveVectorUnary.class,
+        MveIntegerOp.VectorUnary clz = assertInstanceOf(MveIntegerOp.VectorUnary.class,
                 tryDecode(oneOpRaw(0b00, 2, 0b0100, 0b11, 4, 5)).liftedOp());
         assertEquals(AdvSimdUnaryOp.CLZ, clz.op());
     }
 
     @Test
     void decodesRevForms() {
-        IrOp.MveVectorUnary rev16 = assertInstanceOf(IrOp.MveVectorUnary.class,
+        MveIntegerOp.VectorUnary rev16 = assertInstanceOf(MveIntegerOp.VectorUnary.class,
                 tryDecode(oneOpRaw(0b00, 0, 0b0001, 0b01, 1, 2)).liftedOp());
         assertEquals(AdvSimdUnaryOp.REV16, rev16.op());
 
-        IrOp.MveVectorUnary rev32 = assertInstanceOf(IrOp.MveVectorUnary.class,
+        MveIntegerOp.VectorUnary rev32 = assertInstanceOf(MveIntegerOp.VectorUnary.class,
                 tryDecode(oneOpRaw(0b00, 1, 0b0000, 0b11, 1, 2)).liftedOp());
         assertEquals(AdvSimdUnaryOp.REV32, rev32.op());
 
-        IrOp.MveVectorUnary rev64 = assertInstanceOf(IrOp.MveVectorUnary.class,
+        MveIntegerOp.VectorUnary rev64 = assertInstanceOf(MveIntegerOp.VectorUnary.class,
                 tryDecode(oneOpRaw(0b00, 2, 0b0000, 0b01, 1, 2)).liftedOp());
         assertEquals(AdvSimdUnaryOp.REV64, rev64.op());
 
@@ -72,18 +74,18 @@ class Thumb2MveVectorMiscDecoderTest {
 
     @Test
     void decodesQabsAndQneg() {
-        IrOp.MveVectorUnary qabs = assertInstanceOf(IrOp.MveVectorUnary.class,
+        MveIntegerOp.VectorUnary qabs = assertInstanceOf(MveIntegerOp.VectorUnary.class,
                 tryDecode(oneOpRaw(0b00, 0, 0b0111, 0b01, 0, 1)).liftedOp());
         assertEquals(AdvSimdUnaryOp.SQABS, qabs.op());
 
-        IrOp.MveVectorUnary qneg = assertInstanceOf(IrOp.MveVectorUnary.class,
+        MveIntegerOp.VectorUnary qneg = assertInstanceOf(MveIntegerOp.VectorUnary.class,
                 tryDecode(oneOpRaw(0b00, 0, 0b0111, 0b11, 0, 1)).liftedOp());
         assertEquals(AdvSimdUnaryOp.SQNEG, qneg.op());
     }
 
     @Test
     void decodesVmvnWithSizeZeroOnly() {
-        IrOp.MveVectorUnary mvn = assertInstanceOf(IrOp.MveVectorUnary.class,
+        MveIntegerOp.VectorUnary mvn = assertInstanceOf(MveIntegerOp.VectorUnary.class,
                 tryDecode(oneOpRaw(0b00, 0, 0b0101, 0b11, 6, 7)).liftedOp());
         assertEquals(AdvSimdUnaryOp.NOT, mvn.op());
         assertEquals(0, mvn.esz());
@@ -94,11 +96,11 @@ class Thumb2MveVectorMiscDecoderTest {
 
     @Test
     void decodesAbsAndNegInteger() {
-        IrOp.MveVectorUnary abs = assertInstanceOf(IrOp.MveVectorUnary.class,
+        MveIntegerOp.VectorUnary abs = assertInstanceOf(MveIntegerOp.VectorUnary.class,
                 tryDecode(oneOpRaw(0b01, 0, 0b0011, 0b01, 1, 2)).liftedOp());
         assertEquals(AdvSimdUnaryOp.ABS, abs.op());
 
-        IrOp.MveVectorUnary neg = assertInstanceOf(IrOp.MveVectorUnary.class,
+        MveIntegerOp.VectorUnary neg = assertInstanceOf(MveIntegerOp.VectorUnary.class,
                 tryDecode(oneOpRaw(0b01, 0, 0b0011, 0b11, 1, 2)).liftedOp());
         assertEquals(AdvSimdUnaryOp.NEG, neg.op());
     }
@@ -107,12 +109,12 @@ class Thumb2MveVectorMiscDecoderTest {
     void decodesAbsAndNegFpUnderMveFloat() {
         ArmArchitecture arch = ArmArchitecture.ARMV8_1M_MVE;
         int absFpRaw = oneOpRaw(0b01, 2, 0b0111, 0b01, 1, 2);
-        IrOp.MveVectorFpUnary absFp = assertInstanceOf(IrOp.MveVectorFpUnary.class,
+        MveFpOp.VectorFpUnary absFp = assertInstanceOf(MveFpOp.VectorFpUnary.class,
                 new Thumb2MveVectorMiscDecoder(arch).tryDecode(absFpRaw, 0, Condition.AL).liftedOp());
         assertEquals(AdvSimdFpUnaryOp.ABS, absFp.op());
 
         int negFpRaw = oneOpRaw(0b01, 2, 0b0111, 0b11, 1, 2);
-        IrOp.MveVectorFpUnary negFp = assertInstanceOf(IrOp.MveVectorFpUnary.class,
+        MveFpOp.VectorFpUnary negFp = assertInstanceOf(MveFpOp.VectorFpUnary.class,
                 new Thumb2MveVectorMiscDecoder(arch).tryDecode(negFpRaw, 0, Condition.AL).liftedOp());
         assertEquals(AdvSimdFpUnaryOp.NEG, negFp.op());
     }
@@ -211,17 +213,17 @@ class Thumb2MveVectorMiscDecoderTest {
 
     @Test
     void decodesVdupByteHalfwordWord() {
-        IrOp.MveVectorDup byteForm = assertInstanceOf(IrOp.MveVectorDup.class,
+        MveMoveOp.VectorDup byteForm = assertInstanceOf(MveMoveOp.VectorDup.class,
                 tryDecode(vdupRawReal(1, 0, 3, 5)).liftedOp());
         assertEquals(0, byteForm.esz());
         assertEquals(3, byteForm.qd());
         assertEquals(5, byteForm.rt());
 
-        IrOp.MveVectorDup halfForm = assertInstanceOf(IrOp.MveVectorDup.class,
+        MveMoveOp.VectorDup halfForm = assertInstanceOf(MveMoveOp.VectorDup.class,
                 tryDecode(vdupRawReal(0, 1, 4, 6)).liftedOp());
         assertEquals(1, halfForm.esz());
 
-        IrOp.MveVectorDup wordForm = assertInstanceOf(IrOp.MveVectorDup.class,
+        MveMoveOp.VectorDup wordForm = assertInstanceOf(MveMoveOp.VectorDup.class,
                 tryDecode(vdupRawReal(0, 0, 7, 2)).liftedOp());
         assertEquals(2, wordForm.esz());
     }
@@ -231,7 +233,7 @@ class Thumb2MveVectorMiscDecoderTest {
         // "Qd is in the fields usually named Qn" — bit22 (que seria alto de %qd) É o bit B do
         // tamanho aqui, não parte de Qd; Qd vem inteiramente de bit7+bits[19:17].
         int raw = vdupRawReal(0, 0, 5, 1);
-        IrOp.MveVectorDup dup = assertInstanceOf(IrOp.MveVectorDup.class, tryDecode(raw).liftedOp());
+        MveMoveOp.VectorDup dup = assertInstanceOf(MveMoveOp.VectorDup.class, tryDecode(raw).liftedOp());
         assertEquals(5, dup.qd());
     }
 

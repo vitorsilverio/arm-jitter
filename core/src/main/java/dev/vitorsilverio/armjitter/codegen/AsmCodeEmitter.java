@@ -10,9 +10,13 @@ import dev.vitorsilverio.armjitter.codegen.jvm.IrOpInterop; // referenciado no J
 import dev.vitorsilverio.armjitter.codegen.jvm.JvmBlockLoader;
 import dev.vitorsilverio.armjitter.codegen.jvm.SuperblockContext;
 import dev.vitorsilverio.armjitter.core.ArmCore;
+import dev.vitorsilverio.armjitter.ir.BranchOp;
+import dev.vitorsilverio.armjitter.ir.IntegerOp;
 import dev.vitorsilverio.armjitter.ir.IrBlock;
 import dev.vitorsilverio.armjitter.ir.IrOp;
 import dev.vitorsilverio.armjitter.ir.IrOpCode;
+import dev.vitorsilverio.armjitter.ir.MemoryOp;
+import dev.vitorsilverio.armjitter.ir.SystemOp;
 import dev.vitorsilverio.armjitter.ir.opt.IrOptimizer;
 import dev.vitorsilverio.armjitter.jit.CompiledBlock;
 
@@ -232,16 +236,16 @@ public final class AsmCodeEmitter implements CodeEmitter {
 
     /// Conjunto de subtipos de {@link IrOp} que podem ser emitidos nativamente (qualquer condição —
     /// o compilador emite um guard {@code evalCond} por op).
-    /// {@link IrOp.Swap} não está incluído (sempre delegado ao interpretado).
+    /// {@link MemoryOp.Swap} não está incluído (sempre delegado ao interpretado).
     @SuppressWarnings("unchecked")
     public static Set<Class<? extends IrOp>> supportedOps() {
         return Set.of(
-                IrOp.Alu.class, IrOp.Multiply.class, IrOp.LongMultiply.class,
-                IrOp.Load.class, IrOp.Store.class, IrOp.LoadLiteral.class,
-                IrOp.MultipleTransfer.class, IrOp.Branch.class, IrOp.BranchExchange.class,
-                IrOp.ThumbBlPrefix.class, IrOp.ThumbBlSuffix.class,
-                IrOp.Push.class, IrOp.Pop.class, IrOp.PsrTransfer.class,
-                IrOp.Swi.class, IrOp.Coprocessor.class, IrOp.CoprocessorDouble.class, IrOp.Undefined.class,
+                IntegerOp.Alu.class, IntegerOp.Multiply.class, IntegerOp.LongMultiply.class,
+                MemoryOp.Load.class, MemoryOp.Store.class, MemoryOp.LoadLiteral.class,
+                MemoryOp.MultipleTransfer.class, BranchOp.Branch.class, BranchOp.BranchExchange.class,
+                BranchOp.ThumbBlPrefix.class, BranchOp.ThumbBlSuffix.class,
+                MemoryOp.Push.class, MemoryOp.Pop.class, SystemOp.PsrTransfer.class,
+                SystemOp.Swi.class, SystemOp.Coprocessor.class, SystemOp.CoprocessorDouble.class, SystemOp.Undefined.class,
                 IrOp.Cycle.class, IrOp.Fetch.class
         );
     }

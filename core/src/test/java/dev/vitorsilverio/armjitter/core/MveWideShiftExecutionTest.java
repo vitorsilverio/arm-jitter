@@ -379,7 +379,7 @@ class MveWideShiftExecutionTest {
         put32(core, CODE_BASE + 4, wordImmediate(LEFT, 3, 1)); // UQSHL (satura)
         var block = liftThumb(core, 2);
         assertEquals(2, block.operations().stream()
-                .filter(op -> op instanceof dev.vitorsilverio.armjitter.ir.IrOp.MveWideShift).count());
+                .filter(op -> op instanceof dev.vitorsilverio.armjitter.ir.MveIntegerOp.WideShift).count());
 
         new dev.vitorsilverio.armjitter.codegen.executor.IrBlockExecutor(ArmArchitecture.ARMV8_1M_MVE)
                 .execute(block, core);
@@ -392,8 +392,8 @@ class MveWideShiftExecutionTest {
 
     @Test
     void wideShiftIsInterpretedOnlyAndRunsThroughExecuteOp() {
-        var op = new dev.vitorsilverio.armjitter.ir.IrOp.MveWideShift(
-                dev.vitorsilverio.armjitter.ir.IrOp.WideShiftOperation.LSLL_RI, 4, -1, 2, 5, Condition.AL);
+        var op = new dev.vitorsilverio.armjitter.ir.MveIntegerOp.WideShift(
+                dev.vitorsilverio.armjitter.ir.MveIntegerOp.WideShiftOperation.LSLL_RI, 4, -1, 2, 5, Condition.AL);
         assertFalse(dev.vitorsilverio.armjitter.codegen.jvm.AsmNativePolicy.supports(op));
         ArmCore core = newCore();
         setPair(core, 2, 5, 1);
@@ -404,8 +404,8 @@ class MveWideShiftExecutionTest {
 
     @Test
     void wideShiftWithFalseConditionDoesNothingInExecuteOp() {
-        var op = new dev.vitorsilverio.armjitter.ir.IrOp.MveWideShift(
-                dev.vitorsilverio.armjitter.ir.IrOp.WideShiftOperation.LSLL_RI, 4, -1, 2, 5, Condition.NE);
+        var op = new dev.vitorsilverio.armjitter.ir.MveIntegerOp.WideShift(
+                dev.vitorsilverio.armjitter.ir.MveIntegerOp.WideShiftOperation.LSLL_RI, 4, -1, 2, 5, Condition.NE);
         ArmCore core = newCore();
         core.cpsr().setNzcv(false, true, false, false);
         setPair(core, 2, 5, 1);

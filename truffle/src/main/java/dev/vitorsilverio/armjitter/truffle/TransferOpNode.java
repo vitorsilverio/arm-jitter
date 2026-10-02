@@ -5,6 +5,7 @@ import com.oracle.truffle.api.CompilerDirectives.TruffleBoundary;
 import dev.vitorsilverio.armjitter.codegen.executor.IrTransferExecutor;
 import dev.vitorsilverio.armjitter.core.ArmCore;
 import dev.vitorsilverio.armjitter.ir.IrOp;
+import dev.vitorsilverio.armjitter.ir.MemoryOp;
 
 /// Nó Truffle para a categoria LDM/STM/PUSH/POP (task A6): `MultipleTransfer`, `Push`, `Pop`.
 /// Delega DIRETO a {@link IrTransferExecutor}. Toda op desta categoria acessa memória (uma
@@ -29,12 +30,12 @@ final class TransferOpNode extends IrOpNode {
     @TruffleBoundary
     private boolean executeAtBoundary(ArmCore core) {
         return switch (op) {
-            case IrOp.MultipleTransfer multipleTransfer -> executor.executeMultipleTransfer(core, multipleTransfer);
-            case IrOp.Push push -> {
+            case MemoryOp.MultipleTransfer multipleTransfer -> executor.executeMultipleTransfer(core, multipleTransfer);
+            case MemoryOp.Push push -> {
                 executor.executePush(core, push);
                 yield false;
             }
-            case IrOp.Pop pop -> executor.executePop(core, pop);
+            case MemoryOp.Pop pop -> executor.executePop(core, pop);
             default -> throw new IllegalStateException("TransferOpNode não cobre: " + op);
         };
     }

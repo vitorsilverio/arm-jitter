@@ -4,9 +4,9 @@ import dev.vitorsilverio.armjitter.arch.ArmArchitecture;
 import dev.vitorsilverio.armjitter.arch.ArmFeature;
 import dev.vitorsilverio.armjitter.core.ArmCore;
 import dev.vitorsilverio.armjitter.core.CpuMode;
-import dev.vitorsilverio.armjitter.ir.IrOp;
 import dev.vitorsilverio.armjitter.ir.IrOpCode;
 import dev.vitorsilverio.armjitter.ir.IrOperand;
+import dev.vitorsilverio.armjitter.ir.MemoryOp;
 import dev.vitorsilverio.armjitter.ir.ShiftType;
 import dev.vitorsilverio.armjitter.memory.MemoryAccessType;
 
@@ -454,7 +454,7 @@ final class IrExecutionSupport {
 
     int multipleStoreRegisterValue(
             ArmCore core,
-            IrOp.MultipleTransfer transfer,
+            MemoryOp.MultipleTransfer transfer,
             int register,
             int firstRegister,
             int writebackAddress) {

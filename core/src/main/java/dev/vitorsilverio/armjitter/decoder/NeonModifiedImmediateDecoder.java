@@ -5,7 +5,7 @@ import dev.vitorsilverio.armjitter.arch.ArmArchitecture;
 import dev.vitorsilverio.armjitter.arch.ArmFeature;
 import dev.vitorsilverio.armjitter.arch.DecoderExtension;
 import dev.vitorsilverio.armjitter.core.Condition;
-import dev.vitorsilverio.armjitter.ir.IrOp;
+import dev.vitorsilverio.armjitter.ir.NeonMoveOp;
 
 /// Decodifica a seção **"1-reg-and-modified-immediate"** do espaço NEON/Advanced SIMD de
 /// processamento de dados do encoding A32 (task B13.9) — `VMOV`/`VMVN`/`VORR`/`VBIC` imediato.
@@ -79,7 +79,7 @@ public final class NeonModifiedImmediateDecoder implements DecoderExtension {
         }
         AdvSimdModifiedImmediate.Expanded expanded = AdvSimdModifiedImmediate.expand(imm8, cmode, op);
         return DecodedInstruction.lifted(address, raw, InstructionSet.ARM, Condition.AL,
-                new IrOp.NeonModifiedImmediate(expanded.op(), quad, expanded.imm64(), vd));
+                new NeonMoveOp.ModifiedImmediate(expanded.op(), quad, expanded.imm64(), vd));
     }
 
     private static int doubleRegister(int raw, int nibbleShift, int extensionBit) {

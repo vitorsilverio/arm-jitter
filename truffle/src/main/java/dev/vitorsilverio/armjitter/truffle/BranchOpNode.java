@@ -4,6 +4,7 @@ import com.oracle.truffle.api.CompilerDirectives.CompilationFinal;
 import com.oracle.truffle.api.CompilerDirectives.TruffleBoundary;
 import dev.vitorsilverio.armjitter.codegen.executor.IrBranchExecutor;
 import dev.vitorsilverio.armjitter.core.ArmCore;
+import dev.vitorsilverio.armjitter.ir.BranchOp;
 import dev.vitorsilverio.armjitter.ir.IrOp;
 
 /// Nó Truffle para a categoria de branch (task A6): `Branch`, `BranchExchange`, `ThumbBlPrefix`,
@@ -27,21 +28,21 @@ final class BranchOpNode extends IrOpNode {
     @Override
     boolean doExecute(ArmCore core, int blockEndPc) {
         return switch (op) {
-            case IrOp.Branch branch -> executor.executeBranch(core, branch);
-            case IrOp.BranchExchange branchExchange -> executor.executeBranchExchange(core, branchExchange);
-            case IrOp.ThumbBlPrefix prefix -> {
+            case BranchOp.Branch branch -> executor.executeBranch(core, branch);
+            case BranchOp.BranchExchange branchExchange -> executor.executeBranchExchange(core, branchExchange);
+            case BranchOp.ThumbBlPrefix prefix -> {
                 executor.executeThumbBlPrefix(core, prefix);
                 yield false;
             }
-            case IrOp.ThumbBlSuffix suffix -> executor.executeThumbBlSuffix(core, suffix);
-            case IrOp.TableBranch tableBranch -> executeTableBranchAtBoundary(tableBranch, core);
-            case IrOp.CompareBranchZero compareBranchZero -> executor.executeCompareBranchZero(core, compareBranchZero);
+            case BranchOp.ThumbBlSuffix suffix -> executor.executeThumbBlSuffix(core, suffix);
+            case BranchOp.TableBranch tableBranch -> executeTableBranchAtBoundary(tableBranch, core);
+            case BranchOp.CompareBranchZero compareBranchZero -> executor.executeCompareBranchZero(core, compareBranchZero);
             default -> throw new IllegalStateException("BranchOpNode não cobre: " + op);
         };
     }
 
     @TruffleBoundary
-    private boolean executeTableBranchAtBoundary(IrOp.TableBranch tableBranch, ArmCore core) {
+    private boolean executeTableBranchAtBoundary(BranchOp.TableBranch tableBranch, ArmCore core) {
         return executor.executeTableBranch(core, tableBranch);
     }
 }

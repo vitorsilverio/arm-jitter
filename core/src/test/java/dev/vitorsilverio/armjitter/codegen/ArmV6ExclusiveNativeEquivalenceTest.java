@@ -22,7 +22,7 @@ import org.junit.jupiter.api.Test;
 /// (STREX que falha não deve tocar a memória) e as formas B/H/D.
 ///
 /// {@code CLREX} vive no espaço incondicional (encoding exato {@code 0xF57FF01F}, sempre AL — ver
-/// {@link dev.vitorsilverio.armjitter.ir.IrOp.ClearExclusive}), então não entra no loop de
+/// {@link dev.vitorsilverio.armjitter.ir.MemoryOp.ClearExclusive}), então não entra no loop de
 /// condições; é coberto por {@link #clrexBlockIsNativeAndMatchesInterpreted()}.
 class ArmV6ExclusiveNativeEquivalenceTest extends BlockEquivalenceTest {
     private static final int FIRST_COND = 0;   // EQ

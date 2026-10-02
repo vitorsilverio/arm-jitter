@@ -9,7 +9,7 @@ import dev.vitorsilverio.armjitter.arch.ArmArchitecture;
 import dev.vitorsilverio.armjitter.codegen.AsmCodeEmitter;
 import dev.vitorsilverio.armjitter.codegen.InterpretedCodeEmitter;
 import dev.vitorsilverio.armjitter.ir.IrBlock;
-import dev.vitorsilverio.armjitter.ir.IrOp;
+import dev.vitorsilverio.armjitter.ir.SystemOp;
 import dev.vitorsilverio.armjitter.support.TestAddressSpace;
 import dev.vitorsilverio.armjitter.swi.SwiDispatcher;
 import org.junit.jupiter.api.Test;
@@ -228,7 +228,7 @@ class MProfileSystemRegisterTest {
         // MRS/MSR SYSm cai no interpretado (AsmNativePolicy.supports == false), então o AsmCodeEmitter
         // usa o fallback — este teste garante que o estado resultante é idêntico ao interpretado puro.
         IrBlock block = IrBlock.builder(CODE_BASE)
-                .add(new IrOp.MProfileSystemRegister(false, 0, MProfileExceptionModel.SYSM_PRIMASK, Condition.AL))
+                .add(new SystemOp.MProfileSystemRegister(false, 0, MProfileExceptionModel.SYSM_PRIMASK, Condition.AL))
                 .endPc(CODE_BASE + 4)
                 .sealed();
         new InterpretedCodeEmitter(ArmArchitecture.ARMV7M).emit(block).execute(interp);

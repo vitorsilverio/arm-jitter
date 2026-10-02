@@ -17,6 +17,7 @@ import dev.vitorsilverio.armjitter.ir.IrBlock;
 import dev.vitorsilverio.armjitter.ir.IrOp;
 import dev.vitorsilverio.armjitter.ir.StandardIrBlockLifter;
 import dev.vitorsilverio.armjitter.ir.StandardIrBuilder;
+import dev.vitorsilverio.armjitter.ir.VfpOp;
 import dev.vitorsilverio.armjitter.support.TestAddressSpace;
 import dev.vitorsilverio.armjitter.swi.SwiDispatcher;
 import java.util.List;
@@ -149,7 +150,7 @@ class VfpB227ResidualsTest {
     void vrintzDecodesToVfpRoundTowardZeroNeverFpscr() {
         DecodedInstruction decoded = decodeArm(V80, word(COND_AL, OPC2_VRINTR_OR_Z, SIZE_SINGLE, true, sField(0), sField(1)));
         assertEquals(InstructionKind.VFP_ROUND, decoded.kind());
-        assertEquals(new IrOp.VfpRound(dev.vitorsilverio.armjitter.advsimd.AdvSimdLanes.RoundingMode.TOWARD_ZERO,
+        assertEquals(new VfpOp.Round(dev.vitorsilverio.armjitter.advsimd.AdvSimdLanes.RoundingMode.TOWARD_ZERO,
                 false, 0, 1, Condition.AL), lift(decoded));
     }
 
@@ -157,14 +158,14 @@ class VfpB227ResidualsTest {
     void vrintrAndVrintxDecodeToVfpRoundWithNullDirectionMeaningFpscr() {
         IrOp vrintr = lift(decodeArm(V80, word(COND_AL, OPC2_VRINTR_OR_Z, SIZE_SINGLE, false, sField(2), sField(3))));
         IrOp vrintx = lift(decodeArm(V80, word(COND_AL, OPC2_VRINTX, SIZE_DOUBLE, false, dField(4), dField(5))));
-        assertEquals(new IrOp.VfpRound(null, false, 2, 3, Condition.AL), vrintr);
-        assertEquals(new IrOp.VfpRound(null, true, 4, 5, Condition.AL), vrintx);
+        assertEquals(new VfpOp.Round(null, false, 2, 3, Condition.AL), vrintr);
+        assertEquals(new VfpOp.Round(null, true, 4, 5, Condition.AL), vrintx);
     }
 
     @Test
     void vrintDoubleFormCarriesDoublePrecisionAndDRegisters() {
         IrOp op = lift(decodeArm(V80, word(COND_AL, OPC2_VRINTR_OR_Z, SIZE_DOUBLE, true, dField(3), dField(7))));
-        assertEquals(new IrOp.VfpRound(dev.vitorsilverio.armjitter.advsimd.AdvSimdLanes.RoundingMode.TOWARD_ZERO,
+        assertEquals(new VfpOp.Round(dev.vitorsilverio.armjitter.advsimd.AdvSimdLanes.RoundingMode.TOWARD_ZERO,
                 true, 3, 7, Condition.AL), op);
     }
 
@@ -241,7 +242,7 @@ class VfpB227ResidualsTest {
         int rintz = word(COND_AL, OPC2_VRINTR_OR_Z, SIZE_HALF, true, sField(0), sField(1));
         int rintx = word(COND_AL, OPC2_VRINTX, SIZE_HALF, false, sField(0), sField(1));
         assertEquals(InstructionKind.VFP_ROUND_HALF, kindOf(V80, rintr));
-        assertEquals(new IrOp.VfpRoundHalf(null, 0, 1, Condition.AL), lift(decodeArm(V80, rintr)));
+        assertEquals(new VfpOp.RoundHalf(null, 0, 1, Condition.AL), lift(decodeArm(V80, rintr)));
         assertEquals(HALF_2_0, run(V80, rintr, fpscrMode(FpRoundingMode.ROUND_TO_NEAREST)
                 .andThen(c -> c.vfp().setS(1, HALF_2_5))).vfp().s(0));
         assertEquals(HALF_3_0, run(V80, rintx, fpscrMode(FpRoundingMode.ROUND_TOWARD_PLUS_INFINITY)
@@ -282,8 +283,8 @@ class VfpB227ResidualsTest {
         DecodedInstruction signed = decodeArm(V80, word(COND_AL, OPC2_VCVT_TO_S32, SIZE_SINGLE, false, sField(0), sField(1)));
         DecodedInstruction unsigned = decodeArm(V80, word(COND_AL, OPC2_VCVT_TO_U32, SIZE_DOUBLE, false, sField(2), dField(3)));
         assertEquals(InstructionKind.VFP_CONVERT_ROUNDED, signed.kind());
-        assertEquals(new IrOp.VfpConvertRounded(null, true, false, 0, 1, Condition.AL), lift(signed));
-        assertEquals(new IrOp.VfpConvertRounded(null, false, true, 2, 3, Condition.AL), lift(unsigned));
+        assertEquals(new VfpOp.ConvertRounded(null, true, false, 0, 1, Condition.AL), lift(signed));
+        assertEquals(new VfpOp.ConvertRounded(null, false, true, 2, 3, Condition.AL), lift(unsigned));
     }
 
     @Test
@@ -316,7 +317,7 @@ class VfpB227ResidualsTest {
     void vcvtrHalfFormDecodesAndRoundsByFpscr() {
         int vcvtrHalf = word(COND_AL, OPC2_VCVT_TO_S32, SIZE_HALF, false, sField(0), sField(1));
         assertEquals(InstructionKind.VFP_CONVERT_ROUNDED_HALF, kindOf(V80, vcvtrHalf));
-        assertEquals(new IrOp.VfpConvertRoundedHalf(null, true, 0, 1, Condition.AL), lift(decodeArm(V80, vcvtrHalf)));
+        assertEquals(new VfpOp.ConvertRoundedHalf(null, true, 0, 1, Condition.AL), lift(decodeArm(V80, vcvtrHalf)));
         assertEquals(3, run(V80, vcvtrHalf, fpscrMode(FpRoundingMode.ROUND_TOWARD_PLUS_INFINITY)
                 .andThen(c -> c.vfp().setS(1, HALF_2_5))).vfp().s(0));
         assertEquals(2, run(V80, vcvtrHalf, fpscrMode(FpRoundingMode.ROUND_TO_NEAREST)
@@ -339,8 +340,8 @@ class VfpB227ResidualsTest {
         Consumer<ArmCore> setup = c -> c.vfp().setS(3, (HALF_1_5 << 16) | HALF_2_5);
         ArmCore core = run(V80, word(COND_AL, OPC2_CVT_FROM_HALF, SIZE_DOUBLE, true, dField(2), sField(3)), setup);
         assertEquals(1.5, core.vfp().dDouble(2));
-        assertEquals(IrOp.HalfPrecisionConversion.F16_TO_F64,
-                ((IrOp.VfpConvertHalfPrecision) lift(decodeArm(V80,
+        assertEquals(VfpOp.HalfPrecisionConversion.F16_TO_F64,
+                ((VfpOp.ConvertHalfPrecision) lift(decodeArm(V80,
                         word(COND_AL, OPC2_CVT_FROM_HALF, SIZE_DOUBLE, true, dField(2), sField(3))))).conversion());
     }
 
@@ -374,7 +375,7 @@ class VfpB227ResidualsTest {
         int bottom = word(COND_AL, OPC2_CVT_TO_HALF, SIZE_HALF, false, sField(0), sField(1));
         int top = word(COND_AL, OPC2_CVT_TO_HALF, SIZE_HALF, true, sField(0), sField(1));
         assertEquals(InstructionKind.VFP_CONVERT_HALF_PRECISION, kindOf(V86, bottom));
-        assertEquals(new IrOp.VfpConvertHalfPrecision(IrOp.HalfPrecisionConversion.F32_TO_BF16, true, 0, 1,
+        assertEquals(new VfpOp.ConvertHalfPrecision(VfpOp.HalfPrecisionConversion.F32_TO_BF16, true, 0, 1,
                 Condition.AL), lift(decodeArm(V86, top)));
         Consumer<ArmCore> one = c -> {
             c.vfp().setS(0, 0x1111_1111);
@@ -445,7 +446,7 @@ class VfpB227ResidualsTest {
     @Test
     void vcvtrHalfUnsignedDecodesAndSaturatesNegativeToZero() {
         int word = word(COND_AL, OPC2_VCVT_TO_U32, SIZE_HALF, false, sField(0), sField(1));
-        assertEquals(new IrOp.VfpConvertRoundedHalf(null, false, 0, 1, Condition.AL), lift(decodeArm(V80, word)));
+        assertEquals(new VfpOp.ConvertRoundedHalf(null, false, 0, 1, Condition.AL), lift(decodeArm(V80, word)));
         assertEquals(0, run(V80, word, c -> c.vfp().setS(1, 0xBC00)).vfp().s(0), "-1.0 sem sinal satura em 0");
     }
 
@@ -470,7 +471,7 @@ class VfpB227ResidualsTest {
     void vjcvtDecodesToVfpJavascriptConvertOnlyWithJscvt() {
         DecodedInstruction decoded = decodeArm(V86, VJCVT_WORD);
         assertEquals(InstructionKind.VFP_JAVASCRIPT_CONVERT, decoded.kind());
-        assertEquals(new IrOp.VfpJavascriptConvert(0, 1, Condition.AL), lift(decoded));
+        assertEquals(new VfpOp.JavascriptConvert(0, 1, Condition.AL), lift(decoded));
         // ARMv8.0 (sem FEAT_JSCVT), VFP puro e a variante sp são recusados.
         assertEquals(InstructionKind.UNIMPLEMENTED, kindOf(V80, VJCVT_WORD));
         assertEquals(InstructionKind.UNIMPLEMENTED, kindOf(VFP_ONLY, VJCVT_WORD));
@@ -557,10 +558,10 @@ class VfpB227ResidualsTest {
         core.vfp().setDDouble(1, 4294967301.0);
         core.vfp().setSFloat(4, 1.5f);
         IrBlock.Builder builder = IrBlock.builder(0);
-        builder.add(new IrOp.VfpJavascriptConvert(0, 1, Condition.AL));
-        builder.add(new IrOp.VfpConvertHalfPrecision(IrOp.HalfPrecisionConversion.F32_TO_F16, false, 6, 4,
+        builder.add(new VfpOp.JavascriptConvert(0, 1, Condition.AL));
+        builder.add(new VfpOp.ConvertHalfPrecision(VfpOp.HalfPrecisionConversion.F32_TO_F16, false, 6, 4,
                 Condition.AL));
-        builder.add(new IrOp.VfpRound(null, false, 5, 4, Condition.AL));
+        builder.add(new VfpOp.Round(null, false, 5, 4, Condition.AL));
         builder.add(new IrOp.Cycle(1));
         builder.add(new IrOp.Fetch(4, 4));
         new IrBlockExecutor(V86).execute(builder.endPc(4).sealed(), core);
@@ -571,9 +572,9 @@ class VfpB227ResidualsTest {
 
     @Test
     void asmNativePolicyRefusesTheNewOps() {
-        assertEquals(false, AsmNativePolicy.supports(new IrOp.VfpJavascriptConvert(0, 1, Condition.AL)));
-        assertEquals(false, AsmNativePolicy.supports(new IrOp.VfpConvertHalfPrecision(
-                IrOp.HalfPrecisionConversion.F16_TO_F32, false, 0, 1, Condition.AL)));
+        assertEquals(false, AsmNativePolicy.supports(new VfpOp.JavascriptConvert(0, 1, Condition.AL)));
+        assertEquals(false, AsmNativePolicy.supports(new VfpOp.ConvertHalfPrecision(
+                VfpOp.HalfPrecisionConversion.F16_TO_F32, false, 0, 1, Condition.AL)));
     }
 
     @Test

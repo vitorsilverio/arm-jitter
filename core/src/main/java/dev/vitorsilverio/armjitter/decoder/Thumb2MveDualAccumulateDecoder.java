@@ -6,6 +6,7 @@ import dev.vitorsilverio.armjitter.arch.DecoderExtension;
 import dev.vitorsilverio.armjitter.core.Condition;
 import dev.vitorsilverio.armjitter.core.VfpRegisters;
 import dev.vitorsilverio.armjitter.ir.IrOp;
+import dev.vitorsilverio.armjitter.ir.MveReductionOp;
 
 /// `VMLADAV_S`/`VMLADAV_U`/`VMLSDAV`/`VMLALDAV_S`/`VMLALDAV_U`/`VMLSLDAV`/`VRMLALDAVH_S`/
 /// `VRMLALDAVH_U`/`VRMLSLDAVH`/`VMAXV_S`/`VMAXV_U`/`VMINV_S`/`VMINV_U`/`VMAXAV`/`VMINAV`/
@@ -340,7 +341,7 @@ public final class Thumb2MveDualAccumulateDecoder implements DecoderExtension {
         int rda = ((raw >>> RDALO_RAW_SHIFT) & RDALO_RAW_MASK) * 2;
         boolean accumulate = ((raw >>> A_BIT) & 1) != 0;
         return DecodedInstruction.lifted(address, raw, InstructionSet.THUMB, condition,
-                new IrOp.MveVectorDualAccumulate(unsignedForm, subtract, exchange, accumulate, size, qn, qm, rda,
+                new MveReductionOp.VectorDualAccumulate(unsignedForm, subtract, exchange, accumulate, size, qn, qm, rda,
                         condition));
     }
 
@@ -367,7 +368,7 @@ public final class Thumb2MveDualAccumulateDecoder implements DecoderExtension {
         int rdalo = ((raw >>> RDALO_RAW_SHIFT) & RDALO_RAW_MASK) * 2;
         boolean accumulate = ((raw >>> A_BIT) & 1) != 0;
         return DecodedInstruction.lifted(address, raw, InstructionSet.THUMB, condition,
-                new IrOp.MveVectorDualAccumulateLong(unsignedForm, subtract, exchange, accumulate, size, qn, qm,
+                new MveReductionOp.VectorDualAccumulateLong(unsignedForm, subtract, exchange, accumulate, size, qn, qm,
                         rdahi, rdalo, condition));
     }
 
@@ -393,7 +394,7 @@ public final class Thumb2MveDualAccumulateDecoder implements DecoderExtension {
         int rdalo = ((raw >>> RDALO_RAW_SHIFT) & RDALO_RAW_MASK) * 2;
         boolean accumulate = ((raw >>> A_BIT) & 1) != 0;
         return DecodedInstruction.lifted(address, raw, InstructionSet.THUMB, condition,
-                new IrOp.MveVectorRoundingDualAccumulateHigh(unsignedForm, subtract, exchange, accumulate, qn, qm,
+                new MveReductionOp.VectorRoundingDualAccumulateHigh(unsignedForm, subtract, exchange, accumulate, qn, qm,
                         rdahi, rdalo, condition));
     }
 
@@ -416,7 +417,7 @@ public final class Thumb2MveDualAccumulateDecoder implements DecoderExtension {
             return null;
         }
         return DecodedInstruction.lifted(address, raw, InstructionSet.THUMB, condition,
-                new IrOp.MveVectorMinMaxAcrossVector(max, unsignedForm, absoluteForm, size, qm, rda, condition));
+                new MveReductionOp.VectorMinMaxAcrossVector(max, unsignedForm, absoluteForm, size, qm, rda, condition));
     }
 
     /// `VMAXNMV`/`VMINNMV`/`VMAXNMAV`/`VMINNMAV` (`@vmaxnmv`, `size` fixo pelo bloco). Gate
@@ -438,7 +439,7 @@ public final class Thumb2MveDualAccumulateDecoder implements DecoderExtension {
             return null;
         }
         return DecodedInstruction.lifted(address, raw, InstructionSet.THUMB, condition,
-                new IrOp.MveVectorFpMinMaxAcrossVector(max, absoluteForm, esz, qm, rda, condition));
+                new MveReductionOp.VectorFpMinMaxAcrossVector(max, absoluteForm, esz, qm, rda, condition));
     }
 
     private static int extractQn(int raw) {

@@ -1,6 +1,7 @@
 package dev.vitorsilverio.armjitter.ir.opt;
 
 import dev.vitorsilverio.armjitter.core.Condition;
+import dev.vitorsilverio.armjitter.ir.IntegerOp;
 import dev.vitorsilverio.armjitter.ir.IrBlock;
 import dev.vitorsilverio.armjitter.ir.IrOp;
 import dev.vitorsilverio.armjitter.ir.IrOpCode;
@@ -22,7 +23,7 @@ import java.util.List;
 ///   <li>Para opcodes que usam src1, {@code src1ValueOverride >= 0}.</li>
 /// </ul>
 ///
-/// <p>VFP (B3.4): esta passagem só casa {@code instanceof IrOp.Alu} — todo record {@code Vfp*}
+/// <p>VFP (B3.4): esta passagem só casa {@code instanceof IntegerOp.Alu} — todo record {@code Vfp*}
 /// atravessa intacto, mesma barreira de fold que {@code Coprocessor}/{@code Swi} já tinham antes
 /// (nenhuma aritmética de ponto flutuante é dobrada nesta rodada).
 public final class ConstantFoldPass implements IrOptimizer {
@@ -32,7 +33,7 @@ public final class ConstantFoldPass implements IrOptimizer {
         List<IrOp> result = new ArrayList<>(block.operations().size());
         boolean changed = false;
         for (IrOp op : block.operations()) {
-            if (op instanceof IrOp.Alu alu && canFold(alu)) {
+            if (op instanceof IntegerOp.Alu alu && canFold(alu)) {
                 result.add(foldedMov(alu));
                 changed = true;
             } else {
@@ -42,7 +43,7 @@ public final class ConstantFoldPass implements IrOptimizer {
         return changed ? new IrBlock(block.startPc(), block.endPc(), result) : block;
     }
 
-    private static boolean canFold(IrOp.Alu alu) {
+    private static boolean canFold(IntegerOp.Alu alu) {
         if (alu.condition() != Condition.AL) return false;
         if (alu.setFlags()) return false;
         if (alu.dst() == 15) return false;
@@ -58,14 +59,14 @@ public final class ConstantFoldPass implements IrOptimizer {
         };
     }
 
-    private static IrOp.Alu foldedMov(IrOp.Alu alu) {
+    private static IntegerOp.Alu foldedMov(IntegerOp.Alu alu) {
         int value = compute(alu);
-        return new IrOp.Alu(
+        return new IntegerOp.Alu(
                 IrOpCode.MOV, alu.dst(), 0, -1,
                 new IrOperand.Immediate(value), false, Condition.AL);
     }
 
-    private static int compute(IrOp.Alu alu) {
+    private static int compute(IntegerOp.Alu alu) {
         int imm = ((IrOperand.Immediate) alu.src2()).value();
         int s1 = alu.src1ValueOverride();
         return switch (alu.opcode()) {

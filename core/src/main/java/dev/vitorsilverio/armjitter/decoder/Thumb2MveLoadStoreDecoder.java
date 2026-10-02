@@ -5,7 +5,7 @@ import dev.vitorsilverio.armjitter.arch.ArmFeature;
 import dev.vitorsilverio.armjitter.arch.DecoderExtension;
 import dev.vitorsilverio.armjitter.core.Condition;
 import dev.vitorsilverio.armjitter.core.VfpRegisters;
-import dev.vitorsilverio.armjitter.ir.IrOp;
+import dev.vitorsilverio.armjitter.ir.MveMoveOp;
 
 /// `VLDR_VSTR` contíguo não-alargante (perfil M, B16.3, MVE/Helium) — as 6 linhas de
 /// `target/isa-decode/mve.decode` (confirmadas via `WebFetch` nesta rodada, idênticas às citadas na
@@ -114,6 +114,6 @@ public final class Thumb2MveLoadStoreDecoder implements DecoderExtension {
         int signedOffset = add ? scaledOffset : -scaledOffset;
         boolean postIndexed = !p;
         return DecodedInstruction.lifted(address, raw, InstructionSet.THUMB, condition,
-                new IrOp.MveLoadStore(qd, rn, signedOffset, load, w, postIndexed, condition));
+                new MveMoveOp.LoadStore(qd, rn, signedOffset, load, w, postIndexed, condition));
     }
 }

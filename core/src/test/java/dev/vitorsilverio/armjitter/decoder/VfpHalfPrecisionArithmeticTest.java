@@ -15,6 +15,7 @@ import dev.vitorsilverio.armjitter.ir.IrBlock;
 import dev.vitorsilverio.armjitter.ir.IrOp;
 import dev.vitorsilverio.armjitter.ir.StandardIrBlockLifter;
 import dev.vitorsilverio.armjitter.ir.StandardIrBuilder;
+import dev.vitorsilverio.armjitter.ir.VfpOp;
 import dev.vitorsilverio.armjitter.support.TestAddressSpace;
 import dev.vitorsilverio.armjitter.swi.SwiDispatcher;
 import java.util.List;
@@ -183,31 +184,31 @@ class VfpHalfPrecisionArithmeticTest {
         int word = threeRegHalfWord(0xE, 0b011, false, 1, 2, 3); // op1=011 -> ADD (bit6=0).
         DecodedInstruction decoded = decodeArm(FP16_TEST_ARCH, word);
         assertEquals(InstructionKind.VFP_ALU_HALF, decoded.kind());
-        assertEquals(new IrOp.VfpAluHalf(IrOp.VfpOperation.ADD, 2, 1, 3, Condition.AL), liftSingleOp(decoded));
+        assertEquals(new VfpOp.AluHalf(VfpOp.VfpOperation.ADD, 2, 1, 3, Condition.AL), liftSingleOp(decoded));
     }
 
     @Test
     void vsubHpIsAddWithBit6Set() {
         int word = threeRegHalfWord(0xE, 0b011, true, 1, 2, 3);
-        assertEquals(new IrOp.VfpAluHalf(IrOp.VfpOperation.SUB, 2, 1, 3, Condition.AL),
+        assertEquals(new VfpOp.AluHalf(VfpOp.VfpOperation.SUB, 2, 1, 3, Condition.AL),
                 liftSingleOp(decodeArm(FP16_TEST_ARCH, word)));
     }
 
     @Test
     void vfmaHpRequiresFusedMultiplyAccumulateFeature() {
         int word = threeRegHalfWord(0xE, 0b110, false, 1, 2, 3);
-        assertEquals(new IrOp.VfpAluHalf(IrOp.VfpOperation.FMA, 2, 1, 3, Condition.AL),
+        assertEquals(new VfpOp.AluHalf(VfpOp.VfpOperation.FMA, 2, 1, 3, Condition.AL),
                 liftSingleOp(decodeArm(FP16_TEST_ARCH, word)));
     }
 
     @Test
     void vabsHpNegHpSqrtHpDecodeToVfpAluHalfUnary() {
         int abs = twoOperandHalfWord(0xE, 0x0, true, 2, 3);
-        assertEquals(new IrOp.VfpAluHalf(IrOp.VfpOperation.ABS, 2, -1, 3, Condition.AL), liftSingleOp(decodeArm(FP16_TEST_ARCH, abs)));
+        assertEquals(new VfpOp.AluHalf(VfpOp.VfpOperation.ABS, 2, -1, 3, Condition.AL), liftSingleOp(decodeArm(FP16_TEST_ARCH, abs)));
         int neg = twoOperandHalfWord(0xE, 0x1, false, 2, 3);
-        assertEquals(new IrOp.VfpAluHalf(IrOp.VfpOperation.NEG, 2, -1, 3, Condition.AL), liftSingleOp(decodeArm(FP16_TEST_ARCH, neg)));
+        assertEquals(new VfpOp.AluHalf(VfpOp.VfpOperation.NEG, 2, -1, 3, Condition.AL), liftSingleOp(decodeArm(FP16_TEST_ARCH, neg)));
         int sqrt = twoOperandHalfWord(0xE, 0x1, true, 2, 3);
-        assertEquals(new IrOp.VfpAluHalf(IrOp.VfpOperation.SQRT, 2, -1, 3, Condition.AL), liftSingleOp(decodeArm(FP16_TEST_ARCH, sqrt)));
+        assertEquals(new VfpOp.AluHalf(VfpOp.VfpOperation.SQRT, 2, -1, 3, Condition.AL), liftSingleOp(decodeArm(FP16_TEST_ARCH, sqrt)));
     }
 
     /// `VMOV_reg_hp` não existe (opc2=0x0,bit7=0 é reservado, ver Contexto da task).
@@ -222,52 +223,52 @@ class VfpHalfPrecisionArithmeticTest {
         int word = vmovImmHalfWord(0xE, 4, 0x3F);
         DecodedInstruction decoded = decodeArm(FP16_TEST_ARCH, word);
         assertEquals(InstructionKind.VFP_MOVE_IMMEDIATE_HALF, decoded.kind());
-        IrOp.VfpMoveImmediateHalf lifted = (IrOp.VfpMoveImmediateHalf) liftSingleOp(decoded);
+        VfpOp.MoveImmediateHalf lifted = (VfpOp.MoveImmediateHalf) liftSingleOp(decoded);
         assertEquals(4, lifted.vd());
     }
 
     @Test
     void vcmpHpDecodesToVfpCompareHalf() {
         int word = twoOperandHalfWord(0xE, 0x4, false, 2, 3);
-        assertEquals(new IrOp.VfpCompareHalf(false, false, 2, 3, Condition.AL), liftSingleOp(decodeArm(FP16_TEST_ARCH, word)));
+        assertEquals(new VfpOp.CompareHalf(false, false, 2, 3, Condition.AL), liftSingleOp(decodeArm(FP16_TEST_ARCH, word)));
     }
 
     @Test
     void vcmpHpWithZeroDecodesCompareWithZero() {
         int word = twoOperandHalfWord(0xE, 0x5, false, 2, 3);
-        assertEquals(new IrOp.VfpCompareHalf(true, false, 2, -1, Condition.AL), liftSingleOp(decodeArm(FP16_TEST_ARCH, word)));
+        assertEquals(new VfpOp.CompareHalf(true, false, 2, -1, Condition.AL), liftSingleOp(decodeArm(FP16_TEST_ARCH, word)));
     }
 
     @Test
     void vcvtIntHpDecodesToVfpConvertSignedUnsigned() {
         int signed = twoOperandHalfWord(0xE, 0x8, true, 2, 3);
-        assertEquals(new IrOp.VfpConvert(IrOp.VfpConversion.S32_TO_F16, 2, 3, Condition.AL), liftSingleOp(decodeArm(FP16_TEST_ARCH, signed)));
+        assertEquals(new VfpOp.Convert(VfpOp.VfpConversion.S32_TO_F16, 2, 3, Condition.AL), liftSingleOp(decodeArm(FP16_TEST_ARCH, signed)));
         int unsigned = twoOperandHalfWord(0xE, 0x8, false, 2, 3);
-        assertEquals(new IrOp.VfpConvert(IrOp.VfpConversion.U32_TO_F16, 2, 3, Condition.AL), liftSingleOp(decodeArm(FP16_TEST_ARCH, unsigned)));
+        assertEquals(new VfpOp.Convert(VfpOp.VfpConversion.U32_TO_F16, 2, 3, Condition.AL), liftSingleOp(decodeArm(FP16_TEST_ARCH, unsigned)));
     }
 
     @Test
     void vcvtHpIntDecodesToVfpConvertSignedUnsigned() {
         int signed = twoOperandHalfWord(0xE, 0xD, true, 2, 3);
-        assertEquals(new IrOp.VfpConvert(IrOp.VfpConversion.F16_TO_S32, 2, 3, Condition.AL), liftSingleOp(decodeArm(FP16_TEST_ARCH, signed)));
+        assertEquals(new VfpOp.Convert(VfpOp.VfpConversion.F16_TO_S32, 2, 3, Condition.AL), liftSingleOp(decodeArm(FP16_TEST_ARCH, signed)));
         int unsigned = twoOperandHalfWord(0xE, 0xC, true, 2, 3);
-        assertEquals(new IrOp.VfpConvert(IrOp.VfpConversion.F16_TO_U32, 2, 3, Condition.AL), liftSingleOp(decodeArm(FP16_TEST_ARCH, unsigned)));
+        assertEquals(new VfpOp.Convert(VfpOp.VfpConversion.F16_TO_U32, 2, 3, Condition.AL), liftSingleOp(decodeArm(FP16_TEST_ARCH, unsigned)));
     }
 
     /// `VCVTR_hp_int` (`bit7=rz=0`, B22.7): arredonda pelo `FPSCR.RMode` — `direction == null` no IR.
     @Test
     void vcvtHpIntWithoutRzDecodesToVcvtrHalf() {
         int word = twoOperandHalfWord(0xE, 0xD, false, 2, 3);
-        assertEquals(new IrOp.VfpConvertRoundedHalf(null, true, 2, 3, Condition.AL),
+        assertEquals(new VfpOp.ConvertRoundedHalf(null, true, 2, 3, Condition.AL),
                 liftSingleOp(decodeArm(FP16_TEST_ARCH, word)));
     }
 
     @Test
     void vrintrHpAndVrintxHpDecodeToVfpRoundHalfWithFpscrDirection() {
         // B22.7: `VRINTR_hp` (opc2=0x6, bit7=0) e `VRINTX_hp` (opc2=0x7, bit7=0) usam `FPSCR.RMode`.
-        assertEquals(new IrOp.VfpRoundHalf(null, 2, 3, Condition.AL),
+        assertEquals(new VfpOp.RoundHalf(null, 2, 3, Condition.AL),
                 liftSingleOp(decodeArm(FP16_TEST_ARCH, twoOperandHalfWord(0xE, 0x6, false, 2, 3))));
-        assertEquals(new IrOp.VfpRoundHalf(null, 2, 3, Condition.AL),
+        assertEquals(new VfpOp.RoundHalf(null, 2, 3, Condition.AL),
                 liftSingleOp(decodeArm(FP16_TEST_ARCH, twoOperandHalfWord(0xE, 0x7, false, 2, 3))));
     }
 
@@ -276,12 +277,12 @@ class VfpHalfPrecisionArithmeticTest {
         int loadWord = vldrVstrHalfWord(0xE, true, true, 1, 2, 4);
         DecodedInstruction loadDecoded = decodeArm(FP16_TEST_ARCH, loadWord);
         assertEquals(InstructionKind.VFP_LOAD_HALF, loadDecoded.kind());
-        assertEquals(new IrOp.VfpLoadHalf(2, 1, -1, 16, Condition.AL), liftSingleOp(loadDecoded));
+        assertEquals(new VfpOp.LoadHalf(2, 1, -1, 16, Condition.AL), liftSingleOp(loadDecoded));
 
         int storeWord = vldrVstrHalfWord(0xE, false, false, 1, 2, 4);
         DecodedInstruction storeDecoded = decodeArm(FP16_TEST_ARCH, storeWord);
         assertEquals(InstructionKind.VFP_STORE_HALF, storeDecoded.kind());
-        assertEquals(new IrOp.VfpStoreHalf(2, 1, -1, -16, Condition.AL), liftSingleOp(storeDecoded));
+        assertEquals(new VfpOp.StoreHalf(2, 1, -1, -16, Condition.AL), liftSingleOp(storeDecoded));
     }
 
     // ── 2. Decode/lift — espaço incondicional (`VSEL_hp`/`VMAXNM_hp`/`VMINNM_hp`/`VRINT_hp`/`VCVT_hp`) ──
@@ -289,28 +290,28 @@ class VfpHalfPrecisionArithmeticTest {
     @Test
     void vselHpDecodesToVfpSelectHalf() {
         int word = vselHalfWord(2, 1, 2, 3); // cc=2 -> GE.
-        assertEquals(new IrOp.VfpSelectHalf(2, 1, 3, Condition.GE, Condition.AL), liftSingleOp(decodeArm(FP16_TEST_ARCH, word)));
+        assertEquals(new VfpOp.SelectHalf(2, 1, 3, Condition.GE, Condition.AL), liftSingleOp(decodeArm(FP16_TEST_ARCH, word)));
     }
 
     @Test
     void vmaxnmHpVminnmHpDecodeToVfpAluHalf() {
         int max = maxNmMinNmHalfWord(false, 1, 2, 3);
-        assertEquals(new IrOp.VfpAluHalf(IrOp.VfpOperation.MAXNM, 2, 1, 3, Condition.AL), liftSingleOp(decodeArm(FP16_TEST_ARCH, max)));
+        assertEquals(new VfpOp.AluHalf(VfpOp.VfpOperation.MAXNM, 2, 1, 3, Condition.AL), liftSingleOp(decodeArm(FP16_TEST_ARCH, max)));
         int min = maxNmMinNmHalfWord(true, 1, 2, 3);
-        assertEquals(new IrOp.VfpAluHalf(IrOp.VfpOperation.MINNM, 2, 1, 3, Condition.AL), liftSingleOp(decodeArm(FP16_TEST_ARCH, min)));
+        assertEquals(new VfpOp.AluHalf(VfpOp.VfpOperation.MINNM, 2, 1, 3, Condition.AL), liftSingleOp(decodeArm(FP16_TEST_ARCH, min)));
     }
 
     @Test
     void vrintHpDecodesToVfpRoundHalf() {
         int word = roundHalfWord(0b01, 2, 3); // rm=01 -> ties-even.
-        assertEquals(new IrOp.VfpRoundHalf(AdvSimdLanes.RoundingMode.NEAREST_TIES_EVEN, 2, 3, Condition.AL),
+        assertEquals(new VfpOp.RoundHalf(AdvSimdLanes.RoundingMode.NEAREST_TIES_EVEN, 2, 3, Condition.AL),
                 liftSingleOp(decodeArm(FP16_TEST_ARCH, word)));
     }
 
     @Test
     void vcvtHpDecodesToVfpConvertRoundedHalf() {
         int word = convertRoundedHalfWord(0b10, true, 2, 3); // +inf, signed.
-        assertEquals(new IrOp.VfpConvertRoundedHalf(AdvSimdLanes.RoundingMode.TOWARD_POSITIVE_INFINITY, true, 2, 3, Condition.AL),
+        assertEquals(new VfpOp.ConvertRoundedHalf(AdvSimdLanes.RoundingMode.TOWARD_POSITIVE_INFINITY, true, 2, 3, Condition.AL),
                 liftSingleOp(decodeArm(FP16_TEST_ARCH, word)));
     }
 
@@ -342,7 +343,7 @@ class VfpHalfPrecisionArithmeticTest {
         int word = threeRegHalfWord(0xE, 0b011, false, 1, 2, 3) & ~(0xF << 8) | (0xA << 8);
         DecodedInstruction decoded = decodeArm(FP16_TEST_ARCH, word);
         assertEquals(InstructionKind.VFP_ALU, decoded.kind());
-        assertEquals(new IrOp.VfpAlu(IrOp.VfpOperation.ADD, false, 2, 1, 3, Condition.AL), liftSingleOp(decoded));
+        assertEquals(new VfpOp.Alu(VfpOp.VfpOperation.ADD, false, 2, 1, 3, Condition.AL), liftSingleOp(decoded));
     }
 
     // ── 4. Execução: aritmética real em `binary16`, ponte por `AdvSimdLanes` ───────────────────
@@ -353,7 +354,7 @@ class VfpHalfPrecisionArithmeticTest {
         setHalf(core, 1, 1.0f);
         setHalf(core, 3, 2.0f);
         new IrBlockExecutor(FP16_TEST_ARCH).executeOp(core,
-                new IrOp.VfpAluHalf(IrOp.VfpOperation.ADD, 2, 1, 3, Condition.AL), 0);
+                new VfpOp.AluHalf(VfpOp.VfpOperation.ADD, 2, 1, 3, Condition.AL), 0);
         assertEquals(half(3.0f), readHalf(core, 2));
         assertEquals(0, core.vfp().s(2) & 0xFFFF_0000, "bits altos devem ficar zerados");
     }
@@ -363,10 +364,10 @@ class VfpHalfPrecisionArithmeticTest {
         ArmCore core = newCore();
         setHalf(core, 3, -1.5f);
         new IrBlockExecutor(FP16_TEST_ARCH).executeOp(core,
-                new IrOp.VfpAluHalf(IrOp.VfpOperation.ABS, 2, -1, 3, Condition.AL), 0);
+                new VfpOp.AluHalf(VfpOp.VfpOperation.ABS, 2, -1, 3, Condition.AL), 0);
         assertEquals(half(1.5f), readHalf(core, 2));
         new IrBlockExecutor(FP16_TEST_ARCH).executeOp(core,
-                new IrOp.VfpAluHalf(IrOp.VfpOperation.NEG, 4, -1, 3, Condition.AL), 0);
+                new VfpOp.AluHalf(VfpOp.VfpOperation.NEG, 4, -1, 3, Condition.AL), 0);
         assertEquals(half(1.5f), readHalf(core, 4));
     }
 
@@ -377,7 +378,7 @@ class VfpHalfPrecisionArithmeticTest {
         core.vfp().setS(1, 0x0200); // subnormal half (expoente=0, mantissa=0x200).
         setHalf(core, 3, 0.0f);
         new IrBlockExecutor(FP16_TEST_ARCH).executeOp(core,
-                new IrOp.VfpAluHalf(IrOp.VfpOperation.ADD, 2, 1, 3, Condition.AL), 0);
+                new VfpOp.AluHalf(VfpOp.VfpOperation.ADD, 2, 1, 3, Condition.AL), 0);
         assertEquals(0, core.vfp().s(2) & 0xFFFF, "operando subnormal deveria ser flushado (DAZ) antes de somar");
     }
 
@@ -386,7 +387,7 @@ class VfpHalfPrecisionArithmeticTest {
         ArmCore core = newCore();
         setHalf(core, 1, 1.0f);
         setHalf(core, 2, 2.0f);
-        new IrBlockExecutor(FP16_TEST_ARCH).executeOp(core, new IrOp.VfpCompareHalf(false, false, 1, 2, Condition.AL), 0);
+        new IrBlockExecutor(FP16_TEST_ARCH).executeOp(core, new VfpOp.CompareHalf(false, false, 1, 2, Condition.AL), 0);
         assertTrue(core.fpscr().n(), "1.0 < 2.0 deveria setar N");
     }
 
@@ -397,7 +398,7 @@ class VfpHalfPrecisionArithmeticTest {
         setHalf(core, 2, 9.0f);
         core.cpsr().setNzcv(false, true, false, false); // Z=1 -> EQ verdadeiro.
         new IrBlockExecutor(FP16_TEST_ARCH).executeOp(core,
-                new IrOp.VfpSelectHalf(3, 1, 2, Condition.EQ, Condition.AL), 0);
+                new VfpOp.SelectHalf(3, 1, 2, Condition.EQ, Condition.AL), 0);
         assertEquals(half(5.0f), readHalf(core, 3));
     }
 
@@ -405,7 +406,7 @@ class VfpHalfPrecisionArithmeticTest {
     void executeVfpMoveImmediateHalfWritesLowHalfZeroExtended() {
         ArmCore core = newCore();
         core.vfp().setS(2, -1);
-        new IrBlockExecutor(FP16_TEST_ARCH).executeOp(core, new IrOp.VfpMoveImmediateHalf(2, 0x3C00, Condition.AL), 0);
+        new IrBlockExecutor(FP16_TEST_ARCH).executeOp(core, new VfpOp.MoveImmediateHalf(2, 0x3C00, Condition.AL), 0);
         assertEquals(0x3C00, core.vfp().s(2));
     }
 
@@ -414,7 +415,7 @@ class VfpHalfPrecisionArithmeticTest {
         ArmCore core = newCore();
         setHalf(core, 1, 1.25f);
         new IrBlockExecutor(FP16_TEST_ARCH).executeOp(core,
-                new IrOp.VfpRoundHalf(AdvSimdLanes.RoundingMode.TOWARD_POSITIVE_INFINITY, 2, 1, Condition.AL), 0);
+                new VfpOp.RoundHalf(AdvSimdLanes.RoundingMode.TOWARD_POSITIVE_INFINITY, 2, 1, Condition.AL), 0);
         assertEquals(half(2.0f), readHalf(core, 2));
     }
 
@@ -423,7 +424,7 @@ class VfpHalfPrecisionArithmeticTest {
         ArmCore core = newCore();
         setHalf(core, 1, 1.5f);
         new IrBlockExecutor(FP16_TEST_ARCH).executeOp(core,
-                new IrOp.VfpConvertRoundedHalf(AdvSimdLanes.RoundingMode.TOWARD_POSITIVE_INFINITY, true, 2, 1, Condition.AL), 0);
+                new VfpOp.ConvertRoundedHalf(AdvSimdLanes.RoundingMode.TOWARD_POSITIVE_INFINITY, true, 2, 1, Condition.AL), 0);
         assertEquals(2, core.vfp().s(2));
     }
 
@@ -432,11 +433,11 @@ class VfpHalfPrecisionArithmeticTest {
         ArmCore core = newCore();
         core.setRegister(0, 0); // não usado diretamente, apenas para não deixar sujo.
         core.vfp().setS(1, 4); // int32 = 4.
-        new IrBlockExecutor(FP16_TEST_ARCH).executeOp(core, new IrOp.VfpConvert(IrOp.VfpConversion.S32_TO_F16, 2, 1, Condition.AL), 0);
+        new IrBlockExecutor(FP16_TEST_ARCH).executeOp(core, new VfpOp.Convert(VfpOp.VfpConversion.S32_TO_F16, 2, 1, Condition.AL), 0);
         assertEquals(half(4.0f), readHalf(core, 2));
 
         setHalf(core, 3, 7.0f);
-        new IrBlockExecutor(FP16_TEST_ARCH).executeOp(core, new IrOp.VfpConvert(IrOp.VfpConversion.F16_TO_S32, 4, 3, Condition.AL), 0);
+        new IrBlockExecutor(FP16_TEST_ARCH).executeOp(core, new VfpOp.Convert(VfpOp.VfpConversion.F16_TO_S32, 4, 3, Condition.AL), 0);
         assertEquals(7, core.vfp().s(4));
     }
 
@@ -445,11 +446,11 @@ class VfpHalfPrecisionArithmeticTest {
         ArmCore core = newCore();
         setHalf(core, 1, 2.5f);
         new IrBlockExecutor(FP16_TEST_ARCH).executeOp(core,
-                new IrOp.VfpConvertFixedHalf(true, false, false, 1, 1, Condition.AL), 0);
+                new VfpOp.ConvertFixedHalf(true, false, false, 1, 1, Condition.AL), 0);
         assertEquals(5, core.vfp().s(1) & 0xFFFF); // 2.5 * 2^1 = 5.
         core.vfp().setS(1, 5);
         new IrBlockExecutor(FP16_TEST_ARCH).executeOp(core,
-                new IrOp.VfpConvertFixedHalf(false, false, false, 1, 1, Condition.AL), 0);
+                new VfpOp.ConvertFixedHalf(false, false, false, 1, 1, Condition.AL), 0);
         assertEquals(half(2.5f), readHalf(core, 1));
     }
 
@@ -457,8 +458,8 @@ class VfpHalfPrecisionArithmeticTest {
     void executeVfpLoadHalfStoreHalfRoundTrip() {
         ArmCore core = newCore();
         setHalf(core, 1, 3.5f);
-        new IrBlockExecutor(FP16_TEST_ARCH).executeOp(core, new IrOp.VfpStoreHalf(1, 0, -1, 8, Condition.AL), 0);
-        new IrBlockExecutor(FP16_TEST_ARCH).executeOp(core, new IrOp.VfpLoadHalf(2, 0, -1, 8, Condition.AL), 0);
+        new IrBlockExecutor(FP16_TEST_ARCH).executeOp(core, new VfpOp.StoreHalf(1, 0, -1, 8, Condition.AL), 0);
+        new IrBlockExecutor(FP16_TEST_ARCH).executeOp(core, new VfpOp.LoadHalf(2, 0, -1, 8, Condition.AL), 0);
         assertEquals(half(3.5f), readHalf(core, 2));
         assertEquals(0, core.vfp().s(2) & 0xFFFF_0000);
     }
@@ -468,17 +469,17 @@ class VfpHalfPrecisionArithmeticTest {
     @Test
     void asmNativePolicyRefusesAllHalfPrecisionOps() {
         Condition c = Condition.AL;
-        assertEquals(false, AsmNativePolicy.supports(new IrOp.VfpAluHalf(IrOp.VfpOperation.ADD, 0, 1, 2, c)));
-        assertEquals(false, AsmNativePolicy.supports(new IrOp.VfpMoveImmediateHalf(0, 0, c)));
-        assertEquals(false, AsmNativePolicy.supports(new IrOp.VfpCompareHalf(false, false, 0, 1, c)));
-        assertEquals(false, AsmNativePolicy.supports(new IrOp.VfpSelectHalf(0, 1, 2, Condition.EQ, c)));
+        assertEquals(false, AsmNativePolicy.supports(new VfpOp.AluHalf(VfpOp.VfpOperation.ADD, 0, 1, 2, c)));
+        assertEquals(false, AsmNativePolicy.supports(new VfpOp.MoveImmediateHalf(0, 0, c)));
+        assertEquals(false, AsmNativePolicy.supports(new VfpOp.CompareHalf(false, false, 0, 1, c)));
+        assertEquals(false, AsmNativePolicy.supports(new VfpOp.SelectHalf(0, 1, 2, Condition.EQ, c)));
         assertEquals(false, AsmNativePolicy.supports(
-                new IrOp.VfpRoundHalf(AdvSimdLanes.RoundingMode.NEAREST_TIES_AWAY, 0, 1, c)));
-        assertEquals(false, AsmNativePolicy.supports(new IrOp.VfpConvertRoundedHalf(
+                new VfpOp.RoundHalf(AdvSimdLanes.RoundingMode.NEAREST_TIES_AWAY, 0, 1, c)));
+        assertEquals(false, AsmNativePolicy.supports(new VfpOp.ConvertRoundedHalf(
                 AdvSimdLanes.RoundingMode.NEAREST_TIES_AWAY, true, 0, 1, c)));
-        assertEquals(false, AsmNativePolicy.supports(new IrOp.VfpConvertFixedHalf(true, false, false, 8, 0, c)));
-        assertEquals(false, AsmNativePolicy.supports(new IrOp.VfpLoadHalf(0, 1, -1, 0, c)));
-        assertEquals(false, AsmNativePolicy.supports(new IrOp.VfpStoreHalf(0, 1, -1, 0, c)));
+        assertEquals(false, AsmNativePolicy.supports(new VfpOp.ConvertFixedHalf(true, false, false, 8, 0, c)));
+        assertEquals(false, AsmNativePolicy.supports(new VfpOp.LoadHalf(0, 1, -1, 0, c)));
+        assertEquals(false, AsmNativePolicy.supports(new VfpOp.StoreHalf(0, 1, -1, 0, c)));
     }
 
     // ── 6. Fechamento de cobertura JaCoCo (rodada dedicada, a pedido do usuário) ────────────────
@@ -494,23 +495,23 @@ class VfpHalfPrecisionArithmeticTest {
     @Test
     void vmlaHpVmlsHpDecodeToVfpAluHalf() {
         int mla = threeRegHalfWord(0xE, 0b000, false, 1, 2, 3);
-        assertEquals(new IrOp.VfpAluHalf(IrOp.VfpOperation.MLA, 2, 1, 3, Condition.AL), liftSingleOp(decodeArm(FP16_TEST_ARCH, mla)));
+        assertEquals(new VfpOp.AluHalf(VfpOp.VfpOperation.MLA, 2, 1, 3, Condition.AL), liftSingleOp(decodeArm(FP16_TEST_ARCH, mla)));
         int mls = threeRegHalfWord(0xE, 0b000, true, 1, 2, 3);
-        assertEquals(new IrOp.VfpAluHalf(IrOp.VfpOperation.MLS, 2, 1, 3, Condition.AL), liftSingleOp(decodeArm(FP16_TEST_ARCH, mls)));
+        assertEquals(new VfpOp.AluHalf(VfpOp.VfpOperation.MLS, 2, 1, 3, Condition.AL), liftSingleOp(decodeArm(FP16_TEST_ARCH, mls)));
     }
 
     @Test
     void vmulHpVnmulHpDecodeToVfpAluHalf() {
         int mul = threeRegHalfWord(0xE, 0b010, false, 1, 2, 3);
-        assertEquals(new IrOp.VfpAluHalf(IrOp.VfpOperation.MUL, 2, 1, 3, Condition.AL), liftSingleOp(decodeArm(FP16_TEST_ARCH, mul)));
+        assertEquals(new VfpOp.AluHalf(VfpOp.VfpOperation.MUL, 2, 1, 3, Condition.AL), liftSingleOp(decodeArm(FP16_TEST_ARCH, mul)));
         int nmul = threeRegHalfWord(0xE, 0b010, true, 1, 2, 3);
-        assertEquals(new IrOp.VfpAluHalf(IrOp.VfpOperation.NMUL, 2, 1, 3, Condition.AL), liftSingleOp(decodeArm(FP16_TEST_ARCH, nmul)));
+        assertEquals(new VfpOp.AluHalf(VfpOp.VfpOperation.NMUL, 2, 1, 3, Condition.AL), liftSingleOp(decodeArm(FP16_TEST_ARCH, nmul)));
     }
 
     @Test
     void vdivHpDecodesAndBit6SetIsUndefined() {
         int div = threeRegHalfWord(0xE, 0b100, false, 1, 2, 3);
-        assertEquals(new IrOp.VfpAluHalf(IrOp.VfpOperation.DIV, 2, 1, 3, Condition.AL), liftSingleOp(decodeArm(FP16_TEST_ARCH, div)));
+        assertEquals(new VfpOp.AluHalf(VfpOp.VfpOperation.DIV, 2, 1, 3, Condition.AL), liftSingleOp(decodeArm(FP16_TEST_ARCH, div)));
         int reserved = threeRegHalfWord(0xE, 0b100, true, 1, 2, 3);
         assertEquals(InstructionKind.UNIMPLEMENTED, decodeArm(FP16_TEST_ARCH, reserved).kind());
     }
@@ -518,17 +519,17 @@ class VfpHalfPrecisionArithmeticTest {
     @Test
     void vnmlsHpVnmlaHpDecodeToVfpAluHalf() {
         int nmls = threeRegHalfWord(0xE, 0b001, false, 1, 2, 3);
-        assertEquals(new IrOp.VfpAluHalf(IrOp.VfpOperation.NMLS, 2, 1, 3, Condition.AL), liftSingleOp(decodeArm(FP16_TEST_ARCH, nmls)));
+        assertEquals(new VfpOp.AluHalf(VfpOp.VfpOperation.NMLS, 2, 1, 3, Condition.AL), liftSingleOp(decodeArm(FP16_TEST_ARCH, nmls)));
         int nmla = threeRegHalfWord(0xE, 0b001, true, 1, 2, 3);
-        assertEquals(new IrOp.VfpAluHalf(IrOp.VfpOperation.NMLA, 2, 1, 3, Condition.AL), liftSingleOp(decodeArm(FP16_TEST_ARCH, nmla)));
+        assertEquals(new VfpOp.AluHalf(VfpOp.VfpOperation.NMLA, 2, 1, 3, Condition.AL), liftSingleOp(decodeArm(FP16_TEST_ARCH, nmla)));
     }
 
     @Test
     void vfnmsHpVfnmaHpDecodeToVfpAluHalf() {
         int fnms = threeRegHalfWord(0xE, 0b101, false, 1, 2, 3);
-        assertEquals(new IrOp.VfpAluHalf(IrOp.VfpOperation.FNMS, 2, 1, 3, Condition.AL), liftSingleOp(decodeArm(FP16_TEST_ARCH, fnms)));
+        assertEquals(new VfpOp.AluHalf(VfpOp.VfpOperation.FNMS, 2, 1, 3, Condition.AL), liftSingleOp(decodeArm(FP16_TEST_ARCH, fnms)));
         int fnma = threeRegHalfWord(0xE, 0b101, true, 1, 2, 3);
-        assertEquals(new IrOp.VfpAluHalf(IrOp.VfpOperation.FNMA, 2, 1, 3, Condition.AL), liftSingleOp(decodeArm(FP16_TEST_ARCH, fnma)));
+        assertEquals(new VfpOp.AluHalf(VfpOp.VfpOperation.FNMA, 2, 1, 3, Condition.AL), liftSingleOp(decodeArm(FP16_TEST_ARCH, fnma)));
     }
 
     /// `VFMS_hp` (`op1=0b110`, `bit6=1`) com a feature PRESENTE — `vfmaHpRequiresFusedMultiplyAccumulateFeature`
@@ -536,7 +537,7 @@ class VfpHalfPrecisionArithmeticTest {
     @Test
     void vfmsHpDecodesToVfpAluHalf() {
         int word = threeRegHalfWord(0xE, 0b110, true, 1, 2, 3);
-        assertEquals(new IrOp.VfpAluHalf(IrOp.VfpOperation.FMS, 2, 1, 3, Condition.AL), liftSingleOp(decodeArm(FP16_TEST_ARCH, word)));
+        assertEquals(new VfpOp.AluHalf(VfpOp.VfpOperation.FMS, 2, 1, 3, Condition.AL), liftSingleOp(decodeArm(FP16_TEST_ARCH, word)));
     }
 
     /// Cobre o ramo `!architecture.has(VFP_FUSED_MULTIPLY_ACCUMULATE)` para as 4 formas fundidas
@@ -589,14 +590,14 @@ class VfpHalfPrecisionArithmeticTest {
     @Test
     void vcvtHpUnsignedDecodesToVfpConvertRoundedHalf() {
         int word = convertRoundedHalfWord(0b11, false, 2, 3);
-        assertEquals(new IrOp.VfpConvertRoundedHalf(AdvSimdLanes.RoundingMode.TOWARD_NEGATIVE_INFINITY, false, 2, 3, Condition.AL),
+        assertEquals(new VfpOp.ConvertRoundedHalf(AdvSimdLanes.RoundingMode.TOWARD_NEGATIVE_INFINITY, false, 2, 3, Condition.AL),
                 liftSingleOp(decodeArm(FP16_TEST_ARCH, word)));
     }
 
     @Test
     void vcmpeHpDecodesSignalOnQuietNaN() {
         int word = twoOperandHalfWord(0xE, 0x4, true, 2, 3);
-        assertEquals(new IrOp.VfpCompareHalf(false, true, 2, 3, Condition.AL), liftSingleOp(decodeArm(FP16_TEST_ARCH, word)));
+        assertEquals(new VfpOp.CompareHalf(false, true, 2, 3, Condition.AL), liftSingleOp(decodeArm(FP16_TEST_ARCH, word)));
     }
 
     @Test
@@ -604,7 +605,7 @@ class VfpHalfPrecisionArithmeticTest {
         int word = twoOperandHalfWord(0xE, 0xA, true, 2, 3); // op=0,u=0,sx=1(32 bits), imm=vm=3.
         DecodedInstruction decoded = decodeArm(FP16_TEST_ARCH, word);
         assertEquals(InstructionKind.VFP_CONVERT_FIXED_HALF, decoded.kind());
-        IrOp.VfpConvertFixedHalf lifted = (IrOp.VfpConvertFixedHalf) liftSingleOp(decoded);
+        VfpOp.ConvertFixedHalf lifted = (VfpOp.ConvertFixedHalf) liftSingleOp(decoded);
         assertEquals(false, lifted.toFixedPoint());
         assertEquals(false, lifted.unsignedFixedPoint());
         assertEquals(true, lifted.fixedPointIs32Bit());
@@ -617,7 +618,7 @@ class VfpHalfPrecisionArithmeticTest {
     @Test
     void vcvtFixHpDecodesOppositeFlagCombination() {
         int word = twoOperandHalfWord(0xE, 0xF, false, 2, 3);
-        IrOp.VfpConvertFixedHalf lifted = (IrOp.VfpConvertFixedHalf) liftSingleOp(decodeArm(FP16_TEST_ARCH, word));
+        VfpOp.ConvertFixedHalf lifted = (VfpOp.ConvertFixedHalf) liftSingleOp(decodeArm(FP16_TEST_ARCH, word));
         assertEquals(true, lifted.toFixedPoint());
         assertEquals(true, lifted.unsignedFixedPoint());
         assertEquals(false, lifted.fixedPointIs32Bit());
@@ -636,14 +637,14 @@ class VfpHalfPrecisionArithmeticTest {
     @Test
     void vmovImmHpExpandsSignAndBit6Correctly() {
         int word = vmovImmHalfWord(0xE, 4, 0xC0); // bit7=1 (sign), bit6=1.
-        IrOp.VfpMoveImmediateHalf lifted = (IrOp.VfpMoveImmediateHalf) liftSingleOp(decodeArm(FP16_TEST_ARCH, word));
+        VfpOp.MoveImmediateHalf lifted = (VfpOp.MoveImmediateHalf) liftSingleOp(decodeArm(FP16_TEST_ARCH, word));
         assertEquals(0xB000, lifted.immediateBits());
     }
 
     // ── 7. Execução: fecha `computeHalfArithmeticBits` (só `ADD`/`ABS`/`NEG` tinham teste) ──────
 
-    private static void execAlu(ArmCore core, IrOp.VfpOperation op, int vd, int vn, int vm) {
-        new IrBlockExecutor(FP16_TEST_ARCH).executeOp(core, new IrOp.VfpAluHalf(op, vd, vn, vm, Condition.AL), 0);
+    private static void execAlu(ArmCore core, VfpOp.VfpOperation op, int vd, int vn, int vm) {
+        new IrBlockExecutor(FP16_TEST_ARCH).executeOp(core, new VfpOp.AluHalf(op, vd, vn, vm, Condition.AL), 0);
     }
 
     @Test
@@ -652,58 +653,58 @@ class VfpHalfPrecisionArithmeticTest {
         setHalf(core, 1, 4.0f); // vn
         setHalf(core, 2, 2.0f); // vm
 
-        execAlu(core, IrOp.VfpOperation.SUB, 3, 1, 2);
+        execAlu(core, VfpOp.VfpOperation.SUB, 3, 1, 2);
         assertEquals(half(2.0f), readHalf(core, 3));
 
-        execAlu(core, IrOp.VfpOperation.MUL, 3, 1, 2);
+        execAlu(core, VfpOp.VfpOperation.MUL, 3, 1, 2);
         assertEquals(half(8.0f), readHalf(core, 3));
 
-        execAlu(core, IrOp.VfpOperation.DIV, 3, 1, 2);
+        execAlu(core, VfpOp.VfpOperation.DIV, 3, 1, 2);
         assertEquals(half(2.0f), readHalf(core, 3));
 
-        execAlu(core, IrOp.VfpOperation.NMUL, 3, 1, 2);
+        execAlu(core, VfpOp.VfpOperation.NMUL, 3, 1, 2);
         assertEquals(half(-8.0f), readHalf(core, 3));
 
         setHalf(core, 4, 4.0f);
-        execAlu(core, IrOp.VfpOperation.SQRT, 5, -1, 4);
+        execAlu(core, VfpOp.VfpOperation.SQRT, 5, -1, 4);
         assertEquals(half(2.0f), readHalf(core, 5));
 
         setHalf(core, 6, 1.0f);
-        execAlu(core, IrOp.VfpOperation.MLA, 6, 1, 2); // 1 + 4*2 = 9.
+        execAlu(core, VfpOp.VfpOperation.MLA, 6, 1, 2); // 1 + 4*2 = 9.
         assertEquals(half(9.0f), readHalf(core, 6));
 
         setHalf(core, 7, 1.0f);
-        execAlu(core, IrOp.VfpOperation.MLS, 7, 1, 2); // 1 - 4*2 = -7.
+        execAlu(core, VfpOp.VfpOperation.MLS, 7, 1, 2); // 1 - 4*2 = -7.
         assertEquals(half(-7.0f), readHalf(core, 7));
 
         setHalf(core, 8, 1.0f);
-        execAlu(core, IrOp.VfpOperation.NMLA, 8, 1, 2); // -1 - 4*2 = -9.
+        execAlu(core, VfpOp.VfpOperation.NMLA, 8, 1, 2); // -1 - 4*2 = -9.
         assertEquals(half(-9.0f), readHalf(core, 8));
 
         setHalf(core, 9, 1.0f);
-        execAlu(core, IrOp.VfpOperation.NMLS, 9, 1, 2); // -1 + 4*2 = 7.
+        execAlu(core, VfpOp.VfpOperation.NMLS, 9, 1, 2); // -1 + 4*2 = 7.
         assertEquals(half(7.0f), readHalf(core, 9));
 
         setHalf(core, 10, 1.0f);
-        execAlu(core, IrOp.VfpOperation.FMA, 10, 1, 2); // fma(4,2,1) = 9.
+        execAlu(core, VfpOp.VfpOperation.FMA, 10, 1, 2); // fma(4,2,1) = 9.
         assertEquals(half(9.0f), readHalf(core, 10));
 
         setHalf(core, 11, 1.0f);
-        execAlu(core, IrOp.VfpOperation.FMS, 11, 1, 2); // fma(-4,2,1) = -7.
+        execAlu(core, VfpOp.VfpOperation.FMS, 11, 1, 2); // fma(-4,2,1) = -7.
         assertEquals(half(-7.0f), readHalf(core, 11));
 
         setHalf(core, 12, 1.0f);
-        execAlu(core, IrOp.VfpOperation.FNMA, 12, 1, 2); // fma(-4,2,-1) = -9.
+        execAlu(core, VfpOp.VfpOperation.FNMA, 12, 1, 2); // fma(-4,2,-1) = -9.
         assertEquals(half(-9.0f), readHalf(core, 12));
 
         setHalf(core, 13, 1.0f);
-        execAlu(core, IrOp.VfpOperation.FNMS, 13, 1, 2); // fma(4,2,-1) = 7.
+        execAlu(core, VfpOp.VfpOperation.FNMS, 13, 1, 2); // fma(4,2,-1) = 7.
         assertEquals(half(7.0f), readHalf(core, 13));
 
-        execAlu(core, IrOp.VfpOperation.MAXNM, 14, 1, 2);
+        execAlu(core, VfpOp.VfpOperation.MAXNM, 14, 1, 2);
         assertEquals(half(4.0f), readHalf(core, 14));
 
-        execAlu(core, IrOp.VfpOperation.MINNM, 15, 1, 2);
+        execAlu(core, VfpOp.VfpOperation.MINNM, 15, 1, 2);
         assertEquals(half(2.0f), readHalf(core, 15));
     }
 
@@ -714,27 +715,27 @@ class VfpHalfPrecisionArithmeticTest {
         ArmCore core = newCore();
         core.vfp().setS(1, 0x7E00); // NaN half (expoente todo 1, mantissa != 0).
         setHalf(core, 2, 1.0f);
-        new IrBlockExecutor(FP16_TEST_ARCH).executeOp(core, new IrOp.VfpCompareHalf(false, false, 1, 2, Condition.AL), 0);
+        new IrBlockExecutor(FP16_TEST_ARCH).executeOp(core, new VfpOp.CompareHalf(false, false, 1, 2, Condition.AL), 0);
         assertTrue(core.fpscr().v(), "NaN deveria setar V (unordered)");
 
         // NaN só no SEGUNDO operando (cobre o lado direito do `||` de `unordered`).
         setHalf(core, 8, 1.0f);
         core.vfp().setS(9, 0x7E00);
-        new IrBlockExecutor(FP16_TEST_ARCH).executeOp(core, new IrOp.VfpCompareHalf(false, false, 8, 9, Condition.AL), 0);
+        new IrBlockExecutor(FP16_TEST_ARCH).executeOp(core, new VfpOp.CompareHalf(false, false, 8, 9, Condition.AL), 0);
         assertTrue(core.fpscr().v(), "NaN no segundo operando também deveria setar V (unordered)");
 
         setHalf(core, 3, 2.0f);
         setHalf(core, 4, 2.0f);
-        new IrBlockExecutor(FP16_TEST_ARCH).executeOp(core, new IrOp.VfpCompareHalf(false, false, 3, 4, Condition.AL), 0);
+        new IrBlockExecutor(FP16_TEST_ARCH).executeOp(core, new VfpOp.CompareHalf(false, false, 3, 4, Condition.AL), 0);
         assertTrue(core.fpscr().z(), "iguais deveria setar Z");
 
         setHalf(core, 5, 5.0f);
         setHalf(core, 6, 2.0f);
-        new IrBlockExecutor(FP16_TEST_ARCH).executeOp(core, new IrOp.VfpCompareHalf(false, false, 5, 6, Condition.AL), 0);
+        new IrBlockExecutor(FP16_TEST_ARCH).executeOp(core, new VfpOp.CompareHalf(false, false, 5, 6, Condition.AL), 0);
         assertTrue(core.fpscr().c() && !core.fpscr().n() && !core.fpscr().z(), "maior deveria só setar C");
 
         setHalf(core, 7, 0.0f);
-        new IrBlockExecutor(FP16_TEST_ARCH).executeOp(core, new IrOp.VfpCompareHalf(true, false, 7, -1, Condition.AL), 0);
+        new IrBlockExecutor(FP16_TEST_ARCH).executeOp(core, new VfpOp.CompareHalf(true, false, 7, -1, Condition.AL), 0);
         assertTrue(core.fpscr().z(), "compara com zero: 0.0 == 0.0");
     }
 
@@ -744,7 +745,7 @@ class VfpHalfPrecisionArithmeticTest {
         setHalf(core, 1, 5.0f);
         setHalf(core, 2, 9.0f);
         core.cpsr().setNzcv(false, true, false, false); // Z=1 -> NE falso.
-        new IrBlockExecutor(FP16_TEST_ARCH).executeOp(core, new IrOp.VfpSelectHalf(3, 1, 2, Condition.NE, Condition.AL), 0);
+        new IrBlockExecutor(FP16_TEST_ARCH).executeOp(core, new VfpOp.SelectHalf(3, 1, 2, Condition.NE, Condition.AL), 0);
         assertEquals(half(9.0f), readHalf(core, 3));
     }
 
@@ -755,16 +756,16 @@ class VfpHalfPrecisionArithmeticTest {
         ArmCore core = newCore();
         setHalf(core, 1, 5.0f);
         new IrBlockExecutor(FP16_TEST_ARCH).executeOp(core,
-                new IrOp.VfpConvertFixedHalf(true, true, false, 1, 1, Condition.AL), 0);
+                new VfpOp.ConvertFixedHalf(true, true, false, 1, 1, Condition.AL), 0);
         assertEquals(10, core.vfp().s(1) & 0xFFFF); // 5.0 * 2^1 = 10.
 
         core.vfp().setS(1, 10);
         new IrBlockExecutor(FP16_TEST_ARCH).executeOp(core,
-                new IrOp.VfpConvertFixedHalf(false, true, false, 1, 1, Condition.AL), 0);
+                new VfpOp.ConvertFixedHalf(false, true, false, 1, 1, Condition.AL), 0);
         assertEquals(half(5.0f), readHalf(core, 1));
     }
 
-    // ── 9. Guard de condição de BLOCO falsa nos 8 `execute*Half` novos (além de `VfpAluHalf`,
+    // ── 9. Guard de condição de BLOCO falsa nos 8 `execute*Half` novos (além de `VfpOp.AluHalf`,
     // já coberto em "4. Execução") ────────────────────────────────────────────────────────────
 
     @Test
@@ -776,33 +777,33 @@ class VfpHalfPrecisionArithmeticTest {
         int fpscrBefore = core.fpscr().value();
 
         core.vfp().setS(5, -1);
-        executor.executeOp(core, new IrOp.VfpAluHalf(IrOp.VfpOperation.ADD, 5, 1, 2, falseCond), 0);
+        executor.executeOp(core, new VfpOp.AluHalf(VfpOp.VfpOperation.ADD, 5, 1, 2, falseCond), 0);
         assertEquals(-1, core.vfp().s(5));
 
-        executor.executeOp(core, new IrOp.VfpMoveImmediateHalf(5, 0x3C00, falseCond), 0);
+        executor.executeOp(core, new VfpOp.MoveImmediateHalf(5, 0x3C00, falseCond), 0);
         assertEquals(-1, core.vfp().s(5));
 
-        executor.executeOp(core, new IrOp.VfpCompareHalf(false, false, 1, 2, falseCond), 0);
+        executor.executeOp(core, new VfpOp.CompareHalf(false, false, 1, 2, falseCond), 0);
         assertEquals(fpscrBefore, core.fpscr().value(), "compare com condição falsa não deveria tocar FPSCR");
 
-        executor.executeOp(core, new IrOp.VfpSelectHalf(5, 1, 2, Condition.EQ, falseCond), 0);
+        executor.executeOp(core, new VfpOp.SelectHalf(5, 1, 2, Condition.EQ, falseCond), 0);
         assertEquals(-1, core.vfp().s(5));
 
-        executor.executeOp(core, new IrOp.VfpRoundHalf(AdvSimdLanes.RoundingMode.NEAREST_TIES_AWAY, 5, 1, falseCond), 0);
+        executor.executeOp(core, new VfpOp.RoundHalf(AdvSimdLanes.RoundingMode.NEAREST_TIES_AWAY, 5, 1, falseCond), 0);
         assertEquals(-1, core.vfp().s(5));
 
-        executor.executeOp(core, new IrOp.VfpConvertRoundedHalf(AdvSimdLanes.RoundingMode.NEAREST_TIES_AWAY, true, 5, 1, falseCond), 0);
+        executor.executeOp(core, new VfpOp.ConvertRoundedHalf(AdvSimdLanes.RoundingMode.NEAREST_TIES_AWAY, true, 5, 1, falseCond), 0);
         assertEquals(-1, core.vfp().s(5));
 
-        executor.executeOp(core, new IrOp.VfpConvertFixedHalf(true, false, false, 8, 5, falseCond), 0);
+        executor.executeOp(core, new VfpOp.ConvertFixedHalf(true, false, false, 8, 5, falseCond), 0);
         assertEquals(-1, core.vfp().s(5));
 
-        executor.executeOp(core, new IrOp.VfpLoadHalf(5, 0, -1, 0, falseCond), 0);
+        executor.executeOp(core, new VfpOp.LoadHalf(5, 0, -1, 0, falseCond), 0);
         assertEquals(-1, core.vfp().s(5));
 
         core.memory().write32(20, 0);
         setHalf(core, 6, 3.0f);
-        executor.executeOp(core, new IrOp.VfpStoreHalf(6, 0, -1, 20, falseCond), 0);
+        executor.executeOp(core, new VfpOp.StoreHalf(6, 0, -1, 20, falseCond), 0);
         assertEquals(0, core.memory().read16(20), "store com condição falsa não deveria escrever memória");
     }
 
@@ -815,18 +816,18 @@ class VfpHalfPrecisionArithmeticTest {
         ArmCore core = newCore();
         setHalf(core, 1, 3.0f);
         setHalf(core, 2, 4.0f);
-        core.cpsr().setNzcv(false, true, false, false); // Z=1 -> EQ verdadeiro (usado pelo VfpSelectHalf abaixo).
+        core.cpsr().setNzcv(false, true, false, false); // Z=1 -> EQ verdadeiro (usado pelo VfpOp.SelectHalf abaixo).
 
         IrBlock.Builder builder = IrBlock.builder(0);
-        builder.add(new IrOp.VfpAluHalf(IrOp.VfpOperation.ADD, 3, 1, 2, Condition.AL));
-        builder.add(new IrOp.VfpMoveImmediateHalf(4, 0x3C00, Condition.AL));
-        builder.add(new IrOp.VfpCompareHalf(false, false, 1, 2, Condition.AL));
-        builder.add(new IrOp.VfpSelectHalf(5, 1, 2, Condition.EQ, Condition.AL));
-        builder.add(new IrOp.VfpRoundHalf(AdvSimdLanes.RoundingMode.NEAREST_TIES_AWAY, 6, 1, Condition.AL));
-        builder.add(new IrOp.VfpConvertRoundedHalf(AdvSimdLanes.RoundingMode.NEAREST_TIES_AWAY, true, 7, 1, Condition.AL));
-        builder.add(new IrOp.VfpConvertFixedHalf(true, false, false, 1, 1, Condition.AL));
-        builder.add(new IrOp.VfpStoreHalf(2, 0, -1, 16, Condition.AL));
-        builder.add(new IrOp.VfpLoadHalf(8, 0, -1, 16, Condition.AL));
+        builder.add(new VfpOp.AluHalf(VfpOp.VfpOperation.ADD, 3, 1, 2, Condition.AL));
+        builder.add(new VfpOp.MoveImmediateHalf(4, 0x3C00, Condition.AL));
+        builder.add(new VfpOp.CompareHalf(false, false, 1, 2, Condition.AL));
+        builder.add(new VfpOp.SelectHalf(5, 1, 2, Condition.EQ, Condition.AL));
+        builder.add(new VfpOp.RoundHalf(AdvSimdLanes.RoundingMode.NEAREST_TIES_AWAY, 6, 1, Condition.AL));
+        builder.add(new VfpOp.ConvertRoundedHalf(AdvSimdLanes.RoundingMode.NEAREST_TIES_AWAY, true, 7, 1, Condition.AL));
+        builder.add(new VfpOp.ConvertFixedHalf(true, false, false, 1, 1, Condition.AL));
+        builder.add(new VfpOp.StoreHalf(2, 0, -1, 16, Condition.AL));
+        builder.add(new VfpOp.LoadHalf(8, 0, -1, 16, Condition.AL));
         builder.add(new IrOp.Cycle(9));
         builder.add(new IrOp.Fetch(4, 36));
         IrBlock block = builder.endPc(36).sealed();
@@ -852,7 +853,7 @@ class VfpHalfPrecisionArithmeticTest {
         StandardIrBlockLifter lifter = new StandardIrBlockLifter(new ArmDecoder(FP16_TEST_ARCH), new StandardIrBuilder());
         IrBlock block = lifter.lift(memory, 0, 2, 0);
         assertEquals(8, block.endPc(), "bloco deveria conter as DUAS instruções, não terminar na primeira");
-        long aluHalfOps = block.operations().stream().filter(op -> op instanceof IrOp.VfpAluHalf).count();
+        long aluHalfOps = block.operations().stream().filter(op -> op instanceof VfpOp.AluHalf).count();
         assertEquals(2, aluHalfOps);
     }
 }

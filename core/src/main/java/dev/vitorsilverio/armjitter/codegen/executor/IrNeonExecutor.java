@@ -5,7 +5,10 @@ import dev.vitorsilverio.armjitter.advsimd.AdvSimdLanes;
 import dev.vitorsilverio.armjitter.advsimd.AdvSimdRegisterWords;
 import dev.vitorsilverio.armjitter.core.ArmCore;
 import dev.vitorsilverio.armjitter.core.VfpRegisters;
-import dev.vitorsilverio.armjitter.ir.IrOp;
+import dev.vitorsilverio.armjitter.ir.NeonCryptoOp;
+import dev.vitorsilverio.armjitter.ir.NeonFpOp;
+import dev.vitorsilverio.armjitter.ir.NeonIntegerOp;
+import dev.vitorsilverio.armjitter.ir.NeonMoveOp;
 
 /// Executa a IR de NEON/Advanced SIMD de 32 bits (épico B13). A semântica de LANE (largura de
 /// elemento, extensão, truncamento) NÃO vive aqui — vem do núcleo vetorial COMPARTILHADO com o
@@ -36,7 +39,7 @@ public final class IrNeonExecutor {
     /// para `ADD_v`/`SUB_v`. NEON nomeia registradores por índice de `D`, e a base de palavra de
     /// um operando de 64 bits é o próprio índice de `D`; nenhuma escrita destrutiva depois do
     /// laço (VFP32 nunca zera bits fora do registrador escrito).
-    public void executeNeonThreeSame(ArmCore core, IrOp.NeonThreeSame op) {
+    public void executeNeonThreeSame(ArmCore core, NeonIntegerOp.ThreeSame op) {
         VfpRegisters vfp = core.vfp();
         int esz = op.esz();
         int elementBytes = 1 << esz;
@@ -48,7 +51,7 @@ public final class IrNeonExecutor {
     /// ({@link AdvSimdLanes#pairwise}) — a MESMA função que o executor A64 chama para
     /// `ADDP_v`/`SMAXP_v`/... Só forma `D` (8 bytes); nenhuma escrita destrutiva depois (VFP32
     /// nunca zera bits fora do registrador escrito).
-    public void executeNeonPairwise(ArmCore core, IrOp.NeonPairwise op) {
+    public void executeNeonPairwise(ArmCore core, NeonIntegerOp.Pairwise op) {
         VfpRegisters vfp = core.vfp();
         int esz = op.esz();
         int lanes = DOUBLEWORD_BYTES >> esz;
@@ -60,7 +63,7 @@ public final class IrNeonExecutor {
     /// executor A64 chama para `FADD_v`/`FMUL_v`/... NEON nomeia registradores por índice de `D`, e
     /// a base de palavra de um operando de 64 bits é o próprio índice de `D`; nenhuma escrita
     /// destrutiva depois do laço (VFP32 nunca zera bits fora do registrador escrito).
-    public void executeNeonFpThreeSame(ArmCore core, IrOp.NeonFpThreeSame op) {
+    public void executeNeonFpThreeSame(ArmCore core, NeonFpOp.FpThreeSame op) {
         VfpRegisters vfp = core.vfp();
         int esz = op.esz();
         int elementBytes = 1 << esz;
@@ -71,7 +74,7 @@ public final class IrNeonExecutor {
     /// NEON "pairwise" de PONTO FLUTUANTE (`VPADD.F32`/`VPMAX.F32`/`VPMIN.F32`, B13.6): delega ao
     /// núcleo COMPARTILHADO ({@link AdvSimdLanes#fpPairwise}). Só forma `D` (8 bytes); nenhuma
     /// escrita destrutiva depois (VFP32 nunca zera bits fora do registrador escrito).
-    public void executeNeonFpPairwise(ArmCore core, IrOp.NeonFpPairwise op) {
+    public void executeNeonFpPairwise(ArmCore core, NeonFpOp.FpPairwise op) {
         VfpRegisters vfp = core.vfp();
         int esz = op.esz();
         int lanes = DOUBLEWORD_BYTES >> esz;
@@ -85,7 +88,7 @@ public final class IrNeonExecutor {
     /// registradores por índice de `D`, e a base de palavra de um operando de 64 bits é o próprio
     /// índice de `D`; nenhuma escrita destrutiva depois do laço (VFP32 nunca zera bits fora do
     /// registrador escrito).
-    public void executeNeonShiftImmediate(ArmCore core, IrOp.NeonShiftImmediate op) {
+    public void executeNeonShiftImmediate(ArmCore core, NeonIntegerOp.ShiftImmediate op) {
         VfpRegisters vfp = core.vfp();
         int esz = op.esz();
         int elementBytes = 1 << esz;
@@ -96,10 +99,10 @@ public final class IrNeonExecutor {
     /// NEON "2-reg-and-shift" ESTREITANTE (`VSHRN`/`VRSHRN`/`VQSHRUN`/`VQRSHRUN`/`VQSHRN`/`VQRSHRN`,
     /// B13.8): delega ao núcleo COMPARTILHADO ({@link AdvSimdLanes#shiftNarrowImmediate}) — a MESMA
     /// função que o executor A64 chama para `SHRN`/... A fonte é o `Q` nomeado por {@link
-    /// IrOp.NeonShiftNarrowImmediate#vm} (`D<vm>`:`D<vm+1>`), o destino é o `D` nomeado por `vd`
+    /// NeonIntegerOp.ShiftNarrowImmediate#vm} (`D<vm>`:`D<vm+1>`), o destino é o `D` nomeado por `vd`
     /// (`8 >> esz` lanes estreitas). A32 não tem forma "2": `laneOffset` é sempre `0`. Índice de `D`
     /// = índice de palavra no banco VFP32; nenhuma escrita destrutiva depois.
-    public void executeNeonShiftNarrowImmediate(ArmCore core, IrOp.NeonShiftNarrowImmediate op) {
+    public void executeNeonShiftNarrowImmediate(ArmCore core, NeonIntegerOp.ShiftNarrowImmediate op) {
         VfpRegisters vfp = core.vfp();
         int elements = DOUBLEWORD_BYTES >> op.esz();
         AdvSimdLanes.shiftNarrowImmediate(vfp, op.op(), op.esz(), op.shift(), elements, 0, op.vd(), op.vm());
@@ -107,10 +110,10 @@ public final class IrNeonExecutor {
 
     /// NEON "2-reg-and-shift" ALARGANTE (`VSHLL`, B13.8): delega ao núcleo COMPARTILHADO
     /// ({@link AdvSimdLanes#shiftWidenImmediate}) — a MESMA função que o executor A64 chama para
-    /// `SSHLL`/`USHLL`. A fonte é o `D` nomeado por {@link IrOp.NeonShiftWidenImmediate#vm}, o
+    /// `SSHLL`/`USHLL`. A fonte é o `D` nomeado por {@link NeonIntegerOp.ShiftWidenImmediate#vm}, o
     /// destino é o `Q` nomeado por `vd` (`D<vd>`:`D<vd+1>`, `8 >> esz` lanes largas). A32 não tem
     /// forma "2": `laneOffset` é sempre `0`.
-    public void executeNeonShiftWidenImmediate(ArmCore core, IrOp.NeonShiftWidenImmediate op) {
+    public void executeNeonShiftWidenImmediate(ArmCore core, NeonIntegerOp.ShiftWidenImmediate op) {
         VfpRegisters vfp = core.vfp();
         int outputElements = DOUBLEWORD_BYTES >> op.esz();
         AdvSimdLanes.shiftWidenImmediate(vfp, op.op(), op.esz(), op.shift(), outputElements, 0, op.vd(), op.vm());
@@ -121,7 +124,7 @@ public final class IrNeonExecutor {
     /// chama para `SCVTF`/`UCVTF`/`FCVTZS`/`FCVTZU` na forma `@fcvt_fixed`. Lanes = bytes do arranjo
     /// (`8`/`16`) dividido pelo tamanho do elemento (`1 << op.esz()`); leitura e escrita na mesma
     /// largura, sem escrita destrutiva depois.
-    public void executeNeonConvertFixedPoint(ArmCore core, IrOp.NeonConvertFixedPoint op) {
+    public void executeNeonConvertFixedPoint(ArmCore core, NeonFpOp.ConvertFixedPoint op) {
         VfpRegisters vfp = core.vfp();
         int elementBytes = 1 << op.esz();
         int lanes = (op.quad() ? 2 * DOUBLEWORD_BYTES : DOUBLEWORD_BYTES) / elementBytes;
@@ -134,7 +137,7 @@ public final class IrNeonExecutor {
     /// `Q=0`: aplica a operação à palavra `vd`. `Q=1`: às palavras `vd` e `vd+1`. `ORR`/`BIC` LEEM a
     /// palavra atual (mesma disciplina RMW de `VSRA`/`VSRI`, B13.7); `MOV`/`MVN` sobrescrevem. Sem
     /// escrita destrutiva depois (VFP32 nunca zera bits fora do registrador escrito).
-    public void executeNeonModifiedImmediate(ArmCore core, IrOp.NeonModifiedImmediate op) {
+    public void executeNeonModifiedImmediate(ArmCore core, NeonMoveOp.ModifiedImmediate op) {
         VfpRegisters vfp = core.vfp();
         applyModifiedImmediate(vfp, op, op.vd());
         if (op.quad()) {
@@ -142,7 +145,7 @@ public final class IrNeonExecutor {
         }
     }
 
-    private static void applyModifiedImmediate(VfpRegisters vfp, IrOp.NeonModifiedImmediate op, int word) {
+    private static void applyModifiedImmediate(VfpRegisters vfp, NeonMoveOp.ModifiedImmediate op, int word) {
         long current = vfp.d(word);
         long result = switch (op.op()) {
             case MOV -> op.imm64();
@@ -158,7 +161,7 @@ public final class IrNeonExecutor {
     /// núcleo COMPARTILHADO ({@link AdvSimdLanes#widening}) — a MESMA função que o executor A64
     /// chama para `SADDL`/`SMULL`/... `Vn`/`Vm` são `D` (fonte, `8 >> esz` lanes), `Vd` é `Q` (mesma
     /// contagem de lanes, largura dobrada). A32 não tem forma "2": `laneOffset` é sempre `0`.
-    public void executeNeonWidening(ArmCore core, IrOp.NeonWidening op) {
+    public void executeNeonWidening(ArmCore core, NeonIntegerOp.Widening op) {
         VfpRegisters vfp = core.vfp();
         int outputElements = DOUBLEWORD_BYTES >> op.esz();
         AdvSimdLanes.widening(vfp, op.op(), op.esz(), outputElements, 0, op.vd(), op.vn(), op.vm());
@@ -168,7 +171,7 @@ public final class IrNeonExecutor {
     /// núcleo COMPARTILHADO ({@link AdvSimdLanes#wide}) — a MESMA função que o executor A64 chama
     /// para `SADDW`/`SSUBW`/... `Vd`/`Vn` são `Q` (`8 >> esz` lanes largas), `Vm` é `D` (mesma
     /// contagem, estreito). A32 não tem forma "2": `laneOffset` é sempre `0`.
-    public void executeNeonWide(ArmCore core, IrOp.NeonWide op) {
+    public void executeNeonWide(ArmCore core, NeonIntegerOp.Wide op) {
         VfpRegisters vfp = core.vfp();
         int elements = DOUBLEWORD_BYTES >> op.esz();
         AdvSimdLanes.wide(vfp, op.op(), op.esz(), elements, 0, op.vd(), op.vn(), op.vm());
@@ -179,7 +182,7 @@ public final class IrNeonExecutor {
     /// a MESMA função que o executor A64 chama para `ADDHN`/`SUBHN`/... `Vn`/`Vm` são `Q` (`8 >>
     /// esz` lanes largas), `Vd` é `D` (mesma contagem, estreito). A32 não tem forma "2":
     /// `laneOffset` é sempre `0`.
-    public void executeNeonNarrow(ArmCore core, IrOp.NeonNarrow op) {
+    public void executeNeonNarrow(ArmCore core, NeonIntegerOp.Narrow op) {
         VfpRegisters vfp = core.vfp();
         int elements = DOUBLEWORD_BYTES >> op.esz();
         AdvSimdLanes.narrow(vfp, op.op(), op.esz(), elements, 0, op.vd(), op.vn(), op.vm());
@@ -189,9 +192,9 @@ public final class IrNeonExecutor {
     /// `VMUL` inteiro e `VQDMULH`/`VQRDMULH`/`VQRDMLAH`/`VQRDMLSH`, B13.11): delega ao núcleo
     /// COMPARTILHADO ({@link AdvSimdLanes#threeSameByElement}) — a MESMA função que o executor A64
     /// chama para `MUL_vi`/`SQDMULH_vi`/... `Vd`/`Vn` são `D` ou `Q` conforme {@link
-    /// IrOp.NeonThreeSameByElement#quad}; nenhuma escrita destrutiva depois do laço (VFP32 nunca
+    /// NeonIntegerOp.ThreeSameByElement#quad}; nenhuma escrita destrutiva depois do laço (VFP32 nunca
     /// zera bits fora do registrador escrito).
-    public void executeNeonThreeSameByElement(ArmCore core, IrOp.NeonThreeSameByElement op) {
+    public void executeNeonThreeSameByElement(ArmCore core, NeonIntegerOp.ThreeSameByElement op) {
         VfpRegisters vfp = core.vfp();
         int esz = op.esz();
         int elementBytes = 1 << esz;
@@ -204,7 +207,7 @@ public final class IrNeonExecutor {
     /// a MESMA função que o executor A64 chama para `SMULL_vi`/... `Vn` é `D` (fonte, `8 >> esz`
     /// lanes), `Vd` é `Q` (mesma contagem, largura dobrada). A32 não tem forma "2": `laneOffset` é
     /// sempre `0`.
-    public void executeNeonWideningByElement(ArmCore core, IrOp.NeonWideningByElement op) {
+    public void executeNeonWideningByElement(ArmCore core, NeonIntegerOp.WideningByElement op) {
         VfpRegisters vfp = core.vfp();
         int outputElements = DOUBLEWORD_BYTES >> op.esz();
         AdvSimdLanes.wideningByElement(vfp, op.op(), op.esz(), outputElements, 0, op.vd(), op.vn(), op.vm(), op.index());
@@ -214,7 +217,7 @@ public final class IrNeonExecutor {
     /// (B13.24): delega ao núcleo COMPARTILHADO ({@link AdvSimdLanes#fpThreeSameByElement}) — a
     /// MESMA função que o executor A64 chama para `FMUL_vi`/... `MLA`/`MLS` chegam NÃO fundidos aqui
     /// (decisão 3 da B13.6, já resolvida no decoder).
-    public void executeNeonFpThreeSameByElement(ArmCore core, IrOp.NeonFpThreeSameByElement op) {
+    public void executeNeonFpThreeSameByElement(ArmCore core, NeonFpOp.FpThreeSameByElement op) {
         VfpRegisters vfp = core.vfp();
         int esz = op.esz();
         int elementBytes = 1 << esz;
@@ -229,7 +232,7 @@ public final class IrNeonExecutor {
     /// `CLS_v`/`ABS_v`/`URECPE`/... `elements` é a contagem de lanes de ORIGEM (`esz` bytes); o
     /// núcleo já calcula a metade para `VPADDL`/`VPADAL`. Sem escrita destrutiva depois (VFP32 nunca
     /// zera bits fora do registrador escrito).
-    public void executeNeonUnary(ArmCore core, IrOp.NeonUnary op) {
+    public void executeNeonUnary(ArmCore core, NeonIntegerOp.Unary op) {
         VfpRegisters vfp = core.vfp();
         int esz = op.esz();
         int elementBytes = 1 << esz;
@@ -242,7 +245,7 @@ public final class IrNeonExecutor {
     /// MESMA função que o A64 chama para `XTN`/`SQXTN`/`SQXTUN`/`UQXTN`. `Vm` é `Q` (`8 >> esz`
     /// lanes largas), `Vd` é `D` (mesma contagem, estreito). A32 não tem forma "2":
     /// `laneOffset` é sempre `0`.
-    public void executeNeonNarrowUnary(ArmCore core, IrOp.NeonNarrowUnary op) {
+    public void executeNeonNarrowUnary(ArmCore core, NeonIntegerOp.NarrowUnary op) {
         VfpRegisters vfp = core.vfp();
         int elements = DOUBLEWORD_BYTES >> op.esz();
         AdvSimdLanes.narrowUnary(vfp, op.op(), op.esz(), elements, 0, op.vd(), op.vm());
@@ -253,7 +256,7 @@ public final class IrNeonExecutor {
     /// ({@link AdvSimdLanes#fpUnary}) — a MESMA função que o A64 chama para `FABS_v`/`FCM**0_v`/
     /// `FRECPE_v`/`FRSQRTE_v`. Só F32 (`esz=2` fixo, F16 fora de escopo); nenhuma escrita destrutiva
     /// depois (VFP32 nunca zera bits fora do registrador escrito).
-    public void executeNeonFpUnary(ArmCore core, IrOp.NeonFpUnary op) {
+    public void executeNeonFpUnary(ArmCore core, NeonFpOp.FpUnary op) {
         VfpRegisters vfp = core.vfp();
         int esz = 2;
         int elementBytes = 1 << esz;
@@ -268,15 +271,15 @@ public final class IrNeonExecutor {
     /// `VCVT_F16_F32`/`VCVT_B16_F32`/`VCVT_F32_F16`: delega ao núcleo COMPARTILHADO ({@link
     /// AdvSimdLanes#fpConvertPrecision}) — SEMPRE 4 elementos, sem forma `Q`/`quad` (o próprio
     /// registrador `vd`/`vm` já indica qual lado é `D` e qual é `Q`, ver Javadoc de
-    /// {@link IrOp.NeonFpConvertPrecision}).
-    public void executeNeonFpConvertPrecision(ArmCore core, IrOp.NeonFpConvertPrecision op) {
+    /// {@link NeonFpOp.FpConvertPrecision}).
+    public void executeNeonFpConvertPrecision(ArmCore core, NeonFpOp.FpConvertPrecision op) {
         AdvSimdLanes.fpConvertPrecision(core.vfp(), op.op(), op.vd(), op.vm());
     }
 
     /// `VLD1`-`VLD4`/`VST1`-`VST4` (multiple structures) — laço espelhando
     /// `trans_VLDST_multiple` do QEMU real: `tt = vd + reg + stride * xs`, um elemento por vez em
     /// ordem crescente de endereço, avançando `1 << esz` bytes.
-    public void executeNeonLoadStoreMultiple(ArmCore core, IrOp.NeonLoadStoreMultiple op) {
+    public void executeNeonLoadStoreMultiple(ArmCore core, NeonMoveOp.LoadStoreMultiple op) {
         VfpRegisters vfp = core.vfp();
         int esz = op.esz();
         int elementBytes = 1 << esz;
@@ -302,7 +305,7 @@ public final class IrNeonExecutor {
 
     /// `VLD1`-`VLD4`/`VST1`-`VST4` (single structure to one lane) — um elemento na lane `index`
     /// de cada um dos `selem` registradores `vd + stride * xs`, sem tocar nenhum outro bit.
-    public void executeNeonLoadStoreSingle(ArmCore core, IrOp.NeonLoadStoreSingle op) {
+    public void executeNeonLoadStoreSingle(ArmCore core, NeonMoveOp.LoadStoreSingle op) {
         VfpRegisters vfp = core.vfp();
         int esz = op.esz();
         int elementBytes = 1 << esz;
@@ -323,7 +326,7 @@ public final class IrNeonExecutor {
 
     /// `VLD1R`-`VLD4R` (single structure to all lanes) — lê um elemento por registrador e o
     /// replica por todas as lanes do `D` (e no `D` seguinte quando `quad`).
-    public void executeNeonLoadAllLanes(ArmCore core, IrOp.NeonLoadAllLanes op) {
+    public void executeNeonLoadAllLanes(ArmCore core, NeonMoveOp.LoadAllLanes op) {
         VfpRegisters vfp = core.vfp();
         int esz = op.esz();
         int elementBytes = 1 << esz;
@@ -360,7 +363,7 @@ public final class IrNeonExecutor {
     /// MESMA função que o A64 reusará quando `FCMLA`/`FCADD` ganharem decoder. `lanes` conta
     /// elementos de `1 << esz` bytes (pares reais/imaginários adjacentes); nenhuma escrita
     /// destrutiva depois do laço (VFP32 nunca zera bits fora do registrador escrito).
-    public void executeNeonComplex(ArmCore core, IrOp.NeonComplex op) {
+    public void executeNeonComplex(ArmCore core, NeonFpOp.Complex op) {
         VfpRegisters vfp = core.vfp();
         int esz = op.esz();
         int elementBytes = 1 << esz;
@@ -374,8 +377,8 @@ public final class IrNeonExecutor {
 
     /// `neon-shared`: `VCMLA_scalar` (B13.17, `FEAT_FCMA`): delega ao núcleo COMPARTILHADO
     /// ({@link AdvSimdLanes#fpComplexMultiplyAccumulateByElement}) — `vm` é sempre um `D` (nunca
-    /// combinado com {@link IrOp.NeonComplexByElement#quad}).
-    public void executeNeonComplexByElement(ArmCore core, IrOp.NeonComplexByElement op) {
+    /// combinado com {@link NeonFpOp.ComplexByElement#quad}).
+    public void executeNeonComplexByElement(ArmCore core, NeonFpOp.ComplexByElement op) {
         VfpRegisters vfp = core.vfp();
         int esz = op.esz();
         int elementBytes = 1 << esz;
@@ -389,7 +392,7 @@ public final class IrNeonExecutor {
     /// quando `SDOT_v`/`UDOT_v`/`USDOT`/`SUDOT` ganharem decoder (B19.12). Lanes de 32 bits sempre
     /// (o produto escalar nunca muda de largura); nenhuma escrita destrutiva depois do laço (VFP32
     /// nunca zera bits fora do registrador escrito).
-    public void executeNeonDotProduct(ArmCore core, IrOp.NeonDotProduct op) {
+    public void executeNeonDotProduct(ArmCore core, NeonIntegerOp.DotProduct op) {
         VfpRegisters vfp = core.vfp();
         int lanes = (op.quad() ? 2 * DOUBLEWORD_BYTES : DOUBLEWORD_BYTES) / DOT_PRODUCT_LANE_BYTES;
         AdvSimdLanes.dotProduct(vfp, op.signedN(), op.signedM(), lanes, op.vd(), op.vn(), op.vm());
@@ -397,8 +400,8 @@ public final class IrNeonExecutor {
 
     /// `neon-shared`: `VSDOT_scalar`/`VUDOT_scalar`/`VUSDOT_scalar`/`VSUDOT_scalar` (B13.18):
     /// delega ao núcleo COMPARTILHADO ({@link AdvSimdLanes#dotProductByElement}) — `vm` é sempre um
-    /// `D` (nunca combinado com {@link IrOp.NeonDotProductByElement#quad}).
-    public void executeNeonDotProductByElement(ArmCore core, IrOp.NeonDotProductByElement op) {
+    /// `D` (nunca combinado com {@link NeonIntegerOp.DotProductByElement#quad}).
+    public void executeNeonDotProductByElement(ArmCore core, NeonIntegerOp.DotProductByElement op) {
         VfpRegisters vfp = core.vfp();
         int lanes = (op.quad() ? 2 * DOUBLEWORD_BYTES : DOUBLEWORD_BYTES) / DOT_PRODUCT_LANE_BYTES;
         AdvSimdLanes.dotProductByElement(
@@ -409,7 +412,7 @@ public final class IrNeonExecutor {
     /// COMPARTILHADO ({@link AdvSimdLanes#matrixMultiplyAccumulate}) criado pela B19.12 (a task irmã
     /// A64) — reusado sem alteração, mesmo `AdvSimdRegisterWords` que {@link VfpRegisters} já
     /// implementa para {@link #executeNeonDotProduct}.
-    public void executeNeonMatrixMultiplyAccumulate(ArmCore core, IrOp.NeonMatrixMultiplyAccumulate op) {
+    public void executeNeonMatrixMultiplyAccumulate(ArmCore core, NeonIntegerOp.MatrixMultiplyAccumulate op) {
         VfpRegisters vfp = core.vfp();
         AdvSimdLanes.matrixMultiplyAccumulate(
                 vfp, op.signedN(), op.signedM(), op.vd(), op.vn(), op.vm());
@@ -422,11 +425,11 @@ public final class IrNeonExecutor {
     /// `neon-shared`: `VFML`/`VFMSL` (B13.20, `FEAT_FHM`): delega ao núcleo COMPARTILHADO
     /// ({@link AdvSimdLanes#fpFusedMultiplyAddLong}) — a MESMA função que o A64 reusará quando
     /// `FMLAL`/`FMLSL`/`FMLAL2`/`FMLSL2` ganharem decoder (B19.13). `quad=false`: {@link
-    /// IrOp.NeonFusedMultiplyAddLong#vn}/{@link IrOp.NeonFusedMultiplyAddLong#vm} são índices de `S`
+    /// NeonFpOp.FusedMultiplyAddLong#vn}/{@link NeonFpOp.FusedMultiplyAddLong#vm} são índices de `S`
     /// (`0`-`31`) — convertidos para (palavra `D`, offset de lane f16) por {@link #singleWord}/
     /// {@link #singleLaneOffset}, INDEPENDENTES entre `vn` e `vm` (podem ser metades diferentes de
     /// `D`s diferentes). `quad=true`: já são índices de `D` (offset sempre `0`).
-    public void executeNeonFusedMultiplyAddLong(ArmCore core, IrOp.NeonFusedMultiplyAddLong op) {
+    public void executeNeonFusedMultiplyAddLong(ArmCore core, NeonFpOp.FusedMultiplyAddLong op) {
         VfpRegisters vfp = core.vfp();
         boolean quad = op.quad();
         int lanes = quad ? FUSED_MULTIPLY_ADD_LONG_DOUBLE_LANES : FUSED_MULTIPLY_ADD_LONG_SINGLE_LANES;
@@ -440,10 +443,10 @@ public final class IrNeonExecutor {
 
     /// `neon-shared`: `VFML_scalar`/`VFMSL_scalar` (B13.20, `FEAT_FHM`): delega ao núcleo
     /// COMPARTILHADO ({@link AdvSimdLanes#fpFusedMultiplyAddLongByElement}). `quad=false`: {@link
-    /// IrOp.NeonFusedMultiplyAddLongByElement#rm} é `S0`-`S15` (convertido por {@link #singleWord}/
+    /// NeonFpOp.FusedMultiplyAddLongByElement#rm} é `S0`-`S15` (convertido por {@link #singleWord}/
     /// {@link #singleLaneOffset}, `index` somado ao offset da metade); `quad=true`: `rm` já é
     /// `D0`-`D7` (`index` é a lane direta, `0`-`3`).
-    public void executeNeonFusedMultiplyAddLongByElement(ArmCore core, IrOp.NeonFusedMultiplyAddLongByElement op) {
+    public void executeNeonFusedMultiplyAddLongByElement(ArmCore core, NeonFpOp.FusedMultiplyAddLongByElement op) {
         VfpRegisters vfp = core.vfp();
         boolean quad = op.quad();
         int lanes = quad ? FUSED_MULTIPLY_ADD_LONG_DOUBLE_LANES : FUSED_MULTIPLY_ADD_LONG_SINGLE_LANES;
@@ -458,7 +461,7 @@ public final class IrNeonExecutor {
     /// `neon-shared`: `VDOT_b16` (B13.21, `FEAT_BF16`): delega ao núcleo COMPARTILHADO
     /// ({@link AdvSimdLanes#bfDotProduct}) — a MESMA função que o A64 já usa para `BFDOT` (B19.7).
     /// Lanes de 32 bits sempre, mesma contagem de {@link #executeNeonDotProduct}.
-    public void executeNeonDotProductBFloat16(ArmCore core, IrOp.NeonDotProductBFloat16 op) {
+    public void executeNeonDotProductBFloat16(ArmCore core, NeonFpOp.DotProductBFloat16 op) {
         VfpRegisters vfp = core.vfp();
         int lanes = (op.quad() ? 2 * DOUBLEWORD_BYTES : DOUBLEWORD_BYTES) / DOT_PRODUCT_LANE_BYTES;
         AdvSimdLanes.bfDotProduct(vfp, lanes, op.vd(), op.vn(), op.vm());
@@ -466,8 +469,8 @@ public final class IrNeonExecutor {
 
     /// `neon-shared`: `VDOT_b16_scal` (B13.21): delega ao núcleo COMPARTILHADO
     /// ({@link AdvSimdLanes#bfDotProductByElement}) — `vm` é sempre um `D` (nunca combinado com
-    /// {@link IrOp.NeonDotProductByElementBFloat16#quad}).
-    public void executeNeonDotProductByElementBFloat16(ArmCore core, IrOp.NeonDotProductByElementBFloat16 op) {
+    /// {@link NeonFpOp.DotProductByElementBFloat16#quad}).
+    public void executeNeonDotProductByElementBFloat16(ArmCore core, NeonFpOp.DotProductByElementBFloat16 op) {
         VfpRegisters vfp = core.vfp();
         int lanes = (op.quad() ? 2 * DOUBLEWORD_BYTES : DOUBLEWORD_BYTES) / DOT_PRODUCT_LANE_BYTES;
         AdvSimdLanes.bfDotProductByElement(vfp, lanes, op.vd(), op.vn(), op.vm(), op.index());
@@ -476,7 +479,7 @@ public final class IrNeonExecutor {
     /// `neon-shared`: `VMMLA_b16` (B13.21, `FEAT_BF16`): delega ao núcleo COMPARTILHADO
     /// ({@link AdvSimdLanes#bfMatrixMultiplyAccumulate}) — a MESMA função que o A64 já usa para
     /// `BFMMLA` (B19.7), reusada sem nenhuma mudança.
-    public void executeNeonMatrixMultiplyAccumulateBFloat16(ArmCore core, IrOp.NeonMatrixMultiplyAccumulateBFloat16 op) {
+    public void executeNeonMatrixMultiplyAccumulateBFloat16(ArmCore core, NeonFpOp.MatrixMultiplyAccumulateBFloat16 op) {
         VfpRegisters vfp = core.vfp();
         AdvSimdLanes.bfMatrixMultiplyAccumulate(vfp, op.vd(), op.vn(), op.vm());
     }
@@ -484,9 +487,9 @@ public final class IrNeonExecutor {
     /// `neon-shared`: `VFMA_b16` (`VFMAB`/`VFMAT`, B13.21, `FEAT_BF16`): delega ao núcleo
     /// COMPARTILHADO ({@link AdvSimdLanes#bfMultiplyAddLong}) — a MESMA função que o A64 já usa para
     /// `BFMLALB`/`BFMLALT` (B19.7): `Vn`/`Vm` SEMPRE `Q` aqui (ver javadoc de
-    /// {@link IrOp.NeonFusedMultiplyAddLongBFloat16}), exatamente a largura de fonte que a função já
+    /// {@link NeonFpOp.FusedMultiplyAddLongBFloat16}), exatamente a largura de fonte que a função já
     /// assume.
-    public void executeNeonFusedMultiplyAddLongBFloat16(ArmCore core, IrOp.NeonFusedMultiplyAddLongBFloat16 op) {
+    public void executeNeonFusedMultiplyAddLongBFloat16(ArmCore core, NeonFpOp.FusedMultiplyAddLongBFloat16 op) {
         VfpRegisters vfp = core.vfp();
         AdvSimdLanes.bfMultiplyAddLong(vfp, op.top(), op.vd(), op.vn(), op.vm());
     }
@@ -495,7 +498,7 @@ public final class IrNeonExecutor {
     /// ({@link AdvSimdLanes#bfMultiplyAddLongByElement}) — `vm` restrito a `D0`-`D7` (índice
     /// `0`-`3`), mesmo núcleo do A64 `BFMLALB_vi`/`BFMLALT_vi` (que aceita índice até `7`, aqui
     /// nunca ultrapassa `3`).
-    public void executeNeonFusedMultiplyAddLongByElementBFloat16(ArmCore core, IrOp.NeonFusedMultiplyAddLongByElementBFloat16 op) {
+    public void executeNeonFusedMultiplyAddLongByElementBFloat16(ArmCore core, NeonFpOp.FusedMultiplyAddLongByElementBFloat16 op) {
         VfpRegisters vfp = core.vfp();
         AdvSimdLanes.bfMultiplyAddLongByElement(vfp, op.top(), op.vd(), op.vn(), op.vm(), op.index());
     }
@@ -516,7 +519,7 @@ public final class IrNeonExecutor {
     /// ({@link AdvSimdLanes#swapPermute}) — sem equivalente A64, a semântica nasce aqui (exceção do
     /// épico, mesma classe de {@link #executeNeonComplex}/{@link #executeNeonDotProduct}). `Vd`/`Vm`
     /// são fonte E destino; o núcleo já faz o buffer (E10).
-    public void executeNeonSwapPermute(ArmCore core, IrOp.NeonSwapPermute op) {
+    public void executeNeonSwapPermute(ArmCore core, NeonMoveOp.SwapPermute op) {
         VfpRegisters vfp = core.vfp();
         int esz = op.esz();
         int elementBytes = 1 << esz;
@@ -528,7 +531,7 @@ public final class IrNeonExecutor {
     /// função que o executor A64 chama para `EXT` (migração D1). NEON nunca zera bits fora do
     /// registrador escrito (ao contrário do A64, que zera `[127:64]` na forma `D` — disciplina do
     /// CHAMADOR, aqui não se aplica).
-    public void executeNeonExtract(ArmCore core, IrOp.NeonExtract op) {
+    public void executeNeonExtract(ArmCore core, NeonMoveOp.Extract op) {
         VfpRegisters vfp = core.vfp();
         int datasizeBytes = op.quad() ? 2 * DOUBLEWORD_BYTES : DOUBLEWORD_BYTES;
         AdvSimdLanes.extract(vfp, datasizeBytes, op.imm(), op.vd(), op.vn(), op.vm());
@@ -538,19 +541,19 @@ public final class IrNeonExecutor {
     /// a MESMA função que o executor A64 chama para `TBL`/`TBX` (migração D1). A tabela A32 é feita
     /// de registradores `D` (`wordsPerTableRegister=1`, ao contrário do `V` de 128 bits do A64,
     /// `=2`); sempre forma `D` (`indexCount=8`, sem forma `Q` neste encoding).
-    public void executeNeonTableLookup(ArmCore core, IrOp.NeonTableLookup op) {
+    public void executeNeonTableLookup(ArmCore core, NeonMoveOp.TableLookup op) {
         VfpRegisters vfp = core.vfp();
         AdvSimdLanes.tableLookup(vfp, op.tbx(), op.len(), DOUBLEWORD_BYTES,
                 1, VfpRegisters.DOUBLE_COUNT, op.vd(), op.vn(), op.vm());
     }
 
-    /// `VDUP` escalar (B13.14, `VDUP_scalar`): lê o elemento {@link IrOp.NeonDuplicateScalar#index}
+    /// `VDUP` escalar (B13.14, `VDUP_scalar`): lê o elemento {@link NeonMoveOp.DuplicateScalar#index}
     /// de `Vm` e replica por todas as lanes de `Vd` — mesma disciplina de leitura/escrita do núcleo
     /// COMPARTILHADO ({@link AdvSimdLanes#element}/{@link AdvSimdLanes#setElement}), mas sem
     /// função própria em {@link AdvSimdLanes} (replicação é trivial demais para justificar um novo
     /// símbolo compartilhado — nenhum consumidor A64 usaria esta assinatura, que é toda em índice de
     /// `D`).
-    public void executeNeonDuplicateScalar(ArmCore core, IrOp.NeonDuplicateScalar op) {
+    public void executeNeonDuplicateScalar(ArmCore core, NeonMoveOp.DuplicateScalar op) {
         VfpRegisters vfp = core.vfp();
         int esz = op.esz();
         long value = AdvSimdLanes.element(vfp, op.vm(), op.index(), esz);
@@ -565,21 +568,21 @@ public final class IrNeonExecutor {
     /// (migração D1). `Vd`/`Vm` já são índice de `D` PAR que inicia o `Q` — em
     /// {@link AdvSimdRegisterWords}, `D<n>` É a palavra `n`, então nenhuma conversão é necessária
     /// (ao contrário do lado A64, que multiplica por `WORDS_PER_REGISTER`).
-    public void executeNeonCryptoAes(ArmCore core, IrOp.NeonCryptoAes op) {
+    public void executeNeonCryptoAes(ArmCore core, NeonCryptoOp.Aes op) {
         AdvSimdCrypto.aes(core.vfp(), op.op(), op.vd(), op.vm());
     }
 
     /// `SHA1H`/`SHA1SU1`/`SHA256SU0` (B13.15): delega ao núcleo COMPARTILHADO
     /// ({@link AdvSimdCrypto#shaTwoRegister}) — a MESMA função que o executor A64 chama desde esta
     /// task (migração D1).
-    public void executeNeonCryptoSha(ArmCore core, IrOp.NeonCryptoSha op) {
+    public void executeNeonCryptoSha(ArmCore core, NeonCryptoOp.Sha op) {
         AdvSimdCrypto.shaTwoRegister(core.vfp(), op.op(), op.vd(), op.vm());
     }
 
     /// `SHA1C`/`SHA1P`/`SHA1M`/`SHA1SU0`/`SHA256H`/`SHA256H2`/`SHA256SU1` (B13.23): delega ao núcleo
     /// COMPARTILHADO ({@link AdvSimdCrypto#shaThreeRegister}) — a MESMA função que o executor A64
     /// chama desde esta task (migração D1).
-    public void executeNeonCryptoShaThree(ArmCore core, IrOp.NeonCryptoShaThree op) {
+    public void executeNeonCryptoShaThree(ArmCore core, NeonCryptoOp.ShaThree op) {
         AdvSimdCrypto.shaThreeRegister(core.vfp(), op.op(), op.vd(), op.vn(), op.vm());
     }
 }

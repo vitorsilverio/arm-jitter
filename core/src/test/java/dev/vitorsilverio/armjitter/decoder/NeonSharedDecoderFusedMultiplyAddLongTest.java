@@ -8,6 +8,7 @@ import dev.vitorsilverio.armjitter.codegen.executor.IrBlockExecutor;
 import dev.vitorsilverio.armjitter.core.ArmCore;
 import dev.vitorsilverio.armjitter.ir.IrBlock;
 import dev.vitorsilverio.armjitter.ir.IrOp;
+import dev.vitorsilverio.armjitter.ir.NeonFpOp;
 import dev.vitorsilverio.armjitter.ir.StandardIrBuilder;
 import dev.vitorsilverio.armjitter.support.TestAddressSpace;
 import dev.vitorsilverio.armjitter.swi.SwiDispatcher;
@@ -19,7 +20,7 @@ import java.util.List;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
 /// `neon-shared.decode` — `VFML`/`VFMSL`/`VFML_scalar`/`VFMSL_scalar` (task B13.20, `FEAT_FHM`) →
-/// {@link IrOp.NeonFusedMultiplyAddLong}/{@link IrOp.NeonFusedMultiplyAddLongByElement} → execução
+/// {@link NeonFpOp.FusedMultiplyAddLong}/{@link NeonFpOp.FusedMultiplyAddLongByElement} → execução
 /// pelo núcleo vetorial COMPARTILHADO (`AdvSimdLanes.fpFusedMultiplyAddLong`/
 /// `fpFusedMultiplyAddLongByElement`) — nasce nesta task (nem esta nem a irmã A64, B19.13, tinham
 /// semântica prévia).
@@ -212,13 +213,13 @@ class NeonSharedDecoderFusedMultiplyAddLongTest {
 
     @Test
     void decodesVectorFormRegistersAndSign() {
-        assertEquals(new IrOp.NeonFusedMultiplyAddLong(false, false, 0, 0, 1),
+        assertEquals(new NeonFpOp.FusedMultiplyAddLong(false, false, 0, 0, 1),
                 liftedOf(vfmlSingle(false, 0, 0, 1)));   // VFMAL d0,s0,s1
-        assertEquals(new IrOp.NeonFusedMultiplyAddLong(true, false, 0, 0, 1),
+        assertEquals(new NeonFpOp.FusedMultiplyAddLong(true, false, 0, 0, 1),
                 liftedOf(vfmlSingle(true, 0, 0, 1)));    // VFMSL d0,s0,s1
-        assertEquals(new IrOp.NeonFusedMultiplyAddLong(false, true, 0, 0, 1),
+        assertEquals(new NeonFpOp.FusedMultiplyAddLong(false, true, 0, 0, 1),
                 liftedOf(vfmlDouble(false, 0, 0, 1)));   // VFMAL q0,d0,d1
-        assertEquals(new IrOp.NeonFusedMultiplyAddLong(false, false, 2, 2, 3),
+        assertEquals(new NeonFpOp.FusedMultiplyAddLong(false, false, 2, 2, 3),
                 liftedOf(vfmlSingle(false, 2, 2, 3)));   // VFMAL d2,s2,s3
     }
 
@@ -226,21 +227,21 @@ class NeonSharedDecoderFusedMultiplyAddLongTest {
 
     @Test
     void decodesScalarFormRmAndIndex() {
-        assertEquals(new IrOp.NeonFusedMultiplyAddLongByElement(false, false, 0, 0, 3, 0),
+        assertEquals(new NeonFpOp.FusedMultiplyAddLongByElement(false, false, 0, 0, 3, 0),
                 liftedOf(vfmlScalarSingle(false, 0, 0, 3, 0)));   // d0,s0,s3[0]
-        assertEquals(new IrOp.NeonFusedMultiplyAddLongByElement(false, false, 0, 0, 3, 1),
+        assertEquals(new NeonFpOp.FusedMultiplyAddLongByElement(false, false, 0, 0, 3, 1),
                 liftedOf(vfmlScalarSingle(false, 0, 0, 3, 1)));   // d0,s0,s3[1]
-        assertEquals(new IrOp.NeonFusedMultiplyAddLongByElement(false, false, 4, 5, 7, 1),
+        assertEquals(new NeonFpOp.FusedMultiplyAddLongByElement(false, false, 4, 5, 7, 1),
                 liftedOf(vfmlScalarSingle(false, 4, 5, 7, 1)));   // d4,s5,s7[1]
-        assertEquals(new IrOp.NeonFusedMultiplyAddLongByElement(false, true, 0, 0, 1, 0),
+        assertEquals(new NeonFpOp.FusedMultiplyAddLongByElement(false, true, 0, 0, 1, 0),
                 liftedOf(vfmlScalarDouble(false, 0, 0, 1, 0)));   // q0,d0,d1[0]
-        assertEquals(new IrOp.NeonFusedMultiplyAddLongByElement(false, true, 0, 0, 1, 2),
+        assertEquals(new NeonFpOp.FusedMultiplyAddLongByElement(false, true, 0, 0, 1, 2),
                 liftedOf(vfmlScalarDouble(false, 0, 0, 1, 2)));   // q0,d0,d1[2]
-        assertEquals(new IrOp.NeonFusedMultiplyAddLongByElement(false, true, 0, 0, 7, 3),
+        assertEquals(new NeonFpOp.FusedMultiplyAddLongByElement(false, true, 0, 0, 7, 3),
                 liftedOf(vfmlScalarDouble(false, 0, 0, 7, 3)));   // q0,d0,d7[3]
-        assertEquals(new IrOp.NeonFusedMultiplyAddLongByElement(false, true, 6, 6, 7, 3),
+        assertEquals(new NeonFpOp.FusedMultiplyAddLongByElement(false, true, 6, 6, 7, 3),
                 liftedOf(vfmlScalarDouble(false, 6, 6, 7, 3)));   // q3,d6,d7[3]
-        assertEquals(new IrOp.NeonFusedMultiplyAddLongByElement(true, false, 0, 0, 3, 0),
+        assertEquals(new NeonFpOp.FusedMultiplyAddLongByElement(true, false, 0, 0, 3, 0),
                 liftedOf(vfmlScalarSingle(true, 0, 0, 3, 0)));    // vfmsl d0,s0,s3[0]
     }
 

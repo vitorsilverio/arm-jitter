@@ -13,6 +13,10 @@ import dev.vitorsilverio.armjitter.core.ArmCore;
 import dev.vitorsilverio.armjitter.core.Condition;
 import dev.vitorsilverio.armjitter.ir.IrBlock;
 import dev.vitorsilverio.armjitter.ir.IrOp;
+import dev.vitorsilverio.armjitter.ir.NeonCryptoOp;
+import dev.vitorsilverio.armjitter.ir.NeonFpOp;
+import dev.vitorsilverio.armjitter.ir.NeonIntegerOp;
+import dev.vitorsilverio.armjitter.ir.NeonMoveOp;
 import dev.vitorsilverio.armjitter.ir.StandardIrBuilder;
 import dev.vitorsilverio.armjitter.support.TestAddressSpace;
 import dev.vitorsilverio.armjitter.swi.SwiDispatcher;
@@ -232,64 +236,64 @@ class NeonTwoRegMiscDecoderTest {
 
     @Test
     void integerUnaryDecodesWithRightOpEszQuadAndRegisters() {
-        IrOp.NeonUnary rev64 = (IrOp.NeonUnary) liftedOf(enc(0, 0b00, 0, 0b0000, 0, 1));
+        NeonIntegerOp.Unary rev64 = (NeonIntegerOp.Unary) liftedOf(enc(0, 0b00, 0, 0b0000, 0, 1));
         assertEquals(AdvSimdUnaryOp.REV64, rev64.op());
         assertEquals(0, rev64.esz());
         assertEquals(0, rev64.vd());
         assertEquals(1, rev64.vm());
         assertEquals(false, rev64.quad());
 
-        IrOp.NeonUnary rev32Q = (IrOp.NeonUnary) liftedOf(enc(0, 0b00, 0, 0b0001, 1, 2));
+        NeonIntegerOp.Unary rev32Q = (NeonIntegerOp.Unary) liftedOf(enc(0, 0b00, 0, 0b0001, 1, 2));
         assertEquals(AdvSimdUnaryOp.REV32, rev32Q.op());
         assertTrue(rev32Q.quad());
 
-        IrOp.NeonUnary uaddlp = (IrOp.NeonUnary) liftedOf(enc(1, 0b00, 0, 0b0101, 1, 2));
+        NeonIntegerOp.Unary uaddlp = (NeonIntegerOp.Unary) liftedOf(enc(1, 0b00, 0, 0b0101, 1, 2));
         assertEquals(AdvSimdUnaryOp.UADDLP, uaddlp.op());
         assertEquals(1, uaddlp.esz());
 
-        IrOp.NeonUnary urecpe = (IrOp.NeonUnary) liftedOf(enc(2, 0b11, 0, 0b1000, 0, 1));
+        NeonIntegerOp.Unary urecpe = (NeonIntegerOp.Unary) liftedOf(enc(2, 0b11, 0, 0b1000, 0, 1));
         assertEquals(AdvSimdUnaryOp.URECPE, urecpe.op());
     }
 
     @Test
     void fpUnaryDecodesWithRightOpAndQuad() {
-        IrOp.NeonFpUnary absF = (IrOp.NeonFpUnary) liftedOf(enc(2, 0b01, 0, 0b1110, 0, 1));
+        NeonFpOp.FpUnary absF = (NeonFpOp.FpUnary) liftedOf(enc(2, 0b01, 0, 0b1110, 0, 1));
         assertEquals(AdvSimdFpUnaryOp.ABS, absF.op());
         assertEquals(false, absF.quad());
 
-        IrOp.NeonFpUnary rsqrteF = (IrOp.NeonFpUnary) liftedOf(enc(2, 0b11, 0, 0b1011, 1, 2));
+        NeonFpOp.FpUnary rsqrteF = (NeonFpOp.FpUnary) liftedOf(enc(2, 0b11, 0, 0b1011, 1, 2));
         assertEquals(AdvSimdFpUnaryOp.RSQRTE, rsqrteF.op());
         assertTrue(rsqrteF.quad());
     }
 
     @Test
     void narrowUnaryDecodesWithRightOpEszAndRegisters() {
-        IrOp.NeonNarrowUnary movn = (IrOp.NeonNarrowUnary) liftedOf(enc(1, 0b10, 0, 0b0100, 0, 2));
+        NeonIntegerOp.NarrowUnary movn = (NeonIntegerOp.NarrowUnary) liftedOf(enc(1, 0b10, 0, 0b0100, 0, 2));
         assertEquals(AdvSimdNarrowUnaryOp.XTN, movn.op());
         assertEquals(1, movn.esz());
         assertEquals(0, movn.vd());
         assertEquals(2, movn.vm());
 
-        IrOp.NeonNarrowUnary qmovun = (IrOp.NeonNarrowUnary) liftedOf(enc(1, 0b10, 2, 0b0100, 1, 6));
+        NeonIntegerOp.NarrowUnary qmovun = (NeonIntegerOp.NarrowUnary) liftedOf(enc(1, 0b10, 2, 0b0100, 1, 6));
         assertEquals(AdvSimdNarrowUnaryOp.SQXTUN, qmovun.op());
 
-        IrOp.NeonNarrowUnary qmovnS = (IrOp.NeonNarrowUnary) liftedOf(enc(2, 0b10, 4, 0b0101, 0, 10));
+        NeonIntegerOp.NarrowUnary qmovnS = (NeonIntegerOp.NarrowUnary) liftedOf(enc(2, 0b10, 4, 0b0101, 0, 10));
         assertEquals(AdvSimdNarrowUnaryOp.SQXTN, qmovnS.op());
 
-        IrOp.NeonNarrowUnary qmovnU = (IrOp.NeonNarrowUnary) liftedOf(enc(1, 0b10, 6, 0b0101, 1, 14));
+        NeonIntegerOp.NarrowUnary qmovnU = (NeonIntegerOp.NarrowUnary) liftedOf(enc(1, 0b10, 6, 0b0101, 1, 14));
         assertEquals(AdvSimdNarrowUnaryOp.UQXTN, qmovnU.op());
     }
 
     @Test
     void vshllDecodesAsShiftWidenImmediateWithShiftEqualToElementSize() {
-        IrOp.NeonShiftWidenImmediate shll8 = (IrOp.NeonShiftWidenImmediate) liftedOf(enc(0, 0b10, 0, 0b0110, 0, 1));
+        NeonIntegerOp.ShiftWidenImmediate shll8 = (NeonIntegerOp.ShiftWidenImmediate) liftedOf(enc(0, 0b10, 0, 0b0110, 0, 1));
         assertEquals(AdvSimdShiftWidenOp.USHLL, shll8.op());
         assertEquals(0, shll8.esz());
         assertEquals(8, shll8.shift());
         assertEquals(0, shll8.vd());
         assertEquals(1, shll8.vm());
 
-        IrOp.NeonShiftWidenImmediate shll32 = (IrOp.NeonShiftWidenImmediate) liftedOf(enc(2, 0b10, 4, 0b0110, 0, 5));
+        NeonIntegerOp.ShiftWidenImmediate shll32 = (NeonIntegerOp.ShiftWidenImmediate) liftedOf(enc(2, 0b10, 4, 0b0110, 0, 5));
         assertEquals(32, shll32.shift());
     }
 
@@ -477,22 +481,22 @@ class NeonTwoRegMiscDecoderTest {
 
     @Test
     void swapPermuteDecodesWithRightOpEszQuadAndRegisters() {
-        IrOp.NeonSwapPermute swap = (IrOp.NeonSwapPermute) liftedOf(enc(0, 0b10, 0, 0b0000, 1, 2));
+        NeonMoveOp.SwapPermute swap = (NeonMoveOp.SwapPermute) liftedOf(enc(0, 0b10, 0, 0b0000, 1, 2));
         assertEquals(dev.vitorsilverio.armjitter.advsimd.AdvSimdSwapPermuteOp.SWAP, swap.op());
         assertTrue(swap.quad());
         assertEquals(0, swap.vd());
         assertEquals(2, swap.vm());
 
-        IrOp.NeonSwapPermute trn = (IrOp.NeonSwapPermute) liftedOf(enc(1, 0b10, 2, 0b0001, 0, 3));
+        NeonMoveOp.SwapPermute trn = (NeonMoveOp.SwapPermute) liftedOf(enc(1, 0b10, 2, 0b0001, 0, 3));
         assertEquals(dev.vitorsilverio.armjitter.advsimd.AdvSimdSwapPermuteOp.TRN, trn.op());
         assertEquals(1, trn.esz());
         assertEquals(2, trn.vd());
         assertEquals(3, trn.vm());
 
-        IrOp.NeonSwapPermute uzp = (IrOp.NeonSwapPermute) liftedOf(enc(0, 0b10, 4, 0b0010, 0, 5));
+        NeonMoveOp.SwapPermute uzp = (NeonMoveOp.SwapPermute) liftedOf(enc(0, 0b10, 4, 0b0010, 0, 5));
         assertEquals(dev.vitorsilverio.armjitter.advsimd.AdvSimdSwapPermuteOp.UZP, uzp.op());
 
-        IrOp.NeonSwapPermute zip = (IrOp.NeonSwapPermute) liftedOf(enc(0, 0b10, 6, 0b0011, 0, 7));
+        NeonMoveOp.SwapPermute zip = (NeonMoveOp.SwapPermute) liftedOf(enc(0, 0b10, 6, 0b0011, 0, 7));
         assertEquals(dev.vitorsilverio.armjitter.advsimd.AdvSimdSwapPermuteOp.ZIP, zip.op());
     }
 
@@ -633,31 +637,31 @@ class NeonTwoRegMiscDecoderTest {
 
     @Test
     void cryptoDecodesWithRightOpAndRegisters() {
-        IrOp.NeonCryptoAes aese = (IrOp.NeonCryptoAes) liftedCryptoOf(enc(0, 0b00, 0, 0b0110, 0, 2));
+        NeonCryptoOp.Aes aese = (NeonCryptoOp.Aes) liftedCryptoOf(enc(0, 0b00, 0, 0b0110, 0, 2));
         assertEquals(dev.vitorsilverio.armjitter.advsimd.AdvSimdCryptoAesOp.AESE, aese.op());
         assertEquals(0, aese.vd());
         assertEquals(2, aese.vm());
 
-        IrOp.NeonCryptoAes aesd = (IrOp.NeonCryptoAes) liftedCryptoOf(enc(0, 0b00, 4, 0b0110, 1, 6));
+        NeonCryptoOp.Aes aesd = (NeonCryptoOp.Aes) liftedCryptoOf(enc(0, 0b00, 4, 0b0110, 1, 6));
         assertEquals(dev.vitorsilverio.armjitter.advsimd.AdvSimdCryptoAesOp.AESD, aesd.op());
         assertEquals(4, aesd.vd());
         assertEquals(6, aesd.vm());
 
-        IrOp.NeonCryptoAes aesmc = (IrOp.NeonCryptoAes) liftedCryptoOf(enc(0, 0b00, 0, 0b0111, 0, 2));
+        NeonCryptoOp.Aes aesmc = (NeonCryptoOp.Aes) liftedCryptoOf(enc(0, 0b00, 0, 0b0111, 0, 2));
         assertEquals(dev.vitorsilverio.armjitter.advsimd.AdvSimdCryptoAesOp.AESMC, aesmc.op());
 
-        IrOp.NeonCryptoAes aesimc = (IrOp.NeonCryptoAes) liftedCryptoOf(enc(0, 0b00, 0, 0b0111, 1, 2));
+        NeonCryptoOp.Aes aesimc = (NeonCryptoOp.Aes) liftedCryptoOf(enc(0, 0b00, 0, 0b0111, 1, 2));
         assertEquals(dev.vitorsilverio.armjitter.advsimd.AdvSimdCryptoAesOp.AESIMC, aesimc.op());
 
-        IrOp.NeonCryptoSha sha1h = (IrOp.NeonCryptoSha) liftedCryptoOf(enc(2, 0b01, 0, 0b0101, 1, 2));
+        NeonCryptoOp.Sha sha1h = (NeonCryptoOp.Sha) liftedCryptoOf(enc(2, 0b01, 0, 0b0101, 1, 2));
         assertEquals(dev.vitorsilverio.armjitter.advsimd.AdvSimdCryptoShaOp.SHA1H, sha1h.op());
         assertEquals(0, sha1h.vd());
         assertEquals(2, sha1h.vm());
 
-        IrOp.NeonCryptoSha sha1su1 = (IrOp.NeonCryptoSha) liftedCryptoOf(enc(2, 0b10, 0, 0b0111, 0, 2));
+        NeonCryptoOp.Sha sha1su1 = (NeonCryptoOp.Sha) liftedCryptoOf(enc(2, 0b10, 0, 0b0111, 0, 2));
         assertEquals(dev.vitorsilverio.armjitter.advsimd.AdvSimdCryptoShaOp.SHA1SU1, sha1su1.op());
 
-        IrOp.NeonCryptoSha sha256su0 = (IrOp.NeonCryptoSha) liftedCryptoOf(enc(2, 0b10, 0, 0b0111, 1, 2));
+        NeonCryptoOp.Sha sha256su0 = (NeonCryptoOp.Sha) liftedCryptoOf(enc(2, 0b10, 0, 0b0111, 1, 2));
         assertEquals(dev.vitorsilverio.armjitter.advsimd.AdvSimdCryptoShaOp.SHA256SU0, sha256su0.op());
     }
 
@@ -843,46 +847,46 @@ class NeonTwoRegMiscDecoderTest {
 
     @Test
     void rintDecodesWithRightOpAndQuad() {
-        IrOp.NeonFpUnary n = (IrOp.NeonFpUnary) liftedOf(enc(2, 0b10, 0, 0b1000, 1, 2));
+        NeonFpOp.FpUnary n = (NeonFpOp.FpUnary) liftedOf(enc(2, 0b10, 0, 0b1000, 1, 2));
         assertEquals(AdvSimdFpUnaryOp.RINTN, n.op());
         assertTrue(n.quad());
-        assertEquals(AdvSimdFpUnaryOp.RINTX, ((IrOp.NeonFpUnary) liftedOf(enc(2, 0b10, 0, 0b1001, 0, 1))).op());
-        assertEquals(AdvSimdFpUnaryOp.RINTA, ((IrOp.NeonFpUnary) liftedOf(enc(2, 0b10, 0, 0b1010, 0, 1))).op());
-        assertEquals(AdvSimdFpUnaryOp.RINTZ, ((IrOp.NeonFpUnary) liftedOf(enc(2, 0b10, 0, 0b1011, 0, 1))).op());
-        assertEquals(AdvSimdFpUnaryOp.RINTM, ((IrOp.NeonFpUnary) liftedOf(enc(2, 0b10, 0, 0b1101, 0, 1))).op());
-        assertEquals(AdvSimdFpUnaryOp.RINTP, ((IrOp.NeonFpUnary) liftedOf(enc(2, 0b10, 0, 0b1111, 0, 1))).op());
+        assertEquals(AdvSimdFpUnaryOp.RINTX, ((NeonFpOp.FpUnary) liftedOf(enc(2, 0b10, 0, 0b1001, 0, 1))).op());
+        assertEquals(AdvSimdFpUnaryOp.RINTA, ((NeonFpOp.FpUnary) liftedOf(enc(2, 0b10, 0, 0b1010, 0, 1))).op());
+        assertEquals(AdvSimdFpUnaryOp.RINTZ, ((NeonFpOp.FpUnary) liftedOf(enc(2, 0b10, 0, 0b1011, 0, 1))).op());
+        assertEquals(AdvSimdFpUnaryOp.RINTM, ((NeonFpOp.FpUnary) liftedOf(enc(2, 0b10, 0, 0b1101, 0, 1))).op());
+        assertEquals(AdvSimdFpUnaryOp.RINTP, ((NeonFpOp.FpUnary) liftedOf(enc(2, 0b10, 0, 0b1111, 0, 1))).op());
     }
 
     @Test
     void vcvtaNpmDecodesModeAndSignFromOpc2() {
-        assertEquals(AdvSimdFpUnaryOp.FCVTAS, ((IrOp.NeonFpUnary) liftedOf(enc(2, 0b11, 0, 0b0000, 0, 1))).op());
-        assertEquals(AdvSimdFpUnaryOp.FCVTAU, ((IrOp.NeonFpUnary) liftedOf(enc(2, 0b11, 0, 0b0001, 0, 1))).op());
-        assertEquals(AdvSimdFpUnaryOp.FCVTNS, ((IrOp.NeonFpUnary) liftedOf(enc(2, 0b11, 0, 0b0010, 0, 1))).op());
-        assertEquals(AdvSimdFpUnaryOp.FCVTNU, ((IrOp.NeonFpUnary) liftedOf(enc(2, 0b11, 0, 0b0011, 0, 1))).op());
-        assertEquals(AdvSimdFpUnaryOp.FCVTPS, ((IrOp.NeonFpUnary) liftedOf(enc(2, 0b11, 0, 0b0100, 0, 1))).op());
-        assertEquals(AdvSimdFpUnaryOp.FCVTPU, ((IrOp.NeonFpUnary) liftedOf(enc(2, 0b11, 0, 0b0101, 0, 1))).op());
-        assertEquals(AdvSimdFpUnaryOp.FCVTMS, ((IrOp.NeonFpUnary) liftedOf(enc(2, 0b11, 0, 0b0110, 0, 1))).op());
-        assertEquals(AdvSimdFpUnaryOp.FCVTMU, ((IrOp.NeonFpUnary) liftedOf(enc(2, 0b11, 0, 0b0111, 0, 1))).op());
-        assertEquals(AdvSimdFpUnaryOp.SCVTF, ((IrOp.NeonFpUnary) liftedOf(enc(2, 0b11, 0, 0b1100, 0, 1))).op());
-        assertEquals(AdvSimdFpUnaryOp.UCVTF, ((IrOp.NeonFpUnary) liftedOf(enc(2, 0b11, 0, 0b1101, 0, 1))).op());
-        assertEquals(AdvSimdFpUnaryOp.FCVTZS, ((IrOp.NeonFpUnary) liftedOf(enc(2, 0b11, 0, 0b1110, 0, 1))).op());
-        assertEquals(AdvSimdFpUnaryOp.FCVTZU, ((IrOp.NeonFpUnary) liftedOf(enc(2, 0b11, 0, 0b1111, 0, 1))).op());
+        assertEquals(AdvSimdFpUnaryOp.FCVTAS, ((NeonFpOp.FpUnary) liftedOf(enc(2, 0b11, 0, 0b0000, 0, 1))).op());
+        assertEquals(AdvSimdFpUnaryOp.FCVTAU, ((NeonFpOp.FpUnary) liftedOf(enc(2, 0b11, 0, 0b0001, 0, 1))).op());
+        assertEquals(AdvSimdFpUnaryOp.FCVTNS, ((NeonFpOp.FpUnary) liftedOf(enc(2, 0b11, 0, 0b0010, 0, 1))).op());
+        assertEquals(AdvSimdFpUnaryOp.FCVTNU, ((NeonFpOp.FpUnary) liftedOf(enc(2, 0b11, 0, 0b0011, 0, 1))).op());
+        assertEquals(AdvSimdFpUnaryOp.FCVTPS, ((NeonFpOp.FpUnary) liftedOf(enc(2, 0b11, 0, 0b0100, 0, 1))).op());
+        assertEquals(AdvSimdFpUnaryOp.FCVTPU, ((NeonFpOp.FpUnary) liftedOf(enc(2, 0b11, 0, 0b0101, 0, 1))).op());
+        assertEquals(AdvSimdFpUnaryOp.FCVTMS, ((NeonFpOp.FpUnary) liftedOf(enc(2, 0b11, 0, 0b0110, 0, 1))).op());
+        assertEquals(AdvSimdFpUnaryOp.FCVTMU, ((NeonFpOp.FpUnary) liftedOf(enc(2, 0b11, 0, 0b0111, 0, 1))).op());
+        assertEquals(AdvSimdFpUnaryOp.SCVTF, ((NeonFpOp.FpUnary) liftedOf(enc(2, 0b11, 0, 0b1100, 0, 1))).op());
+        assertEquals(AdvSimdFpUnaryOp.UCVTF, ((NeonFpOp.FpUnary) liftedOf(enc(2, 0b11, 0, 0b1101, 0, 1))).op());
+        assertEquals(AdvSimdFpUnaryOp.FCVTZS, ((NeonFpOp.FpUnary) liftedOf(enc(2, 0b11, 0, 0b1110, 0, 1))).op());
+        assertEquals(AdvSimdFpUnaryOp.FCVTZU, ((NeonFpOp.FpUnary) liftedOf(enc(2, 0b11, 0, 0b1111, 0, 1))).op());
     }
 
     @Test
     void precisionConvertDecodesNarrowAndWidenWithRightRegisters() {
-        IrOp.NeonFpConvertPrecision narrowF16 = (IrOp.NeonFpConvertPrecision) liftedOf(enc(1, 0b10, 0, 0b1100, 0, 2));
+        NeonFpOp.FpConvertPrecision narrowF16 = (NeonFpOp.FpConvertPrecision) liftedOf(enc(1, 0b10, 0, 0b1100, 0, 2));
         assertEquals(AdvSimdFpConvertPrecisionOp.NARROW_F16, narrowF16.op());
         assertEquals(0, narrowF16.vd());
         assertEquals(2, narrowF16.vm());
 
-        IrOp.NeonFpConvertPrecision widen = (IrOp.NeonFpConvertPrecision) liftedOf(enc(1, 0b10, 0, 0b1110, 0, 1));
+        NeonFpOp.FpConvertPrecision widen = (NeonFpOp.FpConvertPrecision) liftedOf(enc(1, 0b10, 0, 0b1110, 0, 1));
         assertEquals(AdvSimdFpConvertPrecisionOp.WIDEN_F16, widen.op());
         assertEquals(0, widen.vd());
         assertEquals(1, widen.vm());
 
-        IrOp.NeonFpConvertPrecision narrowBf16 =
-                (IrOp.NeonFpConvertPrecision) liftedOf(BFLOAT16_ARCH, enc(1, 0b10, 0, 0b1100, 1, 2));
+        NeonFpOp.FpConvertPrecision narrowBf16 =
+                (NeonFpOp.FpConvertPrecision) liftedOf(BFLOAT16_ARCH, enc(1, 0b10, 0, 0b1100, 1, 2));
         assertEquals(AdvSimdFpConvertPrecisionOp.NARROW_BF16, narrowBf16.op());
     }
 

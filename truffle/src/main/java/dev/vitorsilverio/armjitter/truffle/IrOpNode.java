@@ -38,7 +38,7 @@ abstract sealed class IrOpNode extends Node
 
     /// Executa a operação e devolve se o PC foi alterado.
     ///
-    /// @param blockEndPc PC sequencial do fim do bloco (só usado por `IrOp.Swi`)
+    /// @param blockEndPc PC sequencial do fim do bloco (só usado por `SystemOp.Swi`)
     final boolean executeOp(ArmCore core, int blockEndPc) {
         if (condition != Condition.AL) {
             conditionTakenProfile.profile(core.cpsr().evalCond(condition));

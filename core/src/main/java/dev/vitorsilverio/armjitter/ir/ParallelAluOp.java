@@ -1,6 +1,6 @@
 package dev.vitorsilverio.armjitter.ir;
 
-/// Operação-base da aritmética paralela ARMv6 ({@link IrOp.ParallelAlu}): define quais lanes
+/// Operação-base da aritmética paralela ARMv6 ({@link IntegerOp.ParallelAlu}): define quais lanes
 /// são somadas/subtraídas e a largura de lane. As variantes de prefixo (S/Q/SH/U/UQ/UH) ficam
 /// em {@link ParallelAluVariant}.
 public enum ParallelAluOp {

@@ -3,9 +3,13 @@ package dev.vitorsilverio.armjitter.truffle;
 import dev.vitorsilverio.armjitter.codegen.jvm.AsmNativePolicy;
 import dev.vitorsilverio.armjitter.codegen64.jvm64.Ir64NativePolicy;
 import dev.vitorsilverio.armjitter.core.Condition;
+import dev.vitorsilverio.armjitter.ir.BranchOp;
+import dev.vitorsilverio.armjitter.ir.IntegerOp;
 import dev.vitorsilverio.armjitter.ir.IrOp;
 import dev.vitorsilverio.armjitter.ir.IrOpCode;
 import dev.vitorsilverio.armjitter.ir.IrOperand;
+import dev.vitorsilverio.armjitter.ir.MemoryOp;
+import dev.vitorsilverio.armjitter.ir.VfpOp;
 import dev.vitorsilverio.armjitter.ir64.Ir64Op;
 
 import java.io.IOException;
@@ -115,34 +119,34 @@ public final class JitCoverageReport {
     private static final Map<Class<? extends IrOp>, Conditional> ASM32_CONDITIONALS = new LinkedHashMap<>();
 
     static {
-        ASM32_CONDITIONALS.put(IrOp.Alu.class, new Conditional(
-                new IrOp.Alu(IrOpCode.ORN, 15, 0, -1, new IrOperand.Immediate(0), true, AL),
+        ASM32_CONDITIONALS.put(IntegerOp.Alu.class, new Conditional(
+                new IntegerOp.Alu(IrOpCode.ORN, 15, 0, -1, new IrOperand.Immediate(0), true, AL),
                 "nativa exceto `dst=PC` com `setFlags` (restaura o CPSR a partir do SPSR) e "
                         + "`opcode=ORN` (Thumb-2, sem emissão nativa ainda)"));
-        ASM32_CONDITIONALS.put(IrOp.Saturating.class, new Conditional(
-                new IrOp.Saturating(15, 0, 0, 0, AL),
+        ASM32_CONDITIONALS.put(IntegerOp.Saturating.class, new Conditional(
+                new IntegerOp.Saturating(15, 0, 0, 0, AL),
                 "nativa exceto `dst=PC` (`UNPREDICTABLE`/troca de bloco)"));
-        ASM32_CONDITIONALS.put(IrOp.DspMultiply.class, new Conditional(
-                new IrOp.DspMultiply(15, 0, 0, 0, 0, 0, 0, AL),
+        ASM32_CONDITIONALS.put(IntegerOp.DspMultiply.class, new Conditional(
+                new IntegerOp.DspMultiply(15, 0, 0, 0, 0, 0, 0, AL),
                 "nativa exceto `dst=PC`, ou `SMLAWx`/`SMULWx` (`op2=2`) com `Rn=PC`"));
-        ASM32_CONDITIONALS.put(IrOp.DoubleTransfer.class, new Conditional(
-                new IrOp.DoubleTransfer(true, 15, 1, 0, -1, new IrOperand.Immediate(0), false, false, AL),
+        ASM32_CONDITIONALS.put(MemoryOp.DoubleTransfer.class, new Conditional(
+                new MemoryOp.DoubleTransfer(true, 15, 1, 0, -1, new IrOperand.Immediate(0), false, false, AL),
                 "STRD (só lê registradores) sempre nativa; LDRD nativa exceto com `PC` no par "
                         + "carregado (sem tratamento de interworking no emissor)"));
-        ASM32_CONDITIONALS.put(IrOp.Load.class, new Conditional(
-                new IrOp.Load(0, 1, -1, new IrOperand.Immediate(0), 4, false, false, false, true, AL),
+        ASM32_CONDITIONALS.put(MemoryOp.Load.class, new Conditional(
+                new MemoryOp.Load(0, 1, -1, new IrOperand.Immediate(0), 4, false, false, false, true, AL),
                 "nativa exceto `LDRxT` (`unprivileged`: precisa de `AddressSpace#withUnprivilegedAccess`)"));
-        ASM32_CONDITIONALS.put(IrOp.Store.class, new Conditional(
-                new IrOp.Store(0, -1, 1, -1, new IrOperand.Immediate(0), 4, false, false, true, AL),
+        ASM32_CONDITIONALS.put(MemoryOp.Store.class, new Conditional(
+                new MemoryOp.Store(0, -1, 1, -1, new IrOperand.Immediate(0), 4, false, false, true, AL),
                 "nativa exceto `STRxT` (`unprivileged`)"));
-        ASM32_CONDITIONALS.put(IrOp.BranchExchange.class, new Conditional(
-                new IrOp.BranchExchange(0, -1, true, 0, AL),
+        ASM32_CONDITIONALS.put(BranchOp.BranchExchange.class, new Conditional(
+                new BranchOp.BranchExchange(0, -1, true, 0, AL),
                 "nativa exceto `BLX` (`link`: interworking + link register)"));
-        ASM32_CONDITIONALS.put(IrOp.ThumbBlSuffix.class, new Conditional(
-                new IrOp.ThumbBlSuffix(0, 0, true, AL),
+        ASM32_CONDITIONALS.put(BranchOp.ThumbBlSuffix.class, new Conditional(
+                new BranchOp.ThumbBlSuffix(0, 0, true, AL),
                 "nativa exceto a forma `BLX` (`exchange`: alinha o destino e troca para ARM)"));
-        ASM32_CONDITIONALS.put(IrOp.VfpCoreTransfer.class, new Conditional(
-                new IrOp.VfpCoreTransfer(true, 0, 0, true, AL),
+        ASM32_CONDITIONALS.put(VfpOp.CoreTransfer.class, new Conditional(
+                new VfpOp.CoreTransfer(true, 0, 0, true, AL),
                 "nativa exceto `VMOV.F16` (`halfWidth`: transferência de 16 bits, sem preset com "
                         + "`HALF_PRECISION_FP` hoje)"));
     }
@@ -175,7 +179,7 @@ public final class JitCoverageReport {
                     condition = conditional.condition();
                 } else {
                     asm = asmPrimary ? Emission.NATIVE : Emission.INTERPRETED;
-                    anomalies.add(recordClass.getSimpleName() + ": carve-out curado não se confirmou "
+                    anomalies.add(operationName(recordClass) + ": carve-out curado não se confirmou "
                             + "(primária=" + asmPrimary + ", adversa=" + asmAdverse + ") — revisar AsmNativePolicy");
                 }
             } else {
@@ -183,13 +187,19 @@ public final class JitCoverageReport {
             }
 
             Emission truffle = IrOpNodeFactory.supports(primary) ? Emission.NATIVE : Emission.INTERPRETED;
-            rows.add(new Row32(recordClass.getSimpleName(), kind, IR_OP_KIND_NAMES.get(kind), asm, truffle, condition));
+            rows.add(new Row32(operationName(recordClass), kind, IR_OP_KIND_NAMES.get(kind), asm, truffle, condition));
         }
         rows.sort((a, b) -> Integer.compare(a.kind(), b.kind()));
         if (!anomalies.isEmpty()) {
             throw new IllegalStateException("anomalias na medição de 32 bits: " + anomalies);
         }
         return rows;
+    }
+
+    /// `Família.Record` (task E15.3) — o nome simples sozinho se repete entre famílias
+    /// (`IntegerOp.Alu` × `VfpOp.Alu`).
+    private static String operationName(Class<?> recordClass) {
+        return recordClass.getEnclosingClass().getSimpleName() + "." + recordClass.getSimpleName();
     }
 
     /// Linhas de 64 bits, ordenadas por `Kind`.

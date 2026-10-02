@@ -5,7 +5,8 @@ import dev.vitorsilverio.armjitter.arch.ArmFeature;
 import dev.vitorsilverio.armjitter.arch.DecoderExtension;
 import dev.vitorsilverio.armjitter.core.Condition;
 import dev.vitorsilverio.armjitter.core.VfpRegisters;
-import dev.vitorsilverio.armjitter.ir.IrOp;
+import dev.vitorsilverio.armjitter.ir.MveFpOp;
+import dev.vitorsilverio.armjitter.ir.MveIntegerOp;
 
 /// Sub-família 2 da B16.7 (perfil M, MVE/Helium, `target/isa-decode/mve.decode`, linhas 325-350, 14
 /// encodings) — o `{}` sobreposto de complexos FP + dual-accumulate inteiros:
@@ -144,7 +145,7 @@ public final class Thumb2MveComplexDualAccumulateDecoder implements DecoderExten
         int rotation = (bit16 ? 2 : 0) | (bit0 ? 1 : 0);
         int esz = ((raw >>> U_BIT) & 1) + SIZE_28_OFFSET;
         return DecodedInstruction.lifted(address, raw, InstructionSet.THUMB, condition,
-                new IrOp.MveVectorFpComplexMultiply(rotation, esz, qd, qn, qm, condition));
+                new MveFpOp.VectorFpComplexMultiply(rotation, esz, qd, qn, qm, condition));
     }
 
     /// `VQDMLADH`/`VQDMLSDH` e variantes `X`(`bit16`)/`R`(`bit0`) — `add = !U` (`bit28`), `size` real
@@ -156,7 +157,7 @@ public final class Thumb2MveComplexDualAccumulateDecoder implements DecoderExten
         }
         boolean add = ((raw >>> U_BIT) & 1) == 0;
         return DecodedInstruction.lifted(address, raw, InstructionSet.THUMB, condition,
-                new IrOp.MveVectorDualMultiplyAddHigh(add, exchange, rounded, size, qd, qn, qm, condition));
+                new MveIntegerOp.VectorDualMultiplyAddHigh(add, exchange, rounded, size, qd, qn, qm, condition));
     }
 
     /// `VQDMULLB`(`bit16=0`)/`VQDMULLT`(`bit16=1`) — `size = bit28+1` (`1`/`2`) — `MVE_INTEGER`.
@@ -172,6 +173,6 @@ public final class Thumb2MveComplexDualAccumulateDecoder implements DecoderExten
             return null;
         }
         return DecodedInstruction.lifted(address, raw, InstructionSet.THUMB, condition,
-                new IrOp.MveVectorDoublingWideningMultiply(esz, top, qd, qn, qm, condition));
+                new MveIntegerOp.VectorDoublingWideningMultiply(esz, top, qd, qn, qm, condition));
     }
 }

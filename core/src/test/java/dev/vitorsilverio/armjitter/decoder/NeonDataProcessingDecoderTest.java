@@ -8,6 +8,7 @@ import dev.vitorsilverio.armjitter.codegen.executor.IrBlockExecutor;
 import dev.vitorsilverio.armjitter.core.ArmCore;
 import dev.vitorsilverio.armjitter.ir.IrBlock;
 import dev.vitorsilverio.armjitter.ir.IrOp;
+import dev.vitorsilverio.armjitter.ir.NeonIntegerOp;
 import dev.vitorsilverio.armjitter.ir.StandardIrBuilder;
 import dev.vitorsilverio.armjitter.support.TestAddressSpace;
 import dev.vitorsilverio.armjitter.swi.SwiDispatcher;
@@ -19,7 +20,7 @@ import java.util.List;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
 /// Protótipo de ponta a ponta da RFC B13.2: encoding A32 de NEON (`VADD`/`VSUB` inteiro) →
-/// {@link IrOp.NeonThreeSame} → execução pelo núcleo vetorial COMPARTILHADO com o lado A64.
+/// {@link NeonIntegerOp.ThreeSame} → execução pelo núcleo vetorial COMPARTILHADO com o lado A64.
 ///
 /// Prova também o zero-diff: sem {@link ArmFeature#ADVANCED_SIMD} (isto é, em TODO preset que
 /// existe hoje) o mesmo encoding continua caindo em `UNIMPLEMENTED`, exatamente como antes.
@@ -90,21 +91,21 @@ class NeonDataProcessingDecoderTest {
     void vaddIntegerDecodesToNeonThreeSame() {
         DecodedInstruction decoded = decode(NEON_TEST_ARCH, neonAddSubWord(false, 2, 0, 1, 2, false));
         assertEquals(InstructionKind.LIFTED_IR_OP, decoded.kind());
-        assertEquals(new IrOp.NeonThreeSame(AdvSimdThreeSameOp.ADD, false, 2, 0, 1, 2),
+        assertEquals(new NeonIntegerOp.ThreeSame(AdvSimdThreeSameOp.ADD, false, 2, 0, 1, 2),
                 liftSingleOp(decoded));
     }
 
     @Test
     void vsubIntegerQuadFormDecodesToNeonThreeSame() {
         DecodedInstruction decoded = decode(NEON_TEST_ARCH, neonAddSubWord(true, 0, 0, 2, 4, true));
-        assertEquals(new IrOp.NeonThreeSame(AdvSimdThreeSameOp.SUB, true, 0, 0, 2, 4),
+        assertEquals(new NeonIntegerOp.ThreeSame(AdvSimdThreeSameOp.SUB, true, 0, 0, 2, 4),
                 liftSingleOp(decoded));
     }
 
     @Test
     void doubleRegisterAboveD15IsAddressableWithTheFeature() {
         DecodedInstruction decoded = decode(NEON_TEST_ARCH, neonAddSubWord(false, 3, 31, 16, 17, false));
-        assertEquals(new IrOp.NeonThreeSame(AdvSimdThreeSameOp.ADD, false, 3, 31, 16, 17),
+        assertEquals(new NeonIntegerOp.ThreeSame(AdvSimdThreeSameOp.ADD, false, 3, 31, 16, 17),
                 liftSingleOp(decoded));
     }
 

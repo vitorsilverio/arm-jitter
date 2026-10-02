@@ -9,7 +9,8 @@ import dev.vitorsilverio.armjitter.arch.ArmArchitecture;
 import dev.vitorsilverio.armjitter.arch.ArmFeature;
 import dev.vitorsilverio.armjitter.arch.DecoderExtension;
 import dev.vitorsilverio.armjitter.core.Condition;
-import dev.vitorsilverio.armjitter.ir.IrOp;
+import dev.vitorsilverio.armjitter.ir.NeonFpOp;
+import dev.vitorsilverio.armjitter.ir.NeonIntegerOp;
 
 /// Decodifica as seções **"three-reg-different-lengths"** (task B13.10) e **"2-regs-plus-scalar"**
 /// (task B13.11) do espaço NEON/Advanced SIMD "two registers, or three registers of different
@@ -136,7 +137,7 @@ public final class NeonThreeRegDifferentDecoder implements DecoderExtension {
                 return unimplemented(address, raw, condition);
             }
             return DecodedInstruction.lifted(address, raw, InstructionSet.ARM, Condition.AL,
-                    new IrOp.NeonWidening(longOp, size, vd, vn, vm));
+                    new NeonIntegerOp.Widening(longOp, size, vd, vn, vm));
         }
         AdvSimdWideOp wideOp = wideOperation(opc, u);
         if (wideOp != null) {
@@ -144,7 +145,7 @@ public final class NeonThreeRegDifferentDecoder implements DecoderExtension {
                 return unimplemented(address, raw, condition);
             }
             return DecodedInstruction.lifted(address, raw, InstructionSet.ARM, Condition.AL,
-                    new IrOp.NeonWide(wideOp, size, vd, vn, vm));
+                    new NeonIntegerOp.Wide(wideOp, size, vd, vn, vm));
         }
         AdvSimdNarrowOp narrowOp = narrowOperation(opc, u);
         if (narrowOp != null) {
@@ -152,7 +153,7 @@ public final class NeonThreeRegDifferentDecoder implements DecoderExtension {
                 return unimplemented(address, raw, condition);
             }
             return DecodedInstruction.lifted(address, raw, InstructionSet.ARM, Condition.AL,
-                    new IrOp.NeonNarrow(narrowOp, size, vd, vn, vm));
+                    new NeonIntegerOp.Narrow(narrowOp, size, vd, vn, vm));
         }
         // `opc=1111` (reservado) ou `U=1` combinado com um `opc` só-`U=0` (`VQDMLAL`/`VQDMLSL`/
         // `VQDMULL`/`VMULL.P8`, opc `1001`/`1011`/`1101`/`1110`).
@@ -224,7 +225,7 @@ public final class NeonThreeRegDifferentDecoder implements DecoderExtension {
                 return unimplemented(address, raw, condition);
             }
             return DecodedInstruction.lifted(address, raw, InstructionSet.ARM, Condition.AL,
-                    new IrOp.NeonWideningByElement(wideningOp, size, vd, vn, vm, index));
+                    new NeonIntegerOp.WideningByElement(wideningOp, size, vd, vn, vm, index));
         }
         boolean quad = bitQU != 0;
         AdvSimdThreeSameOp intOp = scalarThreeSameOperation(opc);
@@ -237,7 +238,7 @@ public final class NeonThreeRegDifferentDecoder implements DecoderExtension {
                 return unimplemented(address, raw, condition);
             }
             return DecodedInstruction.lifted(address, raw, InstructionSet.ARM, Condition.AL,
-                    new IrOp.NeonThreeSameByElement(intOp, size, quad, vd, vn, vm, index));
+                    new NeonIntegerOp.ThreeSameByElement(intOp, size, quad, vd, vn, vm, index));
         }
         AdvSimdFpThreeSameOp fpOp = scalarFpThreeSameOperation(opc);
         if (fpOp != null) {
@@ -249,7 +250,7 @@ public final class NeonThreeRegDifferentDecoder implements DecoderExtension {
                 return unimplemented(address, raw, condition);
             }
             return DecodedInstruction.lifted(address, raw, InstructionSet.ARM, Condition.AL,
-                    new IrOp.NeonFpThreeSameByElement(fpOp, quad, esz, vd, vn, vm, index));
+                    new NeonFpOp.FpThreeSameByElement(fpOp, quad, esz, vd, vn, vm, index));
         }
         // As 3 tabelas acima cobrem exaustivamente os 16 valores de `opc` — inalcançável, mas
         // documenta o contrato (G8) caso uma tabela futura vire incompleta por engano.

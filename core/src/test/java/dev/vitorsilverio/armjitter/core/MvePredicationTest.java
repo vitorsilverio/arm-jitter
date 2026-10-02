@@ -6,6 +6,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import dev.vitorsilverio.armjitter.arch.ArmArchitecture;
 import dev.vitorsilverio.armjitter.codegen.executor.IrBlockExecutor;
 import dev.vitorsilverio.armjitter.ir.IrOp;
+import dev.vitorsilverio.armjitter.ir.MvePredicationOp;
 import dev.vitorsilverio.armjitter.support.TestAddressSpace;
 import dev.vitorsilverio.armjitter.swi.SwiDispatcher;
 import org.junit.jupiter.api.Test;
@@ -155,7 +156,7 @@ class MvePredicationTest {
         int pcBefore = core.programCounter();
 
         boolean pcChanged = new IrBlockExecutor(ArmArchitecture.ARMV8_1M_MVE)
-                .executeOp(core, new IrOp.Vpnot(Condition.AL), pcBefore);
+                .executeOp(core, new MvePredicationOp.Vpnot(Condition.AL), pcBefore);
 
         assertTrue(pcChanged);
         assertEquals(MProfileException.USAGE_FAULT.number(), model.currentException());
@@ -171,7 +172,7 @@ class MvePredicationTest {
         int vprBefore = core.vpr().value();
 
         boolean pcChanged = new IrBlockExecutor(ArmArchitecture.ARMV8_1M_MVE)
-                .executeOp(core, new IrOp.Vpst(0b1111, Condition.EQ), core.programCounter());
+                .executeOp(core, new MvePredicationOp.Vpst(0b1111, Condition.EQ), core.programCounter());
 
         assertTrue(!pcChanged);
         assertEquals(vprBefore, core.vpr().value());

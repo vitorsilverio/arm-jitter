@@ -8,6 +8,7 @@ import dev.vitorsilverio.armjitter.codegen.executor.IrBlockExecutor;
 import dev.vitorsilverio.armjitter.core.ArmCore;
 import dev.vitorsilverio.armjitter.ir.IrBlock;
 import dev.vitorsilverio.armjitter.ir.IrOp;
+import dev.vitorsilverio.armjitter.ir.NeonFpOp;
 import dev.vitorsilverio.armjitter.ir.StandardIrBuilder;
 import dev.vitorsilverio.armjitter.support.TestAddressSpace;
 import dev.vitorsilverio.armjitter.swi.SwiDispatcher;
@@ -20,9 +21,9 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 
 /// `neon-shared.decode` — `VDOT_b16`/`VMMLA_b16`/`VFMA_b16` + as formas `_scal`/`_scalar`
 /// correspondentes (task B13.21, `FEAT_BF16`, a MESMA feature que a B13.13 criou para
-/// `VCVT_B16_F32`) → {@link IrOp.NeonDotProductBFloat16}/{@link IrOp.NeonDotProductByElementBFloat16}/
-/// {@link IrOp.NeonMatrixMultiplyAccumulateBFloat16}/{@link IrOp.NeonFusedMultiplyAddLongBFloat16}/
-/// {@link IrOp.NeonFusedMultiplyAddLongByElementBFloat16} → execução pelo núcleo `bfloat16`
+/// `VCVT_B16_F32`) → {@link NeonFpOp.DotProductBFloat16}/{@link NeonFpOp.DotProductByElementBFloat16}/
+/// {@link NeonFpOp.MatrixMultiplyAccumulateBFloat16}/{@link NeonFpOp.FusedMultiplyAddLongBFloat16}/
+/// {@link NeonFpOp.FusedMultiplyAddLongByElementBFloat16} → execução pelo núcleo `bfloat16`
 /// COMPARTILHADO ({@code AdvSimdLanes.bfDotProduct}/`bfDotProductByElement`/
 /// `bfMatrixMultiplyAccumulate`/`bfMultiplyAddLong`/`bfMultiplyAddLongByElement`), criado pela
 /// B19.7 (a task irmã A64) — reusado sem NENHUMA mudança. **Última task de `neon-shared`: fecha o
@@ -222,10 +223,10 @@ class NeonSharedDecoderBFloat16Test {
 
     @Test
     void decodesDotProductVectorFields() {
-        assertEquals(new IrOp.NeonDotProductBFloat16(true, 0, 2, 4), liftedOf(vdot(true, 0, 2, 4)));
-        assertEquals(new IrOp.NeonDotProductBFloat16(true, 6, 8, 10), liftedOf(vdot(true, 6, 8, 10)));
-        assertEquals(new IrOp.NeonDotProductBFloat16(false, 0, 1, 2), liftedOf(vdot(false, 0, 1, 2)));
-        assertEquals(new IrOp.NeonDotProductBFloat16(false, 3, 4, 5), liftedOf(vdot(false, 3, 4, 5)));
+        assertEquals(new NeonFpOp.DotProductBFloat16(true, 0, 2, 4), liftedOf(vdot(true, 0, 2, 4)));
+        assertEquals(new NeonFpOp.DotProductBFloat16(true, 6, 8, 10), liftedOf(vdot(true, 6, 8, 10)));
+        assertEquals(new NeonFpOp.DotProductBFloat16(false, 0, 1, 2), liftedOf(vdot(false, 0, 1, 2)));
+        assertEquals(new NeonFpOp.DotProductBFloat16(false, 3, 4, 5), liftedOf(vdot(false, 3, 4, 5)));
     }
 
     @Test
@@ -241,13 +242,13 @@ class NeonSharedDecoderBFloat16Test {
 
     @Test
     void decodesDotProductScalarFields() {
-        assertEquals(new IrOp.NeonDotProductByElementBFloat16(false, 0, 1, 2, 1),
+        assertEquals(new NeonFpOp.DotProductByElementBFloat16(false, 0, 1, 2, 1),
                 liftedOf(vdotScal(false, 0, 1, 2, 1)));
-        assertEquals(new IrOp.NeonDotProductByElementBFloat16(false, 0, 1, 2, 0),
+        assertEquals(new NeonFpOp.DotProductByElementBFloat16(false, 0, 1, 2, 0),
                 liftedOf(vdotScal(false, 0, 1, 2, 0)));
-        assertEquals(new IrOp.NeonDotProductByElementBFloat16(true, 0, 2, 2, 0),
+        assertEquals(new NeonFpOp.DotProductByElementBFloat16(true, 0, 2, 2, 0),
                 liftedOf(vdotScal(true, 0, 2, 2, 0)));
-        assertEquals(new IrOp.NeonDotProductByElementBFloat16(true, 0, 2, 2, 1),
+        assertEquals(new NeonFpOp.DotProductByElementBFloat16(true, 0, 2, 2, 1),
                 liftedOf(vdotScal(true, 0, 2, 2, 1)));
     }
 
@@ -255,8 +256,8 @@ class NeonSharedDecoderBFloat16Test {
 
     @Test
     void decodesMatrixMultiplyFields() {
-        assertEquals(new IrOp.NeonMatrixMultiplyAccumulateBFloat16(0, 2, 4), liftedOf(vmmla(0, 2, 4)));
-        assertEquals(new IrOp.NeonMatrixMultiplyAccumulateBFloat16(6, 8, 10), liftedOf(vmmla(6, 8, 10)));
+        assertEquals(new NeonFpOp.MatrixMultiplyAccumulateBFloat16(0, 2, 4), liftedOf(vmmla(0, 2, 4)));
+        assertEquals(new NeonFpOp.MatrixMultiplyAccumulateBFloat16(6, 8, 10), liftedOf(vmmla(6, 8, 10)));
     }
 
     @Test
@@ -270,10 +271,10 @@ class NeonSharedDecoderBFloat16Test {
 
     @Test
     void decodesFusedMultiplyAddLongFields() {
-        assertEquals(new IrOp.NeonFusedMultiplyAddLongBFloat16(false, 0, 2, 4), liftedOf(vfma(false, 0, 2, 4)));
-        assertEquals(new IrOp.NeonFusedMultiplyAddLongBFloat16(true, 0, 2, 4), liftedOf(vfma(true, 0, 2, 4)));
-        assertEquals(new IrOp.NeonFusedMultiplyAddLongBFloat16(false, 6, 8, 10), liftedOf(vfma(false, 6, 8, 10)));
-        assertEquals(new IrOp.NeonFusedMultiplyAddLongBFloat16(true, 12, 14, 0), liftedOf(vfma(true, 12, 14, 0)));
+        assertEquals(new NeonFpOp.FusedMultiplyAddLongBFloat16(false, 0, 2, 4), liftedOf(vfma(false, 0, 2, 4)));
+        assertEquals(new NeonFpOp.FusedMultiplyAddLongBFloat16(true, 0, 2, 4), liftedOf(vfma(true, 0, 2, 4)));
+        assertEquals(new NeonFpOp.FusedMultiplyAddLongBFloat16(false, 6, 8, 10), liftedOf(vfma(false, 6, 8, 10)));
+        assertEquals(new NeonFpOp.FusedMultiplyAddLongBFloat16(true, 12, 14, 0), liftedOf(vfma(true, 12, 14, 0)));
     }
 
     @Test
@@ -287,11 +288,11 @@ class NeonSharedDecoderBFloat16Test {
 
     @Test
     void decodesFusedMultiplyAddLongScalarFields() {
-        assertEquals(new IrOp.NeonFusedMultiplyAddLongByElementBFloat16(false, 0, 2, 2, 0),
+        assertEquals(new NeonFpOp.FusedMultiplyAddLongByElementBFloat16(false, 0, 2, 2, 0),
                 liftedOf(vfmaScal(false, 0, 2, 2, 0)));
-        assertEquals(new IrOp.NeonFusedMultiplyAddLongByElementBFloat16(false, 0, 2, 2, 3),
+        assertEquals(new NeonFpOp.FusedMultiplyAddLongByElementBFloat16(false, 0, 2, 2, 3),
                 liftedOf(vfmaScal(false, 0, 2, 2, 3)));
-        assertEquals(new IrOp.NeonFusedMultiplyAddLongByElementBFloat16(true, 0, 2, 2, 2),
+        assertEquals(new NeonFpOp.FusedMultiplyAddLongByElementBFloat16(true, 0, 2, 2, 2),
                 liftedOf(vfmaScal(true, 0, 2, 2, 2)));
     }
 

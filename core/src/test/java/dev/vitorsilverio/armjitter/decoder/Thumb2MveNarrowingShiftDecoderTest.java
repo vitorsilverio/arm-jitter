@@ -3,7 +3,7 @@ package dev.vitorsilverio.armjitter.decoder;
 import dev.vitorsilverio.armjitter.advsimd.AdvSimdShiftNarrowOp;
 import dev.vitorsilverio.armjitter.arch.ArmArchitecture;
 import dev.vitorsilverio.armjitter.core.Condition;
-import dev.vitorsilverio.armjitter.ir.IrOp;
+import dev.vitorsilverio.armjitter.ir.MveIntegerOp;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
@@ -46,12 +46,12 @@ class Thumb2MveNarrowingShiftDecoderTest {
         return new Thumb2MveNarrowingShiftDecoder(ArmArchitecture.ARMV8_1M_MVE).tryDecode(raw, 0, Condition.AL);
     }
 
-    private static IrOp.MveVectorShiftNarrowImmediateInterleaved decodeNarrow(int raw) {
-        return assertInstanceOf(IrOp.MveVectorShiftNarrowImmediateInterleaved.class, tryDecode(raw).liftedOp());
+    private static MveIntegerOp.VectorShiftNarrowImmediateInterleaved decodeNarrow(int raw) {
+        return assertInstanceOf(MveIntegerOp.VectorShiftNarrowImmediateInterleaved.class, tryDecode(raw).liftedOp());
     }
 
-    private static IrOp.MveVectorShiftLeftCarry decodeVshlc(int raw) {
-        return assertInstanceOf(IrOp.MveVectorShiftLeftCarry.class, tryDecode(raw).liftedOp());
+    private static MveIntegerOp.VectorShiftLeftCarry decodeVshlc(int raw) {
+        return assertInstanceOf(MveIntegerOp.VectorShiftLeftCarry.class, tryDecode(raw).liftedOp());
     }
 
     /// Um caso por combinação `(mnemônico, largura, B/T)` — 16 × 2 × ... na verdade a tabela abaixo
@@ -81,7 +81,7 @@ class Thumb2MveNarrowingShiftDecoderTest {
             for (int top : new int[] {0, 1}) {
                 for (int esz : new int[] {ESZ_BYTE, ESZ_HALFWORD}) {
                     int raw = rawNarrow(c.u, esz, rawShiftField, top, c.bit7, c.bit0, 2, 5);
-                    IrOp.MveVectorShiftNarrowImmediateInterleaved op = decodeNarrow(raw);
+                    MveIntegerOp.VectorShiftNarrowImmediateInterleaved op = decodeNarrow(raw);
                     assertEquals(c.op, op.op(), c.name + " esz=" + esz + " top=" + top);
                     assertEquals(esz, op.esz());
                     assertEquals(top == 1, op.top());
@@ -110,14 +110,14 @@ class Thumb2MveNarrowingShiftDecoderTest {
 
     @Test
     void byteWidthComputesNMinusShiftWithNEight() {
-        IrOp.MveVectorShiftNarrowImmediateInterleaved op = decodeNarrow(rawNarrow(0, ESZ_BYTE, 3, 0, 1, 1, 0, 1));
+        MveIntegerOp.VectorShiftNarrowImmediateInterleaved op = decodeNarrow(rawNarrow(0, ESZ_BYTE, 3, 0, 1, 1, 0, 1));
         assertEquals(0, op.esz());
         assertEquals(5, op.shift()); // 8 - 3.
     }
 
     @Test
     void halfwordWidthComputesNMinusShiftWithNSixteen() {
-        IrOp.MveVectorShiftNarrowImmediateInterleaved op =
+        MveIntegerOp.VectorShiftNarrowImmediateInterleaved op =
                 decodeNarrow(rawNarrow(0, ESZ_HALFWORD, 5, 0, 1, 1, 0, 1));
         assertEquals(1, op.esz());
         assertEquals(11, op.shift()); // 16 - 5.
@@ -162,7 +162,7 @@ class Thumb2MveNarrowingShiftDecoderTest {
 
     @Test
     void decodesVshlcBasicFields() {
-        IrOp.MveVectorShiftLeftCarry op = decodeVshlc(rawVshlc(5, 2, 3));
+        MveIntegerOp.VectorShiftLeftCarry op = decodeVshlc(rawVshlc(5, 2, 3));
         assertEquals(5, op.imm());
         assertEquals(2, op.qd());
         assertEquals(3, op.rdm());
@@ -171,7 +171,7 @@ class Thumb2MveNarrowingShiftDecoderTest {
     @Test
     void vshlcImmZeroIsAcceptedNotUndef() {
         // achado: imm==0 significa "desloca por 32" no helper real, não UNDEF/no-op.
-        IrOp.MveVectorShiftLeftCarry op = decodeVshlc(rawVshlc(0, 2, 3));
+        MveIntegerOp.VectorShiftLeftCarry op = decodeVshlc(rawVshlc(0, 2, 3));
         assertEquals(0, op.imm());
     }
 
@@ -204,7 +204,7 @@ class Thumb2MveNarrowingShiftDecoderTest {
         memory.put16(0, r >>> 16);
         memory.put16(2, r & 0xFFFF);
         DecodedInstruction decoded = new ThumbDecoder(ArmArchitecture.ARMV8_1M_MVE).decode(memory, 0);
-        assertInstanceOf(IrOp.MveVectorShiftNarrowImmediateInterleaved.class, decoded.liftedOp());
+        assertInstanceOf(MveIntegerOp.VectorShiftNarrowImmediateInterleaved.class, decoded.liftedOp());
     }
 
     @Test
@@ -215,6 +215,6 @@ class Thumb2MveNarrowingShiftDecoderTest {
         memory.put16(0, r >>> 16);
         memory.put16(2, r & 0xFFFF);
         DecodedInstruction decoded = new ThumbDecoder(ArmArchitecture.ARMV8_1M_MVE).decode(memory, 0);
-        assertInstanceOf(IrOp.MveVectorShiftLeftCarry.class, decoded.liftedOp());
+        assertInstanceOf(MveIntegerOp.VectorShiftLeftCarry.class, decoded.liftedOp());
     }
 }

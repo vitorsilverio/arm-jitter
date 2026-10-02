@@ -3,7 +3,8 @@ package dev.vitorsilverio.armjitter.codegen.executor;
 import dev.vitorsilverio.armjitter.core.ArmCore;
 import dev.vitorsilverio.armjitter.core.ArmException;
 import dev.vitorsilverio.armjitter.core.CpuMode;
-import dev.vitorsilverio.armjitter.ir.IrOp;
+import dev.vitorsilverio.armjitter.ir.MemoryOp;
+import dev.vitorsilverio.armjitter.ir.SystemOp;
 
 /// Executa LDM/STM, PUSH e POP da IR interpretada.
 public final class IrTransferExecutor {
@@ -14,7 +15,7 @@ public final class IrTransferExecutor {
     }
 
     /// @return {@code true} quando o PC foi alterado pela operação
-    public boolean executeMultipleTransfer(ArmCore core, IrOp.MultipleTransfer transfer) {
+    public boolean executeMultipleTransfer(ArmCore core, MemoryOp.MultipleTransfer transfer) {
         if (!core.cpsr().evalCond(transfer.condition())) {
             return false;
         }
@@ -55,7 +56,7 @@ public final class IrTransferExecutor {
         return transfer.load() && includesPc;
     }
 
-    public void executePush(ArmCore core, IrOp.Push push) {
+    public void executePush(ArmCore core, MemoryOp.Push push) {
         if (!core.cpsr().evalCond(push.condition())) {
             return;
         }
@@ -75,7 +76,7 @@ public final class IrTransferExecutor {
     }
 
     /// @return {@code true} quando o PC foi alterado pela operação
-    public boolean executePop(ArmCore core, IrOp.Pop pop) {
+    public boolean executePop(ArmCore core, MemoryOp.Pop pop) {
         if (!core.cpsr().evalCond(pop.condition())) {
             return false;
         }
@@ -102,7 +103,7 @@ public final class IrTransferExecutor {
     /// próprio) — tratado como UNDEFINED.
     ///
     /// @return {@code true} quando o PC foi alterado pela operação
-    public boolean executeStoreReturnState(ArmCore core, IrOp.StoreReturnState srs) {
+    public boolean executeStoreReturnState(ArmCore core, SystemOp.StoreReturnState srs) {
         if (!core.cpsr().evalCond(srs.condition())) {
             return false;
         }
@@ -130,7 +131,7 @@ public final class IrTransferExecutor {
     /// {@code alignAndSetPc}). UNPREDICTABLE em modo User/System — tratado como UNDEFINED.
     ///
     /// @return {@code true} quando o PC foi alterado pela operação
-    public boolean executeReturnFromException(ArmCore core, IrOp.ReturnFromException rfe) {
+    public boolean executeReturnFromException(ArmCore core, SystemOp.ReturnFromException rfe) {
         if (!core.cpsr().evalCond(rfe.condition())) {
             return false;
         }

@@ -5,7 +5,7 @@ import dev.vitorsilverio.armjitter.arch.ArmFeature;
 import dev.vitorsilverio.armjitter.arch.DecoderExtension;
 import dev.vitorsilverio.armjitter.core.Condition;
 import dev.vitorsilverio.armjitter.core.VfpRegisters;
-import dev.vitorsilverio.armjitter.ir.IrOp;
+import dev.vitorsilverio.armjitter.ir.MveMoveOp;
 
 /// `VLD2`/`VLD4`/`VST2`/`VST4` (desentrelaçamento/entrelaçamento, perfil M, B16.5, MVE/Helium) —
 /// as 4 linhas de `target/isa-decode/mve.decode` (confirmadas bit a bit via leitura direta do
@@ -120,6 +120,6 @@ public final class Thumb2MveInterleavedLoadStoreDecoder implements DecoderExtens
         }
         boolean load = ((raw >>> L_BIT) & 1) != 0;
         return DecodedInstruction.lifted(address, raw, InstructionSet.THUMB, condition,
-                new IrOp.MveInterleavedLoadStore(qd, rn, groupSize, size, pat, load, writeback, condition));
+                new MveMoveOp.InterleavedLoadStore(qd, rn, groupSize, size, pat, load, writeback, condition));
     }
 }

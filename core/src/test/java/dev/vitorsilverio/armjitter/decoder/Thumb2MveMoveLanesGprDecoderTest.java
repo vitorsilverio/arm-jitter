@@ -2,7 +2,7 @@ package dev.vitorsilverio.armjitter.decoder;
 
 import dev.vitorsilverio.armjitter.arch.ArmArchitecture;
 import dev.vitorsilverio.armjitter.core.Condition;
-import dev.vitorsilverio.armjitter.ir.IrOp;
+import dev.vitorsilverio.armjitter.ir.MveMoveOp;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -34,7 +34,7 @@ class Thumb2MveMoveLanesGprDecoderTest {
     @Test
     void decodesVmovToTwoGp() {
         int r = raw(0b00, 3, 4, 1, 5);
-        IrOp.MveMoveLanesGpr op = assertInstanceOf(IrOp.MveMoveLanesGpr.class, tryDecode(r).liftedOp());
+        MveMoveOp.MoveLanesGpr op = assertInstanceOf(MveMoveOp.MoveLanesGpr.class, tryDecode(r).liftedOp());
         assertEquals(true, op.toGpr());
         assertEquals(3, op.qd());
         assertEquals(1, op.idx());
@@ -45,7 +45,7 @@ class Thumb2MveMoveLanesGprDecoderTest {
     @Test
     void decodesVmovFromTwoGp() {
         int r = raw(0b01, 7, 2, 0, 6);
-        IrOp.MveMoveLanesGpr op = assertInstanceOf(IrOp.MveMoveLanesGpr.class, tryDecode(r).liftedOp());
+        MveMoveOp.MoveLanesGpr op = assertInstanceOf(MveMoveOp.MoveLanesGpr.class, tryDecode(r).liftedOp());
         assertEquals(false, op.toGpr());
         assertEquals(7, op.qd());
         assertEquals(0, op.idx());
@@ -63,7 +63,7 @@ class Thumb2MveMoveLanesGprDecoderTest {
     void fromGprAllowsRtEqualsRt2() {
         // Achado real: só VMOV_to_2gp recusa Rt==Rt2 no QEMU real (trans_VMOV_from_2gp não checa).
         int r = raw(0b01, 1, 4, 0, 4);
-        IrOp.MveMoveLanesGpr op = assertInstanceOf(IrOp.MveMoveLanesGpr.class, tryDecode(r).liftedOp());
+        MveMoveOp.MoveLanesGpr op = assertInstanceOf(MveMoveOp.MoveLanesGpr.class, tryDecode(r).liftedOp());
         assertEquals(4, op.rt());
         assertEquals(4, op.rt2());
     }

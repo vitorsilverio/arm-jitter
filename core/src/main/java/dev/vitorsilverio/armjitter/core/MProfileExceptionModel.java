@@ -35,7 +35,7 @@ public final class MProfileExceptionModel implements ExceptionModel {
     /// Bit `UNDEFINSTR` do `UFSR` (ARMv7-M ARM B3.2.15) — `bit[0]` do `UFSR`, então mora em
     /// `bit[16]` do `CFSR` completo (B15.5). Setado por {@link #setUsageFaultUndefinstr()} antes de
     /// entrar em `USAGE_FAULT` por `VLLDM`/`VLSTM` (que tomam UNDEF, nunca `NOCP`, mesmo sem FPU
-    /// real — ver `IrOp.VlldmVlstm`) — bit DIFERENTE do `NOCP` acima, arquiteturalmente distintos.
+    /// real — ver `VfpOp.VlldmVlstm`) — bit DIFERENTE do `NOCP` acima, arquiteturalmente distintos.
     private static final int CFSR_UFSR_UNDEFINSTR_BIT = 1 << 16;
     /// Bit `INVSTATE` do `UFSR` (ARMv7-M ARM B3.2.15) — `bit[1]` do `UFSR`, então mora em
     /// `bit[17]` do `CFSR` completo (B16.2) — DIFERENTE de `UNDEFINSTR`/`NOCP` acima. Setado por
@@ -564,7 +564,7 @@ public final class MProfileExceptionModel implements ExceptionModel {
 
     /// Seta o bit `UNDEFINSTR` do `UFSR` (B15.5): chamado ao entrar em `USAGE_FAULT` por `VLLDM`/
     /// `VLSTM` — mesma disciplina de {@link #setUsageFaultNocp()}, bit diferente (a arquitetura real
-    /// distingue "coprocessador ausente" de "instrução indefinida", ver Javadoc de `IrOp.VlldmVlstm`).
+    /// distingue "coprocessador ausente" de "instrução indefinida", ver Javadoc de `VfpOp.VlldmVlstm`).
     public void setUsageFaultUndefinstr() {
         cfsr |= CFSR_UFSR_UNDEFINSTR_BIT;
     }

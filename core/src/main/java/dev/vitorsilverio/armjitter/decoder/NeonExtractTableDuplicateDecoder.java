@@ -4,7 +4,7 @@ import dev.vitorsilverio.armjitter.arch.ArmArchitecture;
 import dev.vitorsilverio.armjitter.arch.ArmFeature;
 import dev.vitorsilverio.armjitter.arch.DecoderExtension;
 import dev.vitorsilverio.armjitter.core.Condition;
-import dev.vitorsilverio.armjitter.ir.IrOp;
+import dev.vitorsilverio.armjitter.ir.NeonMoveOp;
 
 /// Decodifica os **3 grupos de `size == 0b11`** (bits[21:20]) que vivem FORA do sub-layout
 /// "2-reg-misc" da {@link NeonTwoRegMiscDecoder} (B13.12/B13.14): `VEXT` (bit24=`0`, único
@@ -108,7 +108,7 @@ public final class NeonExtractTableDuplicateDecoder implements DecoderExtension 
             return unimplemented(address, raw, condition);
         }
         return DecodedInstruction.lifted(address, raw, InstructionSet.ARM, Condition.AL,
-                new IrOp.NeonExtract(q, imm, vd, vn, vm));
+                new NeonMoveOp.Extract(q, imm, vd, vn, vm));
     }
 
     /// `VTBL`/`VTBX`: `len` (bits[9:8]) são `len+1` registradores `D` consecutivos a partir de `Vn`
@@ -124,7 +124,7 @@ public final class NeonExtractTableDuplicateDecoder implements DecoderExtension 
             return unimplemented(address, raw, condition);
         }
         return DecodedInstruction.lifted(address, raw, InstructionSet.ARM, Condition.AL,
-                new IrOp.NeonTableLookup(tbx, len, vd, vn, vm));
+                new NeonMoveOp.TableLookup(tbx, len, vd, vn, vm));
     }
 
     /// `VDUP_scalar`: `imm4` (bits[19:16]) empacota `esz`+`index` — `esz` é a posição do bit `1`
@@ -147,7 +147,7 @@ public final class NeonExtractTableDuplicateDecoder implements DecoderExtension 
             return unimplemented(address, raw, condition);
         }
         return DecodedInstruction.lifted(address, raw, InstructionSet.ARM, Condition.AL,
-                new IrOp.NeonDuplicateScalar(esz, index, q, vd, vm));
+                new NeonMoveOp.DuplicateScalar(esz, index, q, vd, vm));
     }
 
     private static DecodedInstruction unimplemented(int address, int raw, Condition condition) {

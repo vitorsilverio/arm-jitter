@@ -298,7 +298,7 @@ public sealed interface AdvSimdMoveOp64 extends AdvSimdOp64 permits
 
     /// `MOVI`/`MVNI`/`ORR`/`BIC` imediato AdvSIMD (`Vimm`) + `FMOV` de meia precisão imediato
     /// (`FMOVI_v_h`, `FEAT_FP16`) — `ARM DDI 0487`, B19.6 bloco G, irmão A64 direto de
-    /// `IrOp.NeonModifiedImmediate` (B13.9, 32 bits): MESMO núcleo compartilhado
+    /// `NeonMoveOp.ModifiedImmediate` (B13.9, 32 bits): MESMO núcleo compartilhado
     /// {@link dev.vitorsilverio.armjitter.advsimd.AdvSimdModifiedImmediate}, `imm64` já EXPANDIDO
     /// pelo decoder (nunca recalculado na execução). Diferença real vs o irmão de 32 bits: escrita
     /// SEMPRE destrutiva — {@link #q}{@code ==false} zera `Rd[127:64]` (A32 não tem esse conceito,

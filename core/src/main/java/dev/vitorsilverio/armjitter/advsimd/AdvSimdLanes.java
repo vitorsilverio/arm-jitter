@@ -1489,7 +1489,7 @@ public final class AdvSimdLanes {
     /// desligado PRESERVA o destino (pula o cálculo — equivalente e mais barato, mesma disciplina de
     /// {@link #threeSameMasked}). Ao contrário de {@link #threeSameMasked}, nunca satura (nenhuma
     /// operação FP de MVE seta `FPSCR.QC` — ver Javadoc de
-    /// {@link dev.vitorsilverio.armjitter.ir.IrOp.MveVectorFpTwoOp}), então não há retorno.
+    /// {@link dev.vitorsilverio.armjitter.ir.MveFpOp.VectorFpTwoOp}), então não há retorno.
     public static void fpThreeSameMasked(AdvSimdRegisterWords regs, AdvSimdFpThreeSameOp op, int esz, int lanes,
             int baseRd, int baseRn, int baseRm, int byteMask) {
         int elementBytes = 1 << esz;
@@ -3016,7 +3016,7 @@ public final class AdvSimdLanes {
     /// só o núcleo de {@code advsimd}, já COMPARTILHADO entre A32 e A64, ficou visível para que
     /// `VRINT{A,N,P,M}`/`VCVT{A,N,P,M}` (VFP incondicional de 32 bits, espaço `1111 1110`) reusem
     /// {@link #roundForConversion} diretamente em vez de duplicar a tabela `rm`→direção e o
-    /// algoritmo de arredondamento). `IrOp.VfpRound`/`IrOp.VfpConvertRounded` (`ir`, 32 bits) usam
+    /// algoritmo de arredondamento). `VfpOp.Round`/`VfpOp.ConvertRounded` (`ir`, 32 bits) usam
     /// este tipo diretamente — decisão registrada na task B14.5 (Armadilha 1): promover este núcleo
     /// já validado em vez de acrescentar um valor a {@code core.FpRoundingMode} (que representa o
     /// campo `RMODE` do FPSCR, 4 valores, contrato public diferente — não tem "ties away") ou criar

@@ -8,6 +8,7 @@ import dev.vitorsilverio.armjitter.core.ArmCore;
 import dev.vitorsilverio.armjitter.core.Condition;
 import dev.vitorsilverio.armjitter.ir.IrBlock;
 import dev.vitorsilverio.armjitter.ir.IrOp;
+import dev.vitorsilverio.armjitter.ir.NeonMoveOp;
 import dev.vitorsilverio.armjitter.ir.StandardIrBuilder;
 import dev.vitorsilverio.armjitter.support.TestAddressSpace;
 import dev.vitorsilverio.armjitter.swi.SwiDispatcher;
@@ -151,14 +152,14 @@ class NeonExtractTableDuplicateDecoderTest {
 
     @Test
     void extDecodesImmAndRegistersInBytes() {
-        IrOp.NeonExtract ext = (IrOp.NeonExtract) liftedOf(encExt(0, 1, 0, 3, 2));
+        NeonMoveOp.Extract ext = (NeonMoveOp.Extract) liftedOf(encExt(0, 1, 0, 3, 2));
         assertEquals(false, ext.quad());
         assertEquals(3, ext.imm());
         assertEquals(0, ext.vd());
         assertEquals(1, ext.vn());
         assertEquals(2, ext.vm());
 
-        IrOp.NeonExtract extQ = (IrOp.NeonExtract) liftedOf(encExt(1, 2, 0, 5, 4));
+        NeonMoveOp.Extract extQ = (NeonMoveOp.Extract) liftedOf(encExt(1, 2, 0, 5, 4));
         assertEquals(true, extQ.quad());
         assertEquals(5, extQ.imm());
         assertEquals(2, extQ.vn());
@@ -172,17 +173,17 @@ class NeonExtractTableDuplicateDecoderTest {
 
     @Test
     void tblDecodesLenAndOp() {
-        IrOp.NeonTableLookup tbl1 = (IrOp.NeonTableLookup) liftedOf(encTbl(0, 1, 0, 0, 2, false));
+        NeonMoveOp.TableLookup tbl1 = (NeonMoveOp.TableLookup) liftedOf(encTbl(0, 1, 0, 0, 2, false));
         assertEquals(false, tbl1.tbx());
         assertEquals(0, tbl1.len());
         assertEquals(0, tbl1.vd());
         assertEquals(1, tbl1.vn());
         assertEquals(2, tbl1.vm());
 
-        IrOp.NeonTableLookup tbl4 = (IrOp.NeonTableLookup) liftedOf(encTbl(0, 1, 3, 0, 5, false));
+        NeonMoveOp.TableLookup tbl4 = (NeonMoveOp.TableLookup) liftedOf(encTbl(0, 1, 3, 0, 5, false));
         assertEquals(3, tbl4.len());
 
-        IrOp.NeonTableLookup tbx = (IrOp.NeonTableLookup) liftedOf(encTbl(0, 1, 1, 0, 3, true));
+        NeonMoveOp.TableLookup tbx = (NeonMoveOp.TableLookup) liftedOf(encTbl(0, 1, 1, 0, 3, true));
         assertEquals(true, tbx.tbx());
         assertEquals(1, tbx.len());
     }
@@ -197,20 +198,20 @@ class NeonExtractTableDuplicateDecoderTest {
 
     @Test
     void dupScalarSizeComesFromThePatternNotAField() {
-        IrOp.NeonDuplicateScalar byteForm = (IrOp.NeonDuplicateScalar) liftedOf(encDup(0, 3, 0, 1, false));
+        NeonMoveOp.DuplicateScalar byteForm = (NeonMoveOp.DuplicateScalar) liftedOf(encDup(0, 3, 0, 1, false));
         assertEquals(0, byteForm.esz());
         assertEquals(3, byteForm.index());
         assertEquals(false, byteForm.quad());
 
-        IrOp.NeonDuplicateScalar halfForm = (IrOp.NeonDuplicateScalar) liftedOf(encDup(1, 1, 0, 1, false));
+        NeonMoveOp.DuplicateScalar halfForm = (NeonMoveOp.DuplicateScalar) liftedOf(encDup(1, 1, 0, 1, false));
         assertEquals(1, halfForm.esz());
         assertEquals(1, halfForm.index());
 
-        IrOp.NeonDuplicateScalar wordForm = (IrOp.NeonDuplicateScalar) liftedOf(encDup(2, 0, 0, 1, false));
+        NeonMoveOp.DuplicateScalar wordForm = (NeonMoveOp.DuplicateScalar) liftedOf(encDup(2, 0, 0, 1, false));
         assertEquals(2, wordForm.esz());
         assertEquals(0, wordForm.index());
 
-        IrOp.NeonDuplicateScalar quadForm = (IrOp.NeonDuplicateScalar) liftedOf(encDup(0, 7, 0, 1, true));
+        NeonMoveOp.DuplicateScalar quadForm = (NeonMoveOp.DuplicateScalar) liftedOf(encDup(0, 7, 0, 1, true));
         assertEquals(true, quadForm.quad());
         assertEquals(7, quadForm.index());
     }

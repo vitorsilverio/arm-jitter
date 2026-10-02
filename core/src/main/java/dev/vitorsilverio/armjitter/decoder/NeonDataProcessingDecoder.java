@@ -10,6 +10,9 @@ import dev.vitorsilverio.armjitter.arch.ArmFeature;
 import dev.vitorsilverio.armjitter.arch.DecoderExtension;
 import dev.vitorsilverio.armjitter.core.Condition;
 import dev.vitorsilverio.armjitter.ir.IrOp;
+import dev.vitorsilverio.armjitter.ir.NeonCryptoOp;
+import dev.vitorsilverio.armjitter.ir.NeonFpOp;
+import dev.vitorsilverio.armjitter.ir.NeonIntegerOp;
 
 /// Decodifica o espaço NEON/Advanced SIMD de processamento de dados do encoding A32, seção
 /// **"3-reg-same"** — a parte INTEIRA (aritmética / comparação / lógica / pairwise, B13.4) e as
@@ -124,7 +127,7 @@ public final class NeonDataProcessingDecoder implements DecoderExtension {
                 return unimplemented(address, raw, condition);
             }
             return DecodedInstruction.lifted(address, raw, InstructionSet.ARM, Condition.AL,
-                    new IrOp.NeonPairwise(pairwise, size, vd, vn, vm));
+                    new NeonIntegerOp.Pairwise(pairwise, size, vd, vn, vm));
         }
 
         AdvSimdThreeSameOp threeSame = threeSameOperation(opc, op, u, size);
@@ -156,7 +159,7 @@ public final class NeonDataProcessingDecoder implements DecoderExtension {
         int recordVn = reversed ? vm : vn;
         int recordVm = reversed ? vn : vm;
         return DecodedInstruction.lifted(address, raw, InstructionSet.ARM, Condition.AL,
-                new IrOp.NeonThreeSame(threeSame, quad, esz, vd, recordVn, recordVm));
+                new NeonIntegerOp.ThreeSame(threeSame, quad, esz, vd, recordVn, recordVm));
     }
 
     /// `size==3` (doubleword) só é válido para `VADD`/`VSUB` (`opc=1000 op=0`, `.i64`) e para as
@@ -196,7 +199,7 @@ public final class NeonDataProcessingDecoder implements DecoderExtension {
             return unimplemented(address, raw, condition);
         }
         return DecodedInstruction.lifted(address, raw, InstructionSet.ARM, Condition.AL,
-                new IrOp.NeonCryptoShaThree(op, vd, vn, vm));
+                new NeonCryptoOp.ShaThree(op, vd, vn, vm));
     }
 
     /// `(U, size)` → mnemônico. `size=11` (`0b11`) só existe do lado `U=0` (`SHA1SU0`); `U=1
@@ -247,7 +250,7 @@ public final class NeonDataProcessingDecoder implements DecoderExtension {
                 return unimplemented(address, raw, condition);
             }
             return DecodedInstruction.lifted(address, raw, InstructionSet.ARM, Condition.AL,
-                    new IrOp.NeonFpPairwise(pairwise, esz, vd, vn, vm));
+                    new NeonFpOp.FpPairwise(pairwise, esz, vd, vn, vm));
         }
 
         AdvSimdFpThreeSameOp threeSame = fpThreeSameOperation(opc, op, u, a);
@@ -259,7 +262,7 @@ public final class NeonDataProcessingDecoder implements DecoderExtension {
             return unimplemented(address, raw, condition);
         }
         return DecodedInstruction.lifted(address, raw, InstructionSet.ARM, Condition.AL,
-                new IrOp.NeonFpThreeSame(threeSame, quad, esz, vd, vn, vm));
+                new NeonFpOp.FpThreeSame(threeSame, quad, esz, vd, vn, vm));
     }
 
     /// Os 3 pairwise FP (`@3same_fp_q0`): `VPADD.F32` (`u1 a0 opc1101 op0`), `VPMAX.F32`

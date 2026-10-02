@@ -11,7 +11,7 @@ import dev.vitorsilverio.armjitter.swi.SwiDispatcher;
 import org.junit.jupiter.api.Test;
 
 /// B14.1b — `HLT` sob `ARMV8A_32` (B14.1) executa de verdade, reusando o MESMO contrato de
-/// `IrOp.Breakpoint` (`BKPT`, B7.5): sem {@link BkptDispatcher} registrado para o imediato, vira
+/// `SystemOp.Breakpoint` (`BKPT`, B7.5): sem {@link BkptDispatcher} registrado para o imediato, vira
 /// `UNDEFINED`; com um handler registrado, o handler é chamado. Antes desta task,
 /// `StandardIrBuilder#lift` não tinha `case HALT` e o comportamento observável era um NOP
 /// silencioso (a instrução era decodificada mas nunca executada, achado durante a revisão de

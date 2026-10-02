@@ -2,6 +2,7 @@ package dev.vitorsilverio.armjitter.codegen.executor;
 
 import dev.vitorsilverio.armjitter.advsimd.Crc32Checksum;
 import dev.vitorsilverio.armjitter.core.ArmCore;
+import dev.vitorsilverio.armjitter.ir.IntegerOp;
 import dev.vitorsilverio.armjitter.ir.IrOp;
 import dev.vitorsilverio.armjitter.ir.IrOpCode;
 import dev.vitorsilverio.armjitter.ir.IrOperand;
@@ -22,7 +23,7 @@ public final class IrAluExecutor {
     }
 
     /// @return {@code true} quando o PC foi alterado pela operação
-    public boolean execute(ArmCore core, IrOp.Alu alu) {
+    public boolean execute(ArmCore core, IntegerOp.Alu alu) {
         if (!core.cpsr().evalCond(alu.condition())) {
             return false;
         }
@@ -198,7 +199,7 @@ public final class IrAluExecutor {
     /// `MOVT` (Thumb-2, B2.2): escreve `immediate16` na metade ALTA (bits 31:16) de `dst`,
     /// preservando a metade baixa — não é um padrão `Alu` comum (nenhuma outra op ARM escreve só
     /// metade do registrador), por isso vive em seu próprio {@link IrOp}. Nunca escreve flags.
-    public void executeMoveTop(ArmCore core, IrOp.MoveTop moveTop) {
+    public void executeMoveTop(ArmCore core, IntegerOp.MoveTop moveTop) {
         if (!core.cpsr().evalCond(moveTop.condition())) {
             return;
         }
@@ -206,7 +207,7 @@ public final class IrAluExecutor {
         core.setRegister(moveTop.dst(), (current & 0xFFFF) | (moveTop.immediate16() << 16));
     }
 
-    public void executeMultiply(ArmCore core, IrOp.Multiply multiply) {
+    public void executeMultiply(ArmCore core, IntegerOp.Multiply multiply) {
         if (!core.cpsr().evalCond(multiply.condition())) {
             return;
         }
@@ -224,7 +225,7 @@ public final class IrAluExecutor {
         }
     }
 
-    public void executeLongMultiply(ArmCore core, IrOp.LongMultiply multiply) {
+    public void executeLongMultiply(ArmCore core, IntegerOp.LongMultiply multiply) {
         if (!core.cpsr().evalCond(multiply.condition())) {
             return;
         }
@@ -256,7 +257,7 @@ public final class IrAluExecutor {
 
     /// Soma/subtração saturada ARMv5TE (QADD/QSUB/QDADD/QDSUB), sempre clampada para 32 bits com
     /// sinal, setando o flag Q sticky em qualquer saturação.
-    public void executeSaturating(ArmCore core, IrOp.Saturating op) {
+    public void executeSaturating(ArmCore core, IntegerOp.Saturating op) {
         if (!core.cpsr().evalCond(op.condition())) {
             return;
         }
@@ -277,7 +278,7 @@ public final class IrAluExecutor {
 
     /// `CRC32{B,H,W}`/`CRC32C{B,H,W}` (B14.3) — delega ao núcleo compartilhado com o A64
     /// ({@link Crc32Checksum}). Nunca seta flags (não é uma operação ALU comum).
-    public void executeCrc32(ArmCore core, IrOp.Crc32 op) {
+    public void executeCrc32(ArmCore core, IntegerOp.Crc32 op) {
         if (!core.cpsr().evalCond(op.condition())) {
             return;
         }
@@ -289,7 +290,7 @@ public final class IrAluExecutor {
 
     /// Multiplicações DSP ARMv5TE: produtos 16x16 (e 32x16 word) com sinal, com acumulador
     /// opcional. SMLA/SMLAW setam o flag Q sticky se o acumulador estourar; SMUL/SMULW/SMLAL não.
-    public void executeDspMultiply(ArmCore core, IrOp.DspMultiply op) {
+    public void executeDspMultiply(ArmCore core, IntegerOp.DspMultiply op) {
         if (!core.cpsr().evalCond(op.condition())) {
             return;
         }
@@ -338,7 +339,7 @@ public final class IrAluExecutor {
     /// precisão de 64 bits, ao 3-way-add real do hardware — a ordem de operações não afeta o
     /// resultado nem a detecção de overflow, só a forma como o QEMU evita um único caso de
     /// arredondamento incorreto). Forma longa: acumula em 64 bits `Ra:Rd`, nunca seta Q.
-    public void executeDspDualMultiply(ArmCore core, IrOp.DspDualMultiply op) {
+    public void executeDspDualMultiply(ArmCore core, IntegerOp.DspDualMultiply op) {
         if (!core.cpsr().evalCond(op.condition())) {
             return;
         }
@@ -366,7 +367,7 @@ public final class IrAluExecutor {
     /// mais significativa de 32 bits do produto de 64 bits, somada/subtraída a um acumulador
     /// posicionado nos 32 bits altos (`Ra<<32 ± Rn×Rm`), com arredondamento opcional. Nunca seta
     /// flags (equivalente, em precisão de 64 bits, ao truque de soma em duas metades do QEMU).
-    public void executeDspTopWordMultiply(ArmCore core, IrOp.DspTopWordMultiply op) {
+    public void executeDspTopWordMultiply(ArmCore core, IntegerOp.DspTopWordMultiply op) {
         if (!core.cpsr().evalCond(op.condition())) {
             return;
         }
@@ -382,7 +383,7 @@ public final class IrAluExecutor {
     /// Aritmética paralela ARMv6 (SADD16/UQSUB8/SHASX/...): cada lane é computada em precisão
     /// larga (int) e finalizada pela variante — wrap (escrevendo GE), saturação ou halving.
     /// As variantes saturadas paralelas NÃO tocam o flag Q sticky (diferente de QADD/QSUB).
-    public void executeParallelAlu(ArmCore core, IrOp.ParallelAlu op) {
+    public void executeParallelAlu(ArmCore core, IntegerOp.ParallelAlu op) {
         if (!core.cpsr().evalCond(op.condition())) {
             return;
         }
@@ -435,7 +436,7 @@ public final class IrAluExecutor {
 
     /// `SEL` (ARMv6): cada byte do resultado vem de Rn quando o GE correspondente está setado,
     /// senão de Rm. Não altera flag algum.
-    public void executeSel(ArmCore core, IrOp.Sel op) {
+    public void executeSel(ArmCore core, IntegerOp.Sel op) {
         if (!core.cpsr().evalCond(op.condition())) {
             return;
         }
@@ -453,7 +454,7 @@ public final class IrAluExecutor {
 
     /// SSAT/USAT/SSAT16/USAT16 (ARMv6): satura o operando (já shiftado nas formas word) para a
     /// largura pedida e seta o flag Q sticky quando alguma lane saturou.
-    public void executeSaturate(ArmCore core, IrOp.Saturate op) {
+    public void executeSaturate(ArmCore core, IntegerOp.Saturate op) {
         if (!core.cpsr().evalCond(op.condition())) {
             return;
         }
@@ -475,7 +476,7 @@ public final class IrAluExecutor {
 
     /// USAD8/USADA8 (ARMv6): soma das diferenças absolutas dos quatro bytes sem sinal, com
     /// acumulador opcional. Não altera flag algum.
-    public void executeAbsDiffSum(ArmCore core, IrOp.AbsDiffSum op) {
+    public void executeAbsDiffSum(ArmCore core, IntegerOp.AbsDiffSum op) {
         if (!core.cpsr().evalCond(op.condition())) {
             return;
         }
@@ -495,7 +496,7 @@ public final class IrAluExecutor {
     /// `SBFX`/`UBFX` (ARMv6T2+, B3.1): move o campo para os bits altos e desloca de volta com
     /// sinal (`SBFX`) ou sem sinal (`UBFX`) — o truque padrão de extração de bit-field. Nunca
     /// toca flags.
-    public void executeBitFieldExtract(ArmCore core, IrOp.BitFieldExtract op) {
+    public void executeBitFieldExtract(ArmCore core, IntegerOp.BitFieldExtract op) {
         if (!core.cpsr().evalCond(op.condition())) {
             return;
         }
@@ -509,7 +510,7 @@ public final class IrAluExecutor {
     /// `BFI`/`BFC` (ARMv6T2+, B3.1): substitui o campo `[lsb, lsb+width)` de `dst` pelos bits
     /// baixos de `src` (`BFI`) ou por zeros (`BFC`, `src == -1`), preservando o resto de `dst`.
     /// Nunca toca flags.
-    public void executeBitFieldInsert(ArmCore core, IrOp.BitFieldInsert op) {
+    public void executeBitFieldInsert(ArmCore core, IntegerOp.BitFieldInsert op) {
         if (!core.cpsr().evalCond(op.condition())) {
             return;
         }
@@ -520,7 +521,7 @@ public final class IrAluExecutor {
     }
 
     /// `RBIT` (ARMv6T2+, B3.1): inverte a ordem dos 32 bits. Nunca toca flags.
-    public void executeBitReverse(ArmCore core, IrOp.BitReverse op) {
+    public void executeBitReverse(ArmCore core, IntegerOp.BitReverse op) {
         if (!core.cpsr().evalCond(op.condition())) {
             return;
         }
@@ -531,7 +532,7 @@ public final class IrAluExecutor {
     /// (sem exceção — ARM DDI 0406C A8.8.165). A divisão inteira de Java já wrapeia
     /// `Integer.MIN_VALUE / -1` para `Integer.MIN_VALUE` sem lançar, igual ao hardware. Nunca
     /// toca flags.
-    public void executeDivide(ArmCore core, IrOp.Divide op) {
+    public void executeDivide(ArmCore core, IntegerOp.Divide op) {
         if (!core.cpsr().evalCond(op.condition())) {
             return;
         }

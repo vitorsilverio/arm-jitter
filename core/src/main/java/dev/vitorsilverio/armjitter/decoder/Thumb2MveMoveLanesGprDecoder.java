@@ -5,7 +5,7 @@ import dev.vitorsilverio.armjitter.arch.ArmFeature;
 import dev.vitorsilverio.armjitter.arch.DecoderExtension;
 import dev.vitorsilverio.armjitter.core.Condition;
 import dev.vitorsilverio.armjitter.core.VfpRegisters;
-import dev.vitorsilverio.armjitter.ir.IrOp;
+import dev.vitorsilverio.armjitter.ir.MveMoveOp;
 
 /// `VMOV_to_2gp`/`VMOV_from_2gp` — sub-família 1 da B16.13a (perfil M, MVE/Helium,
 /// `target/isa-decode/mve.decode`, linhas 206-208, 2 encodings, bit a bit contra o arquivo real):
@@ -22,7 +22,7 @@ import dev.vitorsilverio.armjitter.ir.IrOp;
 ///
 /// **Não predicado por `VPR`** (confirmado verbatim): as duas funções só checam `mve_eci_check`,
 /// nunca chamam `mve_element_mask` — categoria "beatwise mas não predicado" (mesma de
-/// {@link Thumb2MveInterleavedLoadStoreDecoder}, ver Javadoc de {@link IrOp.MveMoveLanesGpr}).
+/// {@link Thumb2MveInterleavedLoadStoreDecoder}, ver Javadoc de {@link MveMoveOp.MoveLanesGpr}).
 ///
 /// Gate: {@link ArmFeature#MVE_INTEGER}. `bits[31:23]=1110_1100_0` colide com o espaço de
 /// extension-register load/store do VFP (`VfpDecoder`, que não checa `bits[31:28]` — bug G8 da
@@ -103,6 +103,6 @@ public final class Thumb2MveMoveLanesGprDecoder implements DecoderExtension {
         }
         int idx = (raw >>> IDX_BIT) & 1;
         return DecodedInstruction.lifted(address, raw, InstructionSet.THUMB, condition,
-                new IrOp.MveMoveLanesGpr(toGpr, qd, idx, rt, rt2, condition));
+                new MveMoveOp.MoveLanesGpr(toGpr, qd, idx, rt, rt2, condition));
     }
 }

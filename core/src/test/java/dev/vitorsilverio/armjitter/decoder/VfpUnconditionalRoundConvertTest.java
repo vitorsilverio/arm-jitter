@@ -14,6 +14,7 @@ import dev.vitorsilverio.armjitter.core.Condition;
 import dev.vitorsilverio.armjitter.ir.IrBlock;
 import dev.vitorsilverio.armjitter.ir.IrOp;
 import dev.vitorsilverio.armjitter.ir.StandardIrBuilder;
+import dev.vitorsilverio.armjitter.ir.VfpOp;
 import dev.vitorsilverio.armjitter.support.TestAddressSpace;
 import dev.vitorsilverio.armjitter.swi.SwiDispatcher;
 import java.util.List;
@@ -120,14 +121,14 @@ class VfpUnconditionalRoundConvertTest {
             DecodedInstruction decoded = decodeArm(VFP_V8_TEST_ARCH, vrintWord(rm, false, 2, 1));
             assertEquals(InstructionKind.VFP_ROUND, decoded.kind());
             IrOp op = liftSingleOp(decoded);
-            assertEquals(new IrOp.VfpRound(RM_TABLE[rm], false, 2, 1, Condition.AL), op);
+            assertEquals(new VfpOp.Round(RM_TABLE[rm], false, 2, 1, Condition.AL), op);
         }
     }
 
     @Test
     void vrintDoubleDecodesToVfpRound() {
         IrOp op = liftSingleOp(decodeArm(VFP_V8_TEST_ARCH, vrintWord(0b10, true, 5, 1)));
-        assertEquals(new IrOp.VfpRound(AdvSimdLanes.RoundingMode.TOWARD_POSITIVE_INFINITY, true, 5, 1, Condition.AL), op);
+        assertEquals(new VfpOp.Round(AdvSimdLanes.RoundingMode.TOWARD_POSITIVE_INFINITY, true, 5, 1, Condition.AL), op);
     }
 
     @Test
@@ -135,11 +136,11 @@ class VfpUnconditionalRoundConvertTest {
         for (int rm = 0; rm < 4; rm++) {
             DecodedInstruction signedDecoded = decodeArm(VFP_V8_TEST_ARCH, vcvtWord(rm, true, false, 2, 1));
             assertEquals(InstructionKind.VFP_CONVERT_ROUNDED, signedDecoded.kind());
-            assertEquals(new IrOp.VfpConvertRounded(RM_TABLE[rm], true, false, 2, 1, Condition.AL),
+            assertEquals(new VfpOp.ConvertRounded(RM_TABLE[rm], true, false, 2, 1, Condition.AL),
                     liftSingleOp(signedDecoded));
 
             DecodedInstruction unsignedDecoded = decodeArm(VFP_V8_TEST_ARCH, vcvtWord(rm, false, false, 2, 1));
-            assertEquals(new IrOp.VfpConvertRounded(RM_TABLE[rm], false, false, 2, 1, Condition.AL),
+            assertEquals(new VfpOp.ConvertRounded(RM_TABLE[rm], false, false, 2, 1, Condition.AL),
                     liftSingleOp(unsignedDecoded));
         }
     }
@@ -148,7 +149,7 @@ class VfpUnconditionalRoundConvertTest {
     void vcvtDoubleSourceDecodesWithSingleDestination() {
         // VCVTMS.S32.F64 S4, D1: origem D1 (doublePrecision=true), destino SEMPRE S.
         IrOp op = liftSingleOp(decodeArm(VFP_V8_TEST_ARCH, vcvtWord(0b11, true, true, 4, 1)));
-        assertEquals(new IrOp.VfpConvertRounded(AdvSimdLanes.RoundingMode.TOWARD_NEGATIVE_INFINITY, true, true, 4, 1,
+        assertEquals(new VfpOp.ConvertRounded(AdvSimdLanes.RoundingMode.TOWARD_NEGATIVE_INFINITY, true, true, 4, 1,
                 Condition.AL), op);
     }
 
@@ -203,10 +204,10 @@ class VfpUnconditionalRoundConvertTest {
         float[] divergingHalves = {0.5f, -0.5f, 2.5f, -2.5f};
         for (float value : divergingHalves) {
             core.vfp().setSFloat(0, value);
-            executor.executeOp(core, new IrOp.VfpRound(AdvSimdLanes.RoundingMode.NEAREST_TIES_AWAY, false, 1, 0,
+            executor.executeOp(core, new VfpOp.Round(AdvSimdLanes.RoundingMode.NEAREST_TIES_AWAY, false, 1, 0,
                     Condition.AL), 0);
             float tiesAway = core.vfp().sFloat(1);
-            executor.executeOp(core, new IrOp.VfpRound(AdvSimdLanes.RoundingMode.NEAREST_TIES_EVEN, false, 1, 0,
+            executor.executeOp(core, new VfpOp.Round(AdvSimdLanes.RoundingMode.NEAREST_TIES_EVEN, false, 1, 0,
                     Condition.AL), 0);
             float tiesEven = core.vfp().sFloat(1);
             assertEquals(true, tiesAway != tiesEven, "ties-away e ties-even deveriam divergir em " + value);
@@ -217,7 +218,7 @@ class VfpUnconditionalRoundConvertTest {
         }
         for (float value : new float[] {1.5f, -1.5f}) {
             core.vfp().setSFloat(0, value);
-            executor.executeOp(core, new IrOp.VfpRound(AdvSimdLanes.RoundingMode.NEAREST_TIES_AWAY, false, 1, 0,
+            executor.executeOp(core, new VfpOp.Round(AdvSimdLanes.RoundingMode.NEAREST_TIES_AWAY, false, 1, 0,
                     Condition.AL), 0);
             assertEquals((float) AdvSimdLanes.roundForConversion(value, AdvSimdLanes.RoundingMode.NEAREST_TIES_AWAY),
                     core.vfp().sFloat(1));
@@ -229,12 +230,12 @@ class VfpUnconditionalRoundConvertTest {
         ArmCore core = newCore();
         IrBlockExecutor executor = new IrBlockExecutor(VFP_V8_TEST_ARCH);
         core.vfp().setSFloat(0, Float.NaN);
-        executor.executeOp(core, new IrOp.VfpRound(AdvSimdLanes.RoundingMode.TOWARD_POSITIVE_INFINITY, false, 1, 0,
+        executor.executeOp(core, new VfpOp.Round(AdvSimdLanes.RoundingMode.TOWARD_POSITIVE_INFINITY, false, 1, 0,
                 Condition.AL), 0);
         assertEquals(true, Float.isNaN(core.vfp().sFloat(1)));
 
         core.vfp().setDDouble(0, Double.POSITIVE_INFINITY);
-        executor.executeOp(core, new IrOp.VfpRound(AdvSimdLanes.RoundingMode.TOWARD_ZERO, true, 1, 0, Condition.AL), 0);
+        executor.executeOp(core, new VfpOp.Round(AdvSimdLanes.RoundingMode.TOWARD_ZERO, true, 1, 0, Condition.AL), 0);
         assertEquals(Double.POSITIVE_INFINITY, core.vfp().dDouble(1));
     }
 
@@ -246,7 +247,7 @@ class VfpUnconditionalRoundConvertTest {
         for (double value : values) {
             for (AdvSimdLanes.RoundingMode direction : AdvSimdLanes.RoundingMode.values()) {
                 core.vfp().setDDouble(0, value);
-                executor.executeOp(core, new IrOp.VfpRound(direction, true, 1, 0, Condition.AL), 0);
+                executor.executeOp(core, new VfpOp.Round(direction, true, 1, 0, Condition.AL), 0);
                 assertEquals(AdvSimdLanes.roundForConversion(value, direction), core.vfp().dDouble(1));
             }
         }
@@ -259,7 +260,7 @@ class VfpUnconditionalRoundConvertTest {
         core.fpscr().setValue(0x1234);
         int before = core.fpscr().value();
         new IrBlockExecutor(VFP_V8_TEST_ARCH).executeOp(core,
-                new IrOp.VfpRound(AdvSimdLanes.RoundingMode.NEAREST_TIES_AWAY, false, 1, 0, Condition.AL), 0);
+                new VfpOp.Round(AdvSimdLanes.RoundingMode.NEAREST_TIES_AWAY, false, 1, 0, Condition.AL), 0);
         assertEquals(before, core.fpscr().value());
     }
 
@@ -273,7 +274,7 @@ class VfpUnconditionalRoundConvertTest {
         for (double value : values) {
             for (AdvSimdLanes.RoundingMode direction : AdvSimdLanes.RoundingMode.values()) {
                 core.vfp().setDDouble(0, value);
-                executor.executeOp(core, new IrOp.VfpConvertRounded(direction, true, true, 1, 0, Condition.AL), 0);
+                executor.executeOp(core, new VfpOp.ConvertRounded(direction, true, true, 1, 0, Condition.AL), 0);
                 int expected = (int) AdvSimdLanes.saturateToInteger(AdvSimdLanes.roundForConversion(value, direction),
                         true, false);
                 assertEquals(expected, core.vfp().s(1));
@@ -286,7 +287,7 @@ class VfpUnconditionalRoundConvertTest {
         ArmCore core = newCore();
         core.vfp().setSFloat(0, -5.0f);
         new IrBlockExecutor(VFP_V8_TEST_ARCH).executeOp(core,
-                new IrOp.VfpConvertRounded(AdvSimdLanes.RoundingMode.NEAREST_TIES_EVEN, false, false, 1, 0,
+                new VfpOp.ConvertRounded(AdvSimdLanes.RoundingMode.NEAREST_TIES_EVEN, false, false, 1, 0,
                         Condition.AL), 0);
         int expected = (int) AdvSimdLanes.saturateToInteger(
                 AdvSimdLanes.roundForConversion(-5.0, AdvSimdLanes.RoundingMode.NEAREST_TIES_EVEN), false, false);
@@ -299,7 +300,7 @@ class VfpUnconditionalRoundConvertTest {
         ArmCore core = newCore();
         core.vfp().setSFloat(0, Float.NaN);
         new IrBlockExecutor(VFP_V8_TEST_ARCH).executeOp(core,
-                new IrOp.VfpConvertRounded(AdvSimdLanes.RoundingMode.NEAREST_TIES_AWAY, true, false, 1, 0,
+                new VfpOp.ConvertRounded(AdvSimdLanes.RoundingMode.NEAREST_TIES_AWAY, true, false, 1, 0,
                         Condition.AL), 0);
         assertEquals(0, core.vfp().s(1));
     }
@@ -317,7 +318,7 @@ class VfpUnconditionalRoundConvertTest {
         core.vfp().setSFloat(0, 2.5f);
         core.cpsr().setNzcv(false, true, false, false); // Z=1 -> NE falso.
         new IrBlockExecutor(VFP_V8_TEST_ARCH).executeOp(core,
-                new IrOp.VfpRound(AdvSimdLanes.RoundingMode.NEAREST_TIES_EVEN, false, 1, 0, Condition.NE), 0);
+                new VfpOp.Round(AdvSimdLanes.RoundingMode.NEAREST_TIES_EVEN, false, 1, 0, Condition.NE), 0);
         assertEquals(-1.0f, core.vfp().sFloat(1));
     }
 
@@ -328,20 +329,20 @@ class VfpUnconditionalRoundConvertTest {
         core.vfp().setSFloat(0, 2.5f);
         core.cpsr().setNzcv(false, true, false, false); // Z=1 -> NE falso.
         new IrBlockExecutor(VFP_V8_TEST_ARCH).executeOp(core,
-                new IrOp.VfpConvertRounded(AdvSimdLanes.RoundingMode.NEAREST_TIES_EVEN, true, false, 1, 0,
+                new VfpOp.ConvertRounded(AdvSimdLanes.RoundingMode.NEAREST_TIES_EVEN, true, false, 1, 0,
                         Condition.NE), 0);
         assertEquals(-1, core.vfp().s(1));
     }
 
-    /// Prova DIRETA (não só por exclusão) de que `AsmNativePolicy` recusa `VfpRound`/
-    /// `VfpConvertRounded` — sem este teste, os 2 `case ... -> false` novos nunca eram alcançados
+    /// Prova DIRETA (não só por exclusão) de que `AsmNativePolicy` recusa `VfpOp.Round`/
+    /// `VfpOp.ConvertRounded` — sem este teste, os 2 `case ... -> false` novos nunca eram alcançados
     /// (JaCoCo: `nc`, não-coberto) porque nada mais na suíte chama `supports()` com esses `Kind`.
     @Test
     void asmNativePolicyRefusesVfpRoundAndVfpConvertRounded() {
         assertEquals(false, AsmNativePolicy.supports(
-                new IrOp.VfpRound(AdvSimdLanes.RoundingMode.NEAREST_TIES_EVEN, false, 0, 1, Condition.AL)));
+                new VfpOp.Round(AdvSimdLanes.RoundingMode.NEAREST_TIES_EVEN, false, 0, 1, Condition.AL)));
         assertEquals(false, AsmNativePolicy.supports(
-                new IrOp.VfpConvertRounded(AdvSimdLanes.RoundingMode.NEAREST_TIES_EVEN, true, false, 0, 1,
+                new VfpOp.ConvertRounded(AdvSimdLanes.RoundingMode.NEAREST_TIES_EVEN, true, false, 0, 1,
                         Condition.AL)));
     }
 
@@ -352,7 +353,7 @@ class VfpUnconditionalRoundConvertTest {
         core.fpscr().setValue(0x5678);
         int before = core.fpscr().value();
         new IrBlockExecutor(VFP_V8_TEST_ARCH).executeOp(core,
-                new IrOp.VfpConvertRounded(AdvSimdLanes.RoundingMode.NEAREST_TIES_EVEN, true, false, 1, 0,
+                new VfpOp.ConvertRounded(AdvSimdLanes.RoundingMode.NEAREST_TIES_EVEN, true, false, 1, 0,
                         Condition.AL), 0);
         assertEquals(before, core.fpscr().value());
     }
@@ -402,7 +403,7 @@ class VfpUnconditionalRoundConvertTest {
         ArmCore core = newCore();
         core.vfp().setSFloat(0, 2.5f);
         IrBlock.Builder builder = IrBlock.builder(0);
-        builder.add(new IrOp.VfpRound(AdvSimdLanes.RoundingMode.NEAREST_TIES_EVEN, false, 1, 0, Condition.AL));
+        builder.add(new VfpOp.Round(AdvSimdLanes.RoundingMode.NEAREST_TIES_EVEN, false, 1, 0, Condition.AL));
         builder.add(new IrOp.Cycle(1));
         builder.add(new IrOp.Fetch(4, 4));
         IrBlock block = builder.endPc(4).sealed();
@@ -415,7 +416,7 @@ class VfpUnconditionalRoundConvertTest {
         ArmCore core = newCore();
         core.vfp().setSFloat(0, 7.5f);
         IrBlock.Builder builder = IrBlock.builder(0);
-        builder.add(new IrOp.VfpConvertRounded(AdvSimdLanes.RoundingMode.TOWARD_POSITIVE_INFINITY, true, false, 1, 0,
+        builder.add(new VfpOp.ConvertRounded(AdvSimdLanes.RoundingMode.TOWARD_POSITIVE_INFINITY, true, false, 1, 0,
                 Condition.AL));
         builder.add(new IrOp.Cycle(1));
         builder.add(new IrOp.Fetch(4, 4));

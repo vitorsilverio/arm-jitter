@@ -5,6 +5,8 @@ import dev.vitorsilverio.armjitter.arch.ArmFeature;
 import dev.vitorsilverio.armjitter.arch.DecoderExtension;
 import dev.vitorsilverio.armjitter.core.Condition;
 import dev.vitorsilverio.armjitter.ir.IrOp;
+import dev.vitorsilverio.armjitter.ir.NeonFpOp;
+import dev.vitorsilverio.armjitter.ir.NeonIntegerOp;
 
 /// Decodifica `neon-shared.decode` — encodings NEON cujo bit a bit é **idêntico** em A32 e T32
 /// (cabeçalho do arquivo QEMU real: *"Encodings for Neon instructions whose encoding is the same
@@ -288,7 +290,7 @@ public final class NeonSharedDecoder implements DecoderExtension {
             return unimplemented(address, raw, condition);
         }
         return DecodedInstruction.lifted(address, raw, InstructionSet.ARM, Condition.AL,
-                new IrOp.NeonComplex(cmla, rotation, quad, esz, vd, vn, vm));
+                new NeonFpOp.Complex(cmla, rotation, quad, esz, vd, vn, vm));
     }
 
     /// `VCMLA_scalar` (forma indexada — não existe `VCADD_scalar`): discriminada por bit23 (`0`⇒
@@ -319,7 +321,7 @@ public final class NeonSharedDecoder implements DecoderExtension {
             return unimplemented(address, raw, condition);
         }
         return DecodedInstruction.lifted(address, raw, InstructionSet.ARM, Condition.AL,
-                new IrOp.NeonComplexByElement(rotation, quad, esz, vd, vn, vm, index));
+                new NeonFpOp.ComplexByElement(rotation, quad, esz, vd, vn, vm, index));
     }
 
     /// `VSDOT`/`VUDOT`/`VUSDOT` (forma vetorial, 3 registradores): `signedN`/`signedM` já vêm
@@ -336,7 +338,7 @@ public final class NeonSharedDecoder implements DecoderExtension {
             return unimplemented(address, raw, condition);
         }
         return DecodedInstruction.lifted(address, raw, InstructionSet.ARM, Condition.AL,
-                new IrOp.NeonDotProduct(signedN, signedM, quad, vd, vn, vm));
+                new NeonIntegerOp.DotProduct(signedN, signedM, quad, vd, vn, vm));
     }
 
     /// `VSDOT_scalar`/`VUDOT_scalar`/`VUSDOT_scalar`/`VSUDOT_scalar`: `Vm` é um nibble DIRETO
@@ -354,7 +356,7 @@ public final class NeonSharedDecoder implements DecoderExtension {
             return unimplemented(address, raw, condition);
         }
         return DecodedInstruction.lifted(address, raw, InstructionSet.ARM, Condition.AL,
-                new IrOp.NeonDotProductByElement(signedN, signedM, quad, vd, vn, vm, index));
+                new NeonIntegerOp.DotProductByElement(signedN, signedM, quad, vd, vn, vm, index));
     }
 
     /// `VSMMLA`/`VUMMLA`/`VUSMMLA` (B13.19): `signedN`/`signedM` já vêm decodificados pelo chamador
@@ -371,7 +373,7 @@ public final class NeonSharedDecoder implements DecoderExtension {
             return unimplemented(address, raw, condition);
         }
         return DecodedInstruction.lifted(address, raw, InstructionSet.ARM, Condition.AL,
-                new IrOp.NeonMatrixMultiplyAccumulate(signedN, signedM, vd, vn, vm));
+                new NeonIntegerOp.MatrixMultiplyAccumulate(signedN, signedM, vd, vn, vm));
     }
 
     /// `VFML`/`VFMSL` (B13.20, forma vetorial): `s` (bit23) escolhe soma (`0`, `VFMAL`) ou
@@ -392,7 +394,7 @@ public final class NeonSharedDecoder implements DecoderExtension {
             return unimplemented(address, raw, condition);
         }
         return DecodedInstruction.lifted(address, raw, InstructionSet.ARM, Condition.AL,
-                new IrOp.NeonFusedMultiplyAddLong(subtract, quad, vd, vn, vm));
+                new NeonFpOp.FusedMultiplyAddLong(subtract, quad, vd, vn, vm));
     }
 
     /// `VFML_scalar`/`VFMSL_scalar` (B13.20): `s` aqui é bit20 (posição DIFERENTE da forma
@@ -424,7 +426,7 @@ public final class NeonSharedDecoder implements DecoderExtension {
             return unimplemented(address, raw, condition);
         }
         return DecodedInstruction.lifted(address, raw, InstructionSet.ARM, Condition.AL,
-                new IrOp.NeonFusedMultiplyAddLongByElement(subtract, quad, vd, vn, rm, index));
+                new NeonFpOp.FusedMultiplyAddLongByElement(subtract, quad, vd, vn, rm, index));
     }
 
     /// `VDOT_b16` (B13.21): MESMO layout de {@link #decodeDotProductVector} (vetorial, 3
@@ -438,7 +440,7 @@ public final class NeonSharedDecoder implements DecoderExtension {
             return unimplemented(address, raw, condition);
         }
         return DecodedInstruction.lifted(address, raw, InstructionSet.ARM, Condition.AL,
-                new IrOp.NeonDotProductBFloat16(quad, vd, vn, vm));
+                new NeonFpOp.DotProductBFloat16(quad, vd, vn, vm));
     }
 
     /// `VDOT_b16_scal` (B13.21): MESMO layout de {@link #decodeDotProductScalar}.
@@ -452,7 +454,7 @@ public final class NeonSharedDecoder implements DecoderExtension {
             return unimplemented(address, raw, condition);
         }
         return DecodedInstruction.lifted(address, raw, InstructionSet.ARM, Condition.AL,
-                new IrOp.NeonDotProductByElementBFloat16(quad, vd, vn, vm, index));
+                new NeonFpOp.DotProductByElementBFloat16(quad, vd, vn, vm, index));
     }
 
     /// `VMMLA_b16` (B13.21): MESMO layout de {@link #decodeMatrixMultiply} — sem campos de sinal.
@@ -464,7 +466,7 @@ public final class NeonSharedDecoder implements DecoderExtension {
             return unimplemented(address, raw, condition);
         }
         return DecodedInstruction.lifted(address, raw, InstructionSet.ARM, Condition.AL,
-                new IrOp.NeonMatrixMultiplyAccumulateBFloat16(vd, vn, vm));
+                new NeonFpOp.MatrixMultiplyAccumulateBFloat16(vd, vn, vm));
     }
 
     /// `VFMA_b16` (`VFMAB`/`VFMAT`, B13.21): SEMPRE 128 bits — `Vd`/`Vn`/`Vm` são o `D` par que
@@ -479,7 +481,7 @@ public final class NeonSharedDecoder implements DecoderExtension {
             return unimplemented(address, raw, condition);
         }
         return DecodedInstruction.lifted(address, raw, InstructionSet.ARM, Condition.AL,
-                new IrOp.NeonFusedMultiplyAddLongBFloat16(top, vd, vn, vm));
+                new NeonFpOp.FusedMultiplyAddLongBFloat16(top, vd, vn, vm));
     }
 
     /// `VFMA_b16_scal` (B13.21): `Vm` é um nibble de 3 bits DIRETO em bits[2:0] (`D0`-`D7`, SEM bit
@@ -496,7 +498,7 @@ public final class NeonSharedDecoder implements DecoderExtension {
             return unimplemented(address, raw, condition);
         }
         return DecodedInstruction.lifted(address, raw, InstructionSet.ARM, Condition.AL,
-                new IrOp.NeonFusedMultiplyAddLongByElementBFloat16(top, vd, vn, vm, index));
+                new NeonFpOp.FusedMultiplyAddLongByElementBFloat16(top, vd, vn, vm, index));
     }
 
     private static DecodedInstruction unimplemented(int address, int raw, Condition condition) {

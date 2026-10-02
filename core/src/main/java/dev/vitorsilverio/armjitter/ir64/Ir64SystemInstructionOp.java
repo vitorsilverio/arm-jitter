@@ -11,7 +11,7 @@ public enum Ir64SystemInstructionOp {
     /// sem múltiplos cores modelados — as duas formas mapeiam para o mesmo valor.
     TLBI_ALL,
     /// `DSB`/`ISB`/`DMB` (qualquer opção de barreira): NOP observável, mesmo precedente de
-    /// {@link dev.vitorsilverio.armjitter.ir.IrOp.MemoryBarrier} (32-bit) — sem cache nem
+    /// {@link dev.vitorsilverio.armjitter.ir.SystemOp.MemoryBarrier} (32-bit) — sem cache nem
     /// pipeline modelados.
     BARRIER,
     /// `NOP`/`YIELD`/`WFE`/`SEV`/`SEVL` (B6.6.7, subgrupo "Hints") — NOP observável, mesmo

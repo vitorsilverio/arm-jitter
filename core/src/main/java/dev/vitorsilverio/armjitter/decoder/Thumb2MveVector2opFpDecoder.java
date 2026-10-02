@@ -7,7 +7,7 @@ import dev.vitorsilverio.armjitter.arch.ArmFeature;
 import dev.vitorsilverio.armjitter.arch.DecoderExtension;
 import dev.vitorsilverio.armjitter.core.Condition;
 import dev.vitorsilverio.armjitter.core.VfpRegisters;
-import dev.vitorsilverio.armjitter.ir.IrOp;
+import dev.vitorsilverio.armjitter.ir.MveFpOp;
 
 /// Sub-família 3 da B16.7 (perfil M, MVE/Helium, `target/isa-decode/mve.decode`, seção "2-operand
 /// FP", linhas 771-789, 14 encodings) — a última sub-família da task, transcrita verbatim do
@@ -47,7 +47,7 @@ import dev.vitorsilverio.armjitter.ir.IrOp;
 /// **Reuso total do núcleo**: `VADD_fp`/`VSUB_fp`/`VMUL_fp`/`VABD_fp`/`VMAXNM`/`VMINNM`/`VFMA`/
 /// `VFMS` mapeiam 1:1 para {@link AdvSimdFpThreeSameOp#ADD}/{@code SUB}/{@code MUL}/{@code ABD}/
 /// {@code MAXNM}/{@code MINNM}/{@code FMLA}/{@code FMLS} — as MESMAS operações que
-/// `NeonFpThreeSame`/A64 já usam via {@link AdvSimdLanes#fpThreeSame}; esta task só precisou do
+/// `NeonFpOp.FpThreeSame`/A64 já usam via {@link AdvSimdLanes#fpThreeSame}; esta task só precisou do
 /// gancho PREDICADO ({@link AdvSimdLanes#fpThreeSameMasked}), zero aritmética nova. `VCADD90_fp`/
 /// `VCADD270_fp`/`VCMLA0`/`VCMLA90`/`VCMLA180`/`VCMLA270` reusam a MESMA fórmula
 /// `FComplexAddImpl`/`FComplexMulAdd` que `FEAT_FCMA`/NEON já usam via
@@ -146,7 +146,7 @@ public final class Thumb2MveVector2opFpDecoder implements DecoderExtension {
         }
         int esz = ((raw >>> SIZE_BIT) & 1) != 0 ? ESZ_BINARY16 : ESZ_BINARY32;
         return DecodedInstruction.lifted(address, raw, InstructionSet.THUMB, condition,
-                new IrOp.MveVectorFpTwoOp(op, esz, qd, qn, qm, condition));
+                new MveFpOp.VectorFpTwoOp(op, esz, qd, qn, qm, condition));
     }
 
     /// `VCADD90_fp`/`VCADD270_fp` (`@2op_fp_size_rev`, `size = bit20+1` — ver Javadoc da classe).
@@ -161,7 +161,7 @@ public final class Thumb2MveVector2opFpDecoder implements DecoderExtension {
         }
         int esz = ((raw >>> SIZE_BIT) & 1) + ESZ_BINARY16;
         return DecodedInstruction.lifted(address, raw, InstructionSet.THUMB, condition,
-                new IrOp.MveVectorFpComplexAdd(rotate90, esz, qd, qn, qm, condition));
+                new MveFpOp.VectorFpComplexAdd(rotate90, esz, qd, qn, qm, condition));
     }
 
     /// `VCMLA0`/`VCMLA90`/`VCMLA180`/`VCMLA270` (`@2op_fp_size_rev`, `size = bit20+1`).
@@ -177,6 +177,6 @@ public final class Thumb2MveVector2opFpDecoder implements DecoderExtension {
         }
         int esz = ((raw >>> SIZE_BIT) & 1) + ESZ_BINARY16;
         return DecodedInstruction.lifted(address, raw, InstructionSet.THUMB, condition,
-                new IrOp.MveVectorFpComplexMultiplyAccumulate(rotation, esz, qd, qn, qm, condition));
+                new MveFpOp.VectorFpComplexMultiplyAccumulate(rotation, esz, qd, qn, qm, condition));
     }
 }

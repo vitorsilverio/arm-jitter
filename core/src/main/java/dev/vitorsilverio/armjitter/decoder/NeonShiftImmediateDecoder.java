@@ -7,7 +7,8 @@ import dev.vitorsilverio.armjitter.arch.ArmArchitecture;
 import dev.vitorsilverio.armjitter.arch.ArmFeature;
 import dev.vitorsilverio.armjitter.arch.DecoderExtension;
 import dev.vitorsilverio.armjitter.core.Condition;
-import dev.vitorsilverio.armjitter.ir.IrOp;
+import dev.vitorsilverio.armjitter.ir.NeonFpOp;
+import dev.vitorsilverio.armjitter.ir.NeonIntegerOp;
 
 /// Decodifica a seção **"2-reg-and-shift" com deslocamento por IMEDIATO** do espaço NEON/Advanced
 /// SIMD de processamento de dados do encoding A32 (task B13.7) — `VSHR`/`VSRA`/`VRSHR`/`VRSRA`/
@@ -119,7 +120,7 @@ public final class NeonShiftImmediateDecoder implements DecoderExtension {
         int combined = (immh << 3) | immL;
         int shift = isRightShift(op) ? (2 * esize - combined) : (combined - esize);
         return DecodedInstruction.lifted(address, raw, InstructionSet.ARM, Condition.AL,
-                new IrOp.NeonShiftImmediate(op, quad, esz, shift, vd, vm));
+                new NeonIntegerOp.ShiftImmediate(op, quad, esz, shift, vd, vm));
     }
 
     /// Mapeia `(opc, U)` para a família "shift by immediate" (tabela do Escopo da B13.7 — o `opc` de
@@ -181,7 +182,7 @@ public final class NeonShiftImmediateDecoder implements DecoderExtension {
         }
         AdvSimdShiftNarrowOp op = narrowOperation(opc, u, q);
         return DecodedInstruction.lifted(address, raw, InstructionSet.ARM, Condition.AL,
-                new IrOp.NeonShiftNarrowImmediate(op, esz, rightShift, vd, vm));
+                new NeonIntegerOp.ShiftNarrowImmediate(op, esz, rightShift, vd, vm));
     }
 
     /// `opc=1010` — alargamento (`VSHLL`). Fonte `D` (elementos de `esz`), destino `Q` (elementos
@@ -194,7 +195,7 @@ public final class NeonShiftImmediateDecoder implements DecoderExtension {
         }
         AdvSimdShiftWidenOp op = u == 0 ? AdvSimdShiftWidenOp.SSHLL : AdvSimdShiftWidenOp.USHLL;
         return DecodedInstruction.lifted(address, raw, InstructionSet.ARM, Condition.AL,
-                new IrOp.NeonShiftWidenImmediate(op, esz, leftShift, vd, vm));
+                new NeonIntegerOp.ShiftWidenImmediate(op, esz, leftShift, vd, vm));
     }
 
     /// `opc=1110`/`1111` — `VCVT` fixo↔float **F32**. `@2reg_vcvt` fixa bit21=1 ⇒ `esz==2`; qualquer
@@ -207,7 +208,7 @@ public final class NeonShiftImmediateDecoder implements DecoderExtension {
             return unimplemented(address, raw, condition);
         }
         return DecodedInstruction.lifted(address, raw, InstructionSet.ARM, Condition.AL,
-                new IrOp.NeonConvertFixedPoint(quad, 2, rightShift, opc == 0b1110, u == 0, vd, vm));
+                new NeonFpOp.ConvertFixedPoint(quad, 2, rightShift, opc == 0b1110, u == 0, vd, vm));
     }
 
     /// `opc=1100`/`1101` — `VCVT` fixo↔float **F16** (B13.24, `FEAT_FP16`-independente: é a mesma
@@ -234,7 +235,7 @@ public final class NeonShiftImmediateDecoder implements DecoderExtension {
         int fractionField = ((immH & 1) << 3) | immL;
         int rightShift = HALF_PRECISION_ELEMENT_BITS - fractionField;
         return DecodedInstruction.lifted(address, raw, InstructionSet.ARM, Condition.AL,
-                new IrOp.NeonConvertFixedPoint(quad, 1, rightShift, opc == 0b1100, u == 0, vd, vm));
+                new NeonFpOp.ConvertFixedPoint(quad, 1, rightShift, opc == 0b1100, u == 0, vd, vm));
     }
 
     /// `(opc, U, Q)` → família de estreitamento (tabela do Escopo da B13.8). `opc∈{1000,1001}`.

@@ -1,9 +1,11 @@
 package dev.vitorsilverio.armjitter.ir.opt;
 
 import dev.vitorsilverio.armjitter.core.Condition;
+import dev.vitorsilverio.armjitter.ir.IntegerOp;
 import dev.vitorsilverio.armjitter.ir.IrBlock;
 import dev.vitorsilverio.armjitter.ir.IrOp;
 import dev.vitorsilverio.armjitter.ir.IrOperand;
+import dev.vitorsilverio.armjitter.ir.VfpOp;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -26,11 +28,11 @@ import java.util.List;
 /// um shift anterior só porque um MOV intermediário tem {@code setFlags=true} — removendo o
 /// {@code setFlags} do shift e deixando o C do bloco incorreto.
 ///
-/// <p>VFP (B3.4): {@code potentialWriteMask}/{@code mustDefMask} só reconhecem {@code IrOp.Alu}
-/// — {@link IrOp.VfpCompare} (escreve só `FPSCR.NZCV`, nunca o CPSR) e
-/// {@link IrOp.VfpSystemTransfer} com {@code read=true,armRegister=15} (`VMRS APSR_nzcv`, que
+/// <p>VFP (B3.4): {@code potentialWriteMask}/{@code mustDefMask} só reconhecem {@code IntegerOp.Alu}
+/// — {@link VfpOp.Compare} (escreve só `FPSCR.NZCV`, nunca o CPSR) e
+/// {@link VfpOp.SystemTransfer} com {@code read=true,armRegister=15} (`VMRS APSR_nzcv`, que
 /// ESCREVE o CPSR.NZCV) contam como não-definidores de flags ARM aqui, o mesmo tratamento
-/// (seguro, conservador) que {@code IrOp.PsrTransfer} já recebia antes desta task: a passagem
+/// (seguro, conservador) que {@code SystemOp.PsrTransfer} já recebia antes desta task: a passagem
 /// nunca assume que eles escrevem NZCV, então nunca remove um {@code setFlags} anterior por causa
 /// deles — só deixa de otimizar um caso que passaria a existir com VFP, sem gerar bug.
 public final class FlagMergePass implements IrOptimizer {
@@ -64,9 +66,9 @@ public final class FlagMergePass implements IrOptimizer {
             IrOp op = ops.get(i);
             // Só podemos remover setFlags se NENHUM flag que esta op POSSA escrever (ignorando a
             // condição: quando ela executa, escreve) estiver vivo depois.
-            if (op instanceof IrOp.Alu alu && alu.setFlags()
+            if (op instanceof IntegerOp.Alu alu && alu.setFlags()
                     && (potentialWriteMask(alu) & flagLive[i + 1]) == 0) {
-                result.add(new IrOp.Alu(
+                result.add(new IntegerOp.Alu(
                         alu.opcode(), alu.dst(), alu.src1(), alu.src1ValueOverride(),
                         alu.src2(), false, alu.condition()));
                 changed = true;
@@ -83,7 +85,7 @@ public final class FlagMergePass implements IrOptimizer {
     /// para ADC/SBC/RSC (que o consomem mesmo incondicionalmente).
     private static int flagUseMask(IrOp op) {
         int mask = conditionMask(op.condition());
-        if (op instanceof IrOp.Alu alu) {
+        if (op instanceof IntegerOp.Alu alu) {
             mask |= switch (alu.opcode()) {
                 case ADC, SBC, RSC -> C;
                 default -> 0;
@@ -96,7 +98,7 @@ public final class FlagMergePass implements IrOptimizer {
     /// predicada (condição != AL) pode não executar → must-def vazio (espelha o guard da DCE).
     /// Subestimar é seguro (mantém {@code setFlags}); superestimar mataria flags vivos indevidamente.
     private static int mustDefMask(IrOp op) {
-        if (op instanceof IrOp.Alu alu && alu.condition() != Condition.AL) {
+        if (op instanceof IntegerOp.Alu alu && alu.condition() != Condition.AL) {
             return 0;
         }
         return potentialWriteMask(op);
@@ -105,7 +107,7 @@ public final class FlagMergePass implements IrOptimizer {
     /// Flags que a op escreve QUANDO executa (ignorando a condição). Usado para decidir se o
     /// {@code setFlags} desta op pode ser removido: só se nenhum desses flags estiver vivo depois.
     private static int potentialWriteMask(IrOp op) {
-        if (!(op instanceof IrOp.Alu alu) || !alu.setFlags()) {
+        if (!(op instanceof IntegerOp.Alu alu) || !alu.setFlags()) {
             return 0;
         }
         return switch (alu.opcode()) {

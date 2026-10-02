@@ -1053,7 +1053,7 @@ public final class ArmDecoder implements InstructionDecoder {
         }
 
         // DMB/DSB/ISB (ARMv7, B3.1): `1111 0101 0111 1111 1111 0000 01xx oooo` — `option`
-        // (bits 3:0) ignorado (NOP observável, ver `IrOp.MemoryBarrier`); `op` (bits 7:4)
+        // (bits 3:0) ignorado (NOP observável, ver `SystemOp.MemoryBarrier`); `op` (bits 7:4)
         // distingue DSB(0100)/DMB(0101)/ISB(0110).
         if ((raw & DMB_DSB_ISB_MASK) == DSB_VALUE || (raw & DMB_DSB_ISB_MASK) == DMB_VALUE
                 || (raw & DMB_DSB_ISB_MASK) == ISB_VALUE) {

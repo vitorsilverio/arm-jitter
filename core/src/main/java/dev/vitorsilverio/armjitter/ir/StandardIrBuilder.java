@@ -41,9 +41,9 @@ public final class StandardIrBuilder implements IrBuilder {
             // MOVT (Thumb-2, B2.2): `immediate` já carrega o imediato de 16 bits expandido pelo
             // decoder — não é um padrão Alu comum (escreve só a metade alta), por isso é um IrOp
             // próprio em vez de reusar liftAlu.
-            case MOVE_TOP -> block.add(new IrOp.MoveTop(
+            case MOVE_TOP -> block.add(new IntegerOp.MoveTop(
                     instruction.destinationRegister(), instruction.immediate(), instruction.condition()));
-            case MRS -> block.add(new IrOp.PsrTransfer(
+            case MRS -> block.add(new SystemOp.PsrTransfer(
                     true,
                     instruction.immediate() != 0,
                     instruction.destinationRegister(),
@@ -52,7 +52,7 @@ public final class StandardIrBuilder implements IrBuilder {
                     false,
                     0,
                     instruction.condition()));
-            case MSR -> block.add(new IrOp.PsrTransfer(
+            case MSR -> block.add(new SystemOp.PsrTransfer(
                     false,
                     ((instruction.immediateOperand() ? instruction.destinationRegister() : instruction.immediate()) & 0x10) != 0,
                     instruction.sourceRegister(),
@@ -67,7 +67,7 @@ public final class StandardIrBuilder implements IrBuilder {
             case LSR -> liftAlu(IrOpCode.LSR, instruction, block);
             case ASR -> liftAlu(IrOpCode.ASR, instruction, block);
             case ROR -> liftAlu(IrOpCode.ROR, instruction, block);
-            case MUL, MLA, MLS -> block.add(new IrOp.Multiply(
+            case MUL, MLA, MLS -> block.add(new IntegerOp.Multiply(
                     instruction.destinationRegister(),
                     instruction.sourceRegister(),
                     registerValueOverride(instruction, instruction.sourceRegister()),
@@ -81,7 +81,7 @@ public final class StandardIrBuilder implements IrBuilder {
                     instruction.kind() == InstructionKind.MLS,
                     instruction.setFlags(),
                     instruction.condition()));
-            case UMULL, UMLAL, SMULL, SMLAL -> block.add(new IrOp.LongMultiply(
+            case UMULL, UMLAL, SMULL, SMLAL -> block.add(new IntegerOp.LongMultiply(
                     instruction.destinationRegister(),
                     instruction.immediate(),
                     instruction.sourceRegister(),
@@ -94,7 +94,7 @@ public final class StandardIrBuilder implements IrBuilder {
                     instruction.kind() == InstructionKind.UMLAL || instruction.kind() == InstructionKind.SMLAL,
                     instruction.setFlags(),
                     instruction.condition()));
-            case CLZ -> block.add(new IrOp.Alu(
+            case CLZ -> block.add(new IntegerOp.Alu(
                     IrOpCode.CLZ,
                     instruction.destinationRegister(),
                     instruction.sourceRegister(),
@@ -103,7 +103,7 @@ public final class StandardIrBuilder implements IrBuilder {
                     false,
                     instruction.condition()));
             case EXTEND -> liftExtend(instruction, block);
-            case BYTE_REVERSE -> block.add(new IrOp.Alu(
+            case BYTE_REVERSE -> block.add(new IntegerOp.Alu(
                     switch (instruction.immediate()) {
                         case 0 -> IrOpCode.REV;
                         case 1 -> IrOpCode.REV16;
@@ -115,7 +115,7 @@ public final class StandardIrBuilder implements IrBuilder {
                     new IrOperand.Immediate(0),
                     false,
                     instruction.condition()));
-            case UMAAL -> block.add(new IrOp.LongMultiply(
+            case UMAAL -> block.add(new IntegerOp.LongMultiply(
                     instruction.destinationRegister(),
                     instruction.immediate(),
                     instruction.sourceRegister(),
@@ -131,7 +131,7 @@ public final class StandardIrBuilder implements IrBuilder {
                     instruction.condition()));
             case PARALLEL_ALU -> {
                 int packed = instruction.immediate();
-                block.add(new IrOp.ParallelAlu(
+                block.add(new IntegerOp.ParallelAlu(
                         parallelAluOp((packed >>> 3) & 0x7),
                         parallelAluVariant(packed & 0x7),
                         instruction.destinationRegister(),
@@ -142,28 +142,28 @@ public final class StandardIrBuilder implements IrBuilder {
             // `instruction.immediate()` carrega o offset (`imm8×4`) só no `LDREX`/`STREX` word de
             // 32 bits Thumb-2 (B2.7 PR3, `Thumb2LoadStoreDecoder`) — o `ArmDecoder` clássico e as
             // formas B/H/D (ARM ou Thumb-2) sempre passam `immediate=0` aqui.
-            case LOAD_EXCLUSIVE -> block.add(new IrOp.LoadExclusive(
+            case LOAD_EXCLUSIVE -> block.add(new MemoryOp.LoadExclusive(
                     instruction.destinationRegister(),
                     instruction.sourceRegister(),
                     instruction.immediate(),
                     instruction.accessSizeBytes(),
                     instruction.condition()));
-            case STORE_EXCLUSIVE -> block.add(new IrOp.StoreExclusive(
+            case STORE_EXCLUSIVE -> block.add(new MemoryOp.StoreExclusive(
                     instruction.destinationRegister(),
                     instruction.secondSourceRegister(),
                     instruction.sourceRegister(),
                     instruction.immediate(),
                     instruction.accessSizeBytes(),
                     instruction.condition()));
-            case CLEAR_EXCLUSIVE -> block.add(new IrOp.ClearExclusive(instruction.condition()));
-            case SEL -> block.add(new IrOp.Sel(
+            case CLEAR_EXCLUSIVE -> block.add(new MemoryOp.ClearExclusive(instruction.condition()));
+            case SEL -> block.add(new IntegerOp.Sel(
                     instruction.destinationRegister(),
                     instruction.sourceRegister(),
                     instruction.secondSourceRegister(),
                     instruction.condition()));
             case PKH -> liftPkh(instruction, block);
             case SATURATE -> liftSaturate(instruction, block);
-            case USAD8 -> block.add(new IrOp.AbsDiffSum(
+            case USAD8 -> block.add(new IntegerOp.AbsDiffSum(
                     instruction.destinationRegister(),
                     instruction.sourceRegister(),
                     instruction.secondSourceRegister(),
@@ -171,13 +171,13 @@ public final class StandardIrBuilder implements IrBuilder {
                     instruction.condition()));
             case CMP -> liftAlu(IrOpCode.CMP, instruction, block);
             case CMN -> liftAlu(IrOpCode.CMN, instruction, block);
-            case LOAD_LITERAL -> block.add(new IrOp.LoadLiteral(
+            case LOAD_LITERAL -> block.add(new MemoryOp.LoadLiteral(
                     instruction.destinationRegister(),
                     instruction.immediate(),
                     instruction.accessSizeBytes(),
                     instruction.signedAccess(),
                     instruction.condition()));
-            case LOAD -> block.add(new IrOp.Load(
+            case LOAD -> block.add(new MemoryOp.Load(
                     instruction.destinationRegister(),
                     instruction.sourceRegister(),
                     baseValueOverride(instruction),
@@ -188,7 +188,7 @@ public final class StandardIrBuilder implements IrBuilder {
                     instruction.postIndexed(),
                     instruction.unprivileged(),
                     instruction.condition()));
-            case STORE -> block.add(new IrOp.Store(
+            case STORE -> block.add(new MemoryOp.Store(
                     instruction.destinationRegister(),
                     storeSourceValueOverride(instruction),
                     instruction.sourceRegister(),
@@ -204,7 +204,7 @@ public final class StandardIrBuilder implements IrBuilder {
             // Rt2 — ver `offset()`). Thumb-2 (B2.3) não tem forma de offset por registrador para
             // LDRD/STRD, então `secondSourceRegister` fica livre e é reaproveitado para carregar
             // Rt2 (par arbitrário, independente de Rt — ver `Thumb2LoadStoreDecoder`).
-            case DOUBLE_TRANSFER -> block.add(new IrOp.DoubleTransfer(
+            case DOUBLE_TRANSFER -> block.add(new MemoryOp.DoubleTransfer(
                     instruction.link(), // carrega LDRD (load) vs STRD (store)
                     instruction.destinationRegister(),
                     instruction.instructionSet() == InstructionSet.THUMB
@@ -216,7 +216,7 @@ public final class StandardIrBuilder implements IrBuilder {
                     instruction.writeback(),
                     instruction.postIndexed(),
                     instruction.condition()));
-            case SWAP -> block.add(new IrOp.Swap(
+            case SWAP -> block.add(new MemoryOp.Swap(
                     instruction.destinationRegister(),
                     instruction.sourceRegister(),
                     baseValueOverride(instruction),
@@ -224,7 +224,7 @@ public final class StandardIrBuilder implements IrBuilder {
                     registerValueOverride(instruction, instruction.secondSourceRegister()),
                     instruction.accessSizeBytes(),
                     instruction.condition()));
-            case LOAD_MULTIPLE -> block.add(new IrOp.MultipleTransfer(
+            case LOAD_MULTIPLE -> block.add(new MemoryOp.MultipleTransfer(
                     true,
                     instruction.sourceRegister(),
                     instruction.immediate(),
@@ -234,7 +234,7 @@ public final class StandardIrBuilder implements IrBuilder {
                     instruction.blockTransferMode(),
                     instruction.emptyRegisterList(),
                     instruction.condition()));
-            case STORE_MULTIPLE -> block.add(new IrOp.MultipleTransfer(
+            case STORE_MULTIPLE -> block.add(new MemoryOp.MultipleTransfer(
                     false,
                     instruction.sourceRegister(),
                     instruction.immediate(),
@@ -244,7 +244,7 @@ public final class StandardIrBuilder implements IrBuilder {
                     instruction.blockTransferMode(),
                     instruction.emptyRegisterList(),
                     instruction.condition()));
-            case SATURATING -> block.add(new IrOp.Saturating(
+            case SATURATING -> block.add(new IntegerOp.Saturating(
                     instruction.destinationRegister(),
                     instruction.sourceRegister(),
                     instruction.secondSourceRegister(),
@@ -258,7 +258,7 @@ public final class StandardIrBuilder implements IrBuilder {
                     default -> 32; // sizeCode==2 (W); 3 é recusado no decode
                 };
                 boolean castagnoli = (packed & 0x4) != 0;
-                block.add(new IrOp.Crc32(
+                block.add(new IntegerOp.Crc32(
                         instruction.destinationRegister(),
                         instruction.secondSourceRegister(),
                         instruction.sourceRegister(),
@@ -268,7 +268,7 @@ public final class StandardIrBuilder implements IrBuilder {
             }
             case DSP_MULTIPLY -> {
                 int packed = instruction.immediate();
-                block.add(new IrOp.DspMultiply(
+                block.add(new IntegerOp.DspMultiply(
                         instruction.destinationRegister(),
                         packed & 0xF,            // Rn (RdLo in SMLAL)
                         instruction.sourceRegister(),
@@ -278,13 +278,13 @@ public final class StandardIrBuilder implements IrBuilder {
                         (packed >> 7) & 0x1,     // y
                         instruction.condition()));
             }
-            case BRANCH -> block.add(new IrOp.Branch(
+            case BRANCH -> block.add(new BranchOp.Branch(
                     instruction.immediate(),
                     instruction.address() + instructionWidth(instruction),
                     instruction.link(),
                     instruction.condition(),
                     instruction.instructionSet()));
-            case BRANCH_EXCHANGE -> block.add(new IrOp.BranchExchange(
+            case BRANCH_EXCHANGE -> block.add(new BranchOp.BranchExchange(
                     instruction.sourceRegister(),
                     // BLX-imediato carrega seu alvo (forçado a Thumb) no campo immediate; as formas
                     // registrador (BX/BLX reg) pegam o destino de um registrador.
@@ -297,42 +297,42 @@ public final class StandardIrBuilder implements IrBuilder {
                             ? ((instruction.address() + instructionWidth(instruction)) | 1)
                             : (instruction.address() + instructionWidth(instruction)),
                     instruction.condition()));
-            case SECURE_GATEWAY -> block.add(new IrOp.SecureGateway(instruction.condition()));
-            case SECURE_BRANCH_EXCHANGE -> block.add(new IrOp.SecureBranchExchange(
+            case SECURE_GATEWAY -> block.add(new SystemOp.SecureGateway(instruction.condition()));
+            case SECURE_BRANCH_EXCHANGE -> block.add(new BranchOp.SecureBranchExchange(
                     instruction.sourceRegister(),
                     registerValueOverride(instruction, instruction.sourceRegister()),
                     instruction.link(),
                     (instruction.address() + instructionWidth(instruction)) | 1,
                     instruction.condition()));
-            case LONG_BRANCH_PREFIX -> block.add(new IrOp.ThumbBlPrefix(
+            case LONG_BRANCH_PREFIX -> block.add(new BranchOp.ThumbBlPrefix(
                     instruction.immediate(),
                     instruction.address(),
                     instruction.condition()));
-            case LONG_BRANCH_SUFFIX -> block.add(new IrOp.ThumbBlSuffix(
+            case LONG_BRANCH_SUFFIX -> block.add(new BranchOp.ThumbBlSuffix(
                     instruction.immediate(),
                     instruction.address(),
                     (instruction.raw() & 0xF800) == 0xE800, // H=01 -> BLX (switch to ARM)
                     instruction.condition()));
-            case PUSH -> block.add(new IrOp.Push(
+            case PUSH -> block.add(new MemoryOp.Push(
                     instruction.immediate(),
                     instruction.link(),
                     instruction.condition()));
-            case POP -> block.add(new IrOp.Pop(
+            case POP -> block.add(new MemoryOp.Pop(
                     instruction.immediate(),
                     instruction.link(),
                     instruction.condition()));
-            case SWI -> block.add(new IrOp.Swi(instruction.immediate(), instruction.condition()));
-            case HVC -> block.add(new IrOp.Hvc(instruction.immediate(), instruction.condition()));
-            case SMC -> block.add(new IrOp.Smc(instruction.immediate(), instruction.condition()));
-            case ERET -> block.add(new IrOp.Eret(instruction.condition()));
-            case MRS_BANK -> block.add(new IrOp.MrsBank(
+            case SWI -> block.add(new SystemOp.Swi(instruction.immediate(), instruction.condition()));
+            case HVC -> block.add(new SystemOp.Hvc(instruction.immediate(), instruction.condition()));
+            case SMC -> block.add(new SystemOp.Smc(instruction.immediate(), instruction.condition()));
+            case ERET -> block.add(new SystemOp.Eret(instruction.condition()));
+            case MRS_BANK -> block.add(new SystemOp.MrsBank(
                     instruction.destinationRegister(),
                     CpuMode.values()[instruction.immediate() & BankedRegisterSysm.MODE_MASK],
                     (instruction.immediate() >>> BankedRegisterSysm.REGISTER_SHIFT) & BankedRegisterSysm.REGISTER_MASK,
                     (instruction.immediate() & BankedRegisterSysm.ELR_HYP_BIT) != 0,
                     (instruction.immediate() & BankedRegisterSysm.SPSR_BIT) != 0,
                     instruction.condition()));
-            case MSR_BANK -> block.add(new IrOp.MsrBank(
+            case MSR_BANK -> block.add(new SystemOp.MsrBank(
                     instruction.sourceRegister(),
                     CpuMode.values()[instruction.immediate() & BankedRegisterSysm.MODE_MASK],
                     (instruction.immediate() >>> BankedRegisterSysm.REGISTER_SHIFT) & BankedRegisterSysm.REGISTER_MASK,
@@ -341,8 +341,8 @@ public final class StandardIrBuilder implements IrBuilder {
                     instruction.condition()));
             // HALT (HLT, B14.1b): mesmo contrato de execução de BREAKPOINT (delega a
             // BkptDispatcher, ou UNDEFINED sem handler) — ver Javadoc de IrOp#Breakpoint.
-            case BREAKPOINT, HALT -> block.add(new IrOp.Breakpoint(instruction.immediate()));
-            case COPROCESSOR -> block.add(new IrOp.Coprocessor(
+            case BREAKPOINT, HALT -> block.add(new SystemOp.Breakpoint(instruction.immediate()));
+            case COPROCESSOR -> block.add(new SystemOp.Coprocessor(
                     instruction.link(),
                     instruction.immediate() & 0xF,
                     (instruction.immediate() >>> 4) & 0x7,
@@ -352,7 +352,7 @@ public final class StandardIrBuilder implements IrBuilder {
                     instruction.destinationRegister(),
                     instruction.address() + instructionWidth(instruction),
                     instruction.condition()));
-            case COPROCESSOR_DOUBLE -> block.add(new IrOp.CoprocessorDouble(
+            case COPROCESSOR_DOUBLE -> block.add(new SystemOp.CoprocessorDouble(
                     instruction.link(),
                     instruction.immediate() & 0xF,
                     (instruction.immediate() >>> 4) & 0xF,
@@ -363,7 +363,7 @@ public final class StandardIrBuilder implements IrBuilder {
                     instruction.condition()));
             case CPS -> {
                 int packed = instruction.immediate();
-                block.add(new IrOp.ChangeProcessorState(
+                block.add(new SystemOp.ChangeProcessorState(
                         ((packed >>> 2) & 1) != 0,   // changeMode (M)
                         (packed >>> 6) & 0x1F,        // mode cru
                         ((packed >>> 1) & 1) != 0,    // changeFlags (imod bit 1)
@@ -373,29 +373,29 @@ public final class StandardIrBuilder implements IrBuilder {
                         ((packed >>> 5) & 1) != 0,    // changeF
                         instruction.condition()));
             }
-            case SETEND -> block.add(new IrOp.SetEndianness(
+            case SETEND -> block.add(new SystemOp.SetEndianness(
                     instruction.immediate() != 0,
                     instruction.condition()));
-            case STORE_RETURN_STATE -> block.add(new IrOp.StoreReturnState(
+            case STORE_RETURN_STATE -> block.add(new SystemOp.StoreReturnState(
                     instruction.immediate(),
                     instruction.blockTransferMode(),
                     instruction.writeback(),
                     instruction.address() + instructionWidth(instruction),
                     instruction.condition()));
-            case RETURN_FROM_EXCEPTION -> block.add(new IrOp.ReturnFromException(
+            case RETURN_FROM_EXCEPTION -> block.add(new SystemOp.ReturnFromException(
                     instruction.sourceRegister(),
                     instruction.blockTransferMode(),
                     instruction.writeback(),
                     instruction.address() + instructionWidth(instruction),
                     instruction.condition()));
-            case WAIT_FOR_INTERRUPT -> block.add(new IrOp.WaitForInterrupt(instruction.condition()));
-            // DMB/DSB/ISB (Thumb-2, B2.5): NOP observável — ver javadoc de IrOp.MemoryBarrier.
-            case MEMORY_BARRIER -> block.add(new IrOp.MemoryBarrier(instruction.condition()));
+            case WAIT_FOR_INTERRUPT -> block.add(new SystemOp.WaitForInterrupt(instruction.condition()));
+            // DMB/DSB/ISB (Thumb-2, B2.5): NOP observável — ver javadoc de SystemOp.MemoryBarrier.
+            case MEMORY_BARRIER -> block.add(new SystemOp.MemoryBarrier(instruction.condition()));
             // IT (Thumb-2, B2.4): grava o ITSTATE de entrada já montado pelo decoder. A condição
-            // desta op é a da própria instrução IT (normalmente AL; ver IrOp.SetItState).
-            case IT -> block.add(new IrOp.SetItState(instruction.immediate(), instruction.condition()));
+            // desta op é a da própria instrução IT (normalmente AL; ver SystemOp.SetItState).
+            case IT -> block.add(new SystemOp.SetItState(instruction.immediate(), instruction.condition()));
             // TBB/TBH (Thumb-2, B2.4): ver a decisão D3 em b2.4-thumb2-branches-it.md.
-            case TABLE_BRANCH -> block.add(new IrOp.TableBranch(
+            case TABLE_BRANCH -> block.add(new BranchOp.TableBranch(
                     instruction.sourceRegister(),
                     baseValueOverride(instruction),
                     instruction.secondSourceRegister(),
@@ -404,7 +404,7 @@ public final class StandardIrBuilder implements IrBuilder {
                     (instruction.immediate() & 1) != 0,
                     instruction.condition()));
             // CBZ/CBNZ (Thumb-1, B2.4): nunca afeta flags.
-            case COMPARE_BRANCH_ZERO -> block.add(new IrOp.CompareBranchZero(
+            case COMPARE_BRANCH_ZERO -> block.add(new BranchOp.CompareBranchZero(
                     instruction.sourceRegister(),
                     instruction.immediate(),
                     instruction.link(),
@@ -413,7 +413,7 @@ public final class StandardIrBuilder implements IrBuilder {
             // `signedAccess` reaproveitado como "com sinal" (mesmo campo que LOAD usa, sem IR nova).
             case BIT_FIELD_EXTRACT -> {
                 int packed = instruction.immediate();
-                block.add(new IrOp.BitFieldExtract(
+                block.add(new IntegerOp.BitFieldExtract(
                         instruction.destinationRegister(),
                         instruction.sourceRegister(),
                         packed & 0x1F,
@@ -425,7 +425,7 @@ public final class StandardIrBuilder implements IrBuilder {
             // `sourceRegister == -1` significa BFC (insere zeros).
             case BIT_FIELD_INSERT -> {
                 int packed = instruction.immediate();
-                block.add(new IrOp.BitFieldInsert(
+                block.add(new IntegerOp.BitFieldInsert(
                         instruction.destinationRegister(),
                         instruction.sourceRegister(),
                         packed & 0x1F,
@@ -433,12 +433,12 @@ public final class StandardIrBuilder implements IrBuilder {
                         instruction.condition()));
             }
             // RBIT (ARM/Thumb-2, B3.1).
-            case BIT_REVERSE -> block.add(new IrOp.BitReverse(
+            case BIT_REVERSE -> block.add(new IntegerOp.BitReverse(
                     instruction.destinationRegister(),
                     instruction.sourceRegister(),
                     instruction.condition()));
             // SDIV/UDIV (ARM/Thumb-2, B3.1): `signedAccess` reaproveitado como "com sinal".
-            case DIVIDE -> block.add(new IrOp.Divide(
+            case DIVIDE -> block.add(new IntegerOp.Divide(
                     instruction.destinationRegister(),
                     instruction.sourceRegister(),
                     instruction.secondSourceRegister(),
@@ -449,33 +449,33 @@ public final class StandardIrBuilder implements IrBuilder {
             case LIFTED_IR_OP -> block.add(instruction.liftedOp());
             // VFP (B3.5): `signedAccess` carrega `doublePrecision`, `link` carrega a direção da
             // transferência — ver o javadoc de cada `InstructionKind` VFP_*.
-            case VFP_ALU -> block.add(new IrOp.VfpAlu(
-                    IrOp.VfpOperation.values()[instruction.immediate()],
+            case VFP_ALU -> block.add(new VfpOp.Alu(
+                    VfpOp.VfpOperation.values()[instruction.immediate()],
                     instruction.signedAccess(),
                     instruction.destinationRegister(),
                     instruction.sourceRegister(),
                     instruction.secondSourceRegister(),
                     instruction.condition()));
-            case VFP_MOVE_IMMEDIATE -> block.add(new IrOp.VfpMoveImmediate(
+            case VFP_MOVE_IMMEDIATE -> block.add(new VfpOp.MoveImmediate(
                     instruction.signedAccess(),
                     instruction.destinationRegister(),
                     vfpExpandImm(instruction.immediate(), instruction.signedAccess()),
                     instruction.condition()));
-            case VFP_COMPARE -> block.add(new IrOp.VfpCompare(
+            case VFP_COMPARE -> block.add(new VfpOp.Compare(
                     instruction.signedAccess(),
                     (instruction.immediate() & 1) != 0,
                     (instruction.immediate() & 2) != 0,
                     instruction.destinationRegister(),
                     instruction.secondSourceRegister(),
                     instruction.condition()));
-            case VFP_CONVERT -> block.add(new IrOp.VfpConvert(
-                    IrOp.VfpConversion.values()[instruction.immediate()],
+            case VFP_CONVERT -> block.add(new VfpOp.Convert(
+                    VfpOp.VfpConversion.values()[instruction.immediate()],
                     instruction.destinationRegister(),
                     instruction.sourceRegister(),
                     instruction.condition()));
             // B14.4: `cc:2` (0-3) mapeia para EQ/VS/GE/GT (ARM ARM A8.8.294) — vira o campo DADO
             // `selectCondition` do IrOp, nunca `instruction.condition()` (Armadilha 2 da task).
-            case VFP_SELECT -> block.add(new IrOp.VfpSelect(
+            case VFP_SELECT -> block.add(new VfpOp.Select(
                     instruction.signedAccess(),
                     instruction.destinationRegister(),
                     instruction.sourceRegister(),
@@ -484,7 +484,7 @@ public final class StandardIrBuilder implements IrBuilder {
                     instruction.condition()));
             // B14.5: `immediate`=ordinal de `AdvSimdLanes.RoundingMode` (direção do campo `rm`,
             // nunca `FPSCR.RMode`).
-            case VFP_ROUND -> block.add(new IrOp.VfpRound(
+            case VFP_ROUND -> block.add(new VfpOp.Round(
                     roundingDirection(instruction.immediate()),
                     instruction.signedAccess(),
                     instruction.destinationRegister(),
@@ -494,7 +494,7 @@ public final class StandardIrBuilder implements IrBuilder {
             // sinal — desempacotado aqui, mesmo padrão de `VFP_CONVERT_FIXED` abaixo.
             case VFP_CONVERT_ROUNDED -> {
                 int packed = instruction.immediate();
-                block.add(new IrOp.VfpConvertRounded(
+                block.add(new VfpOp.ConvertRounded(
                         roundingDirection(packed & 0b111),
                         (packed & 0b1000) != 0,
                         instruction.signedAccess(),
@@ -503,7 +503,7 @@ public final class StandardIrBuilder implements IrBuilder {
                         instruction.condition()));
             }
             // B14.6: `immediate`=1 para `VINS`, `0` para `VMOVX` (ver `VfpDecoder#decodeMovxVins`).
-            case VFP_MOVE_HALF_LANE -> block.add(new IrOp.VfpMoveHalfLane(
+            case VFP_MOVE_HALF_LANE -> block.add(new VfpOp.MoveHalfLane(
                     instruction.immediate() != 0,
                     instruction.destinationRegister(),
                     instruction.secondSourceRegister(),
@@ -511,36 +511,36 @@ public final class StandardIrBuilder implements IrBuilder {
             // B14.6b (`_hp`): mesmo padrão dos kinds sp/dp acima, sem `signedAccess`/doublePrecision
             // (só existe uma precisão em cada kind novo — ver Armadilha 2 de B14.6/`## Resultado`
             // de B14.6a).
-            case VFP_ALU_HALF -> block.add(new IrOp.VfpAluHalf(
-                    IrOp.VfpOperation.values()[instruction.immediate()],
+            case VFP_ALU_HALF -> block.add(new VfpOp.AluHalf(
+                    VfpOp.VfpOperation.values()[instruction.immediate()],
                     instruction.destinationRegister(),
                     instruction.sourceRegister(),
                     instruction.secondSourceRegister(),
                     instruction.condition()));
-            case VFP_MOVE_IMMEDIATE_HALF -> block.add(new IrOp.VfpMoveImmediateHalf(
+            case VFP_MOVE_IMMEDIATE_HALF -> block.add(new VfpOp.MoveImmediateHalf(
                     instruction.destinationRegister(),
                     vfpExpandImmHalf(instruction.immediate()),
                     instruction.condition()));
-            case VFP_COMPARE_HALF -> block.add(new IrOp.VfpCompareHalf(
+            case VFP_COMPARE_HALF -> block.add(new VfpOp.CompareHalf(
                     (instruction.immediate() & 1) != 0,
                     (instruction.immediate() & 2) != 0,
                     instruction.destinationRegister(),
                     instruction.secondSourceRegister(),
                     instruction.condition()));
-            case VFP_SELECT_HALF -> block.add(new IrOp.VfpSelectHalf(
+            case VFP_SELECT_HALF -> block.add(new VfpOp.SelectHalf(
                     instruction.destinationRegister(),
                     instruction.sourceRegister(),
                     instruction.secondSourceRegister(),
                     vselCondition(instruction.immediate()),
                     instruction.condition()));
-            case VFP_ROUND_HALF -> block.add(new IrOp.VfpRoundHalf(
+            case VFP_ROUND_HALF -> block.add(new VfpOp.RoundHalf(
                     roundingDirection(instruction.immediate()),
                     instruction.destinationRegister(),
                     instruction.secondSourceRegister(),
                     instruction.condition()));
             case VFP_CONVERT_ROUNDED_HALF -> {
                 int packed = instruction.immediate();
-                block.add(new IrOp.VfpConvertRoundedHalf(
+                block.add(new VfpOp.ConvertRoundedHalf(
                         roundingDirection(packed & 0b111),
                         (packed & 0b1000) != 0,
                         instruction.destinationRegister(),
@@ -552,7 +552,7 @@ public final class StandardIrBuilder implements IrBuilder {
                 boolean fixedPointIs32Bit = (packed & 0b100) != 0;
                 int imm = packed >>> 3;
                 int fractionBits = fixedPointIs32Bit ? (32 - imm) : (16 - imm);
-                block.add(new IrOp.VfpConvertFixedHalf(
+                block.add(new VfpOp.ConvertFixedHalf(
                         (packed & 0b001) != 0,
                         (packed & 0b010) != 0,
                         fixedPointIs32Bit,
@@ -560,28 +560,28 @@ public final class StandardIrBuilder implements IrBuilder {
                         instruction.destinationRegister(),
                         instruction.condition()));
             }
-            case VFP_LOAD_HALF -> block.add(new IrOp.VfpLoadHalf(
+            case VFP_LOAD_HALF -> block.add(new VfpOp.LoadHalf(
                     instruction.destinationRegister(),
                     instruction.sourceRegister(),
                     baseValueOverride(instruction),
                     instruction.immediate(),
                     instruction.condition()));
-            // B22.7: `immediate` empacota bits 2:0 = ordinal de `IrOp.HalfPrecisionConversion`,
+            // B22.7: `immediate` empacota bits 2:0 = ordinal de `VfpOp.HalfPrecisionConversion`,
             // bit 3 = `t` (`VCVTT`, metade alta).
             case VFP_CONVERT_HALF_PRECISION -> {
                 int packed = instruction.immediate();
-                block.add(new IrOp.VfpConvertHalfPrecision(
-                        IrOp.HalfPrecisionConversion.values()[packed & 0b111],
+                block.add(new VfpOp.ConvertHalfPrecision(
+                        VfpOp.HalfPrecisionConversion.values()[packed & 0b111],
                         (packed & 0b1000) != 0,
                         instruction.destinationRegister(),
                         instruction.secondSourceRegister(),
                         instruction.condition()));
             }
-            case VFP_JAVASCRIPT_CONVERT -> block.add(new IrOp.VfpJavascriptConvert(
+            case VFP_JAVASCRIPT_CONVERT -> block.add(new VfpOp.JavascriptConvert(
                     instruction.destinationRegister(),
                     instruction.secondSourceRegister(),
                     instruction.condition()));
-            case VFP_STORE_HALF -> block.add(new IrOp.VfpStoreHalf(
+            case VFP_STORE_HALF -> block.add(new VfpOp.StoreHalf(
                     instruction.destinationRegister(),
                     instruction.sourceRegister(),
                     baseValueOverride(instruction),
@@ -596,21 +596,21 @@ public final class StandardIrBuilder implements IrBuilder {
             // sem viés `+8` — e o literal errado era lido (bug real encontrado via ELF ARMv7-A
             // hard-float: duas `VLDR Dx,[pc,#imm]` consecutivas liam os literais TROCADOS entre
             // si).
-            case VFP_LOAD -> block.add(new IrOp.VfpLoad(
+            case VFP_LOAD -> block.add(new VfpOp.Load(
                     instruction.signedAccess(),
                     instruction.destinationRegister(),
                     instruction.sourceRegister(),
                     baseValueOverride(instruction),
                     instruction.immediate(),
                     instruction.condition()));
-            case VFP_STORE -> block.add(new IrOp.VfpStore(
+            case VFP_STORE -> block.add(new VfpOp.Store(
                     instruction.signedAccess(),
                     instruction.destinationRegister(),
                     instruction.sourceRegister(),
                     baseValueOverride(instruction),
                     instruction.immediate(),
                     instruction.condition()));
-            case VFP_LOAD_MULTIPLE -> block.add(new IrOp.VfpMultipleTransfer(
+            case VFP_LOAD_MULTIPLE -> block.add(new VfpOp.MultipleTransfer(
                     true,
                     instruction.signedAccess(),
                     instruction.sourceRegister(),
@@ -620,7 +620,7 @@ public final class StandardIrBuilder implements IrBuilder {
                     instruction.writeback(),
                     instruction.blockTransferMode() == BlockTransferMode.DB,
                     instruction.condition()));
-            case VFP_STORE_MULTIPLE -> block.add(new IrOp.VfpMultipleTransfer(
+            case VFP_STORE_MULTIPLE -> block.add(new VfpOp.MultipleTransfer(
                     false,
                     instruction.signedAccess(),
                     instruction.sourceRegister(),
@@ -630,7 +630,7 @@ public final class StandardIrBuilder implements IrBuilder {
                     instruction.writeback(),
                     instruction.blockTransferMode() == BlockTransferMode.DB,
                     instruction.condition()));
-            case VFP_CORE_TRANSFER -> block.add(new IrOp.VfpCoreTransfer(
+            case VFP_CORE_TRANSFER -> block.add(new VfpOp.CoreTransfer(
                     instruction.link(),
                     instruction.destinationRegister(),
                     instruction.sourceRegister(),
@@ -645,32 +645,32 @@ public final class StandardIrBuilder implements IrBuilder {
                     VfpLaneTransferEncoding.isLane(instruction.immediate())
                             && VfpLaneTransferEncoding.signExtend(instruction.immediate()),
                     instruction.condition()));
-            case VFP_CORE_PAIR_TRANSFER -> block.add(new IrOp.VfpCorePairTransfer(
+            case VFP_CORE_PAIR_TRANSFER -> block.add(new VfpOp.CorePairTransfer(
                     instruction.link(),
                     instruction.destinationRegister(),
                     instruction.sourceRegister(),
                     instruction.secondSourceRegister(),
                     instruction.condition()));
-            case VFP_SYSTEM_TRANSFER -> block.add(new IrOp.VfpSystemTransfer(
+            case VFP_SYSTEM_TRANSFER -> block.add(new VfpOp.SystemTransfer(
                     instruction.link(),
                     instruction.destinationRegister(),
                     instruction.condition()));
-            case VFP_SYSREG_LOAD -> block.add(new IrOp.VfpSysregMemoryTransfer(
+            case VFP_SYSREG_LOAD -> block.add(new VfpOp.SysregMemoryTransfer(
                     true,
                     instruction.sourceRegister(),
                     instruction.immediate(),
                     instruction.writeback(),
                     instruction.postIndexed(),
                     instruction.condition()));
-            case VFP_SYSREG_STORE -> block.add(new IrOp.VfpSysregMemoryTransfer(
+            case VFP_SYSREG_STORE -> block.add(new VfpOp.SysregMemoryTransfer(
                     false,
                     instruction.sourceRegister(),
                     instruction.immediate(),
                     instruction.writeback(),
                     instruction.postIndexed(),
                     instruction.condition()));
-            // VMOV_64_sp (B9.5): par de S consecutivos, ver IrOp.VfpCorePairTransferSingle.
-            case VFP_CORE_PAIR_TRANSFER_SINGLE -> block.add(new IrOp.VfpCorePairTransferSingle(
+            // VMOV_64_sp (B9.5): par de S consecutivos, ver VfpOp.CorePairTransferSingle.
+            case VFP_CORE_PAIR_TRANSFER_SINGLE -> block.add(new VfpOp.CorePairTransferSingle(
                     instruction.link(),
                     instruction.destinationRegister(),
                     instruction.sourceRegister(),
@@ -684,7 +684,7 @@ public final class StandardIrBuilder implements IrBuilder {
                 boolean fixedPointIs32Bit = (packed & 0b100) != 0;
                 int imm = packed >>> 3;
                 int fractionBits = fixedPointIs32Bit ? (32 - imm) : (16 - imm);
-                block.add(new IrOp.VfpConvertFixed(
+                block.add(new VfpOp.ConvertFixed(
                         instruction.signedAccess(),
                         (packed & 0b001) != 0,
                         (packed & 0b010) != 0,
@@ -694,10 +694,10 @@ public final class StandardIrBuilder implements IrBuilder {
                         instruction.condition()));
             }
             // MRS/MSR SYSm do perfil M (B7.4): `immediate` carrega o campo SYSm; o registrador ARP
-            // ARM é o destino (MRS) ou a fonte (MSR). Ver IrOp.MProfileSystemRegister.
-            case MPROFILE_MRS -> block.add(new IrOp.MProfileSystemRegister(
+            // ARM é o destino (MRS) ou a fonte (MSR). Ver SystemOp.MProfileSystemRegister.
+            case MPROFILE_MRS -> block.add(new SystemOp.MProfileSystemRegister(
                     true, instruction.destinationRegister(), instruction.immediate(), instruction.condition()));
-            case MPROFILE_MSR -> block.add(new IrOp.MProfileSystemRegister(
+            case MPROFILE_MSR -> block.add(new SystemOp.MProfileSystemRegister(
                     false, instruction.sourceRegister(), instruction.immediate(), instruction.condition()));
             // B9.1: dois produtos 16x16 com sinal somados/subtraídos e acumulados; `dst`=Rd
             // (RdHi na forma longa), `rm`=Rm (bits 11:8), `rs`=Rn (bits 3:0) — reaproveita os
@@ -705,7 +705,7 @@ public final class StandardIrBuilder implements IrBuilder {
             // exchange/longForm conforme o Javadoc de InstructionKind#DSP_DUAL_MULTIPLY.
             case DSP_DUAL_MULTIPLY -> {
                 int packed = instruction.immediate();
-                block.add(new IrOp.DspDualMultiply(
+                block.add(new IntegerOp.DspDualMultiply(
                         instruction.destinationRegister(),
                         instruction.sourceRegister(),
                         instruction.secondSourceRegister(),
@@ -719,7 +719,7 @@ public final class StandardIrBuilder implements IrBuilder {
             // `immediate` empacota Ra/subtract/round conforme InstructionKind#DSP_TOP_WORD_MULTIPLY.
             case DSP_TOP_WORD_MULTIPLY -> {
                 int packed = instruction.immediate();
-                block.add(new IrOp.DspTopWordMultiply(
+                block.add(new IntegerOp.DspTopWordMultiply(
                         instruction.destinationRegister(),
                         instruction.sourceRegister(),
                         instruction.secondSourceRegister(),
@@ -729,41 +729,41 @@ public final class StandardIrBuilder implements IrBuilder {
                         instruction.condition()));
             }
             // NOCP/NOCP_8_1 (perfil M, B15.2): `immediate` carrega o coprocessador-alvo (`cp`).
-            // Ver IrOp.Nocp/IrSystemExecutor#executeNocp.
-            case NOCP -> block.add(new IrOp.Nocp(instruction.immediate(), instruction.condition()));
+            // Ver SystemOp.Nocp/IrSystemExecutor#executeNocp.
+            case NOCP -> block.add(new SystemOp.Nocp(instruction.immediate(), instruction.condition()));
             // VLLDM_VLSTM (perfil M, B15.5): sem campos neutros significativos (sempre UNDEF).
-            case VLLDM_VLSTM -> block.add(new IrOp.VlldmVlstm(instruction.condition()));
+            case VLLDM_VLSTM -> block.add(new VfpOp.VlldmVlstm(instruction.condition()));
             // VSCCLRM (perfil M, B15.5): `link` carrega doublePrecision (ver InstructionKind#VSCCLRM).
-            case VSCCLRM -> block.add(new IrOp.Vscclrm(
+            case VSCCLRM -> block.add(new VfpOp.Vscclrm(
                     instruction.link(),
                     instruction.destinationRegister(),
                     instruction.immediate(),
                     instruction.condition()));
             // LOOP_START (DLS/WLS, B15.6): `link` carrega hasSkipBranch (ver InstructionKind#LOOP_START).
-            case LOOP_START -> block.add(new IrOp.LoopStart(
+            case LOOP_START -> block.add(new BranchOp.LoopStart(
                     instruction.sourceRegister(),
                     instruction.immediate(),
                     instruction.link(),
                     // B16.15: `destinationRegister` carrega o `size` das formas *TP (-1 = forma pura).
                     instruction.destinationRegister() >= 0
-                            ? instruction.destinationRegister() : IrOp.LoopStart.NO_LTPSIZE,
+                            ? instruction.destinationRegister() : BranchOp.LoopStart.NO_LTPSIZE,
                     instruction.condition()));
             // LOOP_END (LE, B15.6): `link` carrega forever (ver InstructionKind#LOOP_END).
-            case LOOP_END -> block.add(new IrOp.LoopEnd(
+            case LOOP_END -> block.add(new BranchOp.LoopEnd(
                     instruction.immediate(),
                     instruction.link(),
                     // B16.15: `immediateOperand` = `LETP` (tail-predicated).
                     instruction.immediateOperand(),
                     instruction.condition()));
             // LCTP/VCTP/CLRM (B16.15): ver os Javadocs de `InstructionKind`.
-            case LOOP_CLEAR_TAIL_PREDICATION -> block.add(new IrOp.LoopClearTailPredication(instruction.condition()));
-            case VCTP -> block.add(new IrOp.Vctp(
+            case LOOP_CLEAR_TAIL_PREDICATION -> block.add(new MvePredicationOp.LoopClearTailPredication(instruction.condition()));
+            case VCTP -> block.add(new MvePredicationOp.Vctp(
                     instruction.sourceRegister(), instruction.immediate(), instruction.condition()));
-            case CLEAR_MULTIPLE -> block.add(new IrOp.ClearMultiple(instruction.immediate(), instruction.condition()));
+            case CLEAR_MULTIPLE -> block.add(new IntegerOp.ClearMultiple(instruction.immediate(), instruction.condition()));
             // MVE "long shift" (B16.16): ver o Javadoc de `InstructionKind#MVE_WIDE_SHIFT` para o
             // empacotamento de `immediate` (ordinal nos bits 7:0, quantidade nos bits 15:8).
-            case MVE_WIDE_SHIFT -> block.add(new IrOp.MveWideShift(
-                    IrOp.WideShiftOperation.values()[instruction.immediate() & WIDE_SHIFT_OPERATION_MASK],
+            case MVE_WIDE_SHIFT -> block.add(new MveIntegerOp.WideShift(
+                    MveIntegerOp.WideShiftOperation.values()[instruction.immediate() & WIDE_SHIFT_OPERATION_MASK],
                     instruction.immediate() >>> WIDE_SHIFT_AMOUNT_SHIFT,
                     instruction.secondSourceRegister(),
                     instruction.destinationRegister(),
@@ -771,22 +771,22 @@ public final class StandardIrBuilder implements IrBuilder {
                     instruction.condition()));
             // B9.1: instrução permanentemente indefinida — mesmo IrOp de UNIMPLEMENTED (ver
             // Javadoc de InstructionKind#UDF).
-            case UDF, UNIMPLEMENTED -> block.add(new IrOp.Undefined(
+            case UDF, UNIMPLEMENTED -> block.add(new SystemOp.Undefined(
                     instruction.address() + instructionWidth(instruction),
                     instruction.condition()));
             // VPST (perfil M, B16.2): `immediate` carrega o campo `mask` de 4 bits.
-            case VPST -> block.add(new IrOp.Vpst(instruction.immediate(), instruction.condition()));
+            case VPST -> block.add(new MvePredicationOp.Vpst(instruction.immediate(), instruction.condition()));
             // VPNOT (perfil M, B16.2): sem campos neutros significativos.
-            case VPNOT -> block.add(new IrOp.Vpnot(instruction.condition()));
+            case VPNOT -> block.add(new MvePredicationOp.Vpnot(instruction.condition()));
             // VPSEL (perfil M, B16.2): Qd/Qn/Qm cabem nos 3 registradores neutros existentes.
-            case VPSEL -> block.add(new IrOp.Vpsel(
+            case VPSEL -> block.add(new MvePredicationOp.Vpsel(
                     instruction.destinationRegister(),
                     instruction.sourceRegister(),
                     instruction.secondSourceRegister(),
                     instruction.condition()));
             // VPR_TRANSFER (VMSR/VMRS reg=12, B16.2): `link` carrega `read` (mesma convenção de
             // VFP_SYSTEM_TRANSFER).
-            case VPR_TRANSFER -> block.add(new IrOp.VprTransfer(
+            case VPR_TRANSFER -> block.add(new MvePredicationOp.VprTransfer(
                     instruction.link(),
                     instruction.destinationRegister(),
                     instruction.condition()));
@@ -800,91 +800,91 @@ public final class StandardIrBuilder implements IrBuilder {
         // InstructionKind#isMveBeatwise(); B16.3 (VLDR_VSTR) e B16.4 (VLDSTB_H/VLDSTB_W/VLDSTH_W)
         // chegam via o escape hatch `liftedOp` (LIFTED_IR_OP, fora do switch acima), então os
         // testes seguintes cobrem esses caminhos.
-        if (instruction.kind().isMveBeatwise() || instruction.liftedOp() instanceof IrOp.MveLoadStore
-                || instruction.liftedOp() instanceof IrOp.MveWideningLoadStore
-                || instruction.liftedOp() instanceof IrOp.MveGatherScatterOffset
-                || instruction.liftedOp() instanceof IrOp.MveGatherScatterImmediate
-                || instruction.liftedOp() instanceof IrOp.MveIncrementDup
-                || instruction.liftedOp() instanceof IrOp.MveWrappingIncrementDup
-                // B16.6: MveVector2Op/MveVector2OpWidening/MveVectorCarry/MveVectorComplexAdd
+        if (instruction.kind().isMveBeatwise() || instruction.liftedOp() instanceof MveMoveOp.LoadStore
+                || instruction.liftedOp() instanceof MveMoveOp.WideningLoadStore
+                || instruction.liftedOp() instanceof MveMoveOp.GatherScatterOffset
+                || instruction.liftedOp() instanceof MveMoveOp.GatherScatterImmediate
+                || instruction.liftedOp() instanceof MveMoveOp.IncrementDup
+                || instruction.liftedOp() instanceof MveMoveOp.WrappingIncrementDup
+                // B16.6: MveIntegerOp.Vector2Op/MveIntegerOp.Vector2OpWidening/MveIntegerOp.VectorCarry/MveIntegerOp.VectorComplexAdd
                 // também chegam via `liftedOp` e são beatwise/predicadas por `VPT` (`mergemask`
                 // real), mesmo padrão dos escapes acima desde B16.3.
-                || instruction.liftedOp() instanceof IrOp.MveVector2Op
-                || instruction.liftedOp() instanceof IrOp.MveVector2OpWidening
-                || instruction.liftedOp() instanceof IrOp.MveVectorCarry
-                || instruction.liftedOp() instanceof IrOp.MveVectorComplexAdd
+                || instruction.liftedOp() instanceof MveIntegerOp.Vector2Op
+                || instruction.liftedOp() instanceof MveIntegerOp.Vector2OpWidening
+                || instruction.liftedOp() instanceof MveIntegerOp.VectorCarry
+                || instruction.liftedOp() instanceof MveIntegerOp.VectorComplexAdd
                 // B16.7: VMAXA/VMINA, VMAXNMA/VMINNMA, VSHLL T2, VMOVN*/VQMOVN*/VQMOVUN* e a
                 // conversão binary16<->binary32 "bottom"/"top" — mesmo padrão acima.
-                || instruction.liftedOp() instanceof IrOp.MveVectorAbsAccumulate
-                || instruction.liftedOp() instanceof IrOp.MveVectorFpAbsAccumulate
-                || instruction.liftedOp() instanceof IrOp.MveVectorShiftWidenInterleaved
-                || instruction.liftedOp() instanceof IrOp.MveVectorNarrowInterleaved
-                || instruction.liftedOp() instanceof IrOp.MveVectorFpConvertPrecision
+                || instruction.liftedOp() instanceof MveIntegerOp.VectorAbsAccumulate
+                || instruction.liftedOp() instanceof MveFpOp.VectorFpAbsAccumulate
+                || instruction.liftedOp() instanceof MveIntegerOp.VectorShiftWidenInterleaved
+                || instruction.liftedOp() instanceof MveIntegerOp.VectorNarrowInterleaved
+                || instruction.liftedOp() instanceof MveFpOp.VectorFpConvertPrecision
                 // B16.7 sub-família 2 (achado real desta sessão: faltavam aqui desde a sub-família 2
                 // fechar — VCMUL*/VQDMLADH*/VQDMLSDH*/VQDMULL* nunca avançavam VPR/ECI, corrigido
                 // junto com a sub-família 3 por serem o MESMO gancho).
-                || instruction.liftedOp() instanceof IrOp.MveVectorFpComplexMultiply
-                || instruction.liftedOp() instanceof IrOp.MveVectorDualMultiplyAddHigh
-                || instruction.liftedOp() instanceof IrOp.MveVectorDoublingWideningMultiply
+                || instruction.liftedOp() instanceof MveFpOp.VectorFpComplexMultiply
+                || instruction.liftedOp() instanceof MveIntegerOp.VectorDualMultiplyAddHigh
+                || instruction.liftedOp() instanceof MveIntegerOp.VectorDoublingWideningMultiply
                 // B16.7 sub-família 3: VADD_fp/VSUB_fp/VMUL_fp/VABD_fp/VMAXNM/VMINNM/VFMA/VFMS/
                 // VCADD90_fp/VCADD270_fp/VCMLA0/90/180/270 — mesmo padrão acima.
-                || instruction.liftedOp() instanceof IrOp.MveVectorFpTwoOp
-                || instruction.liftedOp() instanceof IrOp.MveVectorFpComplexAdd
-                || instruction.liftedOp() instanceof IrOp.MveVectorFpComplexMultiplyAccumulate
+                || instruction.liftedOp() instanceof MveFpOp.VectorFpTwoOp
+                || instruction.liftedOp() instanceof MveFpOp.VectorFpComplexAdd
+                || instruction.liftedOp() instanceof MveFpOp.VectorFpComplexMultiplyAccumulate
                 // B16.8: VCMP*/VCMP*_fp (vetor×vetor e vetor×escalar) — mesmo padrão acima. O
                 // `VPT` (mask != 0) é aberto ABAIXO, DEPOIS do AdvanceVpt, reproduzindo a ordem
                 // real do QEMU (o helper `DO_VCMP` já chama `mve_advance_vpt` internamente; só
                 // DEPOIS, fora do helper, `do_vcmp`/`do_vcmp_scalar` chamam `gen_vpst` se
-                // `a->mask`) — ver Javadoc de `IrOp.MveVectorCompare`.
-                || instruction.liftedOp() instanceof IrOp.MveVectorCompare
-                || instruction.liftedOp() instanceof IrOp.MveVectorCompareScalar
+                // `a->mask`) — ver Javadoc de `MvePredicationOp.VectorCompare`.
+                || instruction.liftedOp() instanceof MvePredicationOp.VectorCompare
+                || instruction.liftedOp() instanceof MvePredicationOp.VectorCompareScalar
                 // B16.9: operações escalares (vetor × GPR broadcast) — mesmo padrão acima.
-                || instruction.liftedOp() instanceof IrOp.MveVectorScalar
-                || instruction.liftedOp() instanceof IrOp.MveVectorScalarWidening
-                || instruction.liftedOp() instanceof IrOp.MveVectorFpScalar
-                || instruction.liftedOp() instanceof IrOp.MveVectorFpScalarFma
-                || instruction.liftedOp() instanceof IrOp.MveVectorScalarSpecial
+                || instruction.liftedOp() instanceof MveIntegerOp.VectorScalar
+                || instruction.liftedOp() instanceof MveIntegerOp.VectorScalarWidening
+                || instruction.liftedOp() instanceof MveFpOp.VectorFpScalar
+                || instruction.liftedOp() instanceof MveFpOp.VectorFpScalarFma
+                || instruction.liftedOp() instanceof MveIntegerOp.VectorScalarSpecial
                 // B16.11: VSHRNB/T, VRSHRNB/T, VQSHRNB/T_S, VQSHRNB/T_U, VQSHRUNB/T, VQRSHRNB/T_S,
                 // VQRSHRNB/T_U, VQRSHRUNB/T e VSHLC — mesmo padrão acima (o helper real, incluindo
                 // `HELPER(mve_vshlc)`, chama `mve_advance_vpt` no fim).
-                || instruction.liftedOp() instanceof IrOp.MveVectorShiftNarrowImmediateInterleaved
-                || instruction.liftedOp() instanceof IrOp.MveVectorShiftLeftCarry
+                || instruction.liftedOp() instanceof MveIntegerOp.VectorShiftNarrowImmediateInterleaved
+                || instruction.liftedOp() instanceof MveIntegerOp.VectorShiftLeftCarry
                 // B16.13a: 1-op misc (VCLS/VCLZ/VREV*/VMVN/VABS/VNEG/VQABS/VQNEG), VABS_fp/VNEG_fp,
                 // VDUP, VADDV/VADDLV, VABAV e Vimm_1r — todos predicados (mergemask/mve_element_mask
                 // reais), mesmo padrão acima. VMOV_to_2gp/VMOV_from_2gp NÃO entram aqui (não são
                 // predicados — ver o ramo AdvanceEci abaixo).
-                || instruction.liftedOp() instanceof IrOp.MveVectorUnary
-                || instruction.liftedOp() instanceof IrOp.MveVectorFpUnary
-                || instruction.liftedOp() instanceof IrOp.MveVectorDup
-                || instruction.liftedOp() instanceof IrOp.MveVectorAddAcrossVector
-                || instruction.liftedOp() instanceof IrOp.MveVectorAddAcrossVectorLong
-                || instruction.liftedOp() instanceof IrOp.MveVectorAbsoluteDifferenceAccumulate
-                || instruction.liftedOp() instanceof IrOp.MveVectorModifiedImmediate
+                || instruction.liftedOp() instanceof MveIntegerOp.VectorUnary
+                || instruction.liftedOp() instanceof MveFpOp.VectorFpUnary
+                || instruction.liftedOp() instanceof MveMoveOp.VectorDup
+                || instruction.liftedOp() instanceof MveReductionOp.VectorAddAcrossVector
+                || instruction.liftedOp() instanceof MveReductionOp.VectorAddAcrossVectorLong
+                || instruction.liftedOp() instanceof MveReductionOp.VectorAbsoluteDifferenceAccumulate
+                || instruction.liftedOp() instanceof MveMoveOp.VectorModifiedImmediate
                 // B16.13b: VMLADAV/VMLSDAV/VMLALDAV/VMLSLDAV/VRMLALDAVH/VRMLSLDAVH/VMAXV/VMINV/
                 // VMAXAV/VMINAV/VMAXNMV/VMINNMV/VMAXNMAV/VMINNMAV — todos predicados (mergemask/
                 // mve_element_mask reais, `mve_advance_vpt` chamado por todos os helpers verbatim),
                 // mesmo padrão acima.
-                || instruction.liftedOp() instanceof IrOp.MveVectorDualAccumulate
-                || instruction.liftedOp() instanceof IrOp.MveVectorDualAccumulateLong
-                || instruction.liftedOp() instanceof IrOp.MveVectorRoundingDualAccumulateHigh
-                || instruction.liftedOp() instanceof IrOp.MveVectorMinMaxAcrossVector
-                || instruction.liftedOp() instanceof IrOp.MveVectorFpMinMaxAcrossVector) {
-            block.add(new IrOp.AdvanceVpt(Condition.AL));
-            if (instruction.liftedOp() instanceof IrOp.MveVectorCompare compare && compare.mask() != 0) {
-                block.add(new IrOp.Vpst(compare.mask(), compare.condition()));
-            } else if (instruction.liftedOp() instanceof IrOp.MveVectorCompareScalar compareScalar
+                || instruction.liftedOp() instanceof MveReductionOp.VectorDualAccumulate
+                || instruction.liftedOp() instanceof MveReductionOp.VectorDualAccumulateLong
+                || instruction.liftedOp() instanceof MveReductionOp.VectorRoundingDualAccumulateHigh
+                || instruction.liftedOp() instanceof MveReductionOp.VectorMinMaxAcrossVector
+                || instruction.liftedOp() instanceof MveReductionOp.VectorFpMinMaxAcrossVector) {
+            block.add(new MvePredicationOp.AdvanceVpt(Condition.AL));
+            if (instruction.liftedOp() instanceof MvePredicationOp.VectorCompare compare && compare.mask() != 0) {
+                block.add(new MvePredicationOp.Vpst(compare.mask(), compare.condition()));
+            } else if (instruction.liftedOp() instanceof MvePredicationOp.VectorCompareScalar compareScalar
                     && compareScalar.mask() != 0) {
-                block.add(new IrOp.Vpst(compareScalar.mask(), compareScalar.condition()));
+                block.add(new MvePredicationOp.Vpst(compareScalar.mask(), compareScalar.condition()));
             }
-        } else if (instruction.liftedOp() instanceof IrOp.MveInterleavedLoadStore
+        } else if (instruction.liftedOp() instanceof MveMoveOp.InterleavedLoadStore
                 // B16.13a: VMOV_to_2gp/VMOV_from_2gp são "beatwise mas não predicado" (verbatim de
                 // trans_VMOV_to_2gp/trans_VMOV_from_2gp real: só o ECI cicla, nunca chamam
-                // mve_element_mask) — mesma categoria de MveInterleavedLoadStore acima.
-                || instruction.liftedOp() instanceof IrOp.MveMoveLanesGpr) {
+                // mve_element_mask) — mesma categoria de MveMoveOp.InterleavedLoadStore acima.
+                || instruction.liftedOp() instanceof MveMoveOp.MoveLanesGpr) {
             // VLD2/VLD4/VST2/VST4 (B16.5): "beatwise mas não predicado" — só o ECI cicla
             // (`mve_update_and_store_eci` real), o `VPR` nunca é tocado (ao contrário de
-            // AdvanceVpt/mve_advance_vpt) — ver Javadoc de IrOp.MveInterleavedLoadStore.
-            block.add(new IrOp.AdvanceEci(Condition.AL));
+            // AdvanceVpt/mve_advance_vpt) — ver Javadoc de MveMoveOp.InterleavedLoadStore.
+            block.add(new MvePredicationOp.AdvanceEci(Condition.AL));
         }
 
         block.add(new IrOp.Cycle(1));
@@ -910,11 +910,11 @@ public final class StandardIrBuilder implements IrBuilder {
         int prefixAddress = instruction.address();
         int suffixAddress = prefixAddress + 2;
 
-        block.add(new IrOp.ThumbBlPrefix(highOffset, prefixAddress, instruction.condition()));
+        block.add(new BranchOp.ThumbBlPrefix(highOffset, prefixAddress, instruction.condition()));
         block.add(new IrOp.Cycle(1));
         block.add(new IrOp.Fetch(prefixAddress, 2));
 
-        block.add(new IrOp.ThumbBlSuffix(lowOffset, suffixAddress, exchange, instruction.condition()));
+        block.add(new BranchOp.ThumbBlSuffix(lowOffset, suffixAddress, exchange, instruction.condition()));
         block.add(new IrOp.Cycle(1));
         block.add(new IrOp.Fetch(suffixAddress, 2));
 
@@ -1026,7 +1026,7 @@ public final class StandardIrBuilder implements IrBuilder {
                     : new IrOperand.ShiftedRegister(rm, ShiftType.LSL, shiftImm, -1,
                             rmOverride, -1, false, false);
         }
-        block.add(new IrOp.Alu(
+        block.add(new IntegerOp.Alu(
                 tb ? IrOpCode.PKHTB : IrOpCode.PKHBT,
                 instruction.destinationRegister(),
                 instruction.sourceRegister(),
@@ -1054,7 +1054,7 @@ public final class StandardIrBuilder implements IrBuilder {
             operand = new IrOperand.ShiftedRegister(rm, asr ? ShiftType.ASR : ShiftType.LSL,
                     asr && shiftImm == 0 ? 32 : shiftImm, -1, rmOverride, -1, false, false);
         }
-        block.add(new IrOp.Saturate(
+        block.add(new IntegerOp.Saturate(
                 instruction.destinationRegister(),
                 unsigned ? satImm : satImm + 1,
                 unsigned,
@@ -1084,7 +1084,7 @@ public final class StandardIrBuilder implements IrBuilder {
                 : new IrOperand.ShiftedRegister(rm, ShiftType.ROR, rotation, -1,
                         registerValueOverride(instruction, rm), -1, false, false);
         int rn = instruction.sourceRegister();
-        block.add(new IrOp.Alu(
+        block.add(new IntegerOp.Alu(
                 opcode,
                 instruction.destinationRegister(),
                 rn,
@@ -1095,7 +1095,7 @@ public final class StandardIrBuilder implements IrBuilder {
     }
 
     private void liftAlu(IrOpCode opcode, DecodedInstruction instruction, IrBlock.Builder block) {
-        block.add(new IrOp.Alu(
+        block.add(new IntegerOp.Alu(
                 opcode,
                 instruction.destinationRegister(),
                 instruction.sourceRegister(),

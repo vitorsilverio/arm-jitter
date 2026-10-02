@@ -3,6 +3,7 @@ package dev.vitorsilverio.armjitter.codegen.jvm;
 import dev.vitorsilverio.armjitter.codegen.executor.IrBlockExecutor;
 import dev.vitorsilverio.armjitter.core.ArmCore;
 import dev.vitorsilverio.armjitter.ir.IrOp;
+import dev.vitorsilverio.armjitter.ir.SystemOp;
 
 import java.util.concurrent.CopyOnWriteArrayList;
 
@@ -50,7 +51,7 @@ public final class IrOpInterop {
     ///
     /// @param core       núcleo ARM em execução
     /// @param opId       id retornado por {@link #register} em tempo de compilação
-    /// @param blockEndPc PC sequencial do fim do bloco (usado por {@link IrOp.Swi})
+    /// @param blockEndPc PC sequencial do fim do bloco (usado por {@link SystemOp.Swi})
     /// @return {@code true} se a op alterou o PC
     public static boolean executeInterpreted(ArmCore core, int opId, int blockEndPc) {
         return EXECUTORS.get(opId).executeOp(core, REGISTRY.get(opId), blockEndPc);

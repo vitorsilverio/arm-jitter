@@ -13,6 +13,7 @@ import dev.vitorsilverio.armjitter.core.ArmCore;
 import dev.vitorsilverio.armjitter.core.Condition;
 import dev.vitorsilverio.armjitter.core.CpuMode;
 import dev.vitorsilverio.armjitter.core.ItState;
+import dev.vitorsilverio.armjitter.ir.IntegerOp;
 import dev.vitorsilverio.armjitter.ir.IrBlock;
 import dev.vitorsilverio.armjitter.ir.IrOp;
 import dev.vitorsilverio.armjitter.ir.StandardIrBlockLifter;
@@ -285,7 +286,7 @@ class Thumb2BranchesItTest {
 
     private static Condition firstAluCondition(IrBlock block) {
         for (IrOp op : block.operations()) {
-            if (op instanceof IrOp.Alu alu) {
+            if (op instanceof IntegerOp.Alu alu) {
                 return alu.condition();
             }
         }

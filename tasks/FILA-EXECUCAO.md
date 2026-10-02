@@ -45,9 +45,9 @@ sem checar o status real ali.**
 
 **⚠️ "tabela 100%" NÃO é o gatilho da `1.4.0`**: seguem abertos **B20** (PMSA/MPU), **B21** (ARMv1-v3) e as dimensões 2/3 do `ROADMAP-100-ARM.md` (JIT nativo, Truffle). Release continua bloqueada — decisão do usuário pendente se a tabela a 100% basta.
 
-**Fechadas em 2026-10-02:** `E15.1` (absorveu a `E14`) — `mvn verify` agora tem piso de cobertura (`jacoco:check`) e guarda de tamanho de fonte; `E15.2` — `Ir64Op` dividido em 14 interfaces por família (quebra de nome em `ir64`, tabela no `CHANGELOG.md`). Ver **Resultado** de cada task.
+**Fechadas em 2026-10-02:** `E15.1` (absorveu a `E14`) — `mvn verify` agora tem piso de cobertura (`jacoco:check`) e guarda de tamanho de fonte; `E15.2` — `Ir64Op` dividido em 14 interfaces por família (quebra de nome em `ir64`, tabela no `CHANGELOG.md`); `E15.3` — `IrOp` idem (14 interfaces, quebra de nome em `ir`, G5 verde). Ver **Resultado** de cada task.
 
-**Pegáveis a seguir:** `B21.2` em diante, `E15.3` (épico `E15`; ler o **Resultado** da `E15.2` antes), `E16` (`ERET` em `EL0` derruba o host), `C12.5`. `B20.9` bloqueada no usuário. Pendências B18.2: `FEAT_SME_FA64` em preset; `ResetSVEState` na troca AArch64↔AArch32 com `SM=1`.
+**Pegáveis a seguir:** `B21.2` em diante, `E16` (`ERET` em `EL0` derruba o host), `C12.5`. `E15.4`/`E15.5` (épico `E15`) estão desbloqueadas mas são `[REFINAR]` — precisam de rodada de spec antes. `B20.9` bloqueada no usuário. Pendências B18.2: `FEAT_SME_FA64` em preset; `ResetSVEState` na troca AArch64↔AArch32 com `SM=1`.
 
 **Protocolo (a pedido do usuário, sessões estourando orçamento de contexto em ~15 tasks/semana):** G5
 (`tasks/README.md`) agora é condicional — pula suites de gbaemu/ndsemu quando o diff fica só em

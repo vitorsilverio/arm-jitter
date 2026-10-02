@@ -6,6 +6,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import dev.vitorsilverio.armjitter.arch.ArmArchitecture;
 import dev.vitorsilverio.armjitter.codegen.executor.IrBlockExecutor;
 import dev.vitorsilverio.armjitter.ir.IrOp;
+import dev.vitorsilverio.armjitter.ir.MveMoveOp;
 import dev.vitorsilverio.armjitter.support.TestAddressSpace;
 import dev.vitorsilverio.armjitter.swi.SwiDispatcher;
 import org.junit.jupiter.api.Test;
@@ -16,11 +17,11 @@ import org.junit.jupiter.api.Test;
 ///
 /// **Achado que diverge da Aceite original da task, medido contra o QEMU real
 /// (`target/arm/tcg/mve_helper.c`, `DO_VLDR`, via `WebFetch`)**: diferente de
-/// {@link IrOp.MveLoadStore} (B16.3, que PRESERVA lanes mascaradas), um load alargante grava ZERO
+/// {@link MveMoveOp.LoadStore} (B16.3, que PRESERVA lanes mascaradas), um load alargante grava ZERO
 /// nas lanes cujo predicado `VPT` falha (comentário real: "predicated lanes are zeroed instead of
 /// keeping their old values") — só lanes de um beat inteiramente ABANDONADO (`ECI`) preservam o
 /// valor antigo (`UNKNOWN` permitido pelo hardware). O store, ao contrário, só escreve as lanes
-/// ativas (memória mascarada fica intocada, mesmo padrão de {@link IrOp.MveLoadStore}).
+/// ativas (memória mascarada fica intocada, mesmo padrão de {@link MveMoveOp.LoadStore}).
 class MveWideningLoadStoreTest {
     private static final int USAGE_FAULT_VECTOR_ADDRESS = 4 * MProfileException.USAGE_FAULT.number();
     private static final int USAGE_FAULT_HANDLER_PC = 0x2000;
@@ -276,7 +277,7 @@ class MveWideningLoadStoreTest {
         int pcBefore = core.programCounter();
 
         boolean pcChanged = new IrBlockExecutor(ArmArchitecture.ARMV8_1M_MVE)
-                .executeOp(core, new IrOp.MveWideningLoadStore(0, 1, 0, 0, 1, true, true, false, false,
+                .executeOp(core, new MveMoveOp.WideningLoadStore(0, 1, 0, 0, 1, true, true, false, false,
                         Condition.AL), pcBefore);
 
         assertTrue(pcChanged);
@@ -293,7 +294,7 @@ class MveWideningLoadStoreTest {
         core.setRegister(1, DATA_BASE);
 
         boolean pcChanged = new IrBlockExecutor(ArmArchitecture.ARMV8_1M_MVE)
-                .executeOp(core, new IrOp.MveWideningLoadStore(0, 1, 4, 0, 1, true, true, true, false,
+                .executeOp(core, new MveMoveOp.WideningLoadStore(0, 1, 4, 0, 1, true, true, true, false,
                         Condition.EQ), core.programCounter());
 
         assertTrue(!pcChanged);

@@ -3,8 +3,17 @@ package dev.vitorsilverio.armjitter.support;
 import dev.vitorsilverio.armjitter.advsimd.AdvSimdThreeSameOp;
 import dev.vitorsilverio.armjitter.core.Condition;
 import dev.vitorsilverio.armjitter.core.CpuMode;
+import dev.vitorsilverio.armjitter.ir.BranchOp;
+import dev.vitorsilverio.armjitter.ir.IntegerOp;
 import dev.vitorsilverio.armjitter.ir.IrOp;
 import dev.vitorsilverio.armjitter.ir.IrOperand;
+import dev.vitorsilverio.armjitter.ir.MemoryOp;
+import dev.vitorsilverio.armjitter.ir.MveFpOp;
+import dev.vitorsilverio.armjitter.ir.MveOp;
+import dev.vitorsilverio.armjitter.ir.NeonFpOp;
+import dev.vitorsilverio.armjitter.ir.NeonIntegerOp;
+import dev.vitorsilverio.armjitter.ir.SystemOp;
+import dev.vitorsilverio.armjitter.ir.VfpOp;
 import dev.vitorsilverio.armjitter.ir64.AdvSimdFpOp64;
 import dev.vitorsilverio.armjitter.ir64.AdvSimdIntegerOp64;
 import dev.vitorsilverio.armjitter.ir64.CryptoOp64;
@@ -62,39 +71,36 @@ public final class IrOpSamples {
     /// dividiria por zero.
     private static final int DOT_PRODUCT_FOUR_WAYS = 4;
 
-    /// Records de {@link IrOp} que só existem no perfil M (ARMv8-M/ARMv8.1-M), além de todos os
-    /// `Mve*`: o executor os entrega ao `MProfileExceptionModel`, então a amostra precisa de um
-    /// core de perfil M (ver {@link #requiresMProfile}).
+    /// Records de {@link IrOp} que só existem no perfil M (ARMv8-M/ARMv8.1-M), além de toda a
+    /// família {@link MveOp}: o executor os entrega ao `MProfileExceptionModel`, então a amostra
+    /// precisa de um core de perfil M (ver {@link #requiresMProfile}).
     private static final Set<Class<? extends IrOp>> M_PROFILE_RECORDS = Set.of(
-            IrOp.MProfileSystemRegister.class, IrOp.Nocp.class, IrOp.VfpSysregMemoryTransfer.class,
-            IrOp.SecureGateway.class, IrOp.SecureBranchExchange.class, IrOp.VlldmVlstm.class,
-            IrOp.Vscclrm.class, IrOp.LoopStart.class, IrOp.LoopEnd.class,
-            IrOp.LoopClearTailPredication.class, IrOp.ClearMultiple.class, IrOp.Vpst.class,
-            IrOp.Vpnot.class, IrOp.Vpsel.class, IrOp.Vctp.class, IrOp.VprTransfer.class,
-            IrOp.AdvanceVpt.class, IrOp.AdvanceEci.class);
-    private static final String MVE_RECORD_PREFIX = "Mve";
+            SystemOp.MProfileSystemRegister.class, SystemOp.Nocp.class, VfpOp.SysregMemoryTransfer.class,
+            SystemOp.SecureGateway.class, BranchOp.SecureBranchExchange.class, VfpOp.VlldmVlstm.class,
+            VfpOp.Vscclrm.class, BranchOp.LoopStart.class, BranchOp.LoopEnd.class,
+            IntegerOp.ClearMultiple.class);
 
     static {
         // ── 32 bits ──────────────────────────────────────────────────────────────────────────
-        override(IrOp.Load.class, "sizeBytes", WORD_BYTES);
-        override(IrOp.Store.class, "sizeBytes", WORD_BYTES);
-        override(IrOp.LoadExclusive.class, "sizeBytes", WORD_BYTES);
-        override(IrOp.StoreExclusive.class, "sizeBytes", WORD_BYTES);
-        override(IrOp.Swap.class, "sizeBytes", WORD_BYTES);
+        override(MemoryOp.Load.class, "sizeBytes", WORD_BYTES);
+        override(MemoryOp.Store.class, "sizeBytes", WORD_BYTES);
+        override(MemoryOp.LoadExclusive.class, "sizeBytes", WORD_BYTES);
+        override(MemoryOp.StoreExclusive.class, "sizeBytes", WORD_BYTES);
+        override(MemoryOp.Swap.class, "sizeBytes", WORD_BYTES);
         // `SRS`: o modo-alvo é o campo de 5 bits do CPSR; `0` não é modo nenhum.
-        override(IrOp.StoreReturnState.class, "targetMode", CpuMode.SUPERVISOR.bits());
+        override(SystemOp.StoreReturnState.class, "targetMode", CpuMode.SUPERVISOR.bits());
         for (Class<?> fpRecord : List.of(
-                IrOp.NeonFpThreeSame.class, IrOp.NeonFpPairwise.class, IrOp.NeonFpThreeSameByElement.class,
-                IrOp.NeonComplex.class, IrOp.NeonComplexByElement.class,
-                IrOp.MveVectorFpComplexMultiply.class, IrOp.MveVectorFpTwoOp.class,
-                IrOp.MveVectorFpComplexAdd.class, IrOp.MveVectorFpComplexMultiplyAccumulate.class,
-                IrOp.MveVectorFpScalar.class, IrOp.MveVectorFpScalarFma.class,
-                IrOp.MveVectorFpConvert.class, IrOp.MveVectorFpUnary.class)) {
+                NeonFpOp.FpThreeSame.class, NeonFpOp.FpPairwise.class, NeonFpOp.FpThreeSameByElement.class,
+                NeonFpOp.Complex.class, NeonFpOp.ComplexByElement.class,
+                MveFpOp.VectorFpComplexMultiply.class, MveFpOp.VectorFpTwoOp.class,
+                MveFpOp.VectorFpComplexAdd.class, MveFpOp.VectorFpComplexMultiplyAccumulate.class,
+                MveFpOp.VectorFpScalar.class, MveFpOp.VectorFpScalarFma.class,
+                MveFpOp.VectorFpConvert.class, MveFpOp.VectorFpUnary.class)) {
             override(fpRecord, "esz", ESZ_SINGLE_PRECISION);
         }
         // "Por elemento" só existe para a família de multiplicação (a primeira constante é `ADD`).
-        override(IrOp.NeonThreeSameByElement.class, "op", AdvSimdThreeSameOp.MUL);
-        override(IrOp.NeonThreeSameByElement.class, "esz", ESZ_HALFWORD);
+        override(NeonIntegerOp.ThreeSameByElement.class, "op", AdvSimdThreeSameOp.MUL);
+        override(NeonIntegerOp.ThreeSameByElement.class, "esz", ESZ_HALFWORD);
 
         // ── 64 bits ──────────────────────────────────────────────────────────────────────────
         // O grupo lógico nunca carrega `ADD`/`SUB` (primeiras constantes de `Ir64AluOp`).
@@ -120,8 +126,7 @@ public final class IrOpSamples {
     /// `true` quando a amostra precisa de um core de perfil M (`MProfileExceptionModel` + preset
     /// ARMv8.1-M com MVE) para ser executada.
     public static boolean requiresMProfile(IrOp op) {
-        Class<?> recordClass = op.getClass();
-        return M_PROFILE_RECORDS.contains(recordClass) || recordClass.getSimpleName().startsWith(MVE_RECORD_PREFIX);
+        return op instanceof MveOp || M_PROFILE_RECORDS.contains(op.getClass());
     }
 
     /// Uma instância por `record` permitido de {@link IrOp}, na ordem do `permits`.

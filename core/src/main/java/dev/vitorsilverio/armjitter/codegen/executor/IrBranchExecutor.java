@@ -2,12 +2,12 @@ package dev.vitorsilverio.armjitter.codegen.executor;
 
 import dev.vitorsilverio.armjitter.core.ArmCore;
 import dev.vitorsilverio.armjitter.core.FpscrRegister;
-import dev.vitorsilverio.armjitter.ir.IrOp;
+import dev.vitorsilverio.armjitter.ir.BranchOp;
 
 /// Executa branches e interworking da IR interpretada.
 public final class IrBranchExecutor {
     /// `LR`/`R14` reusado como contador de loop pelo Low Overhead Branch Extension (B15.6,
-    /// ARMv8.1-M) — não há registrador oculto, ver Javadoc de `IrOp.LoopStart`/`IrOp.LoopEnd`.
+    /// ARMv8.1-M) — não há registrador oculto, ver Javadoc de `BranchOp.LoopStart`/`BranchOp.LoopEnd`.
     private static final int LOOP_COUNTER_REGISTER = 14;
 
     private final IrExecutionSupport support;
@@ -17,7 +17,7 @@ public final class IrBranchExecutor {
     }
 
     /// @return {@code true} quando o PC foi alterado pela operação
-    public boolean executeBranch(ArmCore core, IrOp.Branch branch) {
+    public boolean executeBranch(ArmCore core, BranchOp.Branch branch) {
         if (!core.cpsr().evalCond(branch.condition())) {
             return false;
         }
@@ -29,7 +29,7 @@ public final class IrBranchExecutor {
     }
 
     /// @return {@code true} quando o PC foi alterado pela operação
-    public boolean executeBranchExchange(ArmCore core, IrOp.BranchExchange branch) {
+    public boolean executeBranchExchange(ArmCore core, BranchOp.BranchExchange branch) {
         if (!core.cpsr().evalCond(branch.condition())) {
             return false;
         }
@@ -52,7 +52,7 @@ public final class IrBranchExecutor {
     /// `EXC_RETURN`/`FNC_RETURN`) — ver Javadoc de `MProfileExceptionModel#secureBranchExchange`.
     ///
     /// @return {@code true} quando o PC foi alterado pela operação
-    public boolean executeSecureBranchExchange(ArmCore core, IrOp.SecureBranchExchange branch) {
+    public boolean executeSecureBranchExchange(ArmCore core, BranchOp.SecureBranchExchange branch) {
         if (!core.cpsr().evalCond(branch.condition())) {
             return false;
         }
@@ -62,7 +62,7 @@ public final class IrBranchExecutor {
         return true;
     }
 
-    public void executeThumbBlPrefix(ArmCore core, IrOp.ThumbBlPrefix prefix) {
+    public void executeThumbBlPrefix(ArmCore core, BranchOp.ThumbBlPrefix prefix) {
         if (!core.cpsr().evalCond(prefix.condition())) {
             return;
         }
@@ -70,7 +70,7 @@ public final class IrBranchExecutor {
     }
 
     /// @return {@code true} quando o PC foi alterado pela operação
-    public boolean executeThumbBlSuffix(ArmCore core, IrOp.ThumbBlSuffix suffix) {
+    public boolean executeThumbBlSuffix(ArmCore core, BranchOp.ThumbBlSuffix suffix) {
         if (!core.cpsr().evalCond(suffix.condition())) {
             return false;
         }
@@ -92,7 +92,7 @@ public final class IrBranchExecutor {
     /// registrador (ver a decisão D3 em `b2.4-thumb2-branches-it.md`).
     ///
     /// @return {@code true} quando o PC foi alterado pela operação
-    public boolean executeTableBranch(ArmCore core, IrOp.TableBranch tableBranch) {
+    public boolean executeTableBranch(ArmCore core, BranchOp.TableBranch tableBranch) {
         if (!core.cpsr().evalCond(tableBranch.condition())) {
             return false;
         }
@@ -113,7 +113,7 @@ public final class IrBranchExecutor {
     /// `CBZ`/`CBNZ` (B2.4): desvia conforme `rn` seja zero/não-zero, sem tocar NZCV.
     ///
     /// @return {@code true} quando o PC foi alterado pela operação
-    public boolean executeCompareBranchZero(ArmCore core, IrOp.CompareBranchZero cbz) {
+    public boolean executeCompareBranchZero(ArmCore core, BranchOp.CompareBranchZero cbz) {
         if (!core.cpsr().evalCond(cbz.condition())) {
             return false;
         }
@@ -132,7 +132,7 @@ public final class IrBranchExecutor {
     /// raro/válido de `rn==LR`, ver Armadilha 4 da task) e, nas formas `*TP`, `LTPSIZE = size`.
     ///
     /// @return {@code true} quando o PC foi alterado pela operação
-    public boolean executeLoopStart(ArmCore core, IrOp.LoopStart loopStart) {
+    public boolean executeLoopStart(ArmCore core, BranchOp.LoopStart loopStart) {
         if (!core.cpsr().evalCond(loopStart.condition())) {
             return false;
         }
@@ -142,7 +142,7 @@ public final class IrBranchExecutor {
             return true;
         }
         core.setRegister(LOOP_COUNTER_REGISTER, count);
-        if (loopStart.ltpsize() != IrOp.LoopStart.NO_LTPSIZE) {
+        if (loopStart.ltpsize() != BranchOp.LoopStart.NO_LTPSIZE) {
             core.fpscr().setLtpsize(loopStart.ltpsize());
         }
         return false;
@@ -154,7 +154,7 @@ public final class IrBranchExecutor {
     /// `LR -= decremento` e desvia de volta. Decremento = `1` (`LE`) ou `1 << (4 - LTPSIZE)` (`LETP`).
     ///
     /// @return {@code true} quando o PC foi alterado pela operação
-    public boolean executeLoopEnd(ArmCore core, IrOp.LoopEnd loopEnd) {
+    public boolean executeLoopEnd(ArmCore core, BranchOp.LoopEnd loopEnd) {
         if (!core.cpsr().evalCond(loopEnd.condition())) {
             return false;
         }

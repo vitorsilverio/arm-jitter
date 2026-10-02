@@ -144,8 +144,8 @@ public final class GuestToHostMapper {
     }
 
     // ── VFP (B3.6, PR2) ─────────────────────────────────────────────────────────
-    // Ligações usadas pelo caminho quente de bytecode direto (VfpAlu ADD/SUB/MUL/DIV/NEG/ABS/
-    // COPY, VfpLoad/VfpStore, VfpCoreTransfer, VfpMoveImmediate) — os demais Vfp* passam por um
+    // Ligações usadas pelo caminho quente de bytecode direto (VfpOp.Alu ADD/SUB/MUL/DIV/NEG/ABS/
+    // COPY, VfpOp.Load/VfpOp.Store, VfpOp.CoreTransfer, VfpOp.MoveImmediate) — os demais Vfp* passam por um
     // helper estático em AsmRuntimeHelpers (que chama estes mesmos acessores em Java puro).
 
     /// {@link dev.vitorsilverio.armjitter.core.ArmCore#vfp()}

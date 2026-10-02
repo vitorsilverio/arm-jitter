@@ -4,7 +4,7 @@ import dev.vitorsilverio.armjitter.advsimd.MveCompareCondition;
 import dev.vitorsilverio.armjitter.arch.ArmArchitecture;
 import dev.vitorsilverio.armjitter.arch.ArmFeature;
 import dev.vitorsilverio.armjitter.core.Condition;
-import dev.vitorsilverio.armjitter.ir.IrOp;
+import dev.vitorsilverio.armjitter.ir.MvePredicationOp;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -45,13 +45,13 @@ class Thumb2MveComparisonDecoderTest {
         return new Thumb2MveComparisonDecoder(architecture).tryDecode(raw, 0, Condition.AL);
     }
 
-    private static IrOp.MveVectorCompare vectorCompare(int raw) {
-        return assertInstanceOf(IrOp.MveVectorCompare.class,
+    private static MvePredicationOp.VectorCompare vectorCompare(int raw) {
+        return assertInstanceOf(MvePredicationOp.VectorCompare.class,
                 tryDecode(ArmArchitecture.ARMV8_1M_MVE, raw).liftedOp());
     }
 
-    private static IrOp.MveVectorCompareScalar scalarCompare(int raw) {
-        return assertInstanceOf(IrOp.MveVectorCompareScalar.class,
+    private static MvePredicationOp.VectorCompareScalar scalarCompare(int raw) {
+        return assertInstanceOf(MvePredicationOp.VectorCompareScalar.class,
                 tryDecode(ArmArchitecture.ARMV8_1M_MVE, raw).liftedOp());
     }
 
@@ -60,7 +60,7 @@ class Thumb2MveComparisonDecoderTest {
     @Test
     void decodesIntegerVectorCompareConditionsAndRegisters() {
         int raw = vectorRaw(VALUE_VCMPEQ, 3, 5, 1, 0);
-        IrOp.MveVectorCompare op = vectorCompare(raw);
+        MvePredicationOp.VectorCompare op = vectorCompare(raw);
         assertEquals(MveCompareCondition.EQ, op.compareCondition());
         assertTrue(!op.floatingPoint());
         assertEquals(1, op.esz());
@@ -92,7 +92,7 @@ class Thumb2MveComparisonDecoderTest {
 
     @Test
     void sizeThreeOnIntegerFormBecomesTheFpFormWhenMveFloatIsPresent() {
-        IrOp.MveVectorCompare op = vectorCompare(vectorRaw(VALUE_VCMPEQ, 0, 0, 3, 0));
+        MvePredicationOp.VectorCompare op = vectorCompare(vectorRaw(VALUE_VCMPEQ, 0, 0, 3, 0));
         assertTrue(op.floatingPoint(), "bits[21:20]=11 é literal do encoding _fp, não um size==3 do inteiro");
     }
 
@@ -103,7 +103,7 @@ class Thumb2MveComparisonDecoderTest {
 
     @Test
     void nonZeroMaskIsCarriedThrough() {
-        IrOp.MveVectorCompare op = vectorCompare(vectorRaw(VALUE_VCMPGE, 0, 0, 2, 0b1010));
+        MvePredicationOp.VectorCompare op = vectorCompare(vectorRaw(VALUE_VCMPGE, 0, 0, 2, 0b1010));
         assertEquals(0b1010, op.mask());
     }
 
@@ -118,7 +118,7 @@ class Thumb2MveComparisonDecoderTest {
     void decodesFloatingPointVectorCompareAndSizeFromBit28() {
         int rawBinary32 = vectorRaw(VALUE_VCMPEQ_FP, 2, 3, 0, 0) & ~(1 << 28);
         int rawBinary16 = rawBinary32 | (1 << 28);
-        IrOp.MveVectorCompare binary32 = vectorCompare(rawBinary32);
+        MvePredicationOp.VectorCompare binary32 = vectorCompare(rawBinary32);
         assertTrue(binary32.floatingPoint());
         assertEquals(2, binary32.esz());
         assertEquals(MveCompareCondition.EQ, binary32.compareCondition());
@@ -140,7 +140,7 @@ class Thumb2MveComparisonDecoderTest {
     @Test
     void decodesIntegerScalarCompare() {
         int raw = scalarRaw(VALUE_VCMPEQ_SCALAR, 4, 7, 2, 0);
-        IrOp.MveVectorCompareScalar op = scalarCompare(raw);
+        MvePredicationOp.VectorCompareScalar op = scalarCompare(raw);
         assertEquals(MveCompareCondition.EQ, op.compareCondition());
         assertTrue(!op.floatingPoint());
         assertEquals(2, op.esz());
@@ -157,7 +157,7 @@ class Thumb2MveComparisonDecoderTest {
     void acceptsRmEqualsFifteenAtDecodeTime() {
         // Achado medido contra o QEMU real: Rm==15 é "constante zero", NÃO UNPREDICTABLE — o
         // decode aceita, a resolução (rm=0) acontece no executor.
-        IrOp.MveVectorCompareScalar op = scalarCompare(scalarRaw(VALUE_VCMPEQ_SCALAR, 0, 15, 0, 0));
+        MvePredicationOp.VectorCompareScalar op = scalarCompare(scalarRaw(VALUE_VCMPEQ_SCALAR, 0, 15, 0, 0));
         assertEquals(15, op.rm());
     }
 
@@ -187,7 +187,7 @@ class Thumb2MveComparisonDecoderTest {
     void decodesTheFourScalarFpLinesWithFixedSizeTwoFromTheDupAndScalarBlocks() {
         // VCMPGT_fp_scalar (linha 416, size=2): mesmos campos de @vcmp_fp_scalar, nibble alto 1110.
         int value = 0xEE311F60;
-        IrOp.MveVectorCompareScalar op = scalarCompare(scalarRaw(value, 0, 2, 0, 0));
+        MvePredicationOp.VectorCompareScalar op = scalarCompare(scalarRaw(value, 0, 2, 0, 0));
         assertEquals(MveCompareCondition.GT, op.compareCondition());
         assertEquals(2, op.esz());
         assertTrue(op.floatingPoint());
@@ -197,8 +197,8 @@ class Thumb2MveComparisonDecoderTest {
 
     @Test
     void noneDecodeAsNocpThroughTheFullThumbPipeline() {
-        assertInstanceOf(IrOp.MveVectorCompare.class, decodeThumb32(vectorRaw(VALUE_VCMPEQ, 0, 0, 0, 0)).liftedOp());
-        assertInstanceOf(IrOp.MveVectorCompareScalar.class,
+        assertInstanceOf(MvePredicationOp.VectorCompare.class, decodeThumb32(vectorRaw(VALUE_VCMPEQ, 0, 0, 0, 0)).liftedOp());
+        assertInstanceOf(MvePredicationOp.VectorCompareScalar.class,
                 decodeThumb32(scalarRaw(VALUE_VCMPEQ_SCALAR, 0, 0, 0, 0)).liftedOp());
     }
 
@@ -275,7 +275,7 @@ class Thumb2MveComparisonDecoderTest {
     @Test
     void allEightVectorIntegerConditionsDecodeCorrectly() {
         for (ExpectedLine line : VECTOR_INT_LINES) {
-            IrOp.MveVectorCompare op = vectorCompare(vectorRaw(line.value(), 1, 2, 1, 0));
+            MvePredicationOp.VectorCompare op = vectorCompare(vectorRaw(line.value(), 1, 2, 1, 0));
             assertEquals(line.condition(), op.compareCondition(), line.name());
             assertTrue(!op.floatingPoint(), line.name());
         }
@@ -285,7 +285,7 @@ class Thumb2MveComparisonDecoderTest {
     @Test
     void allSixVectorFloatingPointConditionsDecodeCorrectly() {
         for (ExpectedLine line : VECTOR_FP_LINES) {
-            IrOp.MveVectorCompare op = vectorCompare(vectorRaw(line.value(), 1, 2, 0, 0));
+            MvePredicationOp.VectorCompare op = vectorCompare(vectorRaw(line.value(), 1, 2, 0, 0));
             assertEquals(line.condition(), op.compareCondition(), line.name());
             assertTrue(op.floatingPoint(), line.name());
         }
@@ -294,7 +294,7 @@ class Thumb2MveComparisonDecoderTest {
     @Test
     void allEightScalarIntegerConditionsDecodeCorrectly() {
         for (ExpectedLine line : SCALAR_INT_LINES) {
-            IrOp.MveVectorCompareScalar op = scalarCompare(scalarRaw(line.value(), 1, 2, 1, 0));
+            MvePredicationOp.VectorCompareScalar op = scalarCompare(scalarRaw(line.value(), 1, 2, 1, 0));
             assertEquals(line.condition(), op.compareCondition(), line.name());
             assertTrue(!op.floatingPoint(), line.name());
         }
@@ -304,7 +304,7 @@ class Thumb2MveComparisonDecoderTest {
     @Test
     void allSixScalarFloatingPointConditionsWithFixedSizeOneDecodeCorrectly() {
         for (ExpectedLine line : SCALAR_FP_SIZE1_LINES) {
-            IrOp.MveVectorCompareScalar op = scalarCompare(scalarRaw(line.value(), 1, 2, 0, 0));
+            MvePredicationOp.VectorCompareScalar op = scalarCompare(scalarRaw(line.value(), 1, 2, 0, 0));
             assertEquals(line.condition(), op.compareCondition(), line.name());
             assertTrue(op.floatingPoint(), line.name());
             assertEquals(1, op.esz(), line.name());
@@ -314,7 +314,7 @@ class Thumb2MveComparisonDecoderTest {
     @Test
     void allSixScalarFloatingPointConditionsWithFixedSizeTwoDecodeCorrectly() {
         for (ExpectedLine line : SCALAR_FP_SIZE2_LINES) {
-            IrOp.MveVectorCompareScalar op = scalarCompare(scalarRaw(line.value(), 1, 2, 0, 0));
+            MvePredicationOp.VectorCompareScalar op = scalarCompare(scalarRaw(line.value(), 1, 2, 0, 0));
             assertEquals(line.condition(), op.compareCondition(), line.name());
             assertTrue(op.floatingPoint(), line.name());
             assertEquals(2, op.esz(), line.name());

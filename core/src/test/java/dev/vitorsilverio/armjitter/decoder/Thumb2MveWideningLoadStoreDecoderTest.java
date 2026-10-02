@@ -2,7 +2,7 @@ package dev.vitorsilverio.armjitter.decoder;
 
 import dev.vitorsilverio.armjitter.arch.ArmArchitecture;
 import dev.vitorsilverio.armjitter.core.Condition;
-import dev.vitorsilverio.armjitter.ir.IrOp;
+import dev.vitorsilverio.armjitter.ir.MveMoveOp;
 import dev.vitorsilverio.armjitter.support.TestAddressSpace;
 import org.junit.jupiter.api.Test;
 
@@ -46,7 +46,7 @@ class Thumb2MveWideningLoadStoreDecoderTest {
         // VLDSTB_H: P=1,W=1, A=1, U=0 (sinal), memória=byte, registrador=halfword, imm7=5 -> offset=5 (<<0).
         int r = raw(true, true, true, true, false, false, 1, 3, SIZE_MARKER_HALFWORD, 5);
         DecodedInstruction decoded = tryDecode(ArmArchitecture.ARMV8_1M_MVE, r);
-        IrOp.MveWideningLoadStore op = assertInstanceOf(IrOp.MveWideningLoadStore.class, decoded.liftedOp());
+        MveMoveOp.WideningLoadStore op = assertInstanceOf(MveMoveOp.WideningLoadStore.class, decoded.liftedOp());
         assertEquals(3, op.qd());
         assertEquals(1, op.rn());
         assertEquals(5, op.offset());
@@ -62,7 +62,7 @@ class Thumb2MveWideningLoadStoreDecoderTest {
     void decodesVldstbHUnsignedLoad() {
         int r = raw(true, true, false, true, true, false, 2, 0, SIZE_MARKER_HALFWORD, 0);
         DecodedInstruction decoded = tryDecode(ArmArchitecture.ARMV8_1M_MVE, r);
-        IrOp.MveWideningLoadStore op = assertInstanceOf(IrOp.MveWideningLoadStore.class, decoded.liftedOp());
+        MveMoveOp.WideningLoadStore op = assertInstanceOf(MveMoveOp.WideningLoadStore.class, decoded.liftedOp());
         assertEquals(false, op.signed());
     }
 
@@ -70,7 +70,7 @@ class Thumb2MveWideningLoadStoreDecoderTest {
     void decodesVldstbWByteToWord() {
         int r = raw(true, true, false, true, false, false, 1, 4, SIZE_MARKER_WORD, 0);
         DecodedInstruction decoded = tryDecode(ArmArchitecture.ARMV8_1M_MVE, r);
-        IrOp.MveWideningLoadStore op = assertInstanceOf(IrOp.MveWideningLoadStore.class, decoded.liftedOp());
+        MveMoveOp.WideningLoadStore op = assertInstanceOf(MveMoveOp.WideningLoadStore.class, decoded.liftedOp());
         assertEquals(0, op.memorySizeLog2());
         assertEquals(2, op.registerSizeLog2());
     }
@@ -80,7 +80,7 @@ class Thumb2MveWideningLoadStoreDecoderTest {
         // VLDSTH_W: memória=halfword, registrador=word; imm7=5 -> offset=10 (<<1).
         int r = raw(true, true, false, true, false, true, 1, 4, SIZE_MARKER_WORD, 5);
         DecodedInstruction decoded = tryDecode(ArmArchitecture.ARMV8_1M_MVE, r);
-        IrOp.MveWideningLoadStore op = assertInstanceOf(IrOp.MveWideningLoadStore.class, decoded.liftedOp());
+        MveMoveOp.WideningLoadStore op = assertInstanceOf(MveMoveOp.WideningLoadStore.class, decoded.liftedOp());
         assertEquals(1, op.memorySizeLog2());
         assertEquals(2, op.registerSizeLog2());
         assertEquals(10, op.offset());
@@ -91,7 +91,7 @@ class Thumb2MveWideningLoadStoreDecoderTest {
         // P=0 (força pós-index, W=1 obrigatório), A=0 (subtrai), L=0 (store), U=0 obrigatório.
         int r = raw(false, false, true, false, false, false, 2, 7, SIZE_MARKER_HALFWORD, 9);
         DecodedInstruction decoded = tryDecode(ArmArchitecture.ARMV8_1M_MVE, r);
-        IrOp.MveWideningLoadStore op = assertInstanceOf(IrOp.MveWideningLoadStore.class, decoded.liftedOp());
+        MveMoveOp.WideningLoadStore op = assertInstanceOf(MveMoveOp.WideningLoadStore.class, decoded.liftedOp());
         assertEquals(false, op.load());
         assertEquals(-9, op.offset());
         assertEquals(true, op.writeback());
@@ -148,7 +148,7 @@ class Thumb2MveWideningLoadStoreDecoderTest {
         int r = raw(true, true, false, true, false, false, 1, 3, SIZE_MARKER_HALFWORD, 5);
         DecodedInstruction decoded = decodeThumb32(r);
         assertEquals(InstructionKind.LIFTED_IR_OP, decoded.kind());
-        assertInstanceOf(IrOp.MveWideningLoadStore.class, decoded.liftedOp());
+        assertInstanceOf(MveMoveOp.WideningLoadStore.class, decoded.liftedOp());
     }
 
     private static DecodedInstruction decodeThumb32(int raw32) {

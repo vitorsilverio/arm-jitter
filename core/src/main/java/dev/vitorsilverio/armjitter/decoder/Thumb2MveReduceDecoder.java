@@ -6,7 +6,8 @@ import dev.vitorsilverio.armjitter.arch.ArmFeature;
 import dev.vitorsilverio.armjitter.arch.DecoderExtension;
 import dev.vitorsilverio.armjitter.core.Condition;
 import dev.vitorsilverio.armjitter.core.VfpRegisters;
-import dev.vitorsilverio.armjitter.ir.IrOp;
+import dev.vitorsilverio.armjitter.ir.MveMoveOp;
+import dev.vitorsilverio.armjitter.ir.MveReductionOp;
 
 /// `VADDV`/`VADDLV`/`VABAV_S`/`VABAV_U`/`Vimm_1r` — sub-família 4 da B16.13a (perfil M, MVE/Helium,
 /// `target/isa-decode/mve.decode`, linhas 575-597, 5 encodings, bit a bit contra o arquivo real):
@@ -29,7 +30,7 @@ import dev.vitorsilverio.armjitter.ir.IrOp;
 ///
 /// **Sem beat-wise partido**: `accumulate=false` (`a=0`) sempre começa a soma do ZERO (o "primeiro
 /// beat" do QEMU real, já que este emulador executa cada instrução atomicamente — ver Javadoc de
-/// {@link IrOp.MveVectorAddAcrossVector}). `VABAV_S`/`VABAV_U` NÃO têm bit `a`: sempre acumulam
+/// {@link MveReductionOp.VectorAddAcrossVector}). `VABAV_S`/`VABAV_U` NÃO têm bit `a`: sempre acumulam
 /// sobre `Rda` atual (verbatim de `DO_VABAV`).
 ///
 /// **`Vimm_1r` reusa `AdvSimdModifiedImmediate.expand`** (RFC B13.2 D1, mesmo núcleo do `VORR`/
@@ -189,7 +190,7 @@ public final class Thumb2MveReduceDecoder implements DecoderExtension {
         boolean unsignedForm = ((raw >>> U_BIT) & 1) != 0;
         boolean accumulate = ((raw >>> A_BIT) & 1) != 0;
         return DecodedInstruction.lifted(address, raw, InstructionSet.THUMB, condition,
-                new IrOp.MveVectorAddAcrossVector(unsignedForm, accumulate, size, qm, rda, condition));
+                new MveReductionOp.VectorAddAcrossVector(unsignedForm, accumulate, size, qm, rda, condition));
     }
 
     private DecodedInstruction tryDecodeAddLv(int raw, int address, Condition condition) {
@@ -226,7 +227,7 @@ public final class Thumb2MveReduceDecoder implements DecoderExtension {
         boolean unsignedForm = ((raw >>> U_BIT) & 1) != 0;
         boolean accumulate = ((raw >>> A_BIT) & 1) != 0;
         return DecodedInstruction.lifted(address, raw, InstructionSet.THUMB, condition,
-                new IrOp.MveVectorAddAcrossVectorLong(unsignedForm, accumulate, qm, rdahi, rdalo, condition));
+                new MveReductionOp.VectorAddAcrossVectorLong(unsignedForm, accumulate, qm, rdahi, rdalo, condition));
     }
 
     private DecodedInstruction tryDecodeAbav(int raw, int address, Condition condition) {
@@ -261,7 +262,7 @@ public final class Thumb2MveReduceDecoder implements DecoderExtension {
         }
         boolean unsignedForm = ((raw >>> U_BIT) & 1) != 0;
         return DecodedInstruction.lifted(address, raw, InstructionSet.THUMB, condition,
-                new IrOp.MveVectorAbsoluteDifferenceAccumulate(unsignedForm, size, qn, qm, rda, condition));
+                new MveReductionOp.VectorAbsoluteDifferenceAccumulate(unsignedForm, size, qn, qm, rda, condition));
     }
 
     private DecodedInstruction tryDecodeImm(int raw, int address, Condition condition) {
@@ -297,6 +298,6 @@ public final class Thumb2MveReduceDecoder implements DecoderExtension {
                 | (raw & VIMM_IMM_LOW_MASK);
         AdvSimdModifiedImmediate.Expanded expanded = AdvSimdModifiedImmediate.expand(imm8, cmode, op);
         return DecodedInstruction.lifted(address, raw, InstructionSet.THUMB, condition,
-                new IrOp.MveVectorModifiedImmediate(expanded.op(), expanded.imm64(), qd, condition));
+                new MveMoveOp.VectorModifiedImmediate(expanded.op(), expanded.imm64(), qd, condition));
     }
 }

@@ -7,6 +7,7 @@ import dev.vitorsilverio.armjitter.codegen.executor.IrBlockExecutor;
 import dev.vitorsilverio.armjitter.core.ArmCore;
 import dev.vitorsilverio.armjitter.ir.IrBlock;
 import dev.vitorsilverio.armjitter.ir.IrOp;
+import dev.vitorsilverio.armjitter.ir.NeonIntegerOp;
 import dev.vitorsilverio.armjitter.ir.StandardIrBuilder;
 import dev.vitorsilverio.armjitter.support.TestAddressSpace;
 import dev.vitorsilverio.armjitter.swi.SwiDispatcher;
@@ -18,8 +19,8 @@ import java.util.List;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
 /// `neon-shared.decode` — `VSDOT`/`VUDOT`/`VUSDOT`/`VSDOT_scalar`/`VUDOT_scalar`/`VUSDOT_scalar`/
-/// `VSUDOT_scalar` (task B13.18, `FEAT_DotProd`/`FEAT_I8MM`) → {@link IrOp.NeonDotProduct}/
-/// {@link IrOp.NeonDotProductByElement} → execução pelo núcleo vetorial COMPARTILHADO
+/// `VSUDOT_scalar` (task B13.18, `FEAT_DotProd`/`FEAT_I8MM`) → {@link NeonIntegerOp.DotProduct}/
+/// {@link NeonIntegerOp.DotProductByElement} → execução pelo núcleo vetorial COMPARTILHADO
 /// ({@code AdvSimdLanes.dotProduct}/`dotProductByElement`).
 ///
 /// Encodings golden conferidos com `arm-none-eabi-as -march=armv8.2-a+i8mm -mfpu=neon-fp-armv8
@@ -248,26 +249,26 @@ class NeonSharedDecoderDotProductTest {
 
     @Test
     void vectorFormDecodesSignsAndRegisters() {
-        assertEquals(new IrOp.NeonDotProduct(true, true, true, 0, 2, 4),
+        assertEquals(new NeonIntegerOp.DotProduct(true, true, true, 0, 2, 4),
                 liftedOf(dotSameSignVector(0, true, 0, 2, 4)));   // VSDOT: assinado/assinado
-        assertEquals(new IrOp.NeonDotProduct(false, false, true, 0, 2, 4),
+        assertEquals(new NeonIntegerOp.DotProduct(false, false, true, 0, 2, 4),
                 liftedOf(dotSameSignVector(1, true, 0, 2, 4)));   // VUDOT: sem-sinal/sem-sinal
-        assertEquals(new IrOp.NeonDotProduct(false, true, false, 0, 1, 2),
+        assertEquals(new NeonIntegerOp.DotProduct(false, true, false, 0, 1, 2),
                 liftedOf(vusdotVector(false, 0, 1, 2)));          // VUSDOT: sem-sinal/assinado
     }
 
     @Test
     void scalarFormDecodesSignsIndexAndDirectVm() {
-        assertEquals(new IrOp.NeonDotProductByElement(true, true, true, 0, 2, 4, 0),
+        assertEquals(new NeonIntegerOp.DotProductByElement(true, true, true, 0, 2, 4, 0),
                 liftedOf(dotSameSignScalar(0, true, 0, 2, 4, 0)));  // VSDOT_scalar
-        assertEquals(new IrOp.NeonDotProductByElement(false, false, true, 0, 2, 4, 1),
+        assertEquals(new NeonIntegerOp.DotProductByElement(false, false, true, 0, 2, 4, 1),
                 liftedOf(dotSameSignScalar(1, true, 0, 2, 4, 1)));  // VUDOT_scalar
-        assertEquals(new IrOp.NeonDotProductByElement(false, true, false, 0, 1, 2, 1),
+        assertEquals(new NeonIntegerOp.DotProductByElement(false, true, false, 0, 1, 2, 1),
                 liftedOf(dotMixedScalar(0, false, 0, 1, 2, 1)));    // VUSDOT_scalar: sem-sinal/assinado
-        assertEquals(new IrOp.NeonDotProductByElement(true, false, false, 0, 1, 2, 1),
+        assertEquals(new NeonIntegerOp.DotProductByElement(true, false, false, 0, 1, 2, 1),
                 liftedOf(dotMixedScalar(1, false, 0, 1, 2, 1)));    // VSUDOT_scalar: assinado/sem-sinal
         // vm é nibble DIRETO: D15 é alcançável sem bit de extensão.
-        assertEquals(new IrOp.NeonDotProductByElement(true, true, false, 0, 1, 15, 0),
+        assertEquals(new NeonIntegerOp.DotProductByElement(true, true, false, 0, 1, 15, 0),
                 liftedOf(dotSameSignScalar(0, false, 0, 1, 15, 0)));
     }
 

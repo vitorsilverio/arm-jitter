@@ -3,7 +3,7 @@ package dev.vitorsilverio.armjitter.decoder;
 import dev.vitorsilverio.armjitter.advsimd.AdvSimdFpUnaryOp;
 import dev.vitorsilverio.armjitter.arch.ArmArchitecture;
 import dev.vitorsilverio.armjitter.core.Condition;
-import dev.vitorsilverio.armjitter.ir.IrOp;
+import dev.vitorsilverio.armjitter.ir.MveFpOp;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
@@ -68,12 +68,12 @@ class Thumb2MveFpConvertDecoderTest {
         return new Thumb2MveFpConvertDecoder(ArmArchitecture.ARMV8_1M_MVE).tryDecode(raw, 0, Condition.AL);
     }
 
-    private static IrOp.MveVectorFpConvertFixed decodeFixed(int raw) {
-        return assertInstanceOf(IrOp.MveVectorFpConvertFixed.class, tryDecode(raw).liftedOp());
+    private static MveFpOp.VectorFpConvertFixed decodeFixed(int raw) {
+        return assertInstanceOf(MveFpOp.VectorFpConvertFixed.class, tryDecode(raw).liftedOp());
     }
 
-    private static IrOp.MveVectorFpConvert decodeOneOp(int raw) {
-        return assertInstanceOf(IrOp.MveVectorFpConvert.class, tryDecode(raw).liftedOp());
+    private static MveFpOp.VectorFpConvert decodeOneOp(int raw) {
+        return assertInstanceOf(MveFpOp.VectorFpConvert.class, tryDecode(raw).liftedOp());
     }
 
     // ── As 8 linhas `@vcvt`/`@vcvt_f16` (ponto fixo↔ponto flutuante) ──────────────────────────────
@@ -96,7 +96,7 @@ class Thumb2MveFpConvertDecoderTest {
         for (FixedCase fc : FIXED_CASES) {
             int rawShift = fc.half ? 5 : 9;
             int raw = rawFixed(fc.u, fc.half, rawShift, fc.toInt, 2, 5);
-            IrOp.MveVectorFpConvertFixed op = decodeFixed(raw);
+            MveFpOp.VectorFpConvertFixed op = decodeFixed(raw);
             assertEquals(!fc.toInt, op.toFloat(), fc.name);
             assertEquals(fc.signed, op.signed(), fc.name);
             assertEquals(fc.half ? ESZ_HALF : ESZ_SINGLE, op.esz(), fc.name);
@@ -109,13 +109,13 @@ class Thumb2MveFpConvertDecoderTest {
 
     @Test
     void halfFractionBitsUsesWidthSixteen() {
-        IrOp.MveVectorFpConvertFixed op = decodeFixed(rawFixed(0, true, 0, false, 0, 1));
+        MveFpOp.VectorFpConvertFixed op = decodeFixed(rawFixed(0, true, 0, false, 0, 1));
         assertEquals(16, op.fractionBits()); // raw==0 -> N-0 -> 16 (desloca ao máximo, válido).
     }
 
     @Test
     void singleFractionBitsUsesWidthThirtyTwo() {
-        IrOp.MveVectorFpConvertFixed op = decodeFixed(rawFixed(0, false, 0, false, 0, 1));
+        MveFpOp.VectorFpConvertFixed op = decodeFixed(rawFixed(0, false, 0, false, 0, 1));
         assertEquals(32, op.fractionBits());
     }
 
@@ -137,7 +137,7 @@ class Thumb2MveFpConvertDecoderTest {
 
     @Test
     void plainVcvtWorksForHalfPrecisionToo() {
-        IrOp.MveVectorFpConvert op = decodeOneOp(rawOneOpPlain(ESZ_HALF, false, false, 2, 5));
+        MveFpOp.VectorFpConvert op = decodeOneOp(rawOneOpPlain(ESZ_HALF, false, false, 2, 5));
         assertEquals(AdvSimdFpUnaryOp.SCVTF, op.op());
         assertEquals(ESZ_HALF, op.esz());
         assertEquals(2, op.qd());
@@ -219,7 +219,7 @@ class Thumb2MveFpConvertDecoderTest {
         memory.put16(0, r >>> 16);
         memory.put16(2, r & 0xFFFF);
         DecodedInstruction decoded = new ThumbDecoder(ArmArchitecture.ARMV8_1M_MVE).decode(memory, 0);
-        assertInstanceOf(IrOp.MveVectorFpConvertFixed.class, decoded.liftedOp());
+        assertInstanceOf(MveFpOp.VectorFpConvertFixed.class, decoded.liftedOp());
     }
 
     @Test
@@ -230,6 +230,6 @@ class Thumb2MveFpConvertDecoderTest {
         memory.put16(0, r >>> 16);
         memory.put16(2, r & 0xFFFF);
         DecodedInstruction decoded = new ThumbDecoder(ArmArchitecture.ARMV8_1M_MVE).decode(memory, 0);
-        assertInstanceOf(IrOp.MveVectorFpConvert.class, decoded.liftedOp());
+        assertInstanceOf(MveFpOp.VectorFpConvert.class, decoded.liftedOp());
     }
 }

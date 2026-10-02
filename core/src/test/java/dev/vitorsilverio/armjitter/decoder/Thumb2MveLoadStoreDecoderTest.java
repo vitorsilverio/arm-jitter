@@ -2,7 +2,7 @@ package dev.vitorsilverio.armjitter.decoder;
 
 import dev.vitorsilverio.armjitter.arch.ArmArchitecture;
 import dev.vitorsilverio.armjitter.core.Condition;
-import dev.vitorsilverio.armjitter.ir.IrOp;
+import dev.vitorsilverio.armjitter.ir.MveMoveOp;
 import dev.vitorsilverio.armjitter.support.TestAddressSpace;
 import org.junit.jupiter.api.Test;
 
@@ -44,7 +44,7 @@ class Thumb2MveLoadStoreDecoderTest {
         // P=1,W=1 (pré-index com writeback), A=1 (soma), size=2 (word, imm7<<2), imm7=5 -> offset=20.
         int r = raw(true, true, 3, true, true, 1, SIZE_MARKER_WORD, 5);
         DecodedInstruction decoded = tryDecode(ArmArchitecture.ARMV8_1M_MVE, r);
-        IrOp.MveLoadStore op = assertInstanceOf(IrOp.MveLoadStore.class, decoded.liftedOp());
+        MveMoveOp.LoadStore op = assertInstanceOf(MveMoveOp.LoadStore.class, decoded.liftedOp());
         assertEquals(3, op.qd());
         assertEquals(1, op.rn());
         assertEquals(20, op.offset());
@@ -58,7 +58,7 @@ class Thumb2MveLoadStoreDecoderTest {
         // P=0 (força pós-index, W=1 obrigatório), A=0 (subtrai), size=0 (byte, sem escala), L=0 (store).
         int r = raw(false, false, 7, true, false, 2, SIZE_MARKER_BYTE, 9);
         DecodedInstruction decoded = tryDecode(ArmArchitecture.ARMV8_1M_MVE, r);
-        IrOp.MveLoadStore op = assertInstanceOf(IrOp.MveLoadStore.class, decoded.liftedOp());
+        MveMoveOp.LoadStore op = assertInstanceOf(MveMoveOp.LoadStore.class, decoded.liftedOp());
         assertEquals(7, op.qd());
         assertEquals(2, op.rn());
         assertEquals(-9, op.offset());
@@ -72,7 +72,7 @@ class Thumb2MveLoadStoreDecoderTest {
         // P=1,W=0: offset addressing puro, sem writeback. size=1 (halfword, imm7<<1).
         int r = raw(true, true, 0, false, true, 4, SIZE_MARKER_HALFWORD, 3);
         DecodedInstruction decoded = tryDecode(ArmArchitecture.ARMV8_1M_MVE, r);
-        IrOp.MveLoadStore op = assertInstanceOf(IrOp.MveLoadStore.class, decoded.liftedOp());
+        MveMoveOp.LoadStore op = assertInstanceOf(MveMoveOp.LoadStore.class, decoded.liftedOp());
         assertEquals(6, op.offset(), "imm7=3 << size=1 -> 6");
         assertEquals(false, op.writeback());
         assertEquals(false, op.postIndexed());
@@ -99,7 +99,7 @@ class Thumb2MveLoadStoreDecoderTest {
     @Test
     void allowsStackPointerAsBaseWithoutWriteback() {
         int r = raw(true, true, 0, false, true, 13, SIZE_MARKER_WORD, 0);
-        assertInstanceOf(IrOp.MveLoadStore.class, tryDecode(ArmArchitecture.ARMV8_1M_MVE, r).liftedOp());
+        assertInstanceOf(MveMoveOp.LoadStore.class, tryDecode(ArmArchitecture.ARMV8_1M_MVE, r).liftedOp());
     }
 
     @Test
@@ -128,7 +128,7 @@ class Thumb2MveLoadStoreDecoderTest {
         int r = raw(true, true, 3, true, true, 1, SIZE_MARKER_WORD, 5);
         DecodedInstruction decoded = decodeThumb32(r);
         assertEquals(InstructionKind.LIFTED_IR_OP, decoded.kind());
-        assertInstanceOf(IrOp.MveLoadStore.class, decoded.liftedOp());
+        assertInstanceOf(MveMoveOp.LoadStore.class, decoded.liftedOp());
     }
 
     private static DecodedInstruction decodeThumb32(int raw32) {

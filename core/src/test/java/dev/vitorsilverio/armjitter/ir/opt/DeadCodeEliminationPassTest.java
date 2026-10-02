@@ -1,10 +1,12 @@
 package dev.vitorsilverio.armjitter.ir.opt;
 
 import dev.vitorsilverio.armjitter.core.Condition;
+import dev.vitorsilverio.armjitter.ir.IntegerOp;
 import dev.vitorsilverio.armjitter.ir.IrBlock;
 import dev.vitorsilverio.armjitter.ir.IrOp;
 import dev.vitorsilverio.armjitter.ir.IrOpCode;
 import dev.vitorsilverio.armjitter.ir.IrOperand;
+import dev.vitorsilverio.armjitter.ir.MemoryOp;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -12,23 +14,23 @@ import static org.junit.jupiter.api.Assertions.*;
 class DeadCodeEliminationPassTest {
     private final DeadCodeEliminationPass pass = new DeadCodeEliminationPass();
 
-    private static IrOp.Alu mov(int dst, int imm) {
-        return new IrOp.Alu(IrOpCode.MOV, dst, 0, -1,
+    private static IntegerOp.Alu mov(int dst, int imm) {
+        return new IntegerOp.Alu(IrOpCode.MOV, dst, 0, -1,
                 new IrOperand.Immediate(imm), false, Condition.AL);
     }
 
-    private static IrOp.Alu movFlags(int dst, int imm) {
-        return new IrOp.Alu(IrOpCode.MOV, dst, 0, -1,
+    private static IntegerOp.Alu movFlags(int dst, int imm) {
+        return new IntegerOp.Alu(IrOpCode.MOV, dst, 0, -1,
                 new IrOperand.Immediate(imm), true, Condition.AL);
     }
 
-    private static IrOp.Alu add(int dst, int src1, int imm) {
-        return new IrOp.Alu(IrOpCode.ADD, dst, src1, -1,
+    private static IntegerOp.Alu add(int dst, int src1, int imm) {
+        return new IntegerOp.Alu(IrOpCode.ADD, dst, src1, -1,
                 new IrOperand.Immediate(imm), false, Condition.AL);
     }
 
-    private static IrOp.Alu addRead(int dst, int src1Reg, int src2Reg) {
-        return new IrOp.Alu(IrOpCode.ADD, dst, src1Reg, -1,
+    private static IntegerOp.Alu addRead(int dst, int src1Reg, int src2Reg) {
+        return new IntegerOp.Alu(IrOpCode.ADD, dst, src1Reg, -1,
                 new IrOperand.Register(src2Reg), false, Condition.AL);
     }
 
@@ -45,7 +47,7 @@ class DeadCodeEliminationPassTest {
         IrBlock after = pass.optimize(before);
 
         assertEquals(1, after.operations().size());
-        assertEquals(2, ((IrOperand.Immediate) ((IrOp.Alu) after.operations().getFirst()).src2()).value());
+        assertEquals(2, ((IrOperand.Immediate) ((IntegerOp.Alu) after.operations().getFirst()).src2()).value());
     }
 
     @Test
@@ -70,7 +72,7 @@ class DeadCodeEliminationPassTest {
     void parallelAluOperandsStayLive() {
         // MOV r1 é lido pela SADD16 antes de r1 ser reescrito — não pode ser eliminado
         // (mesma classe do bug de offset shiftado da B1.2: op nova sem case em regUse).
-        IrOp.ParallelAlu sadd16 = new IrOp.ParallelAlu(
+        IntegerOp.ParallelAlu sadd16 = new IntegerOp.ParallelAlu(
                 dev.vitorsilverio.armjitter.ir.ParallelAluOp.ADD16,
                 dev.vitorsilverio.armjitter.ir.ParallelAluVariant.SIGNED,
                 2, 1, 1, Condition.AL);
@@ -82,9 +84,9 @@ class DeadCodeEliminationPassTest {
 
     @Test
     void dst15NeverEliminated() {
-        IrOp.Alu writePc = new IrOp.Alu(IrOpCode.MOV, 15, 0, -1,
+        IntegerOp.Alu writePc = new IntegerOp.Alu(IrOpCode.MOV, 15, 0, -1,
                 new IrOperand.Immediate(0x100), false, Condition.AL);
-        IrOp.Alu overwrite = new IrOp.Alu(IrOpCode.MOV, 15, 0, -1,
+        IntegerOp.Alu overwrite = new IntegerOp.Alu(IrOpCode.MOV, 15, 0, -1,
                 new IrOperand.Immediate(0x200), false, Condition.AL);
         IrBlock block = block(writePc, overwrite);
         IrBlock after = pass.optimize(block);
@@ -100,7 +102,7 @@ class DeadCodeEliminationPassTest {
         IrBlock after = pass.optimize(block);
 
         assertEquals(1, after.operations().size());
-        assertEquals(3, ((IrOperand.Immediate) ((IrOp.Alu) after.operations().getFirst()).src2()).value());
+        assertEquals(3, ((IrOperand.Immediate) ((IntegerOp.Alu) after.operations().getFirst()).src2()).value());
     }
 
     @Test
@@ -138,14 +140,14 @@ class DeadCodeEliminationPassTest {
     void deadWriteBeforeMultipleTransferIsEliminated() {
         // Store em r1 seguido de LDM que sobrescreve r1: o MOV r1 só é morto se r1 NÃO estiver na lista de load do LDM...
         // Na verdade: se o LDM carrega r1, ele escreve r1 → o MOV r1 anterior é morto
-        // Simula: MOV r1 seguido de LDM que define r1 (LDM IrOp.MultipleTransfer load=true, mask bit1=1)
-        IrOp.MultipleTransfer ldm = new IrOp.MultipleTransfer(
+        // Simula: MOV r1 seguido de LDM que define r1 (LDM MemoryOp.MultipleTransfer load=true, mask bit1=1)
+        MemoryOp.MultipleTransfer ldm = new MemoryOp.MultipleTransfer(
                 true, 0, 0b10 /* r1 */, false, -1, false,
                 dev.vitorsilverio.armjitter.decoder.BlockTransferMode.IA, false, Condition.AL);
         IrBlock block = block(mov(1, 99), ldm);
         IrBlock after = pass.optimize(block);
 
         assertEquals(1, after.operations().size());
-        assertInstanceOf(IrOp.MultipleTransfer.class, after.operations().getFirst());
+        assertInstanceOf(MemoryOp.MultipleTransfer.class, after.operations().getFirst());
     }
 }

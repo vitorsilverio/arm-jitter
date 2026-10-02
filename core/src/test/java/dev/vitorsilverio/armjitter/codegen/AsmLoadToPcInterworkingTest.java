@@ -4,7 +4,7 @@ import dev.vitorsilverio.armjitter.arch.ArmArchitecture;
 import dev.vitorsilverio.armjitter.core.ArmCore;
 import dev.vitorsilverio.armjitter.core.Condition;
 import dev.vitorsilverio.armjitter.ir.IrBlock;
-import dev.vitorsilverio.armjitter.ir.IrOp;
+import dev.vitorsilverio.armjitter.ir.MemoryOp;
 import dev.vitorsilverio.armjitter.support.TestAddressSpace;
 import dev.vitorsilverio.armjitter.swi.SwiDispatcher;
 import org.junit.jupiter.api.Test;
@@ -22,7 +22,7 @@ class AsmLoadToPcInterworkingTest {
 
     /// `POP {pc}` (THUMB). registerMask=0, includePc=true.
     private static final IrBlock POP_PC = IrBlock.builder(0)
-            .add(new IrOp.Pop(0, true, Condition.AL))
+            .add(new MemoryOp.Pop(0, true, Condition.AL))
             .endPc(2)
             .sealed();
 

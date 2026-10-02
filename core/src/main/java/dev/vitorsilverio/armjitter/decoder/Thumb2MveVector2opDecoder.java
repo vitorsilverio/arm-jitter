@@ -7,7 +7,7 @@ import dev.vitorsilverio.armjitter.arch.ArmFeature;
 import dev.vitorsilverio.armjitter.arch.DecoderExtension;
 import dev.vitorsilverio.armjitter.core.Condition;
 import dev.vitorsilverio.armjitter.core.VfpRegisters;
-import dev.vitorsilverio.armjitter.ir.IrOp;
+import dev.vitorsilverio.armjitter.ir.MveIntegerOp;
 
 /// Vector 2-op inteiro (perfil M, B16.6, MVE/Helium, `target/isa-decode/mve.decode`, seção "Vector
 /// 2-op", linhas 211-219/281-366, 48 encodings) — todas as formas `@2op`/`@2op_nosz`/`@2op_rev`/
@@ -45,11 +45,11 @@ import dev.vitorsilverio.armjitter.ir.IrOp;
 /// (`top=false`) e `VMULL_T*`/`VMULLP_T` (`top=true`) NÃO selecionam metade CONTÍGUA baixa/alta da
 /// fonte (padrão `SMULL2`/`UMULL2` do A64) — selecionam lanes PARES/ÍMPARES intercaladas (`le*2 +
 /// top`, verbatim de `DO_2OP_L`, `target/arm/tcg/mve_helper.c`, confirmado via `WebFetch`). Ver
-/// Javadoc de {@link IrOp.MveVector2OpWidening}.
+/// Javadoc de {@link MveIntegerOp.Vector2OpWidening}.
 ///
 /// **Achado que corrige o tamanho de elemento de `VMULLP_*`**: o campo `%size_28` (`bit28+1`)
 /// produz `1`/`2`, mas o tamanho REAL do elemento FONTE (o que este decoder grava em
-/// {@link IrOp.MveVector2OpWidening#esz}) é `bit28` diretamente (`0`=byte→halfword, `1`=halfword→
+/// {@link MveIntegerOp.Vector2OpWidening#esz}) é `bit28` diretamente (`0`=byte→halfword, `1`=halfword→
 /// word — QEMU nomeia as duas formas `vmullpbh`/`vmullpbw`, confirmado via `WebFetch`).
 ///
 /// Gate: {@link ArmFeature#MVE_INTEGER}. Usa o escape hatch de lifting
@@ -185,7 +185,7 @@ public final class Thumb2MveVector2opDecoder implements DecoderExtension {
         int irQn = reversed ? qm : qn;
         int irQm = reversed ? qn : qm;
         return DecodedInstruction.lifted(address, raw, InstructionSet.THUMB, condition,
-                new IrOp.MveVector2Op(op, size, qd, irQn, irQm, condition));
+                new MveIntegerOp.Vector2Op(op, size, qd, irQn, irQm, condition));
     }
 
     /// `bits[11:8]=0001`, `bit4=1` — `VAND`/`VBIC`/`VORR`/`VORN` (`@2op_nosz`, `bits[21:20]` é o
@@ -208,7 +208,7 @@ public final class Thumb2MveVector2opDecoder implements DecoderExtension {
         }
         final int nosz = 0;
         return DecodedInstruction.lifted(address, raw, InstructionSet.THUMB, condition,
-                new IrOp.MveVector2Op(op, nosz, qd, qn, qm, condition));
+                new MveIntegerOp.Vector2Op(op, nosz, qd, qn, qm, condition));
     }
 
     /// `bits[27:24]=1110`, `bit16=1` — `VMULLP_B`/`VMULLP_T` (`@2op_sz28`, `bits[21:20]="11"`
@@ -227,11 +227,11 @@ public final class Thumb2MveVector2opDecoder implements DecoderExtension {
             // Javadoc da classe.
             int esz = u ? 1 : 0;
             return DecodedInstruction.lifted(address, raw, InstructionSet.THUMB, condition,
-                    new IrOp.MveVector2OpWidening(AdvSimdWideningOp.PMULL, esz, top, qd, qn, qm, condition));
+                    new MveIntegerOp.Vector2OpWidening(AdvSimdWideningOp.PMULL, esz, top, qd, qn, qm, condition));
         }
         AdvSimdWideningOp op = u ? AdvSimdWideningOp.UMULL : AdvSimdWideningOp.SMULL;
         return DecodedInstruction.lifted(address, raw, InstructionSet.THUMB, condition,
-                new IrOp.MveVector2OpWidening(op, sizeField, top, qd, qn, qm, condition));
+                new MveIntegerOp.Vector2OpWidening(op, sizeField, top, qd, qn, qm, condition));
     }
 
     /// `bits[27:24]=1110`, `bit16=0` — dois blocos `{}`: `VADC`/`VADCI`/`VHCADD90`/`VHCADD270`
@@ -249,11 +249,11 @@ public final class Thumb2MveVector2opDecoder implements DecoderExtension {
         if (sizeField == 0b11) {
             boolean immediateCarry = bit12;
             return DecodedInstruction.lifted(address, raw, InstructionSet.THUMB, condition,
-                    new IrOp.MveVectorCarry(add, immediateCarry, qd, qn, qm, condition));
+                    new MveIntegerOp.VectorCarry(add, immediateCarry, qd, qn, qm, condition));
         }
         boolean rotate90 = !bit12;
         boolean halving = add; // VHCADD90/270 vivem no bloco 1110 (add-family); VCADD90/270 no 1111.
         return DecodedInstruction.lifted(address, raw, InstructionSet.THUMB, condition,
-                new IrOp.MveVectorComplexAdd(rotate90, halving, sizeField, qd, qn, qm, condition));
+                new MveIntegerOp.VectorComplexAdd(rotate90, halving, sizeField, qd, qn, qm, condition));
     }
 }

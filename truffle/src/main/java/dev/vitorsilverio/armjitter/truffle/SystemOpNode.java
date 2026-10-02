@@ -6,6 +6,7 @@ import dev.vitorsilverio.armjitter.codegen.executor.IrSystemExecutor;
 import dev.vitorsilverio.armjitter.codegen.executor.IrTransferExecutor;
 import dev.vitorsilverio.armjitter.core.ArmCore;
 import dev.vitorsilverio.armjitter.ir.IrOp;
+import dev.vitorsilverio.armjitter.ir.SystemOp;
 
 /// Nó Truffle para a categoria de sistema (task A6, + `Hvc`/`Smc`/`Eret`/`MrsBank`/`MsrBank`/
 /// `Breakpoint` desde a A10.5): `PsrTransfer`, `Swi`, `Coprocessor`, `Undefined`,
@@ -44,68 +45,68 @@ final class SystemOpNode extends IrOpNode {
     @Override
     boolean doExecute(ArmCore core, int blockEndPc) {
         return switch (op) {
-            case IrOp.PsrTransfer psrTransfer -> {
+            case SystemOp.PsrTransfer psrTransfer -> {
                 systemExecutor.executePsrTransfer(core, psrTransfer);
                 yield false;
             }
-            case IrOp.Swi swi -> executeSwiAtBoundary(swi, core, blockEndPc);
-            case IrOp.Coprocessor coprocessor -> executeCoprocessorAtBoundary(coprocessor, core);
-            case IrOp.Undefined undefined -> systemExecutor.executeUndefined(core, undefined);
-            case IrOp.ChangeProcessorState changeProcessorState -> {
+            case SystemOp.Swi swi -> executeSwiAtBoundary(swi, core, blockEndPc);
+            case SystemOp.Coprocessor coprocessor -> executeCoprocessorAtBoundary(coprocessor, core);
+            case SystemOp.Undefined undefined -> systemExecutor.executeUndefined(core, undefined);
+            case SystemOp.ChangeProcessorState changeProcessorState -> {
                 systemExecutor.executeChangeProcessorState(core, changeProcessorState);
                 yield false;
             }
-            case IrOp.SetEndianness setEndianness -> {
+            case SystemOp.SetEndianness setEndianness -> {
                 systemExecutor.executeSetEndianness(core, setEndianness);
                 yield false;
             }
-            case IrOp.StoreReturnState storeReturnState -> executeStoreReturnStateAtBoundary(storeReturnState, core);
-            case IrOp.ReturnFromException returnFromException ->
+            case SystemOp.StoreReturnState storeReturnState -> executeStoreReturnStateAtBoundary(storeReturnState, core);
+            case SystemOp.ReturnFromException returnFromException ->
                     executeReturnFromExceptionAtBoundary(returnFromException, core);
-            case IrOp.WaitForInterrupt waitForInterrupt -> {
+            case SystemOp.WaitForInterrupt waitForInterrupt -> {
                 systemExecutor.executeWaitForInterrupt(core, waitForInterrupt);
                 yield false;
             }
-            case IrOp.MemoryBarrier memoryBarrier -> {
+            case SystemOp.MemoryBarrier memoryBarrier -> {
                 systemExecutor.executeMemoryBarrier(core, memoryBarrier);
                 yield false;
             }
-            case IrOp.SetItState setItState -> {
+            case SystemOp.SetItState setItState -> {
                 systemExecutor.executeSetItState(core, setItState);
                 yield false;
             }
-            case IrOp.Hvc hvc -> systemExecutor.executeHvc(core, hvc, blockEndPc);
-            case IrOp.Smc smc -> systemExecutor.executeSmc(core, smc, blockEndPc);
-            case IrOp.Eret eret -> systemExecutor.executeEret(core, eret, blockEndPc);
-            case IrOp.MrsBank mrsBank -> systemExecutor.executeMrsBank(core, mrsBank, blockEndPc);
-            case IrOp.MsrBank msrBank -> systemExecutor.executeMsrBank(core, msrBank, blockEndPc);
-            case IrOp.Breakpoint breakpoint -> executeBreakpointAtBoundary(breakpoint, core, blockEndPc);
+            case SystemOp.Hvc hvc -> systemExecutor.executeHvc(core, hvc, blockEndPc);
+            case SystemOp.Smc smc -> systemExecutor.executeSmc(core, smc, blockEndPc);
+            case SystemOp.Eret eret -> systemExecutor.executeEret(core, eret, blockEndPc);
+            case SystemOp.MrsBank mrsBank -> systemExecutor.executeMrsBank(core, mrsBank, blockEndPc);
+            case SystemOp.MsrBank msrBank -> systemExecutor.executeMsrBank(core, msrBank, blockEndPc);
+            case SystemOp.Breakpoint breakpoint -> executeBreakpointAtBoundary(breakpoint, core, blockEndPc);
             default -> throw new IllegalStateException("SystemOpNode não cobre: " + op);
         };
     }
 
     @TruffleBoundary
-    private boolean executeSwiAtBoundary(IrOp.Swi swi, ArmCore core, int blockEndPc) {
+    private boolean executeSwiAtBoundary(SystemOp.Swi swi, ArmCore core, int blockEndPc) {
         return systemExecutor.executeSwi(core, swi, blockEndPc);
     }
 
     @TruffleBoundary
-    private boolean executeCoprocessorAtBoundary(IrOp.Coprocessor coprocessor, ArmCore core) {
+    private boolean executeCoprocessorAtBoundary(SystemOp.Coprocessor coprocessor, ArmCore core) {
         return systemExecutor.executeCoprocessor(core, coprocessor);
     }
 
     @TruffleBoundary
-    private boolean executeStoreReturnStateAtBoundary(IrOp.StoreReturnState storeReturnState, ArmCore core) {
+    private boolean executeStoreReturnStateAtBoundary(SystemOp.StoreReturnState storeReturnState, ArmCore core) {
         return transferExecutor.executeStoreReturnState(core, storeReturnState);
     }
 
     @TruffleBoundary
-    private boolean executeReturnFromExceptionAtBoundary(IrOp.ReturnFromException returnFromException, ArmCore core) {
+    private boolean executeReturnFromExceptionAtBoundary(SystemOp.ReturnFromException returnFromException, ArmCore core) {
         return transferExecutor.executeReturnFromException(core, returnFromException);
     }
 
     @TruffleBoundary
-    private boolean executeBreakpointAtBoundary(IrOp.Breakpoint breakpoint, ArmCore core, int blockEndPc) {
+    private boolean executeBreakpointAtBoundary(SystemOp.Breakpoint breakpoint, ArmCore core, int blockEndPc) {
         return systemExecutor.executeBreakpoint(core, breakpoint, blockEndPc);
     }
 }

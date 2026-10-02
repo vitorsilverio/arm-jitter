@@ -11,6 +11,7 @@ import dev.vitorsilverio.armjitter.ir.IrBlock;
 import dev.vitorsilverio.armjitter.ir.IrBuilder;
 import dev.vitorsilverio.armjitter.ir.IrOp;
 import dev.vitorsilverio.armjitter.ir.StandardIrBuilder;
+import dev.vitorsilverio.armjitter.ir.SystemOp;
 
 /// Interpretador frio usado para debug, step-by-step e como oráculo do JIT.
 ///
@@ -84,13 +85,13 @@ public final class ArmInterpreter {
         }
         IrBlock.Builder block = IrBlock.builder(pc);
         irBuilder.lift(instruction, block);
-        // `IT` já emite seu próprio IrOp.SetItState dentro de irBuilder.lift (StandardIrBuilder) —
+        // `IT` já emite seu próprio SystemOp.SetItState dentro de irBuilder.lift (StandardIrBuilder) —
         // só falta o "avanço" pós-instrução para as demais instruções governadas por um IT block
         // ativo (mesma regra de StandardIrBlockLifter, incl. a exceção do prefixo de BL/BLX).
         if (governedByIt
                 && instruction.kind() != InstructionKind.IT
                 && instruction.kind() != InstructionKind.LONG_BRANCH_PREFIX) {
-            block.add(new IrOp.SetItState(ItState.advance(itState), Condition.AL));
+            block.add(new SystemOp.SetItState(ItState.advance(itState), Condition.AL));
         }
         int internalCycles = executor.execute(block.sealed(), core);
         core.addCycles(internalCycles);

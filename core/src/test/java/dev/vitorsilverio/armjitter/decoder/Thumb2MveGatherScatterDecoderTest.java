@@ -2,7 +2,7 @@ package dev.vitorsilverio.armjitter.decoder;
 
 import dev.vitorsilverio.armjitter.arch.ArmArchitecture;
 import dev.vitorsilverio.armjitter.core.Condition;
-import dev.vitorsilverio.armjitter.ir.IrOp;
+import dev.vitorsilverio.armjitter.ir.MveMoveOp;
 import dev.vitorsilverio.armjitter.support.TestAddressSpace;
 import org.junit.jupiter.api.Test;
 
@@ -59,7 +59,7 @@ class Thumb2MveGatherScatterDecoderTest {
         // msize=0(byte),size=1(halfword),os=0: vldrb_sg_sh.
         int r = offsetRaw(false, 3, 0b01, 5, 1, 1, 0, false);
         DecodedInstruction decoded = tryDecode(ArmArchitecture.ARMV8_1M_MVE, r);
-        IrOp.MveGatherScatterOffset op = assertInstanceOf(IrOp.MveGatherScatterOffset.class, decoded.liftedOp());
+        MveMoveOp.GatherScatterOffset op = assertInstanceOf(MveMoveOp.GatherScatterOffset.class, decoded.liftedOp());
         assertEquals(3, op.qd());
         assertEquals(1, op.qm());
         assertEquals(5, op.rn());
@@ -75,7 +75,7 @@ class Thumb2MveGatherScatterDecoderTest {
         // msize=2(word),size=2(word): vldrw_sg_uw.
         int r = offsetRaw(true, 2, 0b01, 1, 4, 2, 2, false);
         DecodedInstruction decoded = tryDecode(ArmArchitecture.ARMV8_1M_MVE, r);
-        IrOp.MveGatherScatterOffset op = assertInstanceOf(IrOp.MveGatherScatterOffset.class, decoded.liftedOp());
+        MveMoveOp.GatherScatterOffset op = assertInstanceOf(MveMoveOp.GatherScatterOffset.class, decoded.liftedOp());
         assertEquals(false, op.signedLoad());
         assertEquals(2, op.memorySizeLog2());
         assertEquals(2, op.registerSizeLog2());
@@ -85,7 +85,7 @@ class Thumb2MveGatherScatterDecoderTest {
     void decodesVldrUSgDoubleword() {
         int r = offsetRaw(true, 0, 0b01, 1, 2, 3, 3, false);
         DecodedInstruction decoded = tryDecode(ArmArchitecture.ARMV8_1M_MVE, r);
-        IrOp.MveGatherScatterOffset op = assertInstanceOf(IrOp.MveGatherScatterOffset.class, decoded.liftedOp());
+        MveMoveOp.GatherScatterOffset op = assertInstanceOf(MveMoveOp.GatherScatterOffset.class, decoded.liftedOp());
         assertEquals(3, op.memorySizeLog2());
         assertEquals(3, op.registerSizeLog2());
     }
@@ -94,7 +94,7 @@ class Thumb2MveGatherScatterDecoderTest {
     void decodesVstrSgStore() {
         int r = offsetRaw(false, 2, 0b00, 1, 3, 0, 0, false);
         DecodedInstruction decoded = tryDecode(ArmArchitecture.ARMV8_1M_MVE, r);
-        IrOp.MveGatherScatterOffset op = assertInstanceOf(IrOp.MveGatherScatterOffset.class, decoded.liftedOp());
+        MveMoveOp.GatherScatterOffset op = assertInstanceOf(MveMoveOp.GatherScatterOffset.class, decoded.liftedOp());
         assertEquals(false, op.load());
     }
 
@@ -102,7 +102,7 @@ class Thumb2MveGatherScatterDecoderTest {
     void decodesOffsetScaledForm() {
         int r = offsetRaw(true, 2, 0b01, 1, 3, 2, 1, true); // os=1: vldrh_sg_os_uw
         DecodedInstruction decoded = tryDecode(ArmArchitecture.ARMV8_1M_MVE, r);
-        IrOp.MveGatherScatterOffset op = assertInstanceOf(IrOp.MveGatherScatterOffset.class, decoded.liftedOp());
+        MveMoveOp.GatherScatterOffset op = assertInstanceOf(MveMoveOp.GatherScatterOffset.class, decoded.liftedOp());
         assertEquals(true, op.offsetScaled());
     }
 
@@ -150,7 +150,7 @@ class Thumb2MveGatherScatterDecoderTest {
     void decodesVldrwSgImmWithWriteback() {
         int r = immRaw(true, true, true, 2, 5, 0b1110, 4);
         DecodedInstruction decoded = tryDecode(ArmArchitecture.ARMV8_1M_MVE, r);
-        IrOp.MveGatherScatterImmediate op = assertInstanceOf(IrOp.MveGatherScatterImmediate.class, decoded.liftedOp());
+        MveMoveOp.GatherScatterImmediate op = assertInstanceOf(MveMoveOp.GatherScatterImmediate.class, decoded.liftedOp());
         assertEquals(2, op.qd());
         assertEquals(5, op.qm());
         assertEquals(16, op.offset()); // imm7=4 << sizeLog2(2) = 16
@@ -163,7 +163,7 @@ class Thumb2MveGatherScatterDecoderTest {
     void decodesVldrdSgImmNegativeOffset() {
         int r = immRaw(true, false, false, 3, 1, 0b1111, 2);
         DecodedInstruction decoded = tryDecode(ArmArchitecture.ARMV8_1M_MVE, r);
-        IrOp.MveGatherScatterImmediate op = assertInstanceOf(IrOp.MveGatherScatterImmediate.class, decoded.liftedOp());
+        MveMoveOp.GatherScatterImmediate op = assertInstanceOf(MveMoveOp.GatherScatterImmediate.class, decoded.liftedOp());
         assertEquals(3, op.sizeLog2());
         assertEquals(-16, op.offset()); // imm7=2 << 3 = 16, a=0 -> negativo
         assertEquals(false, op.writeback());
@@ -173,7 +173,7 @@ class Thumb2MveGatherScatterDecoderTest {
     void decodesVstrwSgImm() {
         int r = immRaw(false, true, false, 2, 1, 0b1110, 0);
         DecodedInstruction decoded = tryDecode(ArmArchitecture.ARMV8_1M_MVE, r);
-        IrOp.MveGatherScatterImmediate op = assertInstanceOf(IrOp.MveGatherScatterImmediate.class, decoded.liftedOp());
+        MveMoveOp.GatherScatterImmediate op = assertInstanceOf(MveMoveOp.GatherScatterImmediate.class, decoded.liftedOp());
         assertEquals(false, op.load());
     }
 
@@ -188,7 +188,7 @@ class Thumb2MveGatherScatterDecoderTest {
         // VSTRW_sg_imm não reescreve Qd, então a checagem real não se aplica.
         int r = immRaw(false, true, false, 2, 2, 0b1110, 0);
         DecodedInstruction decoded = tryDecode(ArmArchitecture.ARMV8_1M_MVE, r);
-        assertInstanceOf(IrOp.MveGatherScatterImmediate.class, decoded.liftedOp());
+        assertInstanceOf(MveMoveOp.GatherScatterImmediate.class, decoded.liftedOp());
     }
 
     @Test
@@ -213,6 +213,6 @@ class Thumb2MveGatherScatterDecoderTest {
         memory.put16(2, r & 0xFFFF);
         DecodedInstruction decoded = new ThumbDecoder(ArmArchitecture.ARMV8_1M_MVE).decode(memory, 0);
         assertEquals(InstructionKind.LIFTED_IR_OP, decoded.kind());
-        assertInstanceOf(IrOp.MveGatherScatterOffset.class, decoded.liftedOp());
+        assertInstanceOf(MveMoveOp.GatherScatterOffset.class, decoded.liftedOp());
     }
 }

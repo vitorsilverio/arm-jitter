@@ -6,7 +6,7 @@ import dev.vitorsilverio.armjitter.arch.ArmFeature;
 import dev.vitorsilverio.armjitter.arch.DecoderExtension;
 import dev.vitorsilverio.armjitter.core.Condition;
 import dev.vitorsilverio.armjitter.core.VfpRegisters;
-import dev.vitorsilverio.armjitter.ir.IrOp;
+import dev.vitorsilverio.armjitter.ir.MveIntegerOp;
 
 /// Deslocamentos estreitantes (só `b`/`h`) e `VSHLC` (perfil M, B16.11, MVE/Helium,
 /// `target/isa-decode/mve.decode`, linhas 656-696, 33 encodings — confirmadas bit a bit contra o
@@ -59,7 +59,7 @@ import dev.vitorsilverio.armjitter.ir.IrOp;
 /// como "desloca por 32", achado que corrige a suposição do Inclui #2 da task — não é `UNDEF` nem
 /// no-op). `Rdm ∈ {13, 15}` é `UNDEF` (confirmado: "CONSTRAINED UNPREDICTABLE: we UNDEF" no QEMU
 /// real). **NÃO é predicada lane-a-lane** — opera em 4 elementos de 32 bits (granularidade de
-/// BEAT), ver Javadoc de {@link IrOp.MveVectorShiftLeftCarry}.
+/// BEAT), ver Javadoc de {@link MveIntegerOp.VectorShiftLeftCarry}.
 ///
 /// Gate: {@link ArmFeature#MVE_INTEGER}. TEM que ser registrado ANTES de `Thumb2NocpDecoder` (mesmo
 /// espaço `bits[27:24]=1110` sob `M_PROFILE`, Armadilha 4 da task).
@@ -166,7 +166,7 @@ public final class Thumb2MveNarrowingShiftDecoder implements DecoderExtension {
         AdvSimdShiftNarrowOp op = narrowingOperation(u, bit7, bit0);
         boolean top = ((raw >>> BIT12) & 1) != 0;
         return DecodedInstruction.lifted(address, raw, InstructionSet.THUMB, condition,
-                new IrOp.MveVectorShiftNarrowImmediateInterleaved(op, esz, shift, top, qd, qm, condition));
+                new MveIntegerOp.VectorShiftNarrowImmediateInterleaved(op, esz, shift, top, qd, qm, condition));
     }
 
     /// Tabela COMPLETA dos 8 `(U, bit7, bit0)` → {@link AdvSimdShiftNarrowOp} (Armadilha 1 da task) —
@@ -224,6 +224,6 @@ public final class Thumb2MveNarrowingShiftDecoder implements DecoderExtension {
         }
         int imm = (raw >>> VSHLC_IMM_SHIFT) & VSHLC_IMM_MASK;
         return DecodedInstruction.lifted(address, raw, InstructionSet.THUMB, condition,
-                new IrOp.MveVectorShiftLeftCarry(imm, qd, rdm, condition));
+                new MveIntegerOp.VectorShiftLeftCarry(imm, qd, rdm, condition));
     }
 }

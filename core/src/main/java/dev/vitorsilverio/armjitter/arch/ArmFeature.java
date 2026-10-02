@@ -75,7 +75,7 @@ public enum ArmFeature {
     WAIT_HINTS,
     /// Barreiras de memória `DMB`/`DSB`/`ISB`. ARMv7. Nesta implementação (core single-thread,
     /// sem memória especulativa/reordenação real), a semântica é NOP observável — ver
-    /// {@link dev.vitorsilverio.armjitter.ir.IrOp.MemoryBarrier} e
+    /// {@link dev.vitorsilverio.armjitter.ir.SystemOp.MemoryBarrier} e
     /// {@link dev.vitorsilverio.armjitter.decoder.Thumb2MiscDecoder} para a justificativa
     /// completa. Só o decode Thumb-2 (B2.5) consome esta feature até agora; a forma ARM
     /// clássica de `DMB`/`DSB`/`ISB` fica para uma task futura.
@@ -167,7 +167,7 @@ public enum ArmFeature {
     // ---- Onda 5, B9.6 (cobertura de ISA) ----
     /// `VFMA`/`VFMS`/`VFNMA`/`VFNMS` (multiplicação-acumulação VFP FUNDIDA: um único passo de
     /// arredondamento para o produto+soma, ao contrário de `VMLA`/`VMLS`/`VNMLA`/`VNMLS` — ver
-    /// {@link dev.vitorsilverio.armjitter.ir.IrOp.VfpOperation}). **VFPv4, não VFPv2** — confirmado
+    /// {@link dev.vitorsilverio.armjitter.ir.VfpOp.VfpOperation}). **VFPv4, não VFPv2** — confirmado
     /// contra `target/arm/tcg/translate-vfp.c` real do QEMU (`do_vfm_sp`/`do_vfm_dp`, comentário
     /// literal "Present in VFPv4 only", gate `dc_isar_feature(aa32_simdfmac, s)`) e
     /// cronologicamente: a especificação VFPv4 (ARM Cortex-A15/A7, ~2010) é POSTERIOR à geração

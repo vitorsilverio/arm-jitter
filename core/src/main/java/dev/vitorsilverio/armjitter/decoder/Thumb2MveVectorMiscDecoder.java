@@ -7,7 +7,9 @@ import dev.vitorsilverio.armjitter.arch.ArmFeature;
 import dev.vitorsilverio.armjitter.arch.DecoderExtension;
 import dev.vitorsilverio.armjitter.core.Condition;
 import dev.vitorsilverio.armjitter.core.VfpRegisters;
-import dev.vitorsilverio.armjitter.ir.IrOp;
+import dev.vitorsilverio.armjitter.ir.MveFpOp;
+import dev.vitorsilverio.armjitter.ir.MveIntegerOp;
+import dev.vitorsilverio.armjitter.ir.MveMoveOp;
 
 /// `VCLS`/`VCLZ`/`VREV16`/`VREV32`/`VREV64`/`VMVN`/`VABS`/`VABS_fp`/`VNEG`/`VNEG_fp`/`VQABS`/
 /// `VQNEG`/`VDUP` — sub-família 2 da B16.13a (perfil M, MVE/Helium, `target/isa-decode/mve.decode`,
@@ -165,7 +167,7 @@ public final class Thumb2MveVectorMiscDecoder implements DecoderExtension {
                 return null;
             }
             return DecodedInstruction.lifted(address, raw, InstructionSet.THUMB, condition,
-                    new IrOp.MveVectorUnary(AdvSimdUnaryOp.NOT, 0, qd, qm, condition));
+                    new MveIntegerOp.VectorUnary(AdvSimdUnaryOp.NOT, 0, qd, qm, condition));
         }
         int size = (raw >>> SIZE_SHIFT) & SIZE_MASK;
         if (size == SIZE_INVALID) {
@@ -186,7 +188,7 @@ public final class Thumb2MveVectorMiscDecoder implements DecoderExtension {
                 return null;
             }
             return DecodedInstruction.lifted(address, raw, InstructionSet.THUMB, condition,
-                    new IrOp.MveVectorUnary(op, size, qd, qm, condition));
+                    new MveIntegerOp.VectorUnary(op, size, qd, qm, condition));
         }
         // group == GROUP_ABS_NEG
         if (nibble == NIBBLE_ABS_NEG_INT) {
@@ -196,7 +198,7 @@ public final class Thumb2MveVectorMiscDecoder implements DecoderExtension {
                 return null;
             }
             return DecodedInstruction.lifted(address, raw, InstructionSet.THUMB, condition,
-                    new IrOp.MveVectorUnary(op, size, qd, qm, condition));
+                    new MveIntegerOp.VectorUnary(op, size, qd, qm, condition));
         }
         if (nibble == NIBBLE_ABS_NEG_FP) {
             if (!architecture.has(ArmFeature.MVE_FLOAT)) {
@@ -208,7 +210,7 @@ public final class Thumb2MveVectorMiscDecoder implements DecoderExtension {
                 return null;
             }
             return DecodedInstruction.lifted(address, raw, InstructionSet.THUMB, condition,
-                    new IrOp.MveVectorFpUnary(op, size, qd, qm, condition));
+                    new MveFpOp.VectorFpUnary(op, size, qd, qm, condition));
         }
         return null;
     }
@@ -253,6 +255,6 @@ public final class Thumb2MveVectorMiscDecoder implements DecoderExtension {
             return null;
         }
         return DecodedInstruction.lifted(address, raw, InstructionSet.THUMB, condition,
-                new IrOp.MveVectorDup(size, qd, rt, condition));
+                new MveMoveOp.VectorDup(size, qd, rt, condition));
     }
 }

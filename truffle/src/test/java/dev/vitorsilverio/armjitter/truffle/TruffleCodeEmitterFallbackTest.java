@@ -11,10 +11,12 @@ import dev.vitorsilverio.armjitter.codegen.equivalence.EquivalencePair;
 import dev.vitorsilverio.armjitter.codegen.equivalence.EquivalencePairFactory;
 import dev.vitorsilverio.armjitter.core.ArmCore;
 import dev.vitorsilverio.armjitter.core.Condition;
+import dev.vitorsilverio.armjitter.ir.IntegerOp;
 import dev.vitorsilverio.armjitter.ir.IrBlock;
 import dev.vitorsilverio.armjitter.ir.IrOp;
 import dev.vitorsilverio.armjitter.ir.IrOpCode;
 import dev.vitorsilverio.armjitter.ir.IrOperand;
+import dev.vitorsilverio.armjitter.ir.NeonIntegerOp;
 import dev.vitorsilverio.armjitter.swi.SwiDispatcher;
 import dev.vitorsilverio.armjitter.truffle.support.ByteArrayAddressSpace;
 import java.util.List;
@@ -43,7 +45,7 @@ class TruffleCodeEmitterFallbackTest {
         TruffleCodeEmitter emitter = new TruffleCodeEmitter(ArmArchitecture.ARMV7A);
         // VADD.I32 d0, d0, d1 — Kind NEON_THREE_SAME, sem nó Truffle.
         IrBlock block = new IrBlock(0, 8, List.of(
-                new IrOp.NeonThreeSame(AdvSimdThreeSameOp.ADD, false, 0, 0, 1, 2),
+                new NeonIntegerOp.ThreeSame(AdvSimdThreeSameOp.ADD, false, 0, 0, 1, 2),
                 new IrOp.Cycle(1),
                 new IrOp.Fetch(0, 4)));
 
@@ -58,8 +60,8 @@ class TruffleCodeEmitterFallbackTest {
         TruffleCodeEmitter emitter = new TruffleCodeEmitter(ArmArchitecture.ARMV7A);
         // ADD r2, r0, r1  (coberto)  +  VADD.I32 d0, d0, d1  (NÃO coberto) -> bloco inteiro no fallback.
         IrBlock block = new IrBlock(0, 8, List.of(
-                new IrOp.Alu(IrOpCode.ADD, 2, 0, -1, new IrOperand.Register(1, -1), false, Condition.AL),
-                new IrOp.NeonThreeSame(AdvSimdThreeSameOp.ADD, false, 0, 0, 1, 2),
+                new IntegerOp.Alu(IrOpCode.ADD, 2, 0, -1, new IrOperand.Register(1, -1), false, Condition.AL),
+                new NeonIntegerOp.ThreeSame(AdvSimdThreeSameOp.ADD, false, 0, 0, 1, 2),
                 new IrOp.Cycle(1),
                 new IrOp.Fetch(0, 4)));
 
@@ -73,7 +75,7 @@ class TruffleCodeEmitterFallbackTest {
     void pureIntegerBlockStillCompilesNatively() {
         TruffleCodeEmitter emitter = new TruffleCodeEmitter(ArmArchitecture.ARMV7A);
         IrBlock block = new IrBlock(0, 8, List.of(
-                new IrOp.Alu(IrOpCode.ADD, 2, 0, -1, new IrOperand.Register(1, -1), false, Condition.AL),
+                new IntegerOp.Alu(IrOpCode.ADD, 2, 0, -1, new IrOperand.Register(1, -1), false, Condition.AL),
                 new IrOp.Cycle(1),
                 new IrOp.Fetch(0, 4)));
 

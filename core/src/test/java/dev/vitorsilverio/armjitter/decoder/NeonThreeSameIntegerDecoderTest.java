@@ -9,6 +9,7 @@ import dev.vitorsilverio.armjitter.codegen.executor.IrBlockExecutor;
 import dev.vitorsilverio.armjitter.core.ArmCore;
 import dev.vitorsilverio.armjitter.ir.IrBlock;
 import dev.vitorsilverio.armjitter.ir.IrOp;
+import dev.vitorsilverio.armjitter.ir.NeonIntegerOp;
 import dev.vitorsilverio.armjitter.ir.StandardIrBuilder;
 import dev.vitorsilverio.armjitter.support.TestAddressSpace;
 import dev.vitorsilverio.armjitter.swi.SwiDispatcher;
@@ -20,7 +21,7 @@ import java.util.List;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
 /// NEON 3-reg-same INTEIRO A32 (task B13.4): aritmética / comparação / lógica / pairwise da seção
-/// "3-reg-same" de `neon-dp.decode` → `IrOp.NeonThreeSame`/`IrOp.NeonPairwise` → execução pelo
+/// "3-reg-same" de `neon-dp.decode` → `NeonIntegerOp.ThreeSame`/`NeonIntegerOp.Pairwise` → execução pelo
 /// núcleo vetorial COMPARTILHADO com o lado A64 ({@code AdvSimdLanes}).
 ///
 /// Encodings golden conferidos com `arm-none-eabi-as -mfpu=neon -mcpu=cortex-a8` do devkitARM
@@ -118,89 +119,89 @@ class NeonThreeSameIntegerDecoderTest {
 
     @Test
     void arithmeticFamiliesDecode() {
-        assertEquals(new IrOp.NeonThreeSame(AdvSimdThreeSameOp.SHADD, false, 0, 0, 1, 2),
+        assertEquals(new NeonIntegerOp.ThreeSame(AdvSimdThreeSameOp.SHADD, false, 0, 0, 1, 2),
                 liftedOf(neon3s(0, 0, 0b0000, 0, false, 0, 1, 2)));
-        assertEquals(new IrOp.NeonThreeSame(AdvSimdThreeSameOp.UHADD, true, 1, 0, 2, 4),
+        assertEquals(new NeonIntegerOp.ThreeSame(AdvSimdThreeSameOp.UHADD, true, 1, 0, 2, 4),
                 liftedOf(neon3s(1, 1, 0b0000, 0, true, 0, 2, 4)));
-        assertEquals(new IrOp.NeonThreeSame(AdvSimdThreeSameOp.SRHADD, false, 2, 5, 6, 7),
+        assertEquals(new NeonIntegerOp.ThreeSame(AdvSimdThreeSameOp.SRHADD, false, 2, 5, 6, 7),
                 liftedOf(neon3s(0, 2, 0b0001, 0, false, 5, 6, 7)));
-        assertEquals(new IrOp.NeonThreeSame(AdvSimdThreeSameOp.UHSUB, false, 0, 3, 4, 5),
+        assertEquals(new NeonIntegerOp.ThreeSame(AdvSimdThreeSameOp.UHSUB, false, 0, 3, 4, 5),
                 liftedOf(neon3s(1, 0, 0b0010, 0, false, 3, 4, 5)));
-        assertEquals(new IrOp.NeonThreeSame(AdvSimdThreeSameOp.SMAX, false, 2, 0, 1, 2),
+        assertEquals(new NeonIntegerOp.ThreeSame(AdvSimdThreeSameOp.SMAX, false, 2, 0, 1, 2),
                 liftedOf(neon3s(0, 2, 0b0110, 0, false, 0, 1, 2)));
-        assertEquals(new IrOp.NeonThreeSame(AdvSimdThreeSameOp.UMIN, false, 0, 0, 1, 2),
+        assertEquals(new NeonIntegerOp.ThreeSame(AdvSimdThreeSameOp.UMIN, false, 0, 0, 1, 2),
                 liftedOf(neon3s(1, 0, 0b0110, 1, false, 0, 1, 2)));
-        assertEquals(new IrOp.NeonThreeSame(AdvSimdThreeSameOp.SABD, false, 1, 0, 1, 2),
+        assertEquals(new NeonIntegerOp.ThreeSame(AdvSimdThreeSameOp.SABD, false, 1, 0, 1, 2),
                 liftedOf(neon3s(0, 1, 0b0111, 0, false, 0, 1, 2)));
-        assertEquals(new IrOp.NeonThreeSame(AdvSimdThreeSameOp.UABA, false, 0, 10, 1, 2),
+        assertEquals(new NeonIntegerOp.ThreeSame(AdvSimdThreeSameOp.UABA, false, 0, 10, 1, 2),
                 liftedOf(neon3s(1, 0, 0b0111, 1, false, 10, 1, 2)));
-        assertEquals(new IrOp.NeonThreeSame(AdvSimdThreeSameOp.ADD, false, 3, 0, 1, 2),
+        assertEquals(new NeonIntegerOp.ThreeSame(AdvSimdThreeSameOp.ADD, false, 3, 0, 1, 2),
                 liftedOf(neon3s(0, 3, 0b1000, 0, false, 0, 1, 2)));
-        assertEquals(new IrOp.NeonThreeSame(AdvSimdThreeSameOp.SUB, true, 2, 0, 2, 4),
+        assertEquals(new NeonIntegerOp.ThreeSame(AdvSimdThreeSameOp.SUB, true, 2, 0, 2, 4),
                 liftedOf(neon3s(1, 2, 0b1000, 0, true, 0, 2, 4)));
-        assertEquals(new IrOp.NeonThreeSame(AdvSimdThreeSameOp.MLA, false, 1, 10, 1, 2),
+        assertEquals(new NeonIntegerOp.ThreeSame(AdvSimdThreeSameOp.MLA, false, 1, 10, 1, 2),
                 liftedOf(neon3s(0, 1, 0b1001, 0, false, 10, 1, 2)));
-        assertEquals(new IrOp.NeonThreeSame(AdvSimdThreeSameOp.MLS, false, 1, 10, 1, 2),
+        assertEquals(new NeonIntegerOp.ThreeSame(AdvSimdThreeSameOp.MLS, false, 1, 10, 1, 2),
                 liftedOf(neon3s(1, 1, 0b1001, 0, false, 10, 1, 2)));
-        assertEquals(new IrOp.NeonThreeSame(AdvSimdThreeSameOp.MUL, false, 2, 0, 1, 2),
+        assertEquals(new NeonIntegerOp.ThreeSame(AdvSimdThreeSameOp.MUL, false, 2, 0, 1, 2),
                 liftedOf(neon3s(0, 2, 0b1001, 1, false, 0, 1, 2)));
-        assertEquals(new IrOp.NeonThreeSame(AdvSimdThreeSameOp.PMUL, false, 0, 0, 1, 2),
+        assertEquals(new NeonIntegerOp.ThreeSame(AdvSimdThreeSameOp.PMUL, false, 0, 0, 1, 2),
                 liftedOf(neon3s(1, 0, 0b1001, 1, false, 0, 1, 2)));
     }
 
     @Test
     void comparisonFamiliesDecode() {
-        assertEquals(new IrOp.NeonThreeSame(AdvSimdThreeSameOp.CMGT, false, 1, 0, 1, 2),
+        assertEquals(new NeonIntegerOp.ThreeSame(AdvSimdThreeSameOp.CMGT, false, 1, 0, 1, 2),
                 liftedOf(neon3s(0, 1, 0b0011, 0, false, 0, 1, 2)));
-        assertEquals(new IrOp.NeonThreeSame(AdvSimdThreeSameOp.CMHI, false, 1, 0, 1, 2),
+        assertEquals(new NeonIntegerOp.ThreeSame(AdvSimdThreeSameOp.CMHI, false, 1, 0, 1, 2),
                 liftedOf(neon3s(1, 1, 0b0011, 0, false, 0, 1, 2)));
-        assertEquals(new IrOp.NeonThreeSame(AdvSimdThreeSameOp.CMGE, true, 0, 0, 2, 4),
+        assertEquals(new NeonIntegerOp.ThreeSame(AdvSimdThreeSameOp.CMGE, true, 0, 0, 2, 4),
                 liftedOf(neon3s(0, 0, 0b0011, 1, true, 0, 2, 4)));
-        assertEquals(new IrOp.NeonThreeSame(AdvSimdThreeSameOp.CMHS, true, 0, 0, 2, 4),
+        assertEquals(new NeonIntegerOp.ThreeSame(AdvSimdThreeSameOp.CMHS, true, 0, 0, 2, 4),
                 liftedOf(neon3s(1, 0, 0b0011, 1, true, 0, 2, 4)));
-        assertEquals(new IrOp.NeonThreeSame(AdvSimdThreeSameOp.CMTST, false, 1, 0, 1, 2),
+        assertEquals(new NeonIntegerOp.ThreeSame(AdvSimdThreeSameOp.CMTST, false, 1, 0, 1, 2),
                 liftedOf(neon3s(0, 1, 0b1000, 1, false, 0, 1, 2)));
-        assertEquals(new IrOp.NeonThreeSame(AdvSimdThreeSameOp.CMEQ, false, 0, 0, 1, 2),
+        assertEquals(new NeonIntegerOp.ThreeSame(AdvSimdThreeSameOp.CMEQ, false, 0, 0, 1, 2),
                 liftedOf(neon3s(1, 0, 0b1000, 1, false, 0, 1, 2)));
     }
 
     @Test
     void logicalFamilyDecodesWithEszZeroRegardlessOfSizeField() {
-        assertEquals(new IrOp.NeonThreeSame(AdvSimdThreeSameOp.AND, false, 0, 0, 1, 2),
+        assertEquals(new NeonIntegerOp.ThreeSame(AdvSimdThreeSameOp.AND, false, 0, 0, 1, 2),
                 liftedOf(neon3s(0, 0, 0b0001, 1, false, 0, 1, 2)));
-        assertEquals(new IrOp.NeonThreeSame(AdvSimdThreeSameOp.BIC, false, 0, 0, 1, 2),
+        assertEquals(new NeonIntegerOp.ThreeSame(AdvSimdThreeSameOp.BIC, false, 0, 0, 1, 2),
                 liftedOf(neon3s(0, 1, 0b0001, 1, false, 0, 1, 2)));
-        assertEquals(new IrOp.NeonThreeSame(AdvSimdThreeSameOp.ORR, false, 0, 0, 1, 2),
+        assertEquals(new NeonIntegerOp.ThreeSame(AdvSimdThreeSameOp.ORR, false, 0, 0, 1, 2),
                 liftedOf(neon3s(0, 2, 0b0001, 1, false, 0, 1, 2)));
-        assertEquals(new IrOp.NeonThreeSame(AdvSimdThreeSameOp.ORN, false, 0, 0, 1, 2),
+        assertEquals(new NeonIntegerOp.ThreeSame(AdvSimdThreeSameOp.ORN, false, 0, 0, 1, 2),
                 liftedOf(neon3s(0, 3, 0b0001, 1, false, 0, 1, 2)));
-        assertEquals(new IrOp.NeonThreeSame(AdvSimdThreeSameOp.EOR, true, 0, 0, 2, 4),
+        assertEquals(new NeonIntegerOp.ThreeSame(AdvSimdThreeSameOp.EOR, true, 0, 0, 2, 4),
                 liftedOf(neon3s(1, 0, 0b0001, 1, true, 0, 2, 4)));
-        assertEquals(new IrOp.NeonThreeSame(AdvSimdThreeSameOp.BSL, false, 0, 10, 11, 12),
+        assertEquals(new NeonIntegerOp.ThreeSame(AdvSimdThreeSameOp.BSL, false, 0, 10, 11, 12),
                 liftedOf(neon3s(1, 1, 0b0001, 1, false, 10, 11, 12)));
-        assertEquals(new IrOp.NeonThreeSame(AdvSimdThreeSameOp.BIT, false, 0, 0, 1, 2),
+        assertEquals(new NeonIntegerOp.ThreeSame(AdvSimdThreeSameOp.BIT, false, 0, 0, 1, 2),
                 liftedOf(neon3s(1, 2, 0b0001, 1, false, 0, 1, 2)));
-        assertEquals(new IrOp.NeonThreeSame(AdvSimdThreeSameOp.BIF, false, 0, 0, 1, 2),
+        assertEquals(new NeonIntegerOp.ThreeSame(AdvSimdThreeSameOp.BIF, false, 0, 0, 1, 2),
                 liftedOf(neon3s(1, 3, 0b0001, 1, false, 0, 1, 2)));
     }
 
     @Test
     void pairwiseFamiliesDecode() {
-        assertEquals(new IrOp.NeonPairwise(AdvSimdPairwiseOp.ADD, 1, 0, 1, 2),
+        assertEquals(new NeonIntegerOp.Pairwise(AdvSimdPairwiseOp.ADD, 1, 0, 1, 2),
                 liftedOf(neon3s(0, 1, 0b1011, 1, false, 0, 1, 2)));
-        assertEquals(new IrOp.NeonPairwise(AdvSimdPairwiseOp.SMAX, 0, 0, 1, 2),
+        assertEquals(new NeonIntegerOp.Pairwise(AdvSimdPairwiseOp.SMAX, 0, 0, 1, 2),
                 liftedOf(neon3s(0, 0, 0b1010, 0, false, 0, 1, 2)));
-        assertEquals(new IrOp.NeonPairwise(AdvSimdPairwiseOp.UMAX, 0, 0, 1, 2),
+        assertEquals(new NeonIntegerOp.Pairwise(AdvSimdPairwiseOp.UMAX, 0, 0, 1, 2),
                 liftedOf(neon3s(1, 0, 0b1010, 0, false, 0, 1, 2)));
-        assertEquals(new IrOp.NeonPairwise(AdvSimdPairwiseOp.SMIN, 2, 0, 1, 2),
+        assertEquals(new NeonIntegerOp.Pairwise(AdvSimdPairwiseOp.SMIN, 2, 0, 1, 2),
                 liftedOf(neon3s(0, 2, 0b1010, 1, false, 0, 1, 2)));
-        assertEquals(new IrOp.NeonPairwise(AdvSimdPairwiseOp.UMIN, 1, 0, 1, 2),
+        assertEquals(new NeonIntegerOp.Pairwise(AdvSimdPairwiseOp.UMIN, 1, 0, 1, 2),
                 liftedOf(neon3s(1, 1, 0b1010, 1, false, 0, 1, 2)));
     }
 
     @Test
     void doubleRegisterAboveD15IsAddressableWithTheFeature() {
-        assertEquals(new IrOp.NeonThreeSame(AdvSimdThreeSameOp.ADD, false, 2, 31, 16, 17),
+        assertEquals(new NeonIntegerOp.ThreeSame(AdvSimdThreeSameOp.ADD, false, 2, 31, 16, 17),
                 liftedOf(neon3s(0, 2, 0b1000, 0, false, 31, 16, 17)));
     }
 

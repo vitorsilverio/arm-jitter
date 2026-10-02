@@ -4,6 +4,7 @@ import dev.vitorsilverio.armjitter.advsimd.AdvSimdShiftNarrowOp;
 import dev.vitorsilverio.armjitter.arch.ArmArchitecture;
 import dev.vitorsilverio.armjitter.codegen.executor.IrBlockExecutor;
 import dev.vitorsilverio.armjitter.ir.IrOp;
+import dev.vitorsilverio.armjitter.ir.MveIntegerOp;
 import dev.vitorsilverio.armjitter.support.TestAddressSpace;
 import dev.vitorsilverio.armjitter.swi.SwiDispatcher;
 import org.junit.jupiter.api.Test;
@@ -360,7 +361,7 @@ class MveVectorShiftNarrowAndCarryExecutionTest {
         core.setExceptionModel(model);
         core.cpsr().setEci(3); // valor reservado.
         int pcBefore = core.programCounter();
-        IrOp.MveVectorShiftNarrowImmediateInterleaved op = new IrOp.MveVectorShiftNarrowImmediateInterleaved(
+        MveIntegerOp.VectorShiftNarrowImmediateInterleaved op = new MveIntegerOp.VectorShiftNarrowImmediateInterleaved(
                 AdvSimdShiftNarrowOp.SHRN, 0, 1, false, 1, 3, Condition.AL);
 
         boolean pcChanged = new IrBlockExecutor(ArmArchitecture.ARMV8_1M_MVE).executeOp(core, op, pcBefore);
@@ -378,7 +379,7 @@ class MveVectorShiftNarrowAndCarryExecutionTest {
         core.setExceptionModel(model);
         core.cpsr().setEci(6); // outro valor reservado (3/6/7-15).
         int pcBefore = core.programCounter();
-        IrOp.MveVectorShiftLeftCarry op = new IrOp.MveVectorShiftLeftCarry(4, 1, 0, Condition.AL);
+        MveIntegerOp.VectorShiftLeftCarry op = new MveIntegerOp.VectorShiftLeftCarry(4, 1, 0, Condition.AL);
 
         boolean pcChanged = new IrBlockExecutor(ArmArchitecture.ARMV8_1M_MVE).executeOp(core, op, pcBefore);
 
@@ -398,7 +399,7 @@ class MveVectorShiftNarrowAndCarryExecutionTest {
         core.vfp().setQ(3, 0x7FFFL, 0L); // saturaria se executado.
         core.vfp().setQ(1, 0xAAAA_AAAAL, 0L);
         boolean qcBefore = core.fpscr().qc();
-        IrOp.MveVectorShiftNarrowImmediateInterleaved op = new IrOp.MveVectorShiftNarrowImmediateInterleaved(
+        MveIntegerOp.VectorShiftNarrowImmediateInterleaved op = new MveIntegerOp.VectorShiftNarrowImmediateInterleaved(
                 AdvSimdShiftNarrowOp.SQSHRN, 0, 1, false, 1, 3, Condition.EQ);
 
         boolean pcChanged = new IrBlockExecutor(ArmArchitecture.ARMV8_1M_MVE).executeOp(core, op, core.programCounter());
@@ -415,7 +416,7 @@ class MveVectorShiftNarrowAndCarryExecutionTest {
         core.vfp().setQ(1, 0x0000_0002_0000_0001L, 0L);
         core.setRegister(0, 0xF);
         int rdmBefore = core.register(0);
-        IrOp.MveVectorShiftLeftCarry op = new IrOp.MveVectorShiftLeftCarry(4, 1, 0, Condition.EQ);
+        MveIntegerOp.VectorShiftLeftCarry op = new MveIntegerOp.VectorShiftLeftCarry(4, 1, 0, Condition.EQ);
 
         boolean pcChanged = new IrBlockExecutor(ArmArchitecture.ARMV8_1M_MVE).executeOp(core, op, core.programCounter());
 

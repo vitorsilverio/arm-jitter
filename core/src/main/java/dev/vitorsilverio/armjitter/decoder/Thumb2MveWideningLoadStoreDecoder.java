@@ -4,7 +4,7 @@ import dev.vitorsilverio.armjitter.arch.ArmArchitecture;
 import dev.vitorsilverio.armjitter.arch.ArmFeature;
 import dev.vitorsilverio.armjitter.arch.DecoderExtension;
 import dev.vitorsilverio.armjitter.core.Condition;
-import dev.vitorsilverio.armjitter.ir.IrOp;
+import dev.vitorsilverio.armjitter.ir.MveMoveOp;
 
 /// `VLDSTB_H`/`VLDSTB_W`/`VLDSTH_W` (load alargante/store estreitante, perfil M, B16.4, MVE/Helium)
 /// — as 6 linhas de `target/isa-decode/mve.decode` (confirmadas via `WebFetch` nesta rodada):
@@ -137,7 +137,7 @@ public final class Thumb2MveWideningLoadStoreDecoder implements DecoderExtension
         boolean postIndexed = !p;
         boolean signed = !unsignedLoad;
         return DecodedInstruction.lifted(address, raw, InstructionSet.THUMB, condition,
-                new IrOp.MveWideningLoadStore(qd, rn, signedOffset, memorySizeLog2, registerSizeLog2,
+                new MveMoveOp.WideningLoadStore(qd, rn, signedOffset, memorySizeLog2, registerSizeLog2,
                         load, signed, w, postIndexed, condition));
     }
 }

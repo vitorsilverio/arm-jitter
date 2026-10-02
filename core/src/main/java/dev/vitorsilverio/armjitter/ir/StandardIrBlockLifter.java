@@ -31,7 +31,7 @@ public final class StandardIrBlockLifter implements IrBlockLifter {
     /// mutável do decoder (que continua stateless) nem sobrevive além desta chamada. Para cada
     /// instrução coberta por um IT block ativo (`currentItState != 0`), a condição decodificada é
     /// SOBREPOSTA pela condição corrente do ITSTATE ({@link DecodedInstruction#withCondition}), e
-    /// o lifter emite uma {@link IrOp.SetItState} incondicional logo depois, avançando o ITSTATE
+    /// o lifter emite uma {@link SystemOp.SetItState} incondicional logo depois, avançando o ITSTATE
     /// (via {@link ItState#advance}) — espelha o `ITAdvance()` do hardware real, que roda depois de
     /// TODA instrução coberta independente de o guard condicional ter passado.
     ///
@@ -106,7 +106,7 @@ public final class StandardIrBlockLifter implements IrBlockLifter {
                 currentItState = instruction.immediate();
             } else if (governedByIt && instruction.kind() != InstructionKind.LONG_BRANCH_PREFIX) {
                 int nextItState = ItState.advance(currentItState);
-                block.add(new IrOp.SetItState(nextItState, Condition.AL));
+                block.add(new SystemOp.SetItState(nextItState, Condition.AL));
                 currentItState = nextItState;
             }
             // LONG_BRANCH_PREFIX: mesma condição/ITSTATE se aplica ao sufixo que segue (a próxima
@@ -185,14 +185,14 @@ public final class StandardIrBlockLifter implements IrBlockLifter {
                     // reescreve o VPR que as instruções seguintes leem).
                     VPST, VPNOT, VPSEL, VCTP -> true;
             // LIFTED_IR_OP (RFC B13.2): geralmente `false` (ver o `case` abaixo), EXCETO
-            // VCMP*/VCMP*_fp/VCMP*_scalar/VCMP*_fp_scalar (B16.8, `IrOp.MveVectorCompare`/
-            // `MveVectorCompareScalar`) — o QEMU real seta `DISAS_UPDATE_NOCHAIN` em `do_vcmp`/
+            // VCMP*/VCMP*_fp/VCMP*_scalar/VCMP*_fp_scalar (B16.8, `MvePredicationOp.VectorCompare`/
+            // `MvePredicationOp.VectorCompareScalar`) — o QEMU real seta `DISAS_UPDATE_NOCHAIN` em `do_vcmp`/
             // `do_vcmp_scalar` (a instrução ATUALIZA bits de predicação, mesmo motivo de
             // NOCP/VLLDM_VLSTM acima) e, quando `mask != 0`, é literalmente um `VPT` (mesma
             // categoria de VPST/VPNOT/VPSEL logo acima). Sem isto o lifter continuaria
             // decodificando depois de um `VPT` no MESMO bloco JIT com o `VPR` desatualizado.
-            case LIFTED_IR_OP -> instruction.liftedOp() instanceof IrOp.MveVectorCompare
-                    || instruction.liftedOp() instanceof IrOp.MveVectorCompareScalar;
+            case LIFTED_IR_OP -> instruction.liftedOp() instanceof MvePredicationOp.VectorCompare
+                    || instruction.liftedOp() instanceof MvePredicationOp.VectorCompareScalar;
             // IT (B2.4) NÃO é terminal: as instruções seguintes precisam continuar sendo lifted no
             // MESMO bloco para que a condição por-op seja anotada corretamente.
             case MOV, ADD, ADC, SUB, RSB, SBC, RSC, NEG, AND, EOR, ORR, LSL, LSR, ASR, ROR, MUL, MLA, UMULL, UMLAL, SMULL, SMLAL, CLZ, SATURATING, DSP_MULTIPLY, DSP_DUAL_MULTIPLY, DSP_TOP_WORD_MULTIPLY, EXTEND, BYTE_REVERSE, UMAAL, PARALLEL_ALU, SEL, PKH, SATURATE, USAD8, LOAD_EXCLUSIVE, STORE_EXCLUSIVE, CLEAR_EXCLUSIVE, BIC, MVN, MRS, MSR, TST, TEQ, CMP, CMN, LOAD_LITERAL, LOAD, STORE, DOUBLE_TRANSFER, SWAP, LOAD_MULTIPLE, STORE_MULTIPLE, LONG_BRANCH_PREFIX, PUSH,

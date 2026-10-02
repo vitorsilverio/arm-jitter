@@ -6,7 +6,7 @@ import dev.vitorsilverio.armjitter.arch.ArmFeature;
 import dev.vitorsilverio.armjitter.arch.DecoderExtension;
 import dev.vitorsilverio.armjitter.core.Condition;
 import dev.vitorsilverio.armjitter.core.VfpRegisters;
-import dev.vitorsilverio.armjitter.ir.IrOp;
+import dev.vitorsilverio.armjitter.ir.MveFpOp;
 
 /// Conversões `VCVT` (int↔fp, ponto fixo, modo de arredondamento) e `VRINT*` (perfil M, B16.12,
 /// MVE/Helium, `target/isa-decode/mve.decode`, linhas 791-832, 26 encodings — confirmadas bit a bit
@@ -180,7 +180,7 @@ public final class Thumb2MveFpConvertDecoder implements DecoderExtension {
         boolean toInt = ((raw >>> BIT8) & 1) != 0;
         boolean signed = ((raw >>> U_BIT) & 1) == 0;
         return DecodedInstruction.lifted(address, raw, InstructionSet.THUMB, condition,
-                new IrOp.MveVectorFpConvertFixed(!toInt, signed, esz, fractionBits, qd, qm, condition));
+                new MveFpOp.VectorFpConvertFixed(!toInt, signed, esz, fractionBits, qd, qm, condition));
     }
 
     /// As 18 linhas `@1op` (VCVT simples, VCVT com modo de arredondamento explícito, VRINT).
@@ -216,7 +216,7 @@ public final class Thumb2MveFpConvertDecoder implements DecoderExtension {
             return null;
         }
         return DecodedInstruction.lifted(address, raw, InstructionSet.THUMB, condition,
-                new IrOp.MveVectorFpConvert(op, size, qd, qm, condition));
+                new MveFpOp.VectorFpConvert(op, size, qd, qm, condition));
     }
 
     /// `bits[17:16]=11` — VCVT simples (`bit10=1`, `bit9=1` fixo) ou com modo explícito (`bit10=0`,

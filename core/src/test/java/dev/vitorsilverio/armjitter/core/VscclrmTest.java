@@ -5,7 +5,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import dev.vitorsilverio.armjitter.arch.ArmArchitecture;
 import dev.vitorsilverio.armjitter.codegen.executor.IrBlockExecutor;
-import dev.vitorsilverio.armjitter.ir.IrOp;
+import dev.vitorsilverio.armjitter.ir.VfpOp;
 import dev.vitorsilverio.armjitter.support.TestAddressSpace;
 import dev.vitorsilverio.armjitter.swi.SwiDispatcher;
 import org.junit.jupiter.api.Test;
@@ -27,7 +27,7 @@ class VscclrmTest {
         }
 
         new IrBlockExecutor(ArmArchitecture.ARMV7M)
-                .executeOp(core, new IrOp.Vscclrm(false, 2, 5, Condition.AL), 0);
+                .executeOp(core, new VfpOp.Vscclrm(false, 2, 5, Condition.AL), 0);
 
         assertEquals(0xFFFF_FFFF, core.vfp().s(0), "fora do intervalo, preservado");
         assertEquals(0xFFFF_FFFF, core.vfp().s(1), "fora do intervalo, preservado");
@@ -46,7 +46,7 @@ class VscclrmTest {
         }
 
         new IrBlockExecutor(ArmArchitecture.ARMV7M)
-                .executeOp(core, new IrOp.Vscclrm(true, 1, 2, Condition.AL), 0);
+                .executeOp(core, new VfpOp.Vscclrm(true, 1, 2, Condition.AL), 0);
 
         assertEquals(0xFFFF_FFFF_FFFF_FFFFL, core.vfp().d(0), "fora do intervalo, preservado");
         assertEquals(0L, core.vfp().d(1));
@@ -62,7 +62,7 @@ class VscclrmTest {
         // lastRegister muito além do banco real (encoding UNPREDICTABLE com imm grande): não deve
         // lançar, só recortar ao índice máximo real (31).
         new IrBlockExecutor(ArmArchitecture.ARMV7M)
-                .executeOp(core, new IrOp.Vscclrm(false, 30, 500, Condition.AL), 0);
+                .executeOp(core, new VfpOp.Vscclrm(false, 30, 500, Condition.AL), 0);
 
         assertEquals(0, core.vfp().s(31), "recortado ao topo real do banco, ainda zera S31");
     }
@@ -74,7 +74,7 @@ class VscclrmTest {
 
         // last < first (imm=0 no encoding real): intervalo vazio, nada é zerado.
         new IrBlockExecutor(ArmArchitecture.ARMV7M)
-                .executeOp(core, new IrOp.Vscclrm(false, 0, -1, Condition.AL), 0);
+                .executeOp(core, new VfpOp.Vscclrm(false, 0, -1, Condition.AL), 0);
 
         assertEquals(0xFFFF_FFFF, core.vfp().s(0));
     }
@@ -86,7 +86,7 @@ class VscclrmTest {
         core.cpsr().set(core.cpsr().get() & ~CpsrRegister.ZERO_FLAG); // Z=0 -> EQ falsa
 
         boolean pcChanged = new IrBlockExecutor(ArmArchitecture.ARMV7M)
-                .executeOp(core, new IrOp.Vscclrm(false, 0, 0, Condition.EQ), 0);
+                .executeOp(core, new VfpOp.Vscclrm(false, 0, 0, Condition.EQ), 0);
 
         assertTrue(!pcChanged);
         assertEquals(0xFFFF_FFFF, core.vfp().s(0), "condição falsa não deve zerar nada");

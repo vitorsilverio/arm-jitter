@@ -7,7 +7,8 @@ import dev.vitorsilverio.armjitter.arch.ArmFeature;
 import dev.vitorsilverio.armjitter.arch.DecoderExtension;
 import dev.vitorsilverio.armjitter.core.Condition;
 import dev.vitorsilverio.armjitter.core.VfpRegisters;
-import dev.vitorsilverio.armjitter.ir.IrOp;
+import dev.vitorsilverio.armjitter.ir.MveFpOp;
+import dev.vitorsilverio.armjitter.ir.MveIntegerOp;
 
 /// Sub-família 1 da B16.7 (perfil M, MVE/Helium, `target/isa-decode/mve.decode`, linhas 220-279, 30
 /// encodings) — os quatro blocos `{}` sobrepostos que o comentário do arquivo real descreve assim:
@@ -171,7 +172,7 @@ public final class Thumb2MveVectorOverlapDecoder implements DecoderExtension {
         }
         boolean widen = u; // U=0: _SH (estreita); U=1: _HS (alarga).
         return DecodedInstruction.lifted(address, raw, InstructionSet.THUMB, condition,
-                new IrOp.MveVectorFpConvertPrecision(widen, top, qd, qm, condition));
+                new MveFpOp.VectorFpConvertPrecision(widen, top, qd, qm, condition));
     }
 
     /// `VMAXNMA` (`bit12=0`) / `VMINNMA` (`bit12=1`) — `esz` `1`(`U=1`,binary16)/`2`(`U=0`,binary32),
@@ -183,7 +184,7 @@ public final class Thumb2MveVectorOverlapDecoder implements DecoderExtension {
         }
         int esz = u ? FP_ESZ_HALF : FP_ESZ_SINGLE;
         return DecodedInstruction.lifted(address, raw, InstructionSet.THUMB, condition,
-                new IrOp.MveVectorFpAbsAccumulate(!min, esz, qd, qm, condition));
+                new MveFpOp.VectorFpAbsAccumulate(!min, esz, qd, qm, condition));
     }
 
     /// `VSHLL_BS`/`VSHLL_TS` (`U=0`) / `VSHLL_BU`/`VSHLL_TU` (`U=1`), forma T2 — `size` real
@@ -199,7 +200,7 @@ public final class Thumb2MveVectorOverlapDecoder implements DecoderExtension {
         }
         int shift = esz == 0 ? SHLL_SHIFT_BYTE : SHLL_SHIFT_HALFWORD;
         return DecodedInstruction.lifted(address, raw, InstructionSet.THUMB, condition,
-                new IrOp.MveVectorShiftWidenInterleaved(!u, esz, top, qd, qm, condition));
+                new MveIntegerOp.VectorShiftWidenInterleaved(!u, esz, top, qd, qm, condition));
     }
 
     /// `VQMOVUNB`/`VQMOVUNT` (`U=0`, narrow saturante SIGNED→UNSIGNED, `SQXTUN`) / `VMOVNB`/`VMOVNT`
@@ -219,7 +220,7 @@ public final class Thumb2MveVectorOverlapDecoder implements DecoderExtension {
         }
         AdvSimdNarrowUnaryOp op = u ? AdvSimdNarrowUnaryOp.XTN : AdvSimdNarrowUnaryOp.SQXTUN;
         return DecodedInstruction.lifted(address, raw, InstructionSet.THUMB, condition,
-                new IrOp.MveVectorNarrowInterleaved(op, esz, top, qd, qm, condition));
+                new MveIntegerOp.VectorNarrowInterleaved(op, esz, top, qd, qm, condition));
     }
 
     /// `VQMOVN_BS`/`VQMOVN_TS` (`U=0`, `SQXTN`) / `VQMOVN_BU`/`VQMOVN_TU` (`U=1`, `UQXTN`) — `size`
@@ -235,7 +236,7 @@ public final class Thumb2MveVectorOverlapDecoder implements DecoderExtension {
         }
         AdvSimdNarrowUnaryOp op = u ? AdvSimdNarrowUnaryOp.UQXTN : AdvSimdNarrowUnaryOp.SQXTN;
         return DecodedInstruction.lifted(address, raw, InstructionSet.THUMB, condition,
-                new IrOp.MveVectorNarrowInterleaved(op, esz, top, qd, qm, condition));
+                new MveIntegerOp.VectorNarrowInterleaved(op, esz, top, qd, qm, condition));
     }
 
     /// `VMAXA`/`VMINA` (`bit12` do bloco discrimina — aqui `min` é o parâmetro do bloco gêmeo) — `Qd`
@@ -257,7 +258,7 @@ public final class Thumb2MveVectorOverlapDecoder implements DecoderExtension {
             return null;
         }
         return DecodedInstruction.lifted(address, raw, InstructionSet.THUMB, condition,
-                new IrOp.MveVectorAbsAccumulate(!min, esz, qd, qm, condition));
+                new MveIntegerOp.VectorAbsAccumulate(!min, esz, qd, qm, condition));
     }
 
     /// `VMULH_S`/`VMULH_U` (`bit12=0`) / `VRMULH_S`/`VRMULH_U` (`bit12=1`) — catch-all do bloco,
@@ -278,6 +279,6 @@ public final class Thumb2MveVectorOverlapDecoder implements DecoderExtension {
         AdvSimdThreeSameOp op = rounded ? (u ? AdvSimdThreeSameOp.URMULH : AdvSimdThreeSameOp.SRMULH)
                 : (u ? AdvSimdThreeSameOp.UMULH : AdvSimdThreeSameOp.SMULH);
         return DecodedInstruction.lifted(address, raw, InstructionSet.THUMB, condition,
-                new IrOp.MveVector2Op(op, size, qd, qn, qm, condition));
+                new MveIntegerOp.Vector2Op(op, size, qd, qn, qm, condition));
     }
 }

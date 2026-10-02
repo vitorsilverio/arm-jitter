@@ -52,7 +52,7 @@ class VfpSystemAccessMProfileTest {
         ArmCore core = newCore();
         core.setRegister(5, 0x1234);
         boolean pcChanged = new dev.vitorsilverio.armjitter.codegen.executor.IrBlockExecutor(ArmArchitecture.ARMV7M)
-                .executeOp(core, new dev.vitorsilverio.armjitter.ir.IrOp.VfpSystemTransfer(false, 5, Condition.EQ),
+                .executeOp(core, new dev.vitorsilverio.armjitter.ir.VfpOp.SystemTransfer(false, 5, Condition.EQ),
                         core.programCounter());
         assertTrue(!pcChanged);
         assertEquals(0, core.fpscr().value(), "condição falsa não deve escrever FPSCR");

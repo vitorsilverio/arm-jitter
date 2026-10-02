@@ -7,6 +7,7 @@ import dev.vitorsilverio.armjitter.codegen.executor.IrBlockExecutor;
 import dev.vitorsilverio.armjitter.core.ArmCore;
 import dev.vitorsilverio.armjitter.ir.IrBlock;
 import dev.vitorsilverio.armjitter.ir.IrOp;
+import dev.vitorsilverio.armjitter.ir.NeonIntegerOp;
 import dev.vitorsilverio.armjitter.ir.StandardIrBuilder;
 import dev.vitorsilverio.armjitter.support.TestAddressSpace;
 import dev.vitorsilverio.armjitter.swi.SwiDispatcher;
@@ -18,7 +19,7 @@ import java.util.List;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
 /// `neon-shared.decode` — `VSMMLA`/`VUMMLA`/`VUSMMLA` (task B13.19, `FEAT_I8MM`, MESMA feature
-/// que `VUSDOT`/`VSUDOT_scalar` da B13.18) → {@link IrOp.NeonMatrixMultiplyAccumulate} → execução
+/// que `VUSDOT`/`VSUDOT_scalar` da B13.18) → {@link NeonIntegerOp.MatrixMultiplyAccumulate} → execução
 /// pelo núcleo vetorial COMPARTILHADO ({@code AdvSimdLanes.matrixMultiplyAccumulate}, criado pela
 /// B19.12, a task irmã A64) — reusado sem nenhuma mudança.
 ///
@@ -160,13 +161,13 @@ class NeonSharedDecoderMatrixMultiplyTest {
 
     @Test
     void decodesSignsAndRegisters() {
-        assertEquals(new IrOp.NeonMatrixMultiplyAccumulate(true, true, 0, 2, 4),
+        assertEquals(new NeonIntegerOp.MatrixMultiplyAccumulate(true, true, 0, 2, 4),
                 liftedOf(vsmmla(0, 2, 4)));   // VSMMLA: assinado/assinado
-        assertEquals(new IrOp.NeonMatrixMultiplyAccumulate(false, false, 0, 2, 4),
+        assertEquals(new NeonIntegerOp.MatrixMultiplyAccumulate(false, false, 0, 2, 4),
                 liftedOf(vummla(0, 2, 4)));   // VUMMLA: sem-sinal/sem-sinal
-        assertEquals(new IrOp.NeonMatrixMultiplyAccumulate(false, true, 0, 2, 4),
+        assertEquals(new NeonIntegerOp.MatrixMultiplyAccumulate(false, true, 0, 2, 4),
                 liftedOf(vusmmla(0, 2, 4))); // VUSMMLA: sem-sinal/assinado
-        assertEquals(new IrOp.NeonMatrixMultiplyAccumulate(true, true, 6, 8, 10),
+        assertEquals(new NeonIntegerOp.MatrixMultiplyAccumulate(true, true, 6, 8, 10),
                 liftedOf(vsmmla(6, 8, 10)));
     }
 

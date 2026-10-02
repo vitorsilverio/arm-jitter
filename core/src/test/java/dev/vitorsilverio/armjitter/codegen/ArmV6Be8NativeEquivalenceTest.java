@@ -18,7 +18,7 @@ import org.junit.jupiter.api.Test;
 /// `ArmFeature.UNALIGNED_ACCESS`) trocam bytes IDENTICAMENTE ao interpretado — prova de
 /// equivalência (invariante G1), 14 condições × 16 combinações de NZCV, mesma técnica de
 /// `ArmV6UnalignedAccessNativeEquivalenceTest`. `LDR`/`STR`/`LDRH`/`STRH` já são ops nativas
-/// (`AsmNativePolicy` nunca rejeitou `IrOp.Load`/`IrOp.Store`) — nenhuma mudança de política
+/// (`AsmNativePolicy` nunca rejeitou `MemoryOp.Load`/`MemoryOp.Store`) — nenhuma mudança de política
 /// foi necessária para BE8 funcionar nativamente, só nos helpers que o bytecode já chama.
 class ArmV6Be8NativeEquivalenceTest extends BlockEquivalenceTest {
     private static final int FIRST_COND = 0;  // EQ

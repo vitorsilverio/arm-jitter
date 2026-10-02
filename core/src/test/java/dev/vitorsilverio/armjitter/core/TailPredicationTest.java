@@ -226,7 +226,7 @@ class TailPredicationTest {
 
         boolean pcChanged = new dev.vitorsilverio.armjitter.codegen.executor.IrBlockExecutor(
                 ArmArchitecture.ARMV8_1M_MVE)
-                .executeOp(core, new dev.vitorsilverio.armjitter.ir.IrOp.Vctp(1, 0, Condition.AL),
+                .executeOp(core, new dev.vitorsilverio.armjitter.ir.MvePredicationOp.Vctp(1, 0, Condition.AL),
                         core.programCounter());
 
         assertEquals(true, pcChanged);
@@ -293,9 +293,9 @@ class TailPredicationTest {
     @Test
     void newOpsAreInterpretedOnlyAndRunThroughExecuteOp() {
         dev.vitorsilverio.armjitter.ir.IrOp lctp =
-                new dev.vitorsilverio.armjitter.ir.IrOp.LoopClearTailPredication(Condition.AL);
-        dev.vitorsilverio.armjitter.ir.IrOp vctp = new dev.vitorsilverio.armjitter.ir.IrOp.Vctp(1, 0, Condition.AL);
-        dev.vitorsilverio.armjitter.ir.IrOp clrm = new dev.vitorsilverio.armjitter.ir.IrOp.ClearMultiple(1, Condition.AL);
+                new dev.vitorsilverio.armjitter.ir.MvePredicationOp.LoopClearTailPredication(Condition.AL);
+        dev.vitorsilverio.armjitter.ir.IrOp vctp = new dev.vitorsilverio.armjitter.ir.MvePredicationOp.Vctp(1, 0, Condition.AL);
+        dev.vitorsilverio.armjitter.ir.IrOp clrm = new dev.vitorsilverio.armjitter.ir.IntegerOp.ClearMultiple(1, Condition.AL);
         for (dev.vitorsilverio.armjitter.ir.IrOp op : new dev.vitorsilverio.armjitter.ir.IrOp[] {lctp, vctp, clrm}) {
             assertFalse(dev.vitorsilverio.armjitter.codegen.jvm.AsmNativePolicy.supports(op), op.toString());
         }
@@ -311,9 +311,9 @@ class TailPredicationTest {
 
     @Test
     void pureLoopStartConstructorKeepsLtpsizeUntouched() {
-        var pure = new dev.vitorsilverio.armjitter.ir.IrOp.LoopStart(2, 0, false, Condition.AL);
-        assertEquals(dev.vitorsilverio.armjitter.ir.IrOp.LoopStart.NO_LTPSIZE, pure.ltpsize());
-        var pureEnd = new dev.vitorsilverio.armjitter.ir.IrOp.LoopEnd(0, false, Condition.AL);
+        var pure = new dev.vitorsilverio.armjitter.ir.BranchOp.LoopStart(2, 0, false, Condition.AL);
+        assertEquals(dev.vitorsilverio.armjitter.ir.BranchOp.LoopStart.NO_LTPSIZE, pure.ltpsize());
+        var pureEnd = new dev.vitorsilverio.armjitter.ir.BranchOp.LoopEnd(0, false, Condition.AL);
         assertFalse(pureEnd.tailPredicated());
     }
 

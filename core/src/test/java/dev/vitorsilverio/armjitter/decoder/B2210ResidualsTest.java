@@ -10,6 +10,7 @@ import dev.vitorsilverio.armjitter.core.Condition;
 import dev.vitorsilverio.armjitter.ir.IrBlock;
 import dev.vitorsilverio.armjitter.ir.IrOp;
 import dev.vitorsilverio.armjitter.ir.StandardIrBuilder;
+import dev.vitorsilverio.armjitter.ir.VfpOp;
 import dev.vitorsilverio.armjitter.support.TestAddressSpace;
 import dev.vitorsilverio.armjitter.swi.SwiDispatcher;
 import java.util.List;
@@ -103,7 +104,7 @@ class B2210ResidualsTest {
     void vmovHalfDecodesUnderFp16PresetsAndIsRefusedInArmv7() {
         for (ArmArchitecture arch : List.of(ArmArchitecture.ARMV8A_32, ArmArchitecture.ARMV8_6A_32)) {
             IrOp op = lift(decodeArm(arch, vmovHalf(true, 2, 5)));
-            assertEquals(new IrOp.VfpCoreTransfer(true, 2, 5, true, Condition.AL), op, arch.name());
+            assertEquals(new VfpOp.CoreTransfer(true, 2, 5, true, Condition.AL), op, arch.name());
         }
         assertEquals(InstructionKind.UNIMPLEMENTED,
                 decodeArm(ArmArchitecture.ARMV7A_NEON, vmovHalf(true, 2, 5)).kind());

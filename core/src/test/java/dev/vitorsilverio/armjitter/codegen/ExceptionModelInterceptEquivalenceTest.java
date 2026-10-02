@@ -6,9 +6,10 @@ import dev.vitorsilverio.armjitter.core.ArmCore;
 import dev.vitorsilverio.armjitter.core.ArmException;
 import dev.vitorsilverio.armjitter.core.Condition;
 import dev.vitorsilverio.armjitter.core.ExceptionModel;
+import dev.vitorsilverio.armjitter.ir.BranchOp;
 import dev.vitorsilverio.armjitter.ir.IrBlock;
-import dev.vitorsilverio.armjitter.ir.IrOp;
 import dev.vitorsilverio.armjitter.ir.IrOperand;
+import dev.vitorsilverio.armjitter.ir.MemoryOp;
 import dev.vitorsilverio.armjitter.support.TestAddressSpace;
 import dev.vitorsilverio.armjitter.swi.SwiDispatcher;
 import org.junit.jupiter.api.Test;
@@ -54,7 +55,7 @@ class ExceptionModelInterceptEquivalenceTest {
     @Test
     void branchExchangeToInterceptedTargetCallsBranchInterceptedInBothBackends() {
         IrBlock block = IrBlock.builder(0)
-                .add(new IrOp.BranchExchange(0, -1, false, 0, Condition.AL))
+                .add(new BranchOp.BranchExchange(0, -1, false, 0, Condition.AL))
                 .endPc(4)
                 .sealed();
 
@@ -64,7 +65,7 @@ class ExceptionModelInterceptEquivalenceTest {
     @Test
     void popPcToInterceptedTargetCallsBranchInterceptedInBothBackends() {
         IrBlock block = IrBlock.builder(0)
-                .add(new IrOp.Pop(0, true, Condition.AL))
+                .add(new MemoryOp.Pop(0, true, Condition.AL))
                 .endPc(2)
                 .sealed();
 
@@ -74,7 +75,7 @@ class ExceptionModelInterceptEquivalenceTest {
     @Test
     void loadPcToInterceptedTargetCallsBranchInterceptedInBothBackends() {
         IrBlock block = IrBlock.builder(0)
-                .add(new IrOp.Load(15, 0, -1, new IrOperand.Immediate(0), 4,
+                .add(new MemoryOp.Load(15, 0, -1, new IrOperand.Immediate(0), 4,
                         false, false, true, false, Condition.AL))
                 .endPc(4)
                 .sealed();

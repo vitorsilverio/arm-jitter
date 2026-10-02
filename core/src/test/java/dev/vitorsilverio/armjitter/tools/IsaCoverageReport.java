@@ -1054,7 +1054,7 @@ public final class IsaCoverageReport {
 
     /// **Achado da B14.7**: comparar só `.kind()` é raso demais para este heurístico — `VFP_ALU`
     /// (e outros `Kind` "guarda-chuva") empacota a operação de verdade em {@link
-    /// DecodedInstruction#immediate()} (o ordinal de `IrOp.VfpOperation`, ver `VfpDecoder`). Sem
+    /// DecodedInstruction#immediate()} (o ordinal de `VfpOp.VfpOperation`, ver `VfpDecoder`). Sem
     /// isto, `VMAXNM_sp` (`vfp-uncond.decode`, `cond=1111`) e `VDIV` (`vfp.decode`, `cond=1110`,
     /// MESMO padrão `bit23=1,bits21:20=00,bit6=0`) tinham o MESMO `Kind` por coincidência e o
     /// medidor acusava "misdecode" onde as duas são instruções genuinamente distintas e

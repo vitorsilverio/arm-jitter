@@ -13,7 +13,15 @@ import dev.vitorsilverio.armjitter.core.MveVptState;
 import dev.vitorsilverio.armjitter.core.MveWideShifts;
 import dev.vitorsilverio.armjitter.core.VfpRegisters;
 import dev.vitorsilverio.armjitter.core.VprRegister;
+import dev.vitorsilverio.armjitter.ir.IntegerOp;
 import dev.vitorsilverio.armjitter.ir.IrOp;
+import dev.vitorsilverio.armjitter.ir.MveFpOp;
+import dev.vitorsilverio.armjitter.ir.MveIntegerOp;
+import dev.vitorsilverio.armjitter.ir.MveMoveOp;
+import dev.vitorsilverio.armjitter.ir.MvePredicationOp;
+import dev.vitorsilverio.armjitter.ir.MveReductionOp;
+import dev.vitorsilverio.armjitter.ir.SystemOp;
+import dev.vitorsilverio.armjitter.ir.VfpOp;
 import dev.vitorsilverio.armjitter.swi.CpuState;
 
 /// Executa PSR, SWI, coprocessador e instruções indefinidas da IR interpretada.
@@ -24,7 +32,7 @@ public final class IrSystemExecutor {
         this.support = support;
     }
 
-    public void executePsrTransfer(ArmCore core, IrOp.PsrTransfer transfer) {
+    public void executePsrTransfer(ArmCore core, SystemOp.PsrTransfer transfer) {
         if (!core.cpsr().evalCond(transfer.condition())) {
             return;
         }
@@ -48,7 +56,7 @@ public final class IrSystemExecutor {
     }
 
     /// @return {@code true} quando o PC foi alterado pela operação
-    public boolean executeSwi(ArmCore core, IrOp.Swi swi, int sequentialPc) {
+    public boolean executeSwi(ArmCore core, SystemOp.Swi swi, int sequentialPc) {
         if (!core.cpsr().evalCond(swi.condition())) {
             return false;
         }
@@ -69,7 +77,7 @@ public final class IrSystemExecutor {
     /// corrente como base de retorno tanto para `SWI` quanto para `HVC`.
     ///
     /// @return {@code true} quando o PC foi alterado pela operação
-    public boolean executeHvc(ArmCore core, IrOp.Hvc hvc, int sequentialPc) {
+    public boolean executeHvc(ArmCore core, SystemOp.Hvc hvc, int sequentialPc) {
         if (!core.cpsr().evalCond(hvc.condition())) {
             return false;
         }
@@ -86,7 +94,7 @@ public final class IrSystemExecutor {
     /// em tempo de EXECUÇÃO de {@link #executeHvc}). Mesma convenção de PC sequencial.
     ///
     /// @return {@code true} quando o PC foi alterado pela operação
-    public boolean executeSmc(ArmCore core, IrOp.Smc smc, int sequentialPc) {
+    public boolean executeSmc(ArmCore core, SystemOp.Smc smc, int sequentialPc) {
         if (!core.cpsr().evalCond(smc.condition())) {
             return false;
         }
@@ -108,7 +116,7 @@ public final class IrSystemExecutor {
     /// troca de modo/banco, então ler depois corromperia a leitura do banco de ORIGEM.
     ///
     /// @return {@code true} (sempre altera o PC — via `UNDEFINED` ou via retorno real)
-    public boolean executeEret(ArmCore core, IrOp.Eret eret, int sequentialPc) {
+    public boolean executeEret(ArmCore core, SystemOp.Eret eret, int sequentialPc) {
         if (!core.cpsr().evalCond(eret.condition())) {
             return false;
         }
@@ -130,7 +138,7 @@ public final class IrSystemExecutor {
     /// B9.8, ver `b9.8-plano-hyp-monitor-32bit.md`).
     ///
     /// @return {@code true} quando o PC foi alterado pela operação (só no caso `UNDEFINED`)
-    public boolean executeMrsBank(ArmCore core, IrOp.MrsBank mrs, int sequentialPc) {
+    public boolean executeMrsBank(ArmCore core, SystemOp.MrsBank mrs, int sequentialPc) {
         if (!core.cpsr().evalCond(mrs.condition())) {
             return false;
         }
@@ -150,7 +158,7 @@ public final class IrSystemExecutor {
     /// escreve o registrador geral de origem no `SPSR`/`ELR_hyp`/registrador bancado do modo ALVO.
     ///
     /// @return {@code true} quando o PC foi alterado pela operação (só no caso `UNDEFINED`)
-    public boolean executeMsrBank(ArmCore core, IrOp.MsrBank msr, int sequentialPc) {
+    public boolean executeMsrBank(ArmCore core, SystemOp.MsrBank msr, int sequentialPc) {
         if (!core.cpsr().evalCond(msr.condition())) {
             return false;
         }
@@ -172,7 +180,7 @@ public final class IrSystemExecutor {
 
     /// @return {@code true} quando o PC foi alterado pela operação (sempre — `BKPT` é
     /// incondicional, sem campo de condição em nenhum dos dois modos)
-    public boolean executeBreakpoint(ArmCore core, IrOp.Breakpoint bkpt, int sequentialPc) {
+    public boolean executeBreakpoint(ArmCore core, SystemOp.Breakpoint bkpt, int sequentialPc) {
         core.setProgramCounter(sequentialPc);
         if (core.bkptDispatcher().canDispatch(bkpt.immediate())) {
             CpuState next = core.bkptDispatcher().dispatch(bkpt.immediate(), core.toCpuState());
@@ -184,7 +192,7 @@ public final class IrSystemExecutor {
     }
 
     /// @return {@code true} quando o PC foi alterado pela operação
-    public boolean executeCoprocessor(ArmCore core, IrOp.Coprocessor cp) {
+    public boolean executeCoprocessor(ArmCore core, SystemOp.Coprocessor cp) {
         if (!core.cpsr().evalCond(cp.condition())) {
             return false;
         }
@@ -210,7 +218,7 @@ public final class IrSystemExecutor {
     }
 
     /// @return {@code true} quando o PC foi alterado pela operação
-    public boolean executeCoprocessorDouble(ArmCore core, IrOp.CoprocessorDouble cp) {
+    public boolean executeCoprocessorDouble(ArmCore core, SystemOp.CoprocessorDouble cp) {
         if (!core.cpsr().evalCond(cp.condition())) {
             return false;
         }
@@ -231,7 +239,7 @@ public final class IrSystemExecutor {
     }
 
     /// @return {@code true} quando o PC foi alterado pela operação
-    public boolean executeUndefined(ArmCore core, IrOp.Undefined undefined) {
+    public boolean executeUndefined(ArmCore core, SystemOp.Undefined undefined) {
         if (!core.cpsr().evalCond(undefined.condition())) {
             return false;
         }
@@ -243,7 +251,7 @@ public final class IrSystemExecutor {
     /// `CPS`/`CPSIE`/`CPSID` (ARMv6): reusa {@link ArmCore#setCpsr} — o mesmo caminho de troca de
     /// banco que `MSR`/entrada de exceção usam — para que a troca de modo (quando presente)
     /// rebanque os registradores corretamente. UNPREDICTABLE em modo User: tratado como NOP.
-    public void executeChangeProcessorState(ArmCore core, IrOp.ChangeProcessorState cps) {
+    public void executeChangeProcessorState(ArmCore core, SystemOp.ChangeProcessorState cps) {
         if (!core.cpsr().evalCond(cps.condition())) {
             return;
         }
@@ -280,7 +288,7 @@ public final class IrSystemExecutor {
     /// ao {@link MProfileExceptionModel} (dono de MSP/PSP/PRIMASK/BASEPRI/FAULTMASK/CONTROL). O cast
     /// é seguro: esta op só é produzida pelo decoder sob {@code ArmFeature.M_PROFILE}, e todo core
     /// com essa feature roda com um {@code MProfileExceptionModel} instalado.
-    public void executeMProfileSystemRegister(ArmCore core, IrOp.MProfileSystemRegister op) {
+    public void executeMProfileSystemRegister(ArmCore core, SystemOp.MProfileSystemRegister op) {
         if (!core.cpsr().evalCond(op.condition())) {
             return;
         }
@@ -299,7 +307,7 @@ public final class IrSystemExecutor {
     /// {@code ArmFeature.M_PROFILE}.
     ///
     /// @return sempre {@code true} — `enterException` sempre muda o PC para o vetor do handler.
-    public boolean executeNocp(ArmCore core, IrOp.Nocp op) {
+    public boolean executeNocp(ArmCore core, SystemOp.Nocp op) {
         if (!core.cpsr().evalCond(op.condition())) {
             return false;
         }
@@ -311,11 +319,11 @@ public final class IrSystemExecutor {
 
     /// `VLLDM`/`VLSTM` (perfil M, B15.5): sem FPU real, sempre `UNDEFINED` — seta `UFSR.UNDEFINSTR`
     /// (diferente do `UFSR.NOCP` de {@link #executeNocp}: a arquitetura real prioriza estas 2 formas
-    /// ANTES do `NOCP` genérico, ver Javadoc de {@code IrOp.VlldmVlstm}) e entra em `USAGE_FAULT`
+    /// ANTES do `NOCP` genérico, ver Javadoc de {@code VfpOp.VlldmVlstm}) e entra em `USAGE_FAULT`
     /// direto no {@link MProfileExceptionModel}, mesmo cast seguro de {@link #executeNocp}.
     ///
     /// @return sempre {@code true} — `enterException` sempre muda o PC para o vetor do handler.
-    public boolean executeVlldmVlstm(ArmCore core, IrOp.VlldmVlstm op) {
+    public boolean executeVlldmVlstm(ArmCore core, VfpOp.VlldmVlstm op) {
         if (!core.cpsr().evalCond(op.condition())) {
             return false;
         }
@@ -327,7 +335,7 @@ public final class IrSystemExecutor {
 
     /// `SG` (B15.4): só produzida sob `ArmFeature#M_PROFILE_SECURITY` (exclusivo do perfil M),
     /// mesmo cast direto de {@link #executeNocp} acima.
-    public void executeSecureGateway(ArmCore core, IrOp.SecureGateway op) {
+    public void executeSecureGateway(ArmCore core, SystemOp.SecureGateway op) {
         if (!core.cpsr().evalCond(op.condition())) {
             return;
         }
@@ -337,7 +345,7 @@ public final class IrSystemExecutor {
     /// `SETEND` (ARMv6): seta o bit E do CPSR. Acessos de dados subsequentes com E=1 passam a
     /// usar BE8 (task B1.8, ver {@code IrExecutionSupport#applyDataEndiannessWord}); a busca de
     /// instrução nunca é afetada.
-    public void executeSetEndianness(ArmCore core, IrOp.SetEndianness setend) {
+    public void executeSetEndianness(ArmCore core, SystemOp.SetEndianness setend) {
         if (!core.cpsr().evalCond(setend.condition())) {
             return;
         }
@@ -345,7 +353,7 @@ public final class IrSystemExecutor {
     }
 
     /// `WFI` (ARMv6K hint): coloca o core em HALT (acorda com {@code setInterruptLine(true)}).
-    public void executeWaitForInterrupt(ArmCore core, IrOp.WaitForInterrupt wfi) {
+    public void executeWaitForInterrupt(ArmCore core, SystemOp.WaitForInterrupt wfi) {
         if (!core.cpsr().evalCond(wfi.condition())) {
             return;
         }
@@ -353,19 +361,19 @@ public final class IrSystemExecutor {
     }
 
     /// `DMB`/`DSB`/`ISB` (ARMv7, Thumb-2 — B2.5): NOP observável neste core single-thread sem
-    /// reordenação real de memória (premissa documentada em {@link IrOp.MemoryBarrier}). Ainda
+    /// reordenação real de memória (premissa documentada em {@link SystemOp.MemoryBarrier}). Ainda
     /// checa a condição por simetria com o resto do executor, mesmo não havendo efeito algum.
-    public void executeMemoryBarrier(ArmCore core, IrOp.MemoryBarrier barrier) {
+    public void executeMemoryBarrier(ArmCore core, SystemOp.MemoryBarrier barrier) {
         if (!core.cpsr().evalCond(barrier.condition())) {
             return;
         }
-        // Intencionalmente vazio: ver justificativa em IrOp.MemoryBarrier.
+        // Intencionalmente vazio: ver justificativa em SystemOp.MemoryBarrier.
     }
 
     /// Grava o ITSTATE\[7:0\] do CPSR (Thumb-2 IT block, B2.4). Ver o javadoc de
-    /// {@link IrOp.SetItState} para as duas origens (entrada do `IT`/avanço pós-instrução) e por
+    /// {@link SystemOp.SetItState} para as duas origens (entrada do `IT`/avanço pós-instrução) e por
     /// que o avanço é sempre emitido com condição AL pelo lifter.
-    public void executeSetItState(ArmCore core, IrOp.SetItState setItState) {
+    public void executeSetItState(ArmCore core, SystemOp.SetItState setItState) {
         if (!core.cpsr().evalCond(setItState.condition())) {
             return;
         }
@@ -398,10 +406,10 @@ public final class IrSystemExecutor {
     ///
     /// @return `true` quando faultou (PC mudou) — {@link
     ///         dev.vitorsilverio.armjitter.codegen.executor.IrBlockExecutor} usa isto para pular o
-    ///         {@link IrOp.AdvanceVpt} seguinte no mesmo bloco: o QEMU real nunca chega a
+    ///         {@link MvePredicationOp.AdvanceVpt} seguinte no mesmo bloco: o QEMU real nunca chega a
     ///         `mve_update_and_store_eci`/`mve_advance_vpt` quando `mve_eci_check` falha —
     ///         translation-time short-circuit, não comportamento de pipeline.
-    public boolean executeVpst(ArmCore core, IrOp.Vpst op) {
+    public boolean executeVpst(ArmCore core, MvePredicationOp.Vpst op) {
         if (!core.cpsr().evalCond(op.condition())) {
             return false;
         }
@@ -421,7 +429,7 @@ public final class IrSystemExecutor {
     /// idêntico já usado por `mve_advance_vpt` no MESMO arquivo; ver `## Resultado` da task B16.2.
     ///
     /// @return `true` quando faultou (ver {@link #executeVpst}).
-    public boolean executeVpnot(ArmCore core, IrOp.Vpnot op) {
+    public boolean executeVpnot(ArmCore core, MvePredicationOp.Vpnot op) {
         if (!core.cpsr().evalCond(op.condition())) {
             return false;
         }
@@ -443,7 +451,7 @@ public final class IrSystemExecutor {
     /// write-enable pelo `elementMask` corrente. Ver `## Resultado` da task B16.2.
     ///
     /// @return `true` quando faultou (ver {@link #executeVpst}).
-    public boolean executeVpsel(ArmCore core, IrOp.Vpsel op) {
+    public boolean executeVpsel(ArmCore core, MvePredicationOp.Vpsel op) {
         if (!core.cpsr().evalCond(op.condition())) {
             return false;
         }
@@ -468,7 +476,7 @@ public final class IrSystemExecutor {
 
     /// `LCTP` (perfil M, B16.15, MVE): restaura `FPSCR.LTPSIZE = 4`, a tail-predication inativa.
     /// É TUDO o que o QEMU real faz (`trans_LCTP`: sem cache de branch a limpar).
-    public void executeLctp(ArmCore core, IrOp.LoopClearTailPredication op) {
+    public void executeLctp(ArmCore core, MvePredicationOp.LoopClearTailPredication op) {
         if (!core.cpsr().evalCond(op.condition())) {
             return;
         }
@@ -482,7 +490,7 @@ public final class IrSystemExecutor {
     /// que o lifter emite depois de toda instrução beatwise.
     ///
     /// @return `true` quando faultou (`ECI` reservado, ver {@link #executeVpst}).
-    public boolean executeVctp(ArmCore core, IrOp.Vctp op) {
+    public boolean executeVctp(ArmCore core, MvePredicationOp.Vctp op) {
         if (!core.cpsr().evalCond(op.condition())) {
             return false;
         }
@@ -506,7 +514,7 @@ public final class IrSystemExecutor {
     /// `CLRM {list}` (perfil M com Security Extension, B16.15) — `trans_CLRM` do QEMU: zera cada
     /// `R0`-`R12`/`LR` marcado em bits 0-14 e, com o bit 15, o `APSR` inteiro (`N`/`Z`/`C`/`V`/`Q`
     /// e `GE`, como `MSR APSR_nzcvqg, #0`). `SP`/`PC` na lista e lista vazia são recusados no decode.
-    public void executeClrm(ArmCore core, IrOp.ClearMultiple op) {
+    public void executeClrm(ArmCore core, IntegerOp.ClearMultiple op) {
         if (!core.cpsr().evalCond(op.condition())) {
             return;
         }
@@ -526,11 +534,11 @@ public final class IrSystemExecutor {
     /// `do_mve_sh_rr` do QEMU. Escalar: não lê `VPR`/`ECI` nem toca `Q0`-`Q7`. Nas formas por registrador
     /// a quantidade é o BYTE baixo de `Rm` COM SINAL (`(int8_t)`), negado nas operações à direita
     /// (`SQRSHR*`/`ASRL`); a saturação seta `APSR.Q` (sticky), nunca `FPSCR.QC`.
-    public void executeMveWideShift(ArmCore core, IrOp.MveWideShift op) {
+    public void executeMveWideShift(ArmCore core, MveIntegerOp.WideShift op) {
         if (!core.cpsr().evalCond(op.condition())) {
             return;
         }
-        IrOp.WideShiftOperation operation = op.operation();
+        MveIntegerOp.WideShiftOperation operation = op.operation();
         int amount = operation.register() ? (byte) core.register(op.rm()) : op.shim();
         int shift = operation.right() ? -amount : amount;
         boolean sat = operation.saturating();
@@ -569,8 +577,8 @@ public final class IrSystemExecutor {
     /// beatwise; {@link dev.vitorsilverio.armjitter.codegen.executor.IrBlockExecutor} pula esta
     /// chamada quando a instrução MVE anterior no MESMO bloco já mudou o PC (fault de `ECI`
     /// reservado — ver {@link #executeVpst}), nunca quando ela só zerou o `elementMask` inteiro
-    /// (predicação total, que AINDA avança, ver Javadoc de {@link IrOp.AdvanceVpt}).
-    public void executeAdvanceVpt(ArmCore core, IrOp.AdvanceVpt op) {
+    /// (predicação total, que AINDA avança, ver Javadoc de {@link MvePredicationOp.AdvanceVpt}).
+    public void executeAdvanceVpt(ArmCore core, MvePredicationOp.AdvanceVpt op) {
         if (!core.cpsr().evalCond(op.condition())) {
             return;
         }
@@ -580,9 +588,9 @@ public final class IrSystemExecutor {
     }
 
     /// `VMSR`/`VMRS` com `reg=12` (perfil M, B16.2, MVE/Helium): transfere o `VPR` bruto de/para
-    /// `armRegister` — armazenamento puro, sem aliasing (ver Javadoc de {@link IrOp.VprTransfer}).
+    /// `armRegister` — armazenamento puro, sem aliasing (ver Javadoc de {@link MvePredicationOp.VprTransfer}).
     /// NÃO avança `VPR`/`ECI` ({@link #executeAdvanceVpt}): `VMSR_VMRS` nunca é beatwise.
-    public void executeVprTransfer(ArmCore core, IrOp.VprTransfer op) {
+    public void executeVprTransfer(ArmCore core, MvePredicationOp.VprTransfer op) {
         if (!core.cpsr().evalCond(op.condition())) {
             return;
         }
@@ -607,8 +615,8 @@ public final class IrSystemExecutor {
     ///
     /// @return `true` quando faultou (ver {@link #executeVpst}) — {@link
     ///         dev.vitorsilverio.armjitter.codegen.executor.IrBlockExecutor} usa isto para pular o
-    ///         {@link IrOp.AdvanceVpt} seguinte no mesmo bloco.
-    public boolean executeMveLoadStore(ArmCore core, IrOp.MveLoadStore op) {
+    ///         {@link MvePredicationOp.AdvanceVpt} seguinte no mesmo bloco.
+    public boolean executeMveLoadStore(ArmCore core, MveMoveOp.LoadStore op) {
         if (!core.cpsr().evalCond(op.condition())) {
             return false;
         }
@@ -642,7 +650,7 @@ public final class IrSystemExecutor {
 
     /// `VLDSTB_H`/`VLDSTB_W`/`VLDSTH_W` (perfil M, B16.4, MVE/Helium): load que alarga (extensão de
     /// sinal/zero) ou store que estreita (truncamento), predicados por ELEMENTO (não por byte —
-    /// diferente de {@link #executeMveLoadStore}, ver Javadoc de {@link IrOp.MveWideningLoadStore}).
+    /// diferente de {@link #executeMveLoadStore}, ver Javadoc de {@link MveMoveOp.WideningLoadStore}).
     /// Usa {@link IrExecutionSupport#readVectorElement}/{@link IrExecutionSupport#writeVectorElement}
     /// (sem o quirk de rotação de acesso desalinhado do ARM7 — `LDR`/`LDRH`, não aplicável a
     /// elemento vetorial, mesmo precedente NEON da B13.3) em vez de {@code read8Arm7}, já que aqui o
@@ -658,7 +666,7 @@ public final class IrSystemExecutor {
     /// Writeback de `Rn` é SEMPRE incondicional (G4), mesma regra de {@link #executeMveLoadStore}.
     ///
     /// @return `true` quando faultou (`ECI` reservado) — ver {@link #executeMveLoadStore}.
-    public boolean executeMveWideningLoadStore(ArmCore core, IrOp.MveWideningLoadStore op) {
+    public boolean executeMveWideningLoadStore(ArmCore core, MveMoveOp.WideningLoadStore op) {
         if (!core.cpsr().evalCond(op.condition())) {
             return false;
         }
@@ -708,7 +716,7 @@ public final class IrSystemExecutor {
     /// Log2 do tamanho de um registrador `Q` inteiro em palavras de 32 bits (`16 / 4`) — usado só
     /// pelo laço de 4 iterações de {@link #executeMveGatherScatterOffset} no ramo `registerSizeLog2
     /// == 3` (`DO_VLDR64_SG`/`DO_VSTR64_SG` reais SEMPRE iteram em passos de 4 bytes, mesmo movendo
-    /// dados de 64 bits — ver Javadoc de {@link IrOp.MveGatherScatterOffset#registerSizeLog2}).
+    /// dados de 64 bits — ver Javadoc de {@link MveMoveOp.GatherScatterOffset#registerSizeLog2}).
     private static final int DOUBLEWORD_LOG2 = 3;
     private static final int WORD_LOG2 = 2;
 
@@ -722,7 +730,7 @@ public final class IrSystemExecutor {
     /// decide entre carregar de verdade ou gravar ZERO (load) — no store só `elementMask` importa.
     ///
     /// @return `true` quando faultou (`ECI` reservado) — ver {@link #executeMveLoadStore}.
-    public boolean executeMveGatherScatterOffset(ArmCore core, IrOp.MveGatherScatterOffset op) {
+    public boolean executeMveGatherScatterOffset(ArmCore core, MveMoveOp.GatherScatterOffset op) {
         if (!core.cpsr().evalCond(op.condition())) {
             return false;
         }
@@ -798,7 +806,7 @@ public final class IrSystemExecutor {
     /// lane) — diferente do writeback escalar único de {@link #executeMveLoadStore}.
     ///
     /// @return `true` quando faultou (`ECI` reservado) — ver {@link #executeMveLoadStore}.
-    public boolean executeMveGatherScatterImmediate(ArmCore core, IrOp.MveGatherScatterImmediate op) {
+    public boolean executeMveGatherScatterImmediate(ArmCore core, MveMoveOp.GatherScatterImmediate op) {
         if (!core.cpsr().evalCond(op.condition())) {
             return false;
         }
@@ -899,14 +907,14 @@ public final class IrSystemExecutor {
     /// `VLD2`/`VLD4`/`VST2`/`VST4` (perfil M, B16.5, MVE/Helium): desentrelaçamento/entrelaçamento
     /// em 4 beats de 32 bits, transcrito verbatim de `DO_VLD2*`/`DO_VLD4*`/`DO_VST2*`/`DO_VST4*`
     /// (`target/arm/tcg/mve_helper.c`) — três formas de endereço/empacotamento por
-    /// {@link IrOp.MveInterleavedLoadStore#sizeLog2} (byte/halfword/word), cada uma com sua própria
+    /// {@link MveMoveOp.InterleavedLoadStore#sizeLog2} (byte/halfword/word), cada uma com sua própria
     /// aritmética de deslocamento de bits (ver os comentários por `case`, fiéis ao C original).
     /// **Só `eciMask` gate cada beat** (nenhum `elementMask`/`VPT` — comentário literal do QEMU
     /// real: "beatwise but not predicated"). Writeback incondicional (G4), soma
     /// `groupSize * 16` bytes.
     ///
     /// @return `true` quando faultou (`ECI` reservado) — ver {@link #executeMveLoadStore}.
-    public boolean executeMveInterleavedLoadStore(ArmCore core, IrOp.MveInterleavedLoadStore op) {
+    public boolean executeMveInterleavedLoadStore(ArmCore core, MveMoveOp.InterleavedLoadStore op) {
         if (!core.cpsr().evalCond(op.condition())) {
             return false;
         }
@@ -1026,7 +1034,7 @@ public final class IrSystemExecutor {
     /// ao elemento) em cada lane sucessiva de `Qd`, mascarado por `elementMask` (`mergemask`, lane
     /// mascarada preserva o valor atual), e acumula `Rn += imm` livremente (SEM truncar o valor
     /// escalar) a cada lane, gravando o resultado final de volta em `Rn`.
-    public boolean executeMveIncrementDup(ArmCore core, IrOp.MveIncrementDup op) {
+    public boolean executeMveIncrementDup(ArmCore core, MveMoveOp.IncrementDup op) {
         if (!core.cpsr().evalCond(op.condition())) {
             return false;
         }
@@ -1053,7 +1061,7 @@ public final class IrSystemExecutor {
 
     /// `VIWDUP`/`VDWDUP` (perfil M, B16.5, MVE/Helium): como {@link #executeMveIncrementDup}, mas
     /// o passo envolve (wrap) contra `Rm` — `do_add_wrap`/`do_sub_wrap` verbatim.
-    public boolean executeMveWrappingIncrementDup(ArmCore core, IrOp.MveWrappingIncrementDup op) {
+    public boolean executeMveWrappingIncrementDup(ArmCore core, MveMoveOp.WrappingIncrementDup op) {
         if (!core.cpsr().evalCond(op.condition())) {
             return false;
         }
@@ -1090,9 +1098,9 @@ public final class IrSystemExecutor {
     }
 
     /// Avanço pós-instrução SÓ do `ECI` (B16.5) — {@link MveVptState#advanceEciOnly}. Usado só por
-    /// {@link IrOp.MveInterleavedLoadStore} (`VLD2`/`VLD4`/`VST2`/`VST4`), mesmo gate de
+    /// {@link MveMoveOp.InterleavedLoadStore} (`VLD2`/`VLD4`/`VST2`/`VST4`), mesmo gate de
     /// `pcChanged` de {@link #executeAdvanceVpt} no chamador.
-    public void executeAdvanceEci(ArmCore core, IrOp.AdvanceEci op) {
+    public void executeAdvanceEci(ArmCore core, MvePredicationOp.AdvanceEci op) {
         if (!core.cpsr().evalCond(op.condition())) {
             return;
         }
@@ -1106,7 +1114,7 @@ public final class IrSystemExecutor {
     /// Javadoc de {@link dev.vitorsilverio.armjitter.core.FpscrRegister#QC_FLAG}).
     ///
     /// @return `true` quando faultou (ver {@link #executeVpst}).
-    public boolean executeMveVector2Op(ArmCore core, IrOp.MveVector2Op op) {
+    public boolean executeMveVector2Op(ArmCore core, MveIntegerOp.Vector2Op op) {
         if (!core.cpsr().evalCond(op.condition())) {
             return false;
         }
@@ -1136,7 +1144,7 @@ public final class IrSystemExecutor {
     /// `FPSCR.QC`.
     ///
     /// @return `true` quando faultou (ver {@link #executeVpst}).
-    public boolean executeMveVector2OpWidening(ArmCore core, IrOp.MveVector2OpWidening op) {
+    public boolean executeMveVector2OpWidening(ArmCore core, MveIntegerOp.Vector2OpWidening op) {
         if (!core.cpsr().evalCond(op.condition())) {
             return false;
         }
@@ -1159,12 +1167,12 @@ public final class IrSystemExecutor {
 
     /// `VADC`/`VADCI`/`VSBC`/`VSBCI` (perfil M, B16.6, MVE/Helium): soma/subtração com carry
     /// encadeado por `FPSCR.C` através dos 4 elementos de 32 bits de `Qn`/`Qm` — verbatim de
-    /// `do_vadc` (`target/arm/tcg/mve_helper.c`, ver Javadoc de {@link IrOp.MveVectorCarry}). ESIZE
+    /// `do_vadc` (`target/arm/tcg/mve_helper.c`, ver Javadoc de {@link MveIntegerOp.VectorCarry}). ESIZE
     /// fixo em 4 bytes (não usa {@link AdvSimdLanes#threeSameMasked}: o carry ENCADEADO entre
     /// lanes, que só avança em lanes ATIVAS, não é uma operação "three same" independente por lane).
     ///
     /// @return `true` quando faultou (ver {@link #executeVpst}).
-    public boolean executeMveVectorCarry(ArmCore core, IrOp.MveVectorCarry op) {
+    public boolean executeMveVectorCarry(ArmCore core, MveIntegerOp.VectorCarry op) {
         if (!core.cpsr().evalCond(op.condition())) {
             return false;
         }
@@ -1222,7 +1230,7 @@ public final class IrSystemExecutor {
     /// COMPARTILHADO ({@link AdvSimdLanes#complexAddMasked}). Nunca satura, sem `FPSCR.QC`.
     ///
     /// @return `true` quando faultou (ver {@link #executeVpst}).
-    public boolean executeMveVectorComplexAdd(ArmCore core, IrOp.MveVectorComplexAdd op) {
+    public boolean executeMveVectorComplexAdd(ArmCore core, MveIntegerOp.VectorComplexAdd op) {
         if (!core.cpsr().evalCond(op.condition())) {
             return false;
         }
@@ -1246,7 +1254,7 @@ public final class IrSystemExecutor {
     /// ({@link AdvSimdLanes#absAccumulateMasked}). Nunca satura, sem `FPSCR.QC`.
     ///
     /// @return `true` quando faultou (ver {@link #executeVpst}).
-    public boolean executeMveVectorAbsAccumulate(ArmCore core, IrOp.MveVectorAbsAccumulate op) {
+    public boolean executeMveVectorAbsAccumulate(ArmCore core, MveIntegerOp.VectorAbsAccumulate op) {
         if (!core.cpsr().evalCond(op.condition())) {
             return false;
         }
@@ -1269,7 +1277,7 @@ public final class IrSystemExecutor {
     /// COMPARTILHADO ({@link AdvSimdLanes#fpAbsAccumulateMasked}). Nunca satura.
     ///
     /// @return `true` quando faultou (ver {@link #executeVpst}).
-    public boolean executeMveVectorFpAbsAccumulate(ArmCore core, IrOp.MveVectorFpAbsAccumulate op) {
+    public boolean executeMveVectorFpAbsAccumulate(ArmCore core, MveFpOp.VectorFpAbsAccumulate op) {
         if (!core.cpsr().evalCond(op.condition())) {
             return false;
         }
@@ -1293,7 +1301,7 @@ public final class IrSystemExecutor {
     /// `8 << esz` (T2 — "shift == esize"). Nunca satura.
     ///
     /// @return `true` quando faultou (ver {@link #executeVpst}).
-    public boolean executeMveVectorShiftWidenInterleaved(ArmCore core, IrOp.MveVectorShiftWidenInterleaved op) {
+    public boolean executeMveVectorShiftWidenInterleaved(ArmCore core, MveIntegerOp.VectorShiftWidenInterleaved op) {
         if (!core.cpsr().evalCond(op.condition())) {
             return false;
         }
@@ -1321,7 +1329,7 @@ public final class IrSystemExecutor {
     /// 3 formas saturantes setam `FPSCR.QC` só quando alguma lane ATIVA saturou de verdade.
     ///
     /// @return `true` quando faultou (ver {@link #executeVpst}).
-    public boolean executeMveVectorShiftImmediate(ArmCore core, IrOp.MveVectorShiftImmediate op) {
+    public boolean executeMveVectorShiftImmediate(ArmCore core, MveIntegerOp.VectorShiftImmediate op) {
         if (!core.cpsr().evalCond(op.condition())) {
             return false;
         }
@@ -1352,7 +1360,7 @@ public final class IrSystemExecutor {
     ///
     /// @return `true` quando faultou (ver {@link #executeVpst}).
     public boolean executeMveVectorShiftWidenImmediateInterleaved(ArmCore core,
-            IrOp.MveVectorShiftWidenImmediateInterleaved op) {
+            MveIntegerOp.VectorShiftWidenImmediateInterleaved op) {
         if (!core.cpsr().evalCond(op.condition())) {
             return false;
         }
@@ -1380,7 +1388,7 @@ public final class IrSystemExecutor {
     ///
     /// @return `true` quando faultou (ver {@link #executeVpst}).
     public boolean executeMveVectorShiftNarrowImmediateInterleaved(ArmCore core,
-            IrOp.MveVectorShiftNarrowImmediateInterleaved op) {
+            MveIntegerOp.VectorShiftNarrowImmediateInterleaved op) {
         if (!core.cpsr().evalCond(op.condition())) {
             return false;
         }
@@ -1406,13 +1414,13 @@ public final class IrSystemExecutor {
     /// `VSHLC` (perfil M, B16.11, MVE/Helium, verbatim de `HELPER(mve_vshlc)`,
     /// `target/arm/tcg/mve_helper.c`): desloca os 128 bits de `Qd` à esquerda por `shift` bits
     /// (`shift == 0` do encoding significa "desloca por 32", tratado explicitamente — ver Javadoc de
-    /// {@link IrOp.MveVectorShiftLeftCarry}), injetando os bits BAIXOS de `Rdm` na base de cada
+    /// {@link MveIntegerOp.VectorShiftLeftCarry}), injetando os bits BAIXOS de `Rdm` na base de cada
     /// elemento de 32 bits e atualizando `Rdm` com os bits que saíram pelo topo do último elemento
     /// ATIVO (granularidade de BEAT — `mask & 1` por elemento de 32 bits, não por byte). Nunca
     /// satura.
     ///
     /// @return `true` quando faultou (ver {@link #executeVpst}).
-    public boolean executeMveVectorShiftLeftCarry(ArmCore core, IrOp.MveVectorShiftLeftCarry op) {
+    public boolean executeMveVectorShiftLeftCarry(ArmCore core, MveIntegerOp.VectorShiftLeftCarry op) {
         if (!core.cpsr().evalCond(op.condition())) {
             return false;
         }
@@ -1459,7 +1467,7 @@ public final class IrSystemExecutor {
     /// ao núcleo COMPARTILHADO ({@link AdvSimdLanes#fpUnaryMasked}). Nunca satura.
     ///
     /// @return `true` quando faultou (ver {@link #executeVpst}).
-    public boolean executeMveVectorFpConvert(ArmCore core, IrOp.MveVectorFpConvert op) {
+    public boolean executeMveVectorFpConvert(ArmCore core, MveFpOp.VectorFpConvert op) {
         if (!core.cpsr().evalCond(op.condition())) {
             return false;
         }
@@ -1483,7 +1491,7 @@ public final class IrSystemExecutor {
     /// núcleo COMPARTILHADO ({@link AdvSimdLanes#convertFixedPointMasked}). Nunca satura.
     ///
     /// @return `true` quando faultou (ver {@link #executeVpst}).
-    public boolean executeMveVectorFpConvertFixed(ArmCore core, IrOp.MveVectorFpConvertFixed op) {
+    public boolean executeMveVectorFpConvertFixed(ArmCore core, MveFpOp.VectorFpConvertFixed op) {
         if (!core.cpsr().evalCond(op.condition())) {
             return false;
         }
@@ -1508,7 +1516,7 @@ public final class IrSystemExecutor {
     /// `FPSCR.QC` só quando `SQABS`/`SQNEG` saturam numa lane ATIVA.
     ///
     /// @return `true` quando faultou (ver {@link #executeVpst}).
-    public boolean executeMveVectorUnary(ArmCore core, IrOp.MveVectorUnary op) {
+    public boolean executeMveVectorUnary(ArmCore core, MveIntegerOp.VectorUnary op) {
         if (!core.cpsr().evalCond(op.condition())) {
             return false;
         }
@@ -1534,7 +1542,7 @@ public final class IrSystemExecutor {
     /// ({@link AdvSimdLanes#fpUnaryMasked}). Nunca satura.
     ///
     /// @return `true` quando faultou (ver {@link #executeVpst}).
-    public boolean executeMveVectorFpUnary(ArmCore core, IrOp.MveVectorFpUnary op) {
+    public boolean executeMveVectorFpUnary(ArmCore core, MveFpOp.VectorFpUnary op) {
         if (!core.cpsr().evalCond(op.condition())) {
             return false;
         }
@@ -1554,11 +1562,11 @@ public final class IrSystemExecutor {
     }
 
     /// `VDUP` (perfil M, B16.13a, MVE/Helium): replica `Rt` (truncado a `1 << esz` bytes) em todas
-    /// as lanes ATIVAS de `Qd` (ver Javadoc de {@link IrOp.MveVectorDup} para o achado `%qn`, já
+    /// as lanes ATIVAS de `Qd` (ver Javadoc de {@link MveMoveOp.VectorDup} para o achado `%qn`, já
     /// resolvido pelo decoder — aqui `op.qd()` já é o índice correto).
     ///
     /// @return `true` quando faultou (ver {@link #executeVpst}).
-    public boolean executeMveVectorDup(ArmCore core, IrOp.MveVectorDup op) {
+    public boolean executeMveVectorDup(ArmCore core, MveMoveOp.VectorDup op) {
         if (!core.cpsr().evalCond(op.condition())) {
             return false;
         }
@@ -1586,10 +1594,10 @@ public final class IrSystemExecutor {
     }
 
     /// `VMOV_to_2gp`/`VMOV_from_2gp` (perfil M, B16.13a, MVE/Helium): **NÃO predicado por `VPR`**
-    /// (ver Javadoc de {@link IrOp.MveMoveLanesGpr}) — só o `ECI` reservado pode faultar.
+    /// (ver Javadoc de {@link MveMoveOp.MoveLanesGpr}) — só o `ECI` reservado pode faultar.
     ///
     /// @return `true` quando faultou (ver {@link #executeVpst}).
-    public boolean executeMveMoveLanesGpr(ArmCore core, IrOp.MveMoveLanesGpr op) {
+    public boolean executeMveMoveLanesGpr(ArmCore core, MveMoveOp.MoveLanesGpr op) {
         if (!core.cpsr().evalCond(op.condition())) {
             return false;
         }
@@ -1612,11 +1620,11 @@ public final class IrSystemExecutor {
     }
 
     /// `VADDV` (perfil M, B16.13a, MVE/Helium): soma horizontal das lanes ATIVAS de `Qm` em `Rda`
-    /// (ver Javadoc de {@link IrOp.MveVectorAddAcrossVector} para a semântica de
+    /// (ver Javadoc de {@link MveReductionOp.VectorAddAcrossVector} para a semântica de
     /// `accumulate`/máscara-toda-zero).
     ///
     /// @return `true` quando faultou (ver {@link #executeVpst}).
-    public boolean executeMveVectorAddAcrossVector(ArmCore core, IrOp.MveVectorAddAcrossVector op) {
+    public boolean executeMveVectorAddAcrossVector(ArmCore core, MveReductionOp.VectorAddAcrossVector op) {
         if (!core.cpsr().evalCond(op.condition())) {
             return false;
         }
@@ -1647,10 +1655,10 @@ public final class IrSystemExecutor {
 
     /// `VADDLV` (perfil M, B16.13a, MVE/Helium): como {@link #executeMveVectorAddAcrossVector}, mas
     /// elementos SEMPRE de 32 bits e acumulador de 64 bits em `RdaHi:RdaLo` (ver Javadoc de
-    /// {@link IrOp.MveVectorAddAcrossVectorLong}).
+    /// {@link MveReductionOp.VectorAddAcrossVectorLong}).
     ///
     /// @return `true` quando faultou (ver {@link #executeVpst}).
-    public boolean executeMveVectorAddAcrossVectorLong(ArmCore core, IrOp.MveVectorAddAcrossVectorLong op) {
+    public boolean executeMveVectorAddAcrossVectorLong(ArmCore core, MveReductionOp.VectorAddAcrossVectorLong op) {
         if (!core.cpsr().evalCond(op.condition())) {
             return false;
         }
@@ -1684,11 +1692,11 @@ public final class IrSystemExecutor {
 
     /// `VABAV_S`/`VABAV_U` (perfil M, B16.13a, MVE/Helium): soma horizontal, nas lanes ATIVAS, de
     /// `|Qn[i] - Qm[i]|` em `Rda` — SEMPRE acumula (sem bit `a`, ver Javadoc de
-    /// {@link IrOp.MveVectorAbsoluteDifferenceAccumulate}).
+    /// {@link MveReductionOp.VectorAbsoluteDifferenceAccumulate}).
     ///
     /// @return `true` quando faultou (ver {@link #executeVpst}).
     public boolean executeMveVectorAbsoluteDifferenceAccumulate(ArmCore core,
-            IrOp.MveVectorAbsoluteDifferenceAccumulate op) {
+            MveReductionOp.VectorAbsoluteDifferenceAccumulate op) {
         if (!core.cpsr().evalCond(op.condition())) {
             return false;
         }
@@ -1720,11 +1728,11 @@ public final class IrSystemExecutor {
     }
 
     /// `Vimm_1r` (perfil M, B16.13a, MVE/Helium): `VORR`/`VBIC`/`VMOV`/`VMVN` de imediato modificado
-    /// já resolvido pelo decoder (ver Javadoc de {@link IrOp.MveVectorModifiedImmediate}) — predicado
+    /// já resolvido pelo decoder (ver Javadoc de {@link MveMoveOp.VectorModifiedImmediate}) — predicado
     /// por byte a granularidade de palavra de 64 bits (`DO_1OP_IMM`/`mergemask` real).
     ///
     /// @return `true` quando faultou (ver {@link #executeVpst}).
-    public boolean executeMveVectorModifiedImmediate(ArmCore core, IrOp.MveVectorModifiedImmediate op) {
+    public boolean executeMveVectorModifiedImmediate(ArmCore core, MveMoveOp.VectorModifiedImmediate op) {
         if (!core.cpsr().evalCond(op.condition())) {
             return false;
         }
@@ -1741,7 +1749,7 @@ public final class IrSystemExecutor {
         return false;
     }
 
-    private static void applyMveModifiedImmediate(VfpRegisters vfp, IrOp.MveVectorModifiedImmediate op, int word,
+    private static void applyMveModifiedImmediate(VfpRegisters vfp, MveMoveOp.VectorModifiedImmediate op, int word,
             int wordByteMask) {
         if (wordByteMask == 0) {
             return;
@@ -1758,10 +1766,10 @@ public final class IrSystemExecutor {
     }
 
     /// `VMLADAV_S`/`VMLADAV_U`/`VMLSDAV` (perfil M, B16.13b, MVE/Helium): produto-soma horizontal
-    /// das lanes ATIVAS em `Rda` (ver Javadoc de {@link IrOp.MveVectorDualAccumulate}).
+    /// das lanes ATIVAS em `Rda` (ver Javadoc de {@link MveReductionOp.VectorDualAccumulate}).
     ///
     /// @return `true` quando faultou (ver {@link #executeVpst}).
-    public boolean executeMveVectorDualAccumulate(ArmCore core, IrOp.MveVectorDualAccumulate op) {
+    public boolean executeMveVectorDualAccumulate(ArmCore core, MveReductionOp.VectorDualAccumulate op) {
         if (!core.cpsr().evalCond(op.condition())) {
             return false;
         }
@@ -1797,10 +1805,10 @@ public final class IrSystemExecutor {
 
     /// `VMLALDAV_S`/`VMLALDAV_U`/`VMLSLDAV` (perfil M, B16.13b, MVE/Helium): como
     /// {@link #executeMveVectorDualAccumulate}, mas acumulador de 64 bits em `RdaHi:RdaLo` (ver
-    /// Javadoc de {@link IrOp.MveVectorDualAccumulateLong}).
+    /// Javadoc de {@link MveReductionOp.VectorDualAccumulateLong}).
     ///
     /// @return `true` quando faultou (ver {@link #executeVpst}).
-    public boolean executeMveVectorDualAccumulateLong(ArmCore core, IrOp.MveVectorDualAccumulateLong op) {
+    public boolean executeMveVectorDualAccumulateLong(ArmCore core, MveReductionOp.VectorDualAccumulateLong op) {
         if (!core.cpsr().evalCond(op.condition())) {
             return false;
         }
@@ -1839,11 +1847,11 @@ public final class IrSystemExecutor {
 
     /// `VRMLALDAVH_S`/`VRMLALDAVH_U`/`VRMLSLDAVH` (perfil M, B16.13b, MVE/Helium): produto-soma
     /// horizontal ARREDONDADO de elementos de 32 bits, acumulador de 64 bits em `RdaHi:RdaLo` (ver
-    /// Javadoc de {@link IrOp.MveVectorRoundingDualAccumulateHigh}).
+    /// Javadoc de {@link MveReductionOp.VectorRoundingDualAccumulateHigh}).
     ///
     /// @return `true` quando faultou (ver {@link #executeVpst}).
     public boolean executeMveVectorRoundingDualAccumulateHigh(ArmCore core,
-            IrOp.MveVectorRoundingDualAccumulateHigh op) {
+            MveReductionOp.VectorRoundingDualAccumulateHigh op) {
         if (!core.cpsr().evalCond(op.condition())) {
             return false;
         }
@@ -1888,10 +1896,10 @@ public final class IrSystemExecutor {
 
     /// `VMAXV_S`/`VMAXV_U`/`VMINV_S`/`VMINV_U`/`VMAXAV`/`VMINAV` (perfil M, B16.13b, MVE/Helium):
     /// min/max horizontal das lanes ATIVAS de `Qm` contra `Rda` ATUAL (ver Javadoc de
-    /// {@link IrOp.MveVectorMinMaxAcrossVector}).
+    /// {@link MveReductionOp.VectorMinMaxAcrossVector}).
     ///
     /// @return `true` quando faultou (ver {@link #executeVpst}).
-    public boolean executeMveVectorMinMaxAcrossVector(ArmCore core, IrOp.MveVectorMinMaxAcrossVector op) {
+    public boolean executeMveVectorMinMaxAcrossVector(ArmCore core, MveReductionOp.VectorMinMaxAcrossVector op) {
         if (!core.cpsr().evalCond(op.condition())) {
             return false;
         }
@@ -1929,10 +1937,10 @@ public final class IrSystemExecutor {
 
     /// `VMAXNMV`/`VMINNMV`/`VMAXNMAV`/`VMINNMAV` (perfil M, B16.13b, MVE/Helium, `FEAT_MVE_FP`):
     /// como {@link #executeMveVectorMinMaxAcrossVector}, mas ponto flutuante (ver Javadoc de
-    /// {@link IrOp.MveVectorFpMinMaxAcrossVector}).
+    /// {@link MveReductionOp.VectorFpMinMaxAcrossVector}).
     ///
     /// @return `true` quando faultou (ver {@link #executeVpst}).
-    public boolean executeMveVectorFpMinMaxAcrossVector(ArmCore core, IrOp.MveVectorFpMinMaxAcrossVector op) {
+    public boolean executeMveVectorFpMinMaxAcrossVector(ArmCore core, MveReductionOp.VectorFpMinMaxAcrossVector op) {
         if (!core.cpsr().evalCond(op.condition())) {
             return false;
         }
@@ -1995,7 +2003,7 @@ public final class IrSystemExecutor {
     /// nunca satura).
     ///
     /// @return `true` quando faultou (ver {@link #executeVpst}).
-    public boolean executeMveVectorNarrowInterleaved(ArmCore core, IrOp.MveVectorNarrowInterleaved op) {
+    public boolean executeMveVectorNarrowInterleaved(ArmCore core, MveIntegerOp.VectorNarrowInterleaved op) {
         if (!core.cpsr().evalCond(op.condition())) {
             return false;
         }
@@ -2023,7 +2031,7 @@ public final class IrSystemExecutor {
     /// {@link AdvSimdLanes#fpWidenPrecisionInterleavedMasked}). Nunca satura.
     ///
     /// @return `true` quando faultou (ver {@link #executeVpst}).
-    public boolean executeMveVectorFpConvertPrecision(ArmCore core, IrOp.MveVectorFpConvertPrecision op) {
+    public boolean executeMveVectorFpConvertPrecision(ArmCore core, MveFpOp.VectorFpConvertPrecision op) {
         if (!core.cpsr().evalCond(op.condition())) {
             return false;
         }
@@ -2048,7 +2056,7 @@ public final class IrSystemExecutor {
     /// ao núcleo COMPARTILHADO ({@link AdvSimdLanes#fpComplexMultiplyMasked}). Nunca satura.
     ///
     /// @return `true` quando faultou (ver {@link #executeVpst}).
-    public boolean executeMveVectorFpComplexMultiply(ArmCore core, IrOp.MveVectorFpComplexMultiply op) {
+    public boolean executeMveVectorFpComplexMultiply(ArmCore core, MveFpOp.VectorFpComplexMultiply op) {
         if (!core.cpsr().evalCond(op.condition())) {
             return false;
         }
@@ -2073,7 +2081,7 @@ public final class IrSystemExecutor {
     /// (ver Javadoc de lá).
     ///
     /// @return `true` quando faultou (ver {@link #executeVpst}).
-    public boolean executeMveVectorDualMultiplyAddHigh(ArmCore core, IrOp.MveVectorDualMultiplyAddHigh op) {
+    public boolean executeMveVectorDualMultiplyAddHigh(ArmCore core, MveIntegerOp.VectorDualMultiplyAddHigh op) {
         if (!core.cpsr().evalCond(op.condition())) {
             return false;
         }
@@ -2101,7 +2109,7 @@ public final class IrSystemExecutor {
     /// ({@link AdvSimdLanes#doublingWideningInterleavedMasked}).
     ///
     /// @return `true` quando faultou (ver {@link #executeVpst}).
-    public boolean executeMveVectorDoublingWideningMultiply(ArmCore core, IrOp.MveVectorDoublingWideningMultiply op) {
+    public boolean executeMveVectorDoublingWideningMultiply(ArmCore core, MveIntegerOp.VectorDoublingWideningMultiply op) {
         if (!core.cpsr().evalCond(op.condition())) {
             return false;
         }
@@ -2130,7 +2138,7 @@ public final class IrSystemExecutor {
     /// ({@link AdvSimdLanes#fpThreeSameMasked}). Nunca satura.
     ///
     /// @return `true` quando faultou (ver {@link #executeVpst}).
-    public boolean executeMveVectorFpTwoOp(ArmCore core, IrOp.MveVectorFpTwoOp op) {
+    public boolean executeMveVectorFpTwoOp(ArmCore core, MveFpOp.VectorFpTwoOp op) {
         if (!core.cpsr().evalCond(op.condition())) {
             return false;
         }
@@ -2154,7 +2162,7 @@ public final class IrSystemExecutor {
     /// ao núcleo COMPARTILHADO ({@link AdvSimdLanes#fpComplexAddMasked}). Nunca satura.
     ///
     /// @return `true` quando faultou (ver {@link #executeVpst}).
-    public boolean executeMveVectorFpComplexAdd(ArmCore core, IrOp.MveVectorFpComplexAdd op) {
+    public boolean executeMveVectorFpComplexAdd(ArmCore core, MveFpOp.VectorFpComplexAdd op) {
         if (!core.cpsr().evalCond(op.condition())) {
             return false;
         }
@@ -2181,7 +2189,7 @@ public final class IrSystemExecutor {
     ///
     /// @return `true` quando faultou (ver {@link #executeVpst}).
     public boolean executeMveVectorFpComplexMultiplyAccumulate(ArmCore core,
-            IrOp.MveVectorFpComplexMultiplyAccumulate op) {
+            MveFpOp.VectorFpComplexMultiplyAccumulate op) {
         if (!core.cpsr().evalCond(op.condition())) {
             return false;
         }
@@ -2269,16 +2277,16 @@ public final class IrSystemExecutor {
     /// `VCMPEQ`/`VCMPNE`/`VCMPGE`/`VCMPLT`/`VCMPGT`/`VCMPLE`/`VCMPCS`/`VCMPHI` e as 6 formas `_fp`
     /// vetor×vetor (perfil M, B16.8, MVE/Helium): compara `Qn`/`Qm` lane a lane, escreve `VPR.P0`
     /// (ver {@link #mergeCompareResultIntoP0}). **Não chama {@link MveVptState#advance}** — o
-    /// avanço é o {@link IrOp.AdvanceVpt} genérico que {@code StandardIrBuilder} sempre emite
+    /// avanço é o {@link MvePredicationOp.AdvanceVpt} genérico que {@code StandardIrBuilder} sempre emite
     /// LOGO DEPOIS desta op (mesmo gancho de {@link #executeMveVector2Op}); quando `op.mask() !=
-    /// 0`, um {@link IrOp.Vpst} adicional (emitido DEPOIS do `AdvanceVpt` pelo `StandardIrBuilder`)
+    /// 0`, um {@link MvePredicationOp.Vpst} adicional (emitido DEPOIS do `AdvanceVpt` pelo `StandardIrBuilder`)
     /// estabelece o `VPT`, reproduzindo a ordem exata do QEMU real (`do_vcmp`: o helper já chama
     /// `mve_advance_vpt` internamente; só DEPOIS, fora do helper, `gen_vpst` roda condicionado a
     /// `a->mask`) — inverter esta ordem corromperia a PRÓPRIA abertura do `VPT` (a máscara recém-
     /// -aberta seria consumida pelo avanço da MESMA instrução, em vez de só pelas seguintes).
     ///
     /// @return `true` quando faultou (ver {@link #executeVpst}).
-    public boolean executeMveVectorCompare(ArmCore core, IrOp.MveVectorCompare op) {
+    public boolean executeMveVectorCompare(ArmCore core, MvePredicationOp.VectorCompare op) {
         if (!core.cpsr().evalCond(op.condition())) {
             return false;
         }
@@ -2315,7 +2323,7 @@ public final class IrSystemExecutor {
     /// {@link #VCMP_SCALAR_ZERO_ENCODING}); `Rm == 13` já foi recusado no decode.
     ///
     /// @return `true` quando faultou (ver {@link #executeVpst}).
-    public boolean executeMveVectorCompareScalar(ArmCore core, IrOp.MveVectorCompareScalar op) {
+    public boolean executeMveVectorCompareScalar(ArmCore core, MvePredicationOp.VectorCompareScalar op) {
         if (!core.cpsr().evalCond(op.condition())) {
             return false;
         }
@@ -2354,7 +2362,7 @@ public final class IrSystemExecutor {
     /// alguma lane ATIVA saturou.
     ///
     /// @return `true` quando faultou (ver {@link #executeVpst}).
-    public boolean executeMveVectorScalar(ArmCore core, IrOp.MveVectorScalar op) {
+    public boolean executeMveVectorScalar(ArmCore core, MveIntegerOp.VectorScalar op) {
         if (!core.cpsr().evalCond(op.condition())) {
             return false;
         }
@@ -2381,7 +2389,7 @@ public final class IrSystemExecutor {
     /// COMPARTILHADO ({@link AdvSimdLanes#doublingWideningScalarInterleavedMasked}).
     ///
     /// @return `true` quando faultou (ver {@link #executeVpst}).
-    public boolean executeMveVectorScalarWidening(ArmCore core, IrOp.MveVectorScalarWidening op) {
+    public boolean executeMveVectorScalarWidening(ArmCore core, MveIntegerOp.VectorScalarWidening op) {
         if (!core.cpsr().evalCond(op.condition())) {
             return false;
         }
@@ -2409,7 +2417,7 @@ public final class IrSystemExecutor {
     /// núcleo COMPARTILHADO ({@link AdvSimdLanes#fpThreeSameScalarMasked}). Nunca satura.
     ///
     /// @return `true` quando faultou (ver {@link #executeVpst}).
-    public boolean executeMveVectorFpScalar(ArmCore core, IrOp.MveVectorFpScalar op) {
+    public boolean executeMveVectorFpScalar(ArmCore core, MveFpOp.VectorFpScalar op) {
         if (!core.cpsr().evalCond(op.condition())) {
             return false;
         }
@@ -2433,7 +2441,7 @@ public final class IrSystemExecutor {
     /// ({@link AdvSimdLanes#fpFusedMultiplyAddScalarMasked}). Nunca satura.
     ///
     /// @return `true` quando faultou (ver {@link #executeVpst}).
-    public boolean executeMveVectorFpScalarFma(ArmCore core, IrOp.MveVectorFpScalarFma op) {
+    public boolean executeMveVectorFpScalarFma(ArmCore core, MveFpOp.VectorFpScalarFma op) {
         if (!core.cpsr().evalCond(op.condition())) {
             return false;
         }
@@ -2455,11 +2463,11 @@ public final class IrSystemExecutor {
 
     /// `VBRSR`/`VMLAS`/`VQDMLAH`/`VQRDMLAH`/`VQDMLASH`/`VQRDMLASH` (perfil M, B16.9, MVE/Helium):
     /// delega ao método dedicado de {@link AdvSimdLanes} correspondente a {@link
-    /// IrOp.MveVectorScalarSpecial.SpecialOp}. As 4 formas `VQ*DMLA*H` setam `FPSCR.QC` só quando
+    /// MveIntegerOp.VectorScalarSpecial.SpecialOp}. As 4 formas `VQ*DMLA*H` setam `FPSCR.QC` só quando
     /// alguma lane ATIVA saturou; `VBRSR`/`VMLAS` nunca saturam.
     ///
     /// @return `true` quando faultou (ver {@link #executeVpst}).
-    public boolean executeMveVectorScalarSpecial(ArmCore core, IrOp.MveVectorScalarSpecial op) {
+    public boolean executeMveVectorScalarSpecial(ArmCore core, MveIntegerOp.VectorScalarSpecial op) {
         if (!core.cpsr().evalCond(op.condition())) {
             return false;
         }

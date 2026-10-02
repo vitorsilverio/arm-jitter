@@ -2,7 +2,8 @@ package dev.vitorsilverio.armjitter.decoder;
 
 import dev.vitorsilverio.armjitter.arch.ArmArchitecture;
 import dev.vitorsilverio.armjitter.core.Condition;
-import dev.vitorsilverio.armjitter.ir.IrOp;
+import dev.vitorsilverio.armjitter.ir.MveFpOp;
+import dev.vitorsilverio.armjitter.ir.MveIntegerOp;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -53,9 +54,9 @@ class Thumb2MveComplexDualAccumulateDecoderTest {
         assertEquals(2, complexMultiply(1, 0, 0).esz());
     }
 
-    private static IrOp.MveVectorFpComplexMultiply complexMultiply(int bit28, int bit16, int bit0) {
+    private static MveFpOp.VectorFpComplexMultiply complexMultiply(int bit28, int bit16, int bit0) {
         int r = raw(bit28, 0b11, 5, 6, 7, bit16, NIBBLE_ADD_ROT, bit0);
-        IrOp.MveVectorFpComplexMultiply op = assertInstanceOf(IrOp.MveVectorFpComplexMultiply.class,
+        MveFpOp.VectorFpComplexMultiply op = assertInstanceOf(MveFpOp.VectorFpComplexMultiply.class,
                 tryDecode(ArmArchitecture.ARMV8_1M_MVE, r).liftedOp());
         assertEquals(5, op.qd());
         assertEquals(6, op.qn());
@@ -73,27 +74,27 @@ class Thumb2MveComplexDualAccumulateDecoderTest {
 
     @Test
     void decodesDualMultiplyAddHighAddSubExchangeRounded() {
-        IrOp.MveVectorDualMultiplyAddHigh plain = dualMultiplyAddHigh(0, 1, 0, 0);
+        MveIntegerOp.VectorDualMultiplyAddHigh plain = dualMultiplyAddHigh(0, 1, 0, 0);
         assertTrue(plain.add());
         assertFalse(plain.exchange());
         assertFalse(plain.rounded());
         assertEquals(1, plain.esz());
 
-        IrOp.MveVectorDualMultiplyAddHigh sub = dualMultiplyAddHigh(1, 1, 0, 0);
+        MveIntegerOp.VectorDualMultiplyAddHigh sub = dualMultiplyAddHigh(1, 1, 0, 0);
         assertFalse(sub.add());
 
-        IrOp.MveVectorDualMultiplyAddHigh exchange = dualMultiplyAddHigh(0, 2, 1, 0);
+        MveIntegerOp.VectorDualMultiplyAddHigh exchange = dualMultiplyAddHigh(0, 2, 1, 0);
         assertTrue(exchange.exchange());
         assertEquals(2, exchange.esz());
 
-        IrOp.MveVectorDualMultiplyAddHigh rounded = dualMultiplyAddHigh(0, 0, 0, 1);
+        MveIntegerOp.VectorDualMultiplyAddHigh rounded = dualMultiplyAddHigh(0, 0, 0, 1);
         assertTrue(rounded.rounded());
         assertEquals(0, rounded.esz());
     }
 
-    private static IrOp.MveVectorDualMultiplyAddHigh dualMultiplyAddHigh(int u, int size, int bit16, int bit0) {
+    private static MveIntegerOp.VectorDualMultiplyAddHigh dualMultiplyAddHigh(int u, int size, int bit16, int bit0) {
         int r = raw(u, size, 3, 4, 5, bit16, NIBBLE_ADD_ROT, bit0);
-        IrOp.MveVectorDualMultiplyAddHigh op = assertInstanceOf(IrOp.MveVectorDualMultiplyAddHigh.class,
+        MveIntegerOp.VectorDualMultiplyAddHigh op = assertInstanceOf(MveIntegerOp.VectorDualMultiplyAddHigh.class,
                 tryDecode(ArmArchitecture.ARMV8_1M_MVE, r).liftedOp());
         assertEquals(3, op.qd());
         assertEquals(4, op.qn());
@@ -111,11 +112,11 @@ class Thumb2MveComplexDualAccumulateDecoderTest {
 
     @Test
     void decodesDoublingWideningMultiplyBottomAndTop() {
-        IrOp.MveVectorDoublingWideningMultiply b = doublingWideningMultiply(0, 0, 1, 2, 3);
+        MveIntegerOp.VectorDoublingWideningMultiply b = doublingWideningMultiply(0, 0, 1, 2, 3);
         assertFalse(b.top());
         assertEquals(1, b.esz());
 
-        IrOp.MveVectorDoublingWideningMultiply t = doublingWideningMultiply(1, 1, 1, 2, 3);
+        MveIntegerOp.VectorDoublingWideningMultiply t = doublingWideningMultiply(1, 1, 1, 2, 3);
         assertTrue(t.top());
         assertEquals(2, t.esz());
         assertEquals(1, t.qd());
@@ -123,10 +124,10 @@ class Thumb2MveComplexDualAccumulateDecoderTest {
         assertEquals(3, t.qm());
     }
 
-    private static IrOp.MveVectorDoublingWideningMultiply doublingWideningMultiply(int bit28, int top, int qd,
+    private static MveIntegerOp.VectorDoublingWideningMultiply doublingWideningMultiply(int bit28, int top, int qd,
             int qn, int qm) {
         int r = raw(bit28, 0b11, qd, qn, qm, top, NIBBLE_DOUBLING_WIDEN, 1);
-        return assertInstanceOf(IrOp.MveVectorDoublingWideningMultiply.class,
+        return assertInstanceOf(MveIntegerOp.VectorDoublingWideningMultiply.class,
                 tryDecode(ArmArchitecture.ARMV8_1M_MVE, r).liftedOp());
     }
 
@@ -147,7 +148,7 @@ class Thumb2MveComplexDualAccumulateDecoderTest {
         assertNull(tryDecode(ArmArchitecture.ARMV8_1M_MVE, qdEqualsQm));
         // Halfword (esz=1, bit28=0) não tem essa restrição.
         int halfword = raw(0, 0b11, 2, 2, 3, 0, NIBBLE_DOUBLING_WIDEN, 1);
-        assertInstanceOf(IrOp.MveVectorDoublingWideningMultiply.class,
+        assertInstanceOf(MveIntegerOp.VectorDoublingWideningMultiply.class,
                 tryDecode(ArmArchitecture.ARMV8_1M_MVE, halfword).liftedOp());
     }
 

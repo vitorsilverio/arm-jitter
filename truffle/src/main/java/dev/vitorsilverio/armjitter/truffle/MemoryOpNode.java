@@ -5,6 +5,7 @@ import com.oracle.truffle.api.CompilerDirectives.TruffleBoundary;
 import dev.vitorsilverio.armjitter.codegen.executor.IrMemoryExecutor;
 import dev.vitorsilverio.armjitter.core.ArmCore;
 import dev.vitorsilverio.armjitter.ir.IrOp;
+import dev.vitorsilverio.armjitter.ir.MemoryOp;
 
 /// Nó Truffle para a categoria de memória (task A6): `Load`, `Store`, `LoadLiteral`,
 /// `DoubleTransfer`, `Swap`, `LoadExclusive`, `StoreExclusive`, `ClearExclusive`. Delega DIRETO a
@@ -37,23 +38,23 @@ final class MemoryOpNode extends IrOpNode {
     @TruffleBoundary
     private boolean executeAtBoundary(ArmCore core) {
         return switch (op) {
-            case IrOp.Load load -> executor.executeLoad(core, load);
-            case IrOp.Store store -> {
+            case MemoryOp.Load load -> executor.executeLoad(core, load);
+            case MemoryOp.Store store -> {
                 executor.executeStore(core, store);
                 yield false;
             }
-            case IrOp.LoadLiteral loadLiteral -> executor.executeLoadLiteral(core, loadLiteral);
-            case IrOp.DoubleTransfer doubleTransfer -> executor.executeDoubleTransfer(core, doubleTransfer);
-            case IrOp.Swap swap -> executor.executeSwap(core, swap);
-            case IrOp.LoadExclusive loadExclusive -> {
+            case MemoryOp.LoadLiteral loadLiteral -> executor.executeLoadLiteral(core, loadLiteral);
+            case MemoryOp.DoubleTransfer doubleTransfer -> executor.executeDoubleTransfer(core, doubleTransfer);
+            case MemoryOp.Swap swap -> executor.executeSwap(core, swap);
+            case MemoryOp.LoadExclusive loadExclusive -> {
                 executor.executeLoadExclusive(core, loadExclusive);
                 yield false;
             }
-            case IrOp.StoreExclusive storeExclusive -> {
+            case MemoryOp.StoreExclusive storeExclusive -> {
                 executor.executeStoreExclusive(core, storeExclusive);
                 yield false;
             }
-            case IrOp.ClearExclusive clearExclusive -> {
+            case MemoryOp.ClearExclusive clearExclusive -> {
                 executor.executeClearExclusive(core, clearExclusive);
                 yield false;
             }

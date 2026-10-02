@@ -5,10 +5,15 @@ import dev.vitorsilverio.armjitter.arch.ArmFeature;
 import dev.vitorsilverio.armjitter.codegen.executor.IrBlockExecutor;
 import dev.vitorsilverio.armjitter.core.Condition;
 import dev.vitorsilverio.armjitter.decoder.BlockTransferMode;
+import dev.vitorsilverio.armjitter.ir.BranchOp;
+import dev.vitorsilverio.armjitter.ir.IntegerOp;
 import dev.vitorsilverio.armjitter.ir.IrBlock;
 import dev.vitorsilverio.armjitter.ir.IrOp;
 import dev.vitorsilverio.armjitter.ir.IrOpCode;
 import dev.vitorsilverio.armjitter.ir.IrOperand;
+import dev.vitorsilverio.armjitter.ir.MemoryOp;
+import dev.vitorsilverio.armjitter.ir.SystemOp;
+import dev.vitorsilverio.armjitter.ir.VfpOp;
 import dev.vitorsilverio.armjitter.jit.CompiledBlock;
 import dev.vitorsilverio.armjitter.memory.MemoryAccessType;
 import org.objectweb.asm.ClassWriter;
@@ -283,43 +288,43 @@ public final class AsmBlockCompiler {
                 method.visitJumpInsn(Opcodes.IFEQ, condSkip);
             }
             switch (op) {
-                case IrOp.Alu alu -> emitAlu(method, alu);
-                case IrOp.Multiply mul -> emitMultiply(method, mul);
-                case IrOp.LongMultiply mul -> emitLongMultiply(method, mul);
-                case IrOp.Saturating sat -> emitSaturating(method, sat);
-                case IrOp.DspMultiply dsp -> emitDspMultiply(method, dsp);
-                case IrOp.DoubleTransfer dt -> emitDoubleTransfer(method, dt);
-                case IrOp.ParallelAlu pa -> emitParallelAlu(method, pa);
-                case IrOp.Sel sel -> emitSel(method, sel);
-                case IrOp.Saturate sat2 -> emitSaturate(method, sat2);
-                case IrOp.AbsDiffSum ads -> emitAbsDiffSum(method, ads);
-                case IrOp.LoadExclusive ldrex -> emitLoadExclusive(method, ldrex);
-                case IrOp.StoreExclusive strex -> emitStoreExclusive(method, strex);
-                case IrOp.ClearExclusive clrex -> emitClearExclusive(method, clrex);
-                case IrOp.Load load -> emitLoad(method, load);
-                case IrOp.Store store -> emitStore(method, store);
-                case IrOp.LoadLiteral lit -> emitLoadLiteral(method, lit);
+                case IntegerOp.Alu alu -> emitAlu(method, alu);
+                case IntegerOp.Multiply mul -> emitMultiply(method, mul);
+                case IntegerOp.LongMultiply mul -> emitLongMultiply(method, mul);
+                case IntegerOp.Saturating sat -> emitSaturating(method, sat);
+                case IntegerOp.DspMultiply dsp -> emitDspMultiply(method, dsp);
+                case MemoryOp.DoubleTransfer dt -> emitDoubleTransfer(method, dt);
+                case IntegerOp.ParallelAlu pa -> emitParallelAlu(method, pa);
+                case IntegerOp.Sel sel -> emitSel(method, sel);
+                case IntegerOp.Saturate sat2 -> emitSaturate(method, sat2);
+                case IntegerOp.AbsDiffSum ads -> emitAbsDiffSum(method, ads);
+                case MemoryOp.LoadExclusive ldrex -> emitLoadExclusive(method, ldrex);
+                case MemoryOp.StoreExclusive strex -> emitStoreExclusive(method, strex);
+                case MemoryOp.ClearExclusive clrex -> emitClearExclusive(method, clrex);
+                case MemoryOp.Load load -> emitLoad(method, load);
+                case MemoryOp.Store store -> emitStore(method, store);
+                case MemoryOp.LoadLiteral lit -> emitLoadLiteral(method, lit);
                 // LDM/STM/PUSH/POP: o caso comum é DESENROLADO inline (a lista de registradores é
                 // constante de compilação) integrado ao register cache; só as formas raras
                 // (user-mode, lista vazia, PC na lista) caem no helper, com flush + reload.
-                case IrOp.MultipleTransfer mt -> {
+                case MemoryOp.MultipleTransfer mt -> {
                     if (canInlineMultipleTransfer(mt)) {
                         emitMultipleTransferInline(method, mt);
                     } else {
                         emitSpilled(method, () -> emitMultipleTransfer(method, mt));
                     }
                 }
-                case IrOp.Branch b -> emitBranch(method, b);
-                case IrOp.BranchExchange bx -> emitBranchExchange(method, bx);
-                case IrOp.ThumbBlPrefix prefix -> emitThumbBlPrefix(method, prefix);
-                case IrOp.ThumbBlSuffix suffix -> emitThumbBlSuffix(method, suffix);
-                case IrOp.Push push -> emitPushInline(method, push);
-                case IrOp.Pop pop -> emitPopInline(method, pop);
-                case IrOp.PsrTransfer psr -> emitSpilled(method, () -> emitPsrTransfer(method, psr));
-                case IrOp.Swi swi -> emitSpilled(method, () -> emitSwi(method, swi, block.endPc()));
-                case IrOp.Coprocessor cp -> emitSpilled(method, () -> emitCoprocessor(method, cp));
-                case IrOp.CoprocessorDouble cp -> emitSpilled(method, () -> emitCoprocessorDouble(method, cp));
-                case IrOp.Undefined undef -> emitSpilled(method, () -> emitUndefined(method, undef));
+                case BranchOp.Branch b -> emitBranch(method, b);
+                case BranchOp.BranchExchange bx -> emitBranchExchange(method, bx);
+                case BranchOp.ThumbBlPrefix prefix -> emitThumbBlPrefix(method, prefix);
+                case BranchOp.ThumbBlSuffix suffix -> emitThumbBlSuffix(method, suffix);
+                case MemoryOp.Push push -> emitPushInline(method, push);
+                case MemoryOp.Pop pop -> emitPopInline(method, pop);
+                case SystemOp.PsrTransfer psr -> emitSpilled(method, () -> emitPsrTransfer(method, psr));
+                case SystemOp.Swi swi -> emitSpilled(method, () -> emitSwi(method, swi, block.endPc()));
+                case SystemOp.Coprocessor cp -> emitSpilled(method, () -> emitCoprocessor(method, cp));
+                case SystemOp.CoprocessorDouble cp -> emitSpilled(method, () -> emitCoprocessorDouble(method, cp));
+                case SystemOp.Undefined undef -> emitSpilled(method, () -> emitUndefined(method, undef));
                 // C12.7: os 20 records que a AsmNativePolicy passou a aceitar. Todos mexem em
                 // estado global (modo/banco/CPSR/IT/exceção de guest) ou são raros o bastante para
                 // não valerem bytecode direto dedicado — emitidos via IrOpInterop (o MESMO
@@ -327,53 +332,53 @@ public final class AsmBlockCompiler {
                 // outro helper desta classe (PsrTransfer/Coprocessor/Undefined acima). O ganho da
                 // task não é acelerar estas 20 ops — é parar de derrubar o BLOCO INTEIRO para o
                 // interpretado só por conterem uma delas (armadilha 6: emitir não é otimizar).
-                case IrOp.Swap interopOp -> emitSpilled(method, () -> emitPerOpFallback(method, interopOp, block.endPc()));
-                case IrOp.ChangeProcessorState interopOp -> emitSpilled(method, () -> emitPerOpFallback(method, interopOp, block.endPc()));
-                case IrOp.SetEndianness interopOp -> emitSpilled(method, () -> emitPerOpFallback(method, interopOp, block.endPc()));
-                case IrOp.StoreReturnState interopOp -> emitSpilled(method, () -> emitPerOpFallback(method, interopOp, block.endPc()));
-                case IrOp.ReturnFromException interopOp -> emitSpilled(method, () -> emitPerOpFallback(method, interopOp, block.endPc()));
-                case IrOp.WaitForInterrupt interopOp -> emitSpilled(method, () -> emitPerOpFallback(method, interopOp, block.endPc()));
-                case IrOp.SetItState interopOp -> emitSpilled(method, () -> emitPerOpFallback(method, interopOp, block.endPc()));
-                case IrOp.TableBranch interopOp -> emitSpilled(method, () -> emitPerOpFallback(method, interopOp, block.endPc()));
-                case IrOp.CompareBranchZero interopOp -> emitSpilled(method, () -> emitPerOpFallback(method, interopOp, block.endPc()));
-                case IrOp.MProfileSystemRegister interopOp -> emitSpilled(method, () -> emitPerOpFallback(method, interopOp, block.endPc()));
-                case IrOp.VfpCorePairTransferSingle interopOp -> emitSpilled(method, () -> emitPerOpFallback(method, interopOp, block.endPc()));
-                case IrOp.VfpConvertFixed interopOp -> emitSpilled(method, () -> emitPerOpFallback(method, interopOp, block.endPc()));
-                case IrOp.DspDualMultiply interopOp -> emitSpilled(method, () -> emitPerOpFallback(method, interopOp, block.endPc()));
-                case IrOp.DspTopWordMultiply interopOp -> emitSpilled(method, () -> emitPerOpFallback(method, interopOp, block.endPc()));
-                case IrOp.Breakpoint interopOp -> emitSpilled(method, () -> emitPerOpFallback(method, interopOp, block.endPc()));
-                case IrOp.Hvc interopOp -> emitSpilled(method, () -> emitPerOpFallback(method, interopOp, block.endPc()));
-                case IrOp.Smc interopOp -> emitSpilled(method, () -> emitPerOpFallback(method, interopOp, block.endPc()));
-                case IrOp.Eret interopOp -> emitSpilled(method, () -> emitPerOpFallback(method, interopOp, block.endPc()));
-                case IrOp.MrsBank interopOp -> emitSpilled(method, () -> emitPerOpFallback(method, interopOp, block.endPc()));
-                case IrOp.MsrBank interopOp -> emitSpilled(method, () -> emitPerOpFallback(method, interopOp, block.endPc()));
+                case MemoryOp.Swap interopOp -> emitSpilled(method, () -> emitPerOpFallback(method, interopOp, block.endPc()));
+                case SystemOp.ChangeProcessorState interopOp -> emitSpilled(method, () -> emitPerOpFallback(method, interopOp, block.endPc()));
+                case SystemOp.SetEndianness interopOp -> emitSpilled(method, () -> emitPerOpFallback(method, interopOp, block.endPc()));
+                case SystemOp.StoreReturnState interopOp -> emitSpilled(method, () -> emitPerOpFallback(method, interopOp, block.endPc()));
+                case SystemOp.ReturnFromException interopOp -> emitSpilled(method, () -> emitPerOpFallback(method, interopOp, block.endPc()));
+                case SystemOp.WaitForInterrupt interopOp -> emitSpilled(method, () -> emitPerOpFallback(method, interopOp, block.endPc()));
+                case SystemOp.SetItState interopOp -> emitSpilled(method, () -> emitPerOpFallback(method, interopOp, block.endPc()));
+                case BranchOp.TableBranch interopOp -> emitSpilled(method, () -> emitPerOpFallback(method, interopOp, block.endPc()));
+                case BranchOp.CompareBranchZero interopOp -> emitSpilled(method, () -> emitPerOpFallback(method, interopOp, block.endPc()));
+                case SystemOp.MProfileSystemRegister interopOp -> emitSpilled(method, () -> emitPerOpFallback(method, interopOp, block.endPc()));
+                case VfpOp.CorePairTransferSingle interopOp -> emitSpilled(method, () -> emitPerOpFallback(method, interopOp, block.endPc()));
+                case VfpOp.ConvertFixed interopOp -> emitSpilled(method, () -> emitPerOpFallback(method, interopOp, block.endPc()));
+                case IntegerOp.DspDualMultiply interopOp -> emitSpilled(method, () -> emitPerOpFallback(method, interopOp, block.endPc()));
+                case IntegerOp.DspTopWordMultiply interopOp -> emitSpilled(method, () -> emitPerOpFallback(method, interopOp, block.endPc()));
+                case SystemOp.Breakpoint interopOp -> emitSpilled(method, () -> emitPerOpFallback(method, interopOp, block.endPc()));
+                case SystemOp.Hvc interopOp -> emitSpilled(method, () -> emitPerOpFallback(method, interopOp, block.endPc()));
+                case SystemOp.Smc interopOp -> emitSpilled(method, () -> emitPerOpFallback(method, interopOp, block.endPc()));
+                case SystemOp.Eret interopOp -> emitSpilled(method, () -> emitPerOpFallback(method, interopOp, block.endPc()));
+                case SystemOp.MrsBank interopOp -> emitSpilled(method, () -> emitPerOpFallback(method, interopOp, block.endPc()));
+                case SystemOp.MsrBank interopOp -> emitSpilled(method, () -> emitPerOpFallback(method, interopOp, block.endPc()));
                 case IrOp.Cycle cycle -> emitCycle(method, cycle);
                 case IrOp.Fetch fetch -> emitFetch(method, fetch);
-                case IrOp.BitFieldExtract bfx -> emitBitFieldExtract(method, bfx);
-                case IrOp.BitFieldInsert bfi -> emitBitFieldInsert(method, bfi);
-                case IrOp.BitReverse rbit -> emitBitReverse(method, rbit);
-                case IrOp.Divide div -> emitDivide(method, div);
-                case IrOp.MoveTop movt -> emitMoveTop(method, movt);
-                case IrOp.MemoryBarrier ignored -> {
-                    // NOP observável (ver IrOp.MemoryBarrier) — nenhum bytecode além do
+                case IntegerOp.BitFieldExtract bfx -> emitBitFieldExtract(method, bfx);
+                case IntegerOp.BitFieldInsert bfi -> emitBitFieldInsert(method, bfi);
+                case IntegerOp.BitReverse rbit -> emitBitReverse(method, rbit);
+                case IntegerOp.Divide div -> emitDivide(method, div);
+                case IntegerOp.MoveTop movt -> emitMoveTop(method, movt);
+                case SystemOp.MemoryBarrier ignored -> {
+                    // NOP observável (ver SystemOp.MemoryBarrier) — nenhum bytecode além do
                     // Cycle/Fetch já emitidos separadamente para esta instrução.
                 }
-                // VFP (B3.6, PR2): VfpAlu/VfpMoveImmediate/VfpLoad/VfpStore/VfpCoreTransfer são
-                // bytecode direto (caminho quente); VfpCompare/VfpConvert chamam um helper (sem
-                // tocar registrador ARM algum, sem spill); VfpMultipleTransfer/VfpCorePairTransfer/
-                // VfpSystemTransfer chamam um helper que toca registrador(es) ARM DIRETAMENTE no
+                // VFP (B3.6, PR2): VfpOp.Alu/VfpOp.MoveImmediate/VfpOp.Load/VfpOp.Store/VfpOp.CoreTransfer são
+                // bytecode direto (caminho quente); VfpOp.Compare/VfpOp.Convert chamam um helper (sem
+                // tocar registrador ARM algum, sem spill); VfpOp.MultipleTransfer/VfpOp.CorePairTransfer/
+                // VfpOp.SystemTransfer chamam um helper que toca registrador(es) ARM DIRETAMENTE no
                 // core (fora do register cache) — cercados por emitSpilled, mesmo tratamento de
                 // PsrTransfer/Coprocessor acima.
-                case IrOp.VfpAlu vfpAlu -> emitVfpAlu(method, vfpAlu);
-                case IrOp.VfpMoveImmediate vfpMovImm -> emitVfpMoveImmediate(method, vfpMovImm);
-                case IrOp.VfpCompare vfpCmp -> emitVfpCompare(method, vfpCmp);
-                case IrOp.VfpConvert vfpCvt -> emitVfpConvert(method, vfpCvt);
-                case IrOp.VfpLoad vfpLoad -> emitVfpLoad(method, vfpLoad);
-                case IrOp.VfpStore vfpStore -> emitVfpStore(method, vfpStore);
-                case IrOp.VfpMultipleTransfer vfpMt -> emitSpilled(method, () -> emitVfpMultipleTransfer(method, vfpMt));
-                case IrOp.VfpCoreTransfer vfpCoreT -> emitVfpCoreTransfer(method, vfpCoreT);
-                case IrOp.VfpCorePairTransfer vfpPair -> emitSpilled(method, () -> emitVfpCorePairTransfer(method, vfpPair));
-                case IrOp.VfpSystemTransfer vfpSys -> emitSpilled(method, () -> emitVfpSystemTransfer(method, vfpSys));
+                case VfpOp.Alu vfpAlu -> emitVfpAlu(method, vfpAlu);
+                case VfpOp.MoveImmediate vfpMovImm -> emitVfpMoveImmediate(method, vfpMovImm);
+                case VfpOp.Compare vfpCmp -> emitVfpCompare(method, vfpCmp);
+                case VfpOp.Convert vfpCvt -> emitVfpConvert(method, vfpCvt);
+                case VfpOp.Load vfpLoad -> emitVfpLoad(method, vfpLoad);
+                case VfpOp.Store vfpStore -> emitVfpStore(method, vfpStore);
+                case VfpOp.MultipleTransfer vfpMt -> emitSpilled(method, () -> emitVfpMultipleTransfer(method, vfpMt));
+                case VfpOp.CoreTransfer vfpCoreT -> emitVfpCoreTransfer(method, vfpCoreT);
+                case VfpOp.CorePairTransfer vfpPair -> emitSpilled(method, () -> emitVfpCorePairTransfer(method, vfpPair));
+                case VfpOp.SystemTransfer vfpSys -> emitSpilled(method, () -> emitVfpSystemTransfer(method, vfpSys));
                 default -> throw new IllegalStateException("Unsupported IR op in native compile: " + op);
             }
             // Op pulado (condição falsa) cai aqui sem tocar PC_CHANGED — `emitProgramCounterFixup`
@@ -485,7 +490,7 @@ public final class AsmBlockCompiler {
 
     private static void countAccesses(IrOp op, int[] accesses, boolean[] writes) {
         switch (op) {
-            case IrOp.Alu alu -> {
+            case IntegerOp.Alu alu -> {
                 if (aluUsesSrc1(alu.opcode()) && alu.src1ValueOverride() == -1) {
                     countRead(accesses, alu.src1());
                 }
@@ -494,13 +499,13 @@ public final class AsmBlockCompiler {
                     countWrite(accesses, writes, alu.dst());
                 }
             }
-            case IrOp.Multiply mul -> {
+            case IntegerOp.Multiply mul -> {
                 if (mul.rmValueOverride() == -1) countRead(accesses, mul.rm());
                 if (mul.rsValueOverride() == -1) countRead(accesses, mul.rs());
                 if (mul.accumulate() && mul.rnValueOverride() == -1) countRead(accesses, mul.rn());
                 countWrite(accesses, writes, mul.dst());
             }
-            case IrOp.LongMultiply mul -> {
+            case IntegerOp.LongMultiply mul -> {
                 if (mul.rmValueOverride() == -1) countRead(accesses, mul.rm());
                 if (mul.rsValueOverride() == -1) countRead(accesses, mul.rs());
                 if (mul.accumulate() || mul.accumulateDouble()) {
@@ -510,7 +515,7 @@ public final class AsmBlockCompiler {
                 countWrite(accesses, writes, mul.dstLow());
                 countWrite(accesses, writes, mul.dstHigh());
             }
-            case IrOp.Load load -> {
+            case MemoryOp.Load load -> {
                 if (load.baseValueOverride() == -1) countRead(accesses, load.base());
                 countOperand(accesses, load.offset());
                 countWrite(accesses, writes, load.dst());
@@ -518,7 +523,7 @@ public final class AsmBlockCompiler {
                     countWrite(accesses, writes, load.base());
                 }
             }
-            case IrOp.Store store -> {
+            case MemoryOp.Store store -> {
                 if (store.baseValueOverride() == -1) countRead(accesses, store.base());
                 countOperand(accesses, store.offset());
                 if (store.srcValueOverride() == -1) countRead(accesses, store.src());
@@ -526,19 +531,19 @@ public final class AsmBlockCompiler {
                     countWrite(accesses, writes, store.base());
                 }
             }
-            case IrOp.LoadLiteral lit -> countWrite(accesses, writes, lit.dst());
-            case IrOp.Branch b -> {
+            case MemoryOp.LoadLiteral lit -> countWrite(accesses, writes, lit.dst());
+            case BranchOp.Branch b -> {
                 if (b.link()) countWrite(accesses, writes, LR_REGISTER);
             }
-            case IrOp.BranchExchange bx -> {
+            case BranchOp.BranchExchange bx -> {
                 if (bx.sourceValueOverride() == -1) countRead(accesses, bx.sourceRegister());
             }
-            case IrOp.ThumbBlPrefix ignored -> countWrite(accesses, writes, LR_REGISTER);
-            case IrOp.ThumbBlSuffix ignored -> {
+            case BranchOp.ThumbBlPrefix ignored -> countWrite(accesses, writes, LR_REGISTER);
+            case BranchOp.ThumbBlSuffix ignored -> {
                 countRead(accesses, LR_REGISTER);
                 countWrite(accesses, writes, LR_REGISTER);
             }
-            case IrOp.MultipleTransfer mt -> {
+            case MemoryOp.MultipleTransfer mt -> {
                 if (canInlineMultipleTransfer(mt)) { // as formas raras vão pelo helper (spill)
                     countRead(accesses, mt.base());
                     if (mt.writeback()) {
@@ -555,12 +560,12 @@ public final class AsmBlockCompiler {
                     }
                 }
             }
-            case IrOp.Saturating sat -> {
+            case IntegerOp.Saturating sat -> {
                 countRead(accesses, sat.rm());
                 countRead(accesses, sat.rn());
                 countWrite(accesses, writes, sat.dst());
             }
-            case IrOp.DspMultiply dsp -> {
+            case IntegerOp.DspMultiply dsp -> {
                 countRead(accesses, dsp.rm());
                 countRead(accesses, dsp.rs());
                 if (dsp.op2() == 0 || (dsp.op2() == 1 && dsp.x() == 0)) {
@@ -573,21 +578,21 @@ public final class AsmBlockCompiler {
                 }
                 countWrite(accesses, writes, dsp.dst());
             }
-            case IrOp.ParallelAlu pa -> {
+            case IntegerOp.ParallelAlu pa -> {
                 countRead(accesses, pa.rn());
                 countRead(accesses, pa.rm());
                 countWrite(accesses, writes, pa.dst());
             }
-            case IrOp.Sel sel -> {
+            case IntegerOp.Sel sel -> {
                 countRead(accesses, sel.rn());
                 countRead(accesses, sel.rm());
                 countWrite(accesses, writes, sel.dst());
             }
-            case IrOp.Saturate sat -> {
+            case IntegerOp.Saturate sat -> {
                 countOperand(accesses, sat.operand());
                 countWrite(accesses, writes, sat.dst());
             }
-            case IrOp.AbsDiffSum ads -> {
+            case IntegerOp.AbsDiffSum ads -> {
                 countRead(accesses, ads.rm());
                 countRead(accesses, ads.rs());
                 if (ads.rn() >= 0) {
@@ -595,14 +600,14 @@ public final class AsmBlockCompiler {
                 }
                 countWrite(accesses, writes, ads.dst());
             }
-            case IrOp.LoadExclusive ldrex -> {
+            case MemoryOp.LoadExclusive ldrex -> {
                 countRead(accesses, ldrex.base());
                 countWrite(accesses, writes, ldrex.dst());
                 if (ldrex.sizeBytes() == 8) {
                     countWrite(accesses, writes, ldrex.dst() + 1);
                 }
             }
-            case IrOp.StoreExclusive strex -> {
+            case MemoryOp.StoreExclusive strex -> {
                 countRead(accesses, strex.base());
                 countRead(accesses, strex.src());
                 if (strex.sizeBytes() == 8) {
@@ -610,7 +615,7 @@ public final class AsmBlockCompiler {
                 }
                 countWrite(accesses, writes, strex.dst());
             }
-            case IrOp.DoubleTransfer dt -> {
+            case MemoryOp.DoubleTransfer dt -> {
                 if (dt.baseValueOverride() == -1) {
                     countRead(accesses, dt.base());
                 }
@@ -626,7 +631,7 @@ public final class AsmBlockCompiler {
                     countWrite(accesses, writes, dt.base());
                 }
             }
-            case IrOp.Push push -> {
+            case MemoryOp.Push push -> {
                 countRead(accesses, SP_REGISTER);
                 countWrite(accesses, writes, SP_REGISTER);
                 for (int reg = 0; reg <= 7; reg++) {
@@ -638,7 +643,7 @@ public final class AsmBlockCompiler {
                     countRead(accesses, LR_REGISTER);
                 }
             }
-            case IrOp.Pop pop -> {
+            case MemoryOp.Pop pop -> {
                 countRead(accesses, SP_REGISTER);
                 countWrite(accesses, writes, SP_REGISTER);
                 for (int reg = 0; reg <= 7; reg++) {
@@ -647,42 +652,42 @@ public final class AsmBlockCompiler {
                     }
                 }
             }
-            case IrOp.BitFieldExtract bfx -> {
+            case IntegerOp.BitFieldExtract bfx -> {
                 countRead(accesses, bfx.src());
                 countWrite(accesses, writes, bfx.dst());
             }
-            case IrOp.BitFieldInsert bfi -> {
+            case IntegerOp.BitFieldInsert bfi -> {
                 countRead(accesses, bfi.dst()); // preserva os bits fora do campo
                 if (bfi.src() >= 0) {
                     countRead(accesses, bfi.src());
                 }
                 countWrite(accesses, writes, bfi.dst());
             }
-            case IrOp.BitReverse rbit -> {
+            case IntegerOp.BitReverse rbit -> {
                 countRead(accesses, rbit.src());
                 countWrite(accesses, writes, rbit.dst());
             }
-            case IrOp.Divide div -> {
+            case IntegerOp.Divide div -> {
                 countRead(accesses, div.dividend());
                 countRead(accesses, div.divisor());
                 countWrite(accesses, writes, div.dst());
             }
-            case IrOp.MoveTop movt -> {
+            case IntegerOp.MoveTop movt -> {
                 countRead(accesses, movt.dst()); // preserva a metade baixa existente
                 countWrite(accesses, writes, movt.dst());
             }
             // VFP (B3.6, PR2): só as formas de bytecode direto que tocam um registrador ARM
-            // entram aqui — VfpMultipleTransfer/VfpCorePairTransfer/VfpSystemTransfer tocam o(s)
+            // entram aqui — VfpOp.MultipleTransfer/VfpOp.CorePairTransfer/VfpOp.SystemTransfer tocam o(s)
             // seu(s) via helper cercado por emitSpilled (flush antes, reload depois), então não
             // contam para o register cache (mesmo motivo de PsrTransfer/Coprocessor, caem no
             // `default` abaixo).
-            case IrOp.VfpLoad vfpLoad -> {
+            case VfpOp.Load vfpLoad -> {
                 if (vfpLoad.baseValueOverride() == -1) countRead(accesses, vfpLoad.base());
             }
-            case IrOp.VfpStore vfpStore -> {
+            case VfpOp.Store vfpStore -> {
                 if (vfpStore.baseValueOverride() == -1) countRead(accesses, vfpStore.base());
             }
-            case IrOp.VfpCoreTransfer vfpCoreT -> {
+            case VfpOp.CoreTransfer vfpCoreT -> {
                 if (vfpCoreT.toArmRegister()) {
                     countWrite(accesses, writes, vfpCoreT.armRegister());
                 } else {
@@ -783,7 +788,7 @@ public final class AsmBlockCompiler {
     // ── ARMv5TE (saturação / DSP / LDRD-STRD) ──────────────────────────────────
 
     /// QADD/QSUB/QDADD/QDSUB via helper por-valor (o bit Q sticky é o único efeito no core).
-    private void emitSaturating(MethodVisitor method, IrOp.Saturating sat) {
+    private void emitSaturating(MethodVisitor method, IntegerOp.Saturating sat) {
         method.visitVarInsn(Opcodes.ALOAD, CORE_LOCAL);
         emitReadRegister(method, sat.rm());
         emitReadRegister(method, sat.rn());
@@ -803,7 +808,7 @@ public final class AsmBlockCompiler {
     }
 
     /// SMLAxy / SMLAWy / SMULWy / SMLALxy / SMULxy (espelha IrAluExecutor.executeDspMultiply).
-    private void emitDspMultiply(MethodVisitor method, IrOp.DspMultiply dsp) {
+    private void emitDspMultiply(MethodVisitor method, IntegerOp.DspMultiply dsp) {
         switch (dsp.op2()) {
             case 0 -> { // SMLAxy: (Rm.x * Rs.y) + Rn, Q em overflow
                 method.visitVarInsn(Opcodes.ALOAD, CORE_LOCAL);
@@ -854,7 +859,7 @@ public final class AsmBlockCompiler {
 
     /// LDRD/STRD (espelha IrMemoryExecutor.executeDoubleTransfer): dois acessos de 32 bits, um
     /// cálculo de endereço/writeback. PC no par é rejeitado pela policy (fica no interpretado).
-    private void emitDoubleTransfer(MethodVisitor method, IrOp.DoubleTransfer dt) {
+    private void emitDoubleTransfer(MethodVisitor method, MemoryOp.DoubleTransfer dt) {
         emitOperand(method, dt.offset());
         method.visitVarInsn(Opcodes.ISTORE, TEMP2_LOCAL);   // offset
         if (dt.baseValueOverride() != -1) {
@@ -908,7 +913,7 @@ public final class AsmBlockCompiler {
     /// O caso comum de LDM/STM que pode ser desenrolado inline: sem user-mode, sem lista vazia e
     /// sem PC na lista (LDM→PC troca de bloco/interworka; STM de PC leria o r15 do core — ambos
     /// ficam no helper).
-    private static boolean canInlineMultipleTransfer(IrOp.MultipleTransfer mt) {
+    private static boolean canInlineMultipleTransfer(MemoryOp.MultipleTransfer mt) {
         return !mt.userMode()
                 && !mt.emptyRegisterList()
                 && mt.registerMask() != 0
@@ -936,7 +941,7 @@ public final class AsmBlockCompiler {
 
     /// LDM/STM desenrolado: espelha AsmRuntimeHelpers.executeMultipleTransfer para o caso comum,
     /// registrador a registrador, lendo/escrevendo pelo register cache (sem flush/reload).
-    private void emitMultipleTransferInline(MethodVisitor method, IrOp.MultipleTransfer mt) {
+    private void emitMultipleTransferInline(MethodVisitor method, MemoryOp.MultipleTransfer mt) {
         int mask = mt.registerMask();
         int count = Integer.bitCount(mask);
         int base = mt.base();
@@ -990,7 +995,7 @@ public final class AsmBlockCompiler {
     }
 
     /// PUSH desenrolado (THUMB): stores ascendentes a partir de sp-4n, depois sp = sp-4n.
-    private void emitPushInline(MethodVisitor method, IrOp.Push push) {
+    private void emitPushInline(MethodVisitor method, MemoryOp.Push push) {
         int count = Integer.bitCount(push.registerMask()) + (push.includeLr() ? 1 : 0);
         emitReadRegister(method, SP_REGISTER);
         AsmBytecode.visitIntConst(method, count * 4);
@@ -1020,7 +1025,7 @@ public final class AsmBlockCompiler {
 
     /// POP desenrolado (THUMB): loads ascendentes a partir de sp; POP {..,pc} carrega o PC pelo
     /// helper de interworking da arquitetura e encerra o bloco (pc_changed).
-    private void emitPopInline(MethodVisitor method, IrOp.Pop pop) {
+    private void emitPopInline(MethodVisitor method, MemoryOp.Pop pop) {
         emitReadRegister(method, SP_REGISTER);
         method.visitVarInsn(Opcodes.ISTORE, ADDR_LOCAL);
         for (int reg = 0; reg <= 7; reg++) {
@@ -1097,7 +1102,7 @@ public final class AsmBlockCompiler {
 
     // ── ALU ────────────────────────────────────────────────────────────────────
 
-    private void emitAlu(MethodVisitor method, IrOp.Alu alu) {
+    private void emitAlu(MethodVisitor method, IntegerOp.Alu alu) {
         switch (alu.opcode()) {
             case MOV -> emitAluMov(method, alu);
             case MVN -> emitAluMvn(method, alu);
@@ -1129,7 +1134,7 @@ public final class AsmBlockCompiler {
         }
     }
 
-    private void emitAluMov(MethodVisitor method, IrOp.Alu alu) {
+    private void emitAluMov(MethodVisitor method, IntegerOp.Alu alu) {
         emitOperand(method, alu.src2());
         if (!alu.setFlags()) {
             emitStoreRegister(method, alu.dst());
@@ -1146,7 +1151,7 @@ public final class AsmBlockCompiler {
         AsmBytecode.invokeStatic(method, HELPERS, "updateLogicFlags", "(" + CORE_REF + "IZ)V");
     }
 
-    private void emitAluMvn(MethodVisitor method, IrOp.Alu alu) {
+    private void emitAluMvn(MethodVisitor method, IntegerOp.Alu alu) {
         emitOperand(method, alu.src2());
         method.visitInsn(Opcodes.ICONST_M1);
         method.visitInsn(Opcodes.IXOR);   // ~value = value ^ -1
@@ -1165,7 +1170,7 @@ public final class AsmBlockCompiler {
         AsmBytecode.invokeStatic(method, HELPERS, "updateLogicFlags", "(" + CORE_REF + "IZ)V");
     }
 
-    private void emitAluAdd(MethodVisitor method, IrOp.Alu alu) {
+    private void emitAluAdd(MethodVisitor method, IntegerOp.Alu alu) {
         emitSrc1(method, alu.src1(), alu.src1ValueOverride());
         if (!alu.setFlags()) {
             emitOperand(method, alu.src2());
@@ -1189,7 +1194,7 @@ public final class AsmBlockCompiler {
         AsmBytecode.invokeStatic(method, HELPERS, "updateAddFlags", "(" + CORE_REF + "III)V");
     }
 
-    private void emitAluAdc(MethodVisitor method, IrOp.Alu alu) {
+    private void emitAluAdc(MethodVisitor method, IntegerOp.Alu alu) {
         emitSrc1(method, alu.src1(), alu.src1ValueOverride());
         method.visitVarInsn(Opcodes.ISTORE, TEMP1_LOCAL);   // left
         emitOperand(method, alu.src2());
@@ -1217,7 +1222,7 @@ public final class AsmBlockCompiler {
         AsmBytecode.invokeStatic(method, HELPERS, "updateAdcFlags", "(" + CORE_REF + "IIII)V");
     }
 
-    private void emitAluSub(MethodVisitor method, IrOp.Alu alu) {
+    private void emitAluSub(MethodVisitor method, IntegerOp.Alu alu) {
         emitSrc1(method, alu.src1(), alu.src1ValueOverride());
         if (!alu.setFlags()) {
             emitOperand(method, alu.src2());
@@ -1242,7 +1247,7 @@ public final class AsmBlockCompiler {
         AsmBytecode.invokeStatic(method, HELPERS, "updateSbcFlags", "(" + CORE_REF + "IIII)V");
     }
 
-    private void emitAluSbc(MethodVisitor method, IrOp.Alu alu) {
+    private void emitAluSbc(MethodVisitor method, IntegerOp.Alu alu) {
         emitSrc1(method, alu.src1(), alu.src1ValueOverride());
         method.visitVarInsn(Opcodes.ISTORE, TEMP1_LOCAL);   // left
         emitOperand(method, alu.src2());
@@ -1273,7 +1278,7 @@ public final class AsmBlockCompiler {
         AsmBytecode.invokeStatic(method, HELPERS, "updateSbcFlags", "(" + CORE_REF + "IIII)V");
     }
 
-    private void emitAluRsb(MethodVisitor method, IrOp.Alu alu) {
+    private void emitAluRsb(MethodVisitor method, IntegerOp.Alu alu) {
         emitSrc1(method, alu.src1(), alu.src1ValueOverride());
         method.visitVarInsn(Opcodes.ISTORE, TEMP1_LOCAL);   // src1 (subtrahend)
         emitOperand(method, alu.src2());
@@ -1296,7 +1301,7 @@ public final class AsmBlockCompiler {
         AsmBytecode.invokeStatic(method, HELPERS, "updateSbcFlags", "(" + CORE_REF + "IIII)V");
     }
 
-    private void emitAluRsc(MethodVisitor method, IrOp.Alu alu) {
+    private void emitAluRsc(MethodVisitor method, IntegerOp.Alu alu) {
         emitSrc1(method, alu.src1(), alu.src1ValueOverride());
         method.visitVarInsn(Opcodes.ISTORE, TEMP1_LOCAL);   // src1 (subtrahend)
         emitOperand(method, alu.src2());
@@ -1327,7 +1332,7 @@ public final class AsmBlockCompiler {
         AsmBytecode.invokeStatic(method, HELPERS, "updateSbcFlags", "(" + CORE_REF + "IIII)V");
     }
 
-    private void emitAluNeg(MethodVisitor method, IrOp.Alu alu) {
+    private void emitAluNeg(MethodVisitor method, IntegerOp.Alu alu) {
         emitOperand(method, alu.src2());
         if (!alu.setFlags()) {
             method.visitInsn(Opcodes.INEG);
@@ -1349,7 +1354,7 @@ public final class AsmBlockCompiler {
         AsmBytecode.invokeStatic(method, HELPERS, "updateSbcFlags", "(" + CORE_REF + "IIII)V");
     }
 
-    private void emitAluCmp(MethodVisitor method, IrOp.Alu alu) {
+    private void emitAluCmp(MethodVisitor method, IntegerOp.Alu alu) {
         emitSrc1(method, alu.src1(), alu.src1ValueOverride());
         method.visitVarInsn(Opcodes.ISTORE, TEMP1_LOCAL);
         emitOperand(method, alu.src2());
@@ -1360,7 +1365,7 @@ public final class AsmBlockCompiler {
         AsmBytecode.invokeStatic(method, HELPERS, "updateCmpFlags", "(" + CORE_REF + "II)V");
     }
 
-    private void emitAluCmn(MethodVisitor method, IrOp.Alu alu) {
+    private void emitAluCmn(MethodVisitor method, IntegerOp.Alu alu) {
         emitSrc1(method, alu.src1(), alu.src1ValueOverride());
         method.visitVarInsn(Opcodes.ISTORE, TEMP1_LOCAL);
         emitOperand(method, alu.src2());
@@ -1376,7 +1381,7 @@ public final class AsmBlockCompiler {
         AsmBytecode.invokeStatic(method, HELPERS, "updateAddFlags", "(" + CORE_REF + "III)V");
     }
 
-    private void emitAluLogic(MethodVisitor method, IrOp.Alu alu, int jvmOpcode) {
+    private void emitAluLogic(MethodVisitor method, IntegerOp.Alu alu, int jvmOpcode) {
         emitSrc1(method, alu.src1(), alu.src1ValueOverride());
         if (!alu.setFlags()) {
             emitOperand(method, alu.src2());
@@ -1403,7 +1408,7 @@ public final class AsmBlockCompiler {
         AsmBytecode.invokeStatic(method, HELPERS, "updateLogicFlags", "(" + CORE_REF + "IZ)V");
     }
 
-    private void emitAluBic(MethodVisitor method, IrOp.Alu alu) {
+    private void emitAluBic(MethodVisitor method, IntegerOp.Alu alu) {
         // BIC = AND NOT: dst = src1 & ~src2
         emitSrc1(method, alu.src1(), alu.src1ValueOverride());
         if (!alu.setFlags()) {
@@ -1434,7 +1439,7 @@ public final class AsmBlockCompiler {
         AsmBytecode.invokeStatic(method, HELPERS, "updateLogicFlags", "(" + CORE_REF + "IZ)V");
     }
 
-    private void emitAluTest(MethodVisitor method, IrOp.Alu alu, int jvmOpcode) {
+    private void emitAluTest(MethodVisitor method, IntegerOp.Alu alu, int jvmOpcode) {
         // TST/TEQ: same as AND/EOR but no register write, always sets flags.
         emitSrc1(method, alu.src1(), alu.src1ValueOverride());
         method.visitVarInsn(Opcodes.ISTORE, TEMP1_LOCAL);
@@ -1452,13 +1457,13 @@ public final class AsmBlockCompiler {
         AsmBytecode.invokeStatic(method, HELPERS, "updateLogicFlags", "(" + CORE_REF + "IZ)V");
     }
 
-    private void emitAluClz(MethodVisitor method, IrOp.Alu alu) {
+    private void emitAluClz(MethodVisitor method, IntegerOp.Alu alu) {
         emitSrc1(method, alu.src1(), alu.src1ValueOverride());
         AsmBytecode.invokeStatic(method, INTEGER_CLASS, "numberOfLeadingZeros", "(I)I");
         emitStoreRegister(method, alu.dst());
     }
 
-    private void emitAluShift(MethodVisitor method, IrOp.Alu alu, String helperName) {
+    private void emitAluShift(MethodVisitor method, IntegerOp.Alu alu, String helperName) {
         emitSrc1(method, alu.src1(), alu.src1ValueOverride());
         method.visitVarInsn(Opcodes.ISTORE, TEMP1_LOCAL);   // value
         emitOperand(method, alu.src2());
@@ -1487,7 +1492,7 @@ public final class AsmBlockCompiler {
 
     /// SXTB/SXTH/UXTB/UXTH: `right` já vem rotacionado pelo operando (ShiftedRegister ROR, nativo
     /// desde a task C2); soma o acumulador src1 (forma sem acumulador = src1ValueOverride 0).
-    private void emitAluExtend(MethodVisitor method, IrOp.Alu alu) {
+    private void emitAluExtend(MethodVisitor method, IntegerOp.Alu alu) {
         emitOperand(method, alu.src2());
         switch (alu.opcode()) {
             case SXTB -> method.visitInsn(Opcodes.I2B);
@@ -1507,7 +1512,7 @@ public final class AsmBlockCompiler {
     }
 
     /// SXTB16/UXTB16 via helper (duas lanes independentes — ver {@code AsmRuntimeHelpers.extendByte16}).
-    private void emitAluExtendByte16(MethodVisitor method, IrOp.Alu alu) {
+    private void emitAluExtendByte16(MethodVisitor method, IntegerOp.Alu alu) {
         emitSrc1(method, alu.src1(), alu.src1ValueOverride());
         emitOperand(method, alu.src2());
         method.visitInsn(alu.opcode() == IrOpCode.SXTB16 ? Opcodes.ICONST_1 : Opcodes.ICONST_0);
@@ -1516,7 +1521,7 @@ public final class AsmBlockCompiler {
     }
 
     /// REV/REV16/REVSH. REV usa {@code Integer.reverseBytes} direto; as outras vão por helper.
-    private void emitAluReverse(MethodVisitor method, IrOp.Alu alu) {
+    private void emitAluReverse(MethodVisitor method, IntegerOp.Alu alu) {
         emitSrc1(method, alu.src1(), alu.src1ValueOverride());
         switch (alu.opcode()) {
             case REV -> AsmBytecode.invokeStatic(method, INTEGER_CLASS, "reverseBytes", "(I)I");
@@ -1528,7 +1533,7 @@ public final class AsmBlockCompiler {
 
     /// PKHBT/PKHTB (ARMv6): `right` já vem shiftado pelo operando; monta o resultado com um
     /// halfword de cada fonte. Nunca escreve flags.
-    private void emitAluPack(MethodVisitor method, IrOp.Alu alu) {
+    private void emitAluPack(MethodVisitor method, IntegerOp.Alu alu) {
         boolean bt = alu.opcode() == IrOpCode.PKHBT;
         emitSrc1(method, alu.src1(), alu.src1ValueOverride());
         AsmBytecode.visitIntConst(method, bt ? 0x0000_FFFF : 0xFFFF_0000);
@@ -1544,7 +1549,7 @@ public final class AsmBlockCompiler {
 
     /// Aritmética paralela (SADD16/UQSUB8/SHASX/...) via helper por-valor; a variante decide
     /// dentro do helper se GE é escrito no core (ver AsmRuntimeHelpers.parallelAlu).
-    private void emitParallelAlu(MethodVisitor method, IrOp.ParallelAlu op) {
+    private void emitParallelAlu(MethodVisitor method, IntegerOp.ParallelAlu op) {
         method.visitVarInsn(Opcodes.ALOAD, CORE_LOCAL);
         emitReadRegister(method, op.rn());
         emitReadRegister(method, op.rm());
@@ -1554,7 +1559,7 @@ public final class AsmBlockCompiler {
         emitStoreRegister(method, op.dst());
     }
 
-    private void emitSel(MethodVisitor method, IrOp.Sel op) {
+    private void emitSel(MethodVisitor method, IntegerOp.Sel op) {
         method.visitVarInsn(Opcodes.ALOAD, CORE_LOCAL);
         emitReadRegister(method, op.rn());
         emitReadRegister(method, op.rm());
@@ -1562,7 +1567,7 @@ public final class AsmBlockCompiler {
         emitStoreRegister(method, op.dst());
     }
 
-    private void emitSaturate(MethodVisitor method, IrOp.Saturate op) {
+    private void emitSaturate(MethodVisitor method, IntegerOp.Saturate op) {
         method.visitVarInsn(Opcodes.ALOAD, CORE_LOCAL);
         emitOperand(method, op.operand());
         AsmBytecode.visitIntConst(method, op.saturateBits());
@@ -1574,7 +1579,7 @@ public final class AsmBlockCompiler {
 
     /// `rn=-1` (forma sem acumulador, USAD8) empilha `hasAccumulator=false` e um valor
     /// dummy — o helper ignora o valor quando a flag é falsa.
-    private void emitAbsDiffSum(MethodVisitor method, IrOp.AbsDiffSum op) {
+    private void emitAbsDiffSum(MethodVisitor method, IntegerOp.AbsDiffSum op) {
         emitReadRegister(method, op.rm());
         emitReadRegister(method, op.rs());
         boolean hasAccumulator = op.rn() >= 0;
@@ -1594,7 +1599,7 @@ public final class AsmBlockCompiler {
     /// helper (dois registradores de destino) — emite `markExclusive` + dois `loadWord` inline,
     /// espelhando `IrMemoryExecutor.executeLoadExclusive`. `offset` só é não-nulo para o `LDREX`
     /// word de 32 bits Thumb-2 (B2.7 PR3).
-    private void emitLoadExclusive(MethodVisitor method, IrOp.LoadExclusive load) {
+    private void emitLoadExclusive(MethodVisitor method, MemoryOp.LoadExclusive load) {
         emitReadRegister(method, load.base());
         if (load.offset() != 0) {
             AsmBytecode.visitIntConst(method, load.offset());
@@ -1628,7 +1633,7 @@ public final class AsmBlockCompiler {
     /// STREX{,B,H,D}: checa o monitor ANTES de qualquer escrita (mesma ordem do interpretador) —
     /// falha não toca a memória. Sucesso escreve, zera `dst` e consome o monitor. `offset` só é
     /// não-nulo para o `STREX` word de 32 bits Thumb-2 (B2.7 PR3).
-    private void emitStoreExclusive(MethodVisitor method, IrOp.StoreExclusive store) {
+    private void emitStoreExclusive(MethodVisitor method, MemoryOp.StoreExclusive store) {
         emitReadRegister(method, store.base());
         if (store.offset() != 0) {
             AsmBytecode.visitIntConst(method, store.offset());
@@ -1675,14 +1680,14 @@ public final class AsmBlockCompiler {
         method.visitLabel(end);
     }
 
-    private void emitClearExclusive(MethodVisitor method, IrOp.ClearExclusive clear) {
+    private void emitClearExclusive(MethodVisitor method, MemoryOp.ClearExclusive clear) {
         method.visitVarInsn(Opcodes.ALOAD, CORE_LOCAL);
         AsmBytecode.invokeStatic(method, HELPERS, "clearExclusiveMonitor", "(" + CORE_REF + ")V");
     }
 
     // ── multiply ────────────────────────────────────────────────────────────────
 
-    private void emitMultiply(MethodVisitor method, IrOp.Multiply mul) {
+    private void emitMultiply(MethodVisitor method, IntegerOp.Multiply mul) {
         emitSrc1(method, mul.rm(), mul.rmValueOverride());
         emitSrc1(method, mul.rs(), mul.rsValueOverride());
         method.visitInsn(Opcodes.IMUL);
@@ -1709,7 +1714,7 @@ public final class AsmBlockCompiler {
         AsmBytecode.invokeStatic(method, HELPERS, "updateNzFlags", CORE_I_TO_V);
     }
 
-    private void emitLongMultiply(MethodVisitor method, IrOp.LongMultiply mul) {
+    private void emitLongMultiply(MethodVisitor method, IntegerOp.LongMultiply mul) {
         // Carrega rm como long
         emitSrc1(method, mul.rm(), mul.rmValueOverride());
         emitAsLong(method, mul.signed());
@@ -1763,7 +1768,7 @@ public final class AsmBlockCompiler {
 
     /// SBFX/UBFX: move o campo para os bits altos com `ISHL` e desloca de volta com sinal
     /// (`ISHR`) ou sem sinal (`IUSHR`) — mesmo truque do interpretado (`executeBitFieldExtract`).
-    private void emitBitFieldExtract(MethodVisitor method, IrOp.BitFieldExtract op) {
+    private void emitBitFieldExtract(MethodVisitor method, IntegerOp.BitFieldExtract op) {
         emitReadRegister(method, op.src());
         AsmBytecode.visitIntConst(method, 32 - op.lsb() - op.width());
         method.visitInsn(Opcodes.ISHL);
@@ -1775,7 +1780,7 @@ public final class AsmBlockCompiler {
     /// BFI/BFC: a máscara do campo é uma constante pré-computada no emit (não em tempo de
     /// execução). `BFC` (`src == -1`) só aplica a máscara de preservação — inserir um valor
     /// zero via OR seria um no-op, então o passo de inserção é pulado inteiramente.
-    private void emitBitFieldInsert(MethodVisitor method, IrOp.BitFieldInsert op) {
+    private void emitBitFieldInsert(MethodVisitor method, IntegerOp.BitFieldInsert op) {
         int mask = op.width() == 32 ? -1 : (((1 << op.width()) - 1) << op.lsb());
         emitReadRegister(method, op.dst());
         AsmBytecode.visitIntConst(method, ~mask);
@@ -1792,7 +1797,7 @@ public final class AsmBlockCompiler {
     }
 
     /// RBIT: `Integer.reverse` (intrínseco JIT), igual ao REV/`Integer.reverseBytes` de B1.6.
-    private void emitBitReverse(MethodVisitor method, IrOp.BitReverse op) {
+    private void emitBitReverse(MethodVisitor method, IntegerOp.BitReverse op) {
         emitReadRegister(method, op.src());
         AsmBytecode.invokeStatic(method, INTEGER_CLASS, "reverse", "(I)I");
         emitStoreRegister(method, op.dst());
@@ -1801,7 +1806,7 @@ public final class AsmBlockCompiler {
     /// SDIV/UDIV: guarda o divisor 0 ANTES do `IDIV` (a ordem importa — ver Armadilhas da task
     /// B3.6). `Integer.MIN_VALUE / -1` não precisa de guard: a divisão inteira da JVM já devolve
     /// `MIN_VALUE` sem lançar, igual ao hardware.
-    private void emitDivide(MethodVisitor method, IrOp.Divide op) {
+    private void emitDivide(MethodVisitor method, IntegerOp.Divide op) {
         emitReadRegister(method, op.dividend());
         emitReadRegister(method, op.divisor());
         method.visitVarInsn(Opcodes.ISTORE, TEMP2_LOCAL);   // divisor
@@ -1826,7 +1831,7 @@ public final class AsmBlockCompiler {
 
     /// MOVT: preserva os 16 bits baixos existentes de `dst` (AND) e insere o imediato nos 16
     /// bits altos (OR) — nunca toca flags, sem operando shiftado.
-    private void emitMoveTop(MethodVisitor method, IrOp.MoveTop op) {
+    private void emitMoveTop(MethodVisitor method, IntegerOp.MoveTop op) {
         emitReadRegister(method, op.dst());
         AsmBytecode.visitIntConst(method, 0xFFFF);
         method.visitInsn(Opcodes.IAND);
@@ -1836,14 +1841,14 @@ public final class AsmBlockCompiler {
     }
 
     // ── VFP (B3.6, PR2) ──────────────────────────────────────────────────────────
-    // VfpAlu/VfpMoveImmediate/VfpLoad/VfpStore/VfpCoreTransfer são bytecode direto (caminho
-    // quente, decisão da task B3.6). VfpCompare/VfpConvert/VfpMultipleTransfer/
-    // VfpCorePairTransfer/VfpSystemTransfer chamam um helper estático em AsmRuntimeHelpers.
+    // VfpOp.Alu/VfpOp.MoveImmediate/VfpOp.Load/VfpOp.Store/VfpOp.CoreTransfer são bytecode direto (caminho
+    // quente, decisão da task B3.6). VfpOp.Compare/VfpOp.Convert/VfpOp.MultipleTransfer/
+    // VfpOp.CorePairTransfer/VfpOp.SystemTransfer chamam um helper estático em AsmRuntimeHelpers.
 
     /// `VADD`/`VSUB`/`VMUL`/`VDIV`/`VNEG`/`VABS`/`VMOV` registrador (bytecode direto);
     /// `VMLA`/`VMLS`/`VNMLA`/`VNMLS`/`VNMUL`/`VSQRT` (mais raras) chamam
     /// {@code AsmRuntimeHelpers#vfpAluCold}.
-    private void emitVfpAlu(MethodVisitor method, IrOp.VfpAlu op) {
+    private void emitVfpAlu(MethodVisitor method, VfpOp.Alu op) {
         switch (op.op()) {
             case ADD, SUB, MUL, DIV -> emitVfpArith(method, op);
             case NEG -> emitVfpSignBit(method, op, true);
@@ -1865,7 +1870,7 @@ public final class AsmBlockCompiler {
     /// {@code VfpRegisters}), aplica o opcode JVM nativo e grava de volta via
     /// {@code setSFloat}/{@code setDDouble} — que já usa `floatToRawIntBits`/`doubleToRawLongBits`
     /// por dentro (nunca a forma não-raw, que canonicalizaria NaN — Armadilha da task B3.6).
-    private void emitVfpArith(MethodVisitor method, IrOp.VfpAlu op) {
+    private void emitVfpArith(MethodVisitor method, VfpOp.Alu op) {
         if (op.doublePrecision()) {
             emitVfpRead(method, GuestToHostMapper.vfpDDouble(), op.vn());
             emitVfpRead(method, GuestToHostMapper.vfpDDouble(), op.vm());
@@ -1897,7 +1902,7 @@ public final class AsmBlockCompiler {
         AsmBytecode.invokeVirtual(method, accessor);
     }
 
-    private static int singleArithOpcode(IrOp.VfpOperation op) {
+    private static int singleArithOpcode(VfpOp.VfpOperation op) {
         return switch (op) {
             case ADD -> Opcodes.FADD;
             case SUB -> Opcodes.FSUB;
@@ -1907,7 +1912,7 @@ public final class AsmBlockCompiler {
         };
     }
 
-    private static int doubleArithOpcode(IrOp.VfpOperation op) {
+    private static int doubleArithOpcode(VfpOp.VfpOperation op) {
         return switch (op) {
             case ADD -> Opcodes.DADD;
             case SUB -> Opcodes.DSUB;
@@ -1920,7 +1925,7 @@ public final class AsmBlockCompiler {
     /// `VNEG`/`VABS`: manipula só o bit de sinal via XOR/AND com uma constante crua (NUNCA `0-x`/
     /// `Math.abs`, que canonicalizariam NaN e quebrariam em `-0.0` — mesma armadilha de
     /// `IrVfpExecutor`, aqui em bytecode).
-    private void emitVfpSignBit(MethodVisitor method, IrOp.VfpAlu op, boolean negate) {
+    private void emitVfpSignBit(MethodVisitor method, VfpOp.Alu op, boolean negate) {
         if (op.doublePrecision()) {
             emitVfpRead(method, GuestToHostMapper.vfpD(), op.vm());
             method.visitLdcInsn(negate ? Long.MIN_VALUE : Long.MAX_VALUE);
@@ -1945,7 +1950,7 @@ public final class AsmBlockCompiler {
     }
 
     /// `VMOV` registrador-a-registrador: cópia bit a bit crua (sem conversão de tipo).
-    private void emitVfpCopy(MethodVisitor method, IrOp.VfpAlu op) {
+    private void emitVfpCopy(MethodVisitor method, VfpOp.Alu op) {
         method.visitVarInsn(Opcodes.ALOAD, CORE_LOCAL);
         AsmBytecode.invokeVirtual(method, GuestToHostMapper.vfp());
         AsmBytecode.visitIntConst(method, op.vd());
@@ -1954,7 +1959,7 @@ public final class AsmBlockCompiler {
     }
 
     /// `VMOV.F32`/`VMOV.F64 Vd, #imm`: grava o imediato já expandido pelo decoder/lifter.
-    private void emitVfpMoveImmediate(MethodVisitor method, IrOp.VfpMoveImmediate op) {
+    private void emitVfpMoveImmediate(MethodVisitor method, VfpOp.MoveImmediate op) {
         method.visitVarInsn(Opcodes.ALOAD, CORE_LOCAL);
         AsmBytecode.invokeVirtual(method, GuestToHostMapper.vfp());
         AsmBytecode.visitIntConst(method, op.vd());
@@ -1969,7 +1974,7 @@ public final class AsmBlockCompiler {
 
     /// `VCMP`/`VCMPE`: sem registrador ARM envolvido (só `FPSCR`) — chamado direto, sem
     /// {@code emitSpilled} (o register cache de r0-r14 nunca fica stale por isto).
-    private void emitVfpCompare(MethodVisitor method, IrOp.VfpCompare op) {
+    private void emitVfpCompare(MethodVisitor method, VfpOp.Compare op) {
         method.visitVarInsn(Opcodes.ALOAD, CORE_LOCAL);
         method.visitInsn(op.doublePrecision() ? Opcodes.ICONST_1 : Opcodes.ICONST_0);
         method.visitInsn(op.compareWithZero() ? Opcodes.ICONST_1 : Opcodes.ICONST_0);
@@ -1979,7 +1984,7 @@ public final class AsmBlockCompiler {
     }
 
     /// `VCVT` (forma default): sem registrador ARM envolvido — mesma observação de {@link #emitVfpCompare}.
-    private void emitVfpConvert(MethodVisitor method, IrOp.VfpConvert op) {
+    private void emitVfpConvert(MethodVisitor method, VfpOp.Convert op) {
         method.visitVarInsn(Opcodes.ALOAD, CORE_LOCAL);
         AsmBytecode.visitIntConst(method, op.conversion().ordinal());
         AsmBytecode.visitIntConst(method, op.vd());
@@ -1989,10 +1994,10 @@ public final class AsmBlockCompiler {
 
     /// `VLDR`: dupla precisão lê 2 words little-endian consecutivas via {@code loadWord}
     /// (metade baixa no endereço menor); `base` é lido pelo register cache.
-    private void emitVfpLoad(MethodVisitor method, IrOp.VfpLoad load) {
+    private void emitVfpLoad(MethodVisitor method, VfpOp.Load load) {
         // `baseValueOverride` (`Vd, [pc, #imm]` — literal pool de `double`/`float` do `gcc`): sem
         // isso, `emitReadRegister` leria `R15` do register cache/core AO VIVO, que não tem o viés
-        // `+8` do `PC` arquitetural nesta janela (ver o javadoc de {@link IrOp.VfpLoad#baseValueOverride}).
+        // `+8` do `PC` arquitetural nesta janela (ver o javadoc de {@link VfpOp.Load#baseValueOverride}).
         if (load.baseValueOverride() != -1) {
             AsmBytecode.visitIntConst(method, load.baseValueOverride());
         } else {
@@ -2032,7 +2037,7 @@ public final class AsmBlockCompiler {
     }
 
     /// `VSTR`: ver {@link #emitVfpLoad}.
-    private void emitVfpStore(MethodVisitor method, IrOp.VfpStore store) {
+    private void emitVfpStore(MethodVisitor method, VfpOp.Store store) {
         // Ver {@link #emitVfpLoad} — mesmo tratamento de `baseValueOverride`.
         if (store.baseValueOverride() != -1) {
             AsmBytecode.visitIntConst(method, store.baseValueOverride());
@@ -2078,7 +2083,7 @@ public final class AsmBlockCompiler {
 
     /// `VLDM`/`VSTM`/`VPUSH`/`VPOP`: sempre via helper — cercado por {@code emitSpilled} no ponto
     /// de despacho (toca `base` diretamente no core, fora do register cache).
-    private void emitVfpMultipleTransfer(MethodVisitor method, IrOp.VfpMultipleTransfer op) {
+    private void emitVfpMultipleTransfer(MethodVisitor method, VfpOp.MultipleTransfer op) {
         method.visitVarInsn(Opcodes.ALOAD, CORE_LOCAL);
         method.visitInsn(op.load() ? Opcodes.ICONST_1 : Opcodes.ICONST_0);
         method.visitInsn(op.doublePrecision() ? Opcodes.ICONST_1 : Opcodes.ICONST_0);
@@ -2095,7 +2100,7 @@ public final class AsmBlockCompiler {
     /// `VMOV Rt,Sn` / `VMOV Sn,Rt` (`FMRS`/`FMSR`): bytecode direto — `armRegister` é lido/escrito
     /// pelo register cache via {@link #emitReadRegister}/{@link #emitStoreRegister} (um único
     /// registrador, sem tocar o core por fora do cache, então sem necessidade de spill).
-    private void emitVfpCoreTransfer(MethodVisitor method, IrOp.VfpCoreTransfer op) {
+    private void emitVfpCoreTransfer(MethodVisitor method, VfpOp.CoreTransfer op) {
         if (op.toArmRegister()) {
             emitVfpRead(method, GuestToHostMapper.vfpS(), op.vn());
             emitStoreRegister(method, op.armRegister());
@@ -2110,7 +2115,7 @@ public final class AsmBlockCompiler {
 
     /// `VMOV Rt,Rt2,Dm` / `VMOV Dm,Rt,Rt2` (`FMRRD`/`FMDRR`): sempre via helper — cercado por
     /// {@code emitSpilled} no ponto de despacho (toca `armLow`/`armHigh` diretamente no core).
-    private void emitVfpCorePairTransfer(MethodVisitor method, IrOp.VfpCorePairTransfer op) {
+    private void emitVfpCorePairTransfer(MethodVisitor method, VfpOp.CorePairTransfer op) {
         method.visitVarInsn(Opcodes.ALOAD, CORE_LOCAL);
         method.visitInsn(op.toArmRegisters() ? Opcodes.ICONST_1 : Opcodes.ICONST_0);
         AsmBytecode.visitIntConst(method, op.armLow());
@@ -2121,7 +2126,7 @@ public final class AsmBlockCompiler {
 
     /// `VMSR`/`VMRS FPSCR` (`FMXR`/`FMRX`): sempre via helper — cercado por {@code emitSpilled} no
     /// ponto de despacho (toca `armRegister` diretamente no core, incl. o caso `APSR_nzcv`).
-    private void emitVfpSystemTransfer(MethodVisitor method, IrOp.VfpSystemTransfer op) {
+    private void emitVfpSystemTransfer(MethodVisitor method, VfpOp.SystemTransfer op) {
         method.visitVarInsn(Opcodes.ALOAD, CORE_LOCAL);
         method.visitInsn(op.read() ? Opcodes.ICONST_1 : Opcodes.ICONST_0);
         AsmBytecode.visitIntConst(method, op.armRegister());
@@ -2130,7 +2135,7 @@ public final class AsmBlockCompiler {
 
     // ── memory ─────────────────────────────────────────────────────────────────
 
-    private void emitLoad(MethodVisitor method, IrOp.Load load) {
+    private void emitLoad(MethodVisitor method, MemoryOp.Load load) {
         // base value
         if (load.baseValueOverride() != -1) {
             AsmBytecode.visitIntConst(method, load.baseValueOverride());
@@ -2190,7 +2195,7 @@ public final class AsmBlockCompiler {
         }
     }
 
-    private void emitStore(MethodVisitor method, IrOp.Store store) {
+    private void emitStore(MethodVisitor method, MemoryOp.Store store) {
         // base value
         if (store.baseValueOverride() != -1) {
             AsmBytecode.visitIntConst(method, store.baseValueOverride());
@@ -2238,7 +2243,7 @@ public final class AsmBlockCompiler {
         }
     }
 
-    private void emitLoadLiteral(MethodVisitor method, IrOp.LoadLiteral lit) {
+    private void emitLoadLiteral(MethodVisitor method, MemoryOp.LoadLiteral lit) {
         method.visitVarInsn(Opcodes.ALOAD, CORE_LOCAL);
         AsmBytecode.visitIntConst(method, lit.address());
         String readHelper = switch (lit.sizeBytes()) {
@@ -2264,7 +2269,7 @@ public final class AsmBlockCompiler {
 
     // ── LDM/STM/PUSH/POP ───────────────────────────────────────────────────────
 
-    private void emitMultipleTransfer(MethodVisitor method, IrOp.MultipleTransfer mt) {
+    private void emitMultipleTransfer(MethodVisitor method, MemoryOp.MultipleTransfer mt) {
         method.visitVarInsn(Opcodes.ALOAD, CORE_LOCAL);
         method.visitInsn(mt.load() ? Opcodes.ICONST_1 : Opcodes.ICONST_0);
         AsmBytecode.visitIntConst(method, mt.base());
@@ -2279,14 +2284,14 @@ public final class AsmBlockCompiler {
         emitConditionalSetPcChanged(method);
     }
 
-    private void emitPush(MethodVisitor method, IrOp.Push push) {
+    private void emitPush(MethodVisitor method, MemoryOp.Push push) {
         method.visitVarInsn(Opcodes.ALOAD, CORE_LOCAL);
         AsmBytecode.visitIntConst(method, push.registerMask());
         method.visitInsn(push.includeLr() ? Opcodes.ICONST_1 : Opcodes.ICONST_0);
         AsmBytecode.invokeStatic(method, HELPERS, "executePush", CORE_IZ_TO_V);
     }
 
-    private void emitPop(MethodVisitor method, IrOp.Pop pop) {
+    private void emitPop(MethodVisitor method, MemoryOp.Pop pop) {
         method.visitVarInsn(Opcodes.ALOAD, CORE_LOCAL);
         AsmBytecode.visitIntConst(method, pop.registerMask());
         method.visitInsn(pop.includePc() ? Opcodes.ICONST_1 : Opcodes.ICONST_0);
@@ -2297,7 +2302,7 @@ public final class AsmBlockCompiler {
 
     // ── branches ───────────────────────────────────────────────────────────────
 
-    private void emitBranch(MethodVisitor method, IrOp.Branch branch) {
+    private void emitBranch(MethodVisitor method, BranchOp.Branch branch) {
         if (branch.link()) {
             AsmBytecode.visitIntConst(method, branch.returnAddress());
             emitStoreRegister(method, LR_REGISTER);
@@ -2309,7 +2314,7 @@ public final class AsmBlockCompiler {
         method.visitVarInsn(Opcodes.ISTORE, PC_CHANGED_LOCAL);
     }
 
-    private void emitBranchExchange(MethodVisitor method, IrOp.BranchExchange bx) {
+    private void emitBranchExchange(MethodVisitor method, BranchOp.BranchExchange bx) {
         method.visitVarInsn(Opcodes.ALOAD, CORE_LOCAL);
         if (bx.sourceValueOverride() != -1) {
             AsmBytecode.visitIntConst(method, bx.sourceValueOverride());
@@ -2321,13 +2326,13 @@ public final class AsmBlockCompiler {
         method.visitVarInsn(Opcodes.ISTORE, PC_CHANGED_LOCAL);
     }
 
-    private void emitThumbBlPrefix(MethodVisitor method, IrOp.ThumbBlPrefix prefix) {
+    private void emitThumbBlPrefix(MethodVisitor method, BranchOp.ThumbBlPrefix prefix) {
         // LR = address + 4 + highOffset (no PC change)
         AsmBytecode.visitIntConst(method, prefix.address() + 4 + prefix.highOffset());
         emitStoreRegister(method, LR_REGISTER);
     }
 
-    private void emitThumbBlSuffix(MethodVisitor method, IrOp.ThumbBlSuffix suffix) {
+    private void emitThumbBlSuffix(MethodVisitor method, BranchOp.ThumbBlSuffix suffix) {
         // oldLR = register(14)
         emitReadRegister(method, LR_REGISTER);
         method.visitVarInsn(Opcodes.ISTORE, TEMP1_LOCAL);   // oldLR
@@ -2346,7 +2351,7 @@ public final class AsmBlockCompiler {
 
     // ── PSR ────────────────────────────────────────────────────────────────────
 
-    private void emitPsrTransfer(MethodVisitor method, IrOp.PsrTransfer psr) {
+    private void emitPsrTransfer(MethodVisitor method, SystemOp.PsrTransfer psr) {
         if (psr.read()) {
             method.visitVarInsn(Opcodes.ALOAD, CORE_LOCAL);
             method.visitInsn(psr.spsr() ? Opcodes.ICONST_1 : Opcodes.ICONST_0);
@@ -2379,7 +2384,7 @@ public final class AsmBlockCompiler {
 
     // ── SWI / coprocessor / undefined ──────────────────────────────────────────
 
-    private void emitSwi(MethodVisitor method, IrOp.Swi swi, int blockEndPc) {
+    private void emitSwi(MethodVisitor method, SystemOp.Swi swi, int blockEndPc) {
         method.visitVarInsn(Opcodes.ALOAD, CORE_LOCAL);
         AsmBytecode.visitIntConst(method, swi.immediate());
         AsmBytecode.visitIntConst(method, blockEndPc);
@@ -2390,7 +2395,7 @@ public final class AsmBlockCompiler {
         method.visitVarInsn(Opcodes.ISTORE, PC_CHANGED_LOCAL);
     }
 
-    private void emitCoprocessor(MethodVisitor method, IrOp.Coprocessor cp) {
+    private void emitCoprocessor(MethodVisitor method, SystemOp.Coprocessor cp) {
         method.visitVarInsn(Opcodes.ALOAD, CORE_LOCAL);
         method.visitInsn(cp.load() ? Opcodes.ICONST_1 : Opcodes.ICONST_0);
         AsmBytecode.visitIntConst(method, cp.coprocessor());
@@ -2405,7 +2410,7 @@ public final class AsmBlockCompiler {
         emitConditionalSetPcChanged(method);
     }
 
-    private void emitCoprocessorDouble(MethodVisitor method, IrOp.CoprocessorDouble cp) {
+    private void emitCoprocessorDouble(MethodVisitor method, SystemOp.CoprocessorDouble cp) {
         method.visitVarInsn(Opcodes.ALOAD, CORE_LOCAL);
         method.visitInsn(cp.load() ? Opcodes.ICONST_1 : Opcodes.ICONST_0);
         AsmBytecode.visitIntConst(method, cp.coprocessor());
@@ -2419,7 +2424,7 @@ public final class AsmBlockCompiler {
         emitConditionalSetPcChanged(method);
     }
 
-    private void emitUndefined(MethodVisitor method, IrOp.Undefined undef) {
+    private void emitUndefined(MethodVisitor method, SystemOp.Undefined undef) {
         method.visitVarInsn(Opcodes.ALOAD, CORE_LOCAL);
         AsmBytecode.visitIntConst(method, undef.sequentialPc());
         AsmBytecode.invokeStatic(method, HELPERS, "executeUndefined", CORE_I_TO_V);

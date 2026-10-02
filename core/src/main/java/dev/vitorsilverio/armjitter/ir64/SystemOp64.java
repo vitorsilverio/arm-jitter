@@ -11,7 +11,7 @@ public sealed interface SystemOp64 extends Ir64Op permits SystemOp64.Svc, System
         SystemOp64.UndefinedInstructionTrap, SystemOp64.StreamingModeControl {
 
     /// `SVC` (`ARM DDI 0487 C6.2.311`): chamada de sistema delegada ao dispatcher do host — mesmo
-    /// papel de {@link dev.vitorsilverio.armjitter.ir.IrOp.Swi} no IR de 32 bits, mas sem campo
+    /// papel de {@link dev.vitorsilverio.armjitter.ir.SystemOp.Swi} no IR de 32 bits, mas sem campo
     /// de condição (A64 não tem `SVC` condicional).
     record Svc(
             /// Imediato de 16 bits da instrução `SVC`.

@@ -220,7 +220,7 @@ public final class Thumb2MultiplyDecoder implements DecoderExtension {
         }
         // destinationRegister=RdLo, sourceRegister/secondSourceRegister=os dois multiplicandos,
         // immediate=RdHi — mesmo layout que StandardIrBuilder#lift (caso UMULL/UMLAL/SMULL/SMLAL)
-        // já consome, produzindo IrOp.LongMultiply idêntico ao ARM clássico.
+        // já consome, produzindo IntegerOp.LongMultiply idêntico ao ARM clássico.
         return new DecodedInstruction(address, raw, InstructionSet.THUMB, condition, kind,
                 rdLow, rn, rm, rdHigh, false, false, false);
     }
@@ -240,7 +240,7 @@ public final class Thumb2MultiplyDecoder implements DecoderExtension {
         if (op == DUAL_LONG_OP_BASE || op == (DUAL_LONG_OP_BASE | 1)) {
             return decodeDspDualMultiply(raw, address, condition, false, (op & 1) != 0, true);
         }
-        // SMLAL<x><y> (op=1000..1011): acumulador 64 bits {RdHi:RdLo} += Rn.x * Rm.y — IrOp.DspMultiply
+        // SMLAL<x><y> (op=1000..1011): acumulador 64 bits {RdHi:RdLo} += Rn.x * Rm.y — IntegerOp.DspMultiply
         // op2=2 (mesma semântica de IrAluExecutor#executeDspMultiply, caso 2).
         if ((op & 0x8) != 0) {
             return decodeDspMultiplySixtyFourBitAccumulate(raw, address, condition, op);
@@ -360,7 +360,7 @@ public final class Thumb2MultiplyDecoder implements DecoderExtension {
         }
         // Layout: 1111 1011 0001 Rn(19:16) Ra(15:12) Rd(11:8) 00NM Rm(3:0) — N (op bit1) seleciona
         // a metade de Rn (o "Rm" de x na nomenclatura ARM clássica), M (op bit0) a metade de Rm (o
-        // "Rs" de y). Ra=1111 é SMUL<x><y> (sem acumulador, op2=3 no IrOp.DspMultiply); qualquer
+        // "Rs" de y). Ra=1111 é SMUL<x><y> (sem acumulador, op2=3 no IntegerOp.DspMultiply); qualquer
         // outro valor é SMLA<x><y> (op2=0, acumula com Ra).
         int rn = (raw >>> 16) & 0xF; // registrador "x" (metade selecionada por N)
         int ra = (raw >>> 12) & 0xF;

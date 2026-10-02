@@ -3,7 +3,7 @@ package dev.vitorsilverio.armjitter.decoder;
 import dev.vitorsilverio.armjitter.advsimd.AdvSimdShiftImmediateOp;
 import dev.vitorsilverio.armjitter.arch.ArmArchitecture;
 import dev.vitorsilverio.armjitter.core.Condition;
-import dev.vitorsilverio.armjitter.ir.IrOp;
+import dev.vitorsilverio.armjitter.ir.MveIntegerOp;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -56,12 +56,12 @@ class Thumb2MveShiftImmediateDecoderTest {
         return new Thumb2MveShiftImmediateDecoder(ArmArchitecture.ARMV8_1M_MVE).tryDecode(raw, 0, Condition.AL);
     }
 
-    private static IrOp.MveVectorShiftImmediate decodeShift(int raw) {
-        return assertInstanceOf(IrOp.MveVectorShiftImmediate.class, tryDecode(raw).liftedOp());
+    private static MveIntegerOp.VectorShiftImmediate decodeShift(int raw) {
+        return assertInstanceOf(MveIntegerOp.VectorShiftImmediate.class, tryDecode(raw).liftedOp());
     }
 
-    private static IrOp.MveVectorShiftWidenImmediateInterleaved decodeVshll(int raw) {
-        return assertInstanceOf(IrOp.MveVectorShiftWidenImmediateInterleaved.class, tryDecode(raw).liftedOp());
+    private static MveIntegerOp.VectorShiftWidenImmediateInterleaved decodeVshll(int raw) {
+        return assertInstanceOf(MveIntegerOp.VectorShiftWidenImmediateInterleaved.class, tryDecode(raw).liftedOp());
     }
 
     // ── Achado 1: N - shift nas formas _shr/VSRI ────────────────────────────────────────────────
@@ -69,14 +69,14 @@ class Thumb2MveShiftImmediateDecoderTest {
     @Test
     void vshriHalfwordFieldOneMeansShiftFifteen() {
         // VSHRI_S, halfword, campo cru = 1 -> shift = 16 - 1 = 15.
-        IrOp.MveVectorShiftImmediate op = decodeShift(rawShift(0, 0b0000, prefixHalfword(1), 0, 1));
+        MveIntegerOp.VectorShiftImmediate op = decodeShift(rawShift(0, 0b0000, prefixHalfword(1), 0, 1));
         assertEquals(1, op.esz());
         assertEquals(15, op.shift());
     }
 
     @Test
     void vshriByteFieldZeroMeansShiftEight() {
-        IrOp.MveVectorShiftImmediate op = decodeShift(rawShift(0, 0b0000, prefixByte(0), 0, 1));
+        MveIntegerOp.VectorShiftImmediate op = decodeShift(rawShift(0, 0b0000, prefixByte(0), 0, 1));
         assertEquals(0, op.esz());
         assertEquals(8, op.shift());
     }
@@ -84,7 +84,7 @@ class Thumb2MveShiftImmediateDecoderTest {
     @Test
     void vrshriWordUsesNShiftToo() {
         // word, campo cru = 5 -> shift = 32 - 5 = 27.
-        IrOp.MveVectorShiftImmediate op = decodeShift(rawShift(1, 0b0010, prefixWord(5), 0, 1));
+        MveIntegerOp.VectorShiftImmediate op = decodeShift(rawShift(1, 0b0010, prefixWord(5), 0, 1));
         assertEquals(2, op.esz());
         assertEquals(27, op.shift());
         assertEquals(AdvSimdShiftImmediateOp.URSHR, op.op());
@@ -92,7 +92,7 @@ class Thumb2MveShiftImmediateDecoderTest {
 
     @Test
     void vshliUsesRawShiftDirectly() {
-        IrOp.MveVectorShiftImmediate op = decodeShift(rawShift(0, 0b0101, prefixByte(3), 0, 1));
+        MveIntegerOp.VectorShiftImmediate op = decodeShift(rawShift(0, 0b0101, prefixByte(3), 0, 1));
         assertEquals(3, op.shift());
         assertEquals(AdvSimdShiftImmediateOp.SHL, op.op());
     }
@@ -153,12 +153,12 @@ class Thumb2MveShiftImmediateDecoderTest {
 
     @Test
     void decodesVshllBottomSignedAndUnsigned() {
-        IrOp.MveVectorShiftWidenImmediateInterleaved s = decodeVshll(rawVshll(0, 0, 0, 3, 0, 1));
+        MveIntegerOp.VectorShiftWidenImmediateInterleaved s = decodeVshll(rawVshll(0, 0, 0, 3, 0, 1));
         assertEquals(true, s.signed());
         assertEquals(false, s.top());
         assertEquals(0, s.esz());
         assertEquals(3, s.shift());
-        IrOp.MveVectorShiftWidenImmediateInterleaved u = decodeVshll(rawVshll(1, 1, 1, 5, 2, 3));
+        MveIntegerOp.VectorShiftWidenImmediateInterleaved u = decodeVshll(rawVshll(1, 1, 1, 5, 2, 3));
         assertEquals(false, u.signed());
         assertEquals(true, u.top());
         assertEquals(1, u.esz());
@@ -168,14 +168,14 @@ class Thumb2MveShiftImmediateDecoderTest {
     @Test
     void vmovlIsVshllWithZeroShift() {
         // VMOVL não tem Kind próprio: é VSHLL_BS/BU com shift=0.
-        IrOp.MveVectorShiftWidenImmediateInterleaved op = decodeVshll(rawVshll(0, 0, 0, 0, 0, 1));
+        MveIntegerOp.VectorShiftWidenImmediateInterleaved op = decodeVshll(rawVshll(0, 0, 0, 0, 0, 1));
         assertEquals(0, op.shift());
     }
 
     @Test
     void vshllQdEqualsQmIsNotUndef() {
         // Achado: do_2shift_vec real só checa mve_check_qreg_bank(qd|qm), nunca qd != qm.
-        assertInstanceOf(IrOp.MveVectorShiftWidenImmediateInterleaved.class,
+        assertInstanceOf(MveIntegerOp.VectorShiftWidenImmediateInterleaved.class,
                 tryDecode(rawVshll(0, 0, 0, 3, 4, 4)).liftedOp());
     }
 
@@ -263,6 +263,6 @@ class Thumb2MveShiftImmediateDecoderTest {
         memory.put16(0, r >>> 16);
         memory.put16(2, r & 0xFFFF);
         DecodedInstruction decoded = new ThumbDecoder(ArmArchitecture.ARMV8_1M_MVE).decode(memory, 0);
-        assertInstanceOf(IrOp.MveVectorShiftImmediate.class, decoded.liftedOp());
+        assertInstanceOf(MveIntegerOp.VectorShiftImmediate.class, decoded.liftedOp());
     }
 }

@@ -8,6 +8,7 @@ import dev.vitorsilverio.armjitter.core.FpRoundingMode;
 import dev.vitorsilverio.armjitter.core.FpscrRegister;
 import dev.vitorsilverio.armjitter.ir.IrBlock;
 import dev.vitorsilverio.armjitter.ir.IrOp;
+import dev.vitorsilverio.armjitter.ir.VfpOp;
 import dev.vitorsilverio.armjitter.support.TestAddressSpace;
 import dev.vitorsilverio.armjitter.swi.SwiDispatcher;
 import org.junit.jupiter.api.Test;
@@ -38,7 +39,7 @@ class IrVfpExecutorTest {
         ArmCore core = newCore();
         core.vfp().setSFloat(0, 0.1f);
         core.vfp().setSFloat(1, 0.2f);
-        IrOp.VfpAlu add = new IrOp.VfpAlu(IrOp.VfpOperation.ADD, false, 2, 0, 1, Condition.AL);
+        VfpOp.Alu add = new VfpOp.Alu(VfpOp.VfpOperation.ADD, false, 2, 0, 1, Condition.AL);
         newExecutor().executeOp(core, add, 0);
         // 0.1f + 0.2f em ponto flutuante simples IEEE 754 não é exatamente 0.3f.
         assertEquals(0x3E99999A, Float.floatToRawIntBits(0.1f + 0.2f));
@@ -54,13 +55,13 @@ class IrVfpExecutorTest {
         ArmCore subCore = newCore();
         subCore.vfp().setDDouble(0, 5.0);
         subCore.vfp().setDDouble(1, 2.0);
-        newExecutor().executeOp(subCore, new IrOp.VfpAlu(IrOp.VfpOperation.SUB, true, 2, 0, 1, Condition.AL), 0);
+        newExecutor().executeOp(subCore, new VfpOp.Alu(VfpOp.VfpOperation.SUB, true, 2, 0, 1, Condition.AL), 0);
         assertEquals(3.0, subCore.vfp().dDouble(2));
 
-        newExecutor().executeOp(core, new IrOp.VfpAlu(IrOp.VfpOperation.MUL, true, 3, 0, 1, Condition.AL), 0);
+        newExecutor().executeOp(core, new VfpOp.Alu(VfpOp.VfpOperation.MUL, true, 3, 0, 1, Condition.AL), 0);
         assertEquals(10.0, core.vfp().dDouble(3));
 
-        newExecutor().executeOp(core, new IrOp.VfpAlu(IrOp.VfpOperation.DIV, true, 4, 0, 1, Condition.AL), 0);
+        newExecutor().executeOp(core, new VfpOp.Alu(VfpOp.VfpOperation.DIV, true, 4, 0, 1, Condition.AL), 0);
         assertEquals(2.5, core.vfp().dDouble(4));
     }
 
@@ -82,7 +83,7 @@ class IrVfpExecutorTest {
         core.vfp().setSFloat(0, a); // vn
         core.vfp().setSFloat(1, b); // vm
         core.vfp().setSFloat(2, c); // vd (acumulador de entrada)
-        newExecutor().executeOp(core, new IrOp.VfpAlu(IrOp.VfpOperation.MLA, false, 2, 0, 1, Condition.AL), 0);
+        newExecutor().executeOp(core, new VfpOp.Alu(VfpOp.VfpOperation.MLA, false, 2, 0, 1, Condition.AL), 0);
 
         assertEquals(Float.floatToRawIntBits(unfused), core.vfp().s(2));
         assertNotEquals(Float.floatToRawIntBits(fused), core.vfp().s(2));
@@ -105,7 +106,7 @@ class IrVfpExecutorTest {
         core.vfp().setSFloat(0, a); // vn
         core.vfp().setSFloat(1, b); // vm
         core.vfp().setSFloat(2, c); // vd (acumulador de entrada)
-        newExecutor().executeOp(core, new IrOp.VfpAlu(IrOp.VfpOperation.FMA, false, 2, 0, 1, Condition.AL), 0);
+        newExecutor().executeOp(core, new VfpOp.Alu(VfpOp.VfpOperation.FMA, false, 2, 0, 1, Condition.AL), 0);
 
         assertEquals(Float.floatToRawIntBits(fused), core.vfp().s(2));
         assertNotEquals(Float.floatToRawIntBits(unfused), core.vfp().s(2));
@@ -117,20 +118,20 @@ class IrVfpExecutorTest {
         core.vfp().setDDouble(0, 2.0);  // vn
         core.vfp().setDDouble(1, 3.0);  // vm
         core.vfp().setDDouble(2, 10.0); // vd
-        newExecutor().executeOp(core, new IrOp.VfpAlu(IrOp.VfpOperation.FMS, true, 2, 0, 1, Condition.AL), 0);
+        newExecutor().executeOp(core, new VfpOp.Alu(VfpOp.VfpOperation.FMS, true, 2, 0, 1, Condition.AL), 0);
         // vd - vn*vm = 10 - 6 = 4 (Math.fma(-2,3,10)).
         assertEquals(4.0, core.vfp().dDouble(2));
     }
 
     /// `neg_n=true, neg_d=true` → `fma(-vd,-vn,vm)` = `-(vd + vn*vm)` — mesma convenção de sinal de
-    /// `VNMLA` (confirmado contra `MAKE_ONE_VFM_TRANS_FN` real do QEMU, ver `IrOp.VfpOperation`).
+    /// `VNMLA` (confirmado contra `MAKE_ONE_VFM_TRANS_FN` real do QEMU, ver `VfpOp.VfpOperation`).
     @Test
     void fnmaNegatesTheWholeSum() {
         ArmCore core = newCore();
         core.vfp().setDDouble(0, 2.0);  // vn
         core.vfp().setDDouble(1, 3.0);  // vm
         core.vfp().setDDouble(2, 10.0); // vd
-        newExecutor().executeOp(core, new IrOp.VfpAlu(IrOp.VfpOperation.FNMA, true, 2, 0, 1, Condition.AL), 0);
+        newExecutor().executeOp(core, new VfpOp.Alu(VfpOp.VfpOperation.FNMA, true, 2, 0, 1, Condition.AL), 0);
         // -(vd + vn*vm) = -(10 + 6) = -16.
         assertEquals(-16.0, core.vfp().dDouble(2));
     }
@@ -143,7 +144,7 @@ class IrVfpExecutorTest {
         core.vfp().setDDouble(0, 2.0);  // vn
         core.vfp().setDDouble(1, 3.0);  // vm
         core.vfp().setDDouble(2, 10.0); // vd
-        newExecutor().executeOp(core, new IrOp.VfpAlu(IrOp.VfpOperation.FNMS, true, 2, 0, 1, Condition.AL), 0);
+        newExecutor().executeOp(core, new VfpOp.Alu(VfpOp.VfpOperation.FNMS, true, 2, 0, 1, Condition.AL), 0);
         // -vd + vn*vm = -10 + 6 = -4.
         assertEquals(-4.0, core.vfp().dDouble(2));
     }
@@ -154,7 +155,7 @@ class IrVfpExecutorTest {
         core.vfp().setDDouble(0, 2.0);  // vn
         core.vfp().setDDouble(1, 3.0);  // vm
         core.vfp().setDDouble(2, 10.0); // vd
-        newExecutor().executeOp(core, new IrOp.VfpAlu(IrOp.VfpOperation.MLS, true, 2, 0, 1, Condition.AL), 0);
+        newExecutor().executeOp(core, new VfpOp.Alu(VfpOp.VfpOperation.MLS, true, 2, 0, 1, Condition.AL), 0);
         assertEquals(4.0, core.vfp().dDouble(2)); // 10 - (2*3)
     }
 
@@ -167,7 +168,7 @@ class IrVfpExecutorTest {
         core.vfp().setDDouble(0, 2.0);  // vn
         core.vfp().setDDouble(1, 3.0);  // vm
         core.vfp().setDDouble(2, 10.0); // vd
-        newExecutor().executeOp(core, new IrOp.VfpAlu(IrOp.VfpOperation.NMLS, true, 2, 0, 1, Condition.AL), 0);
+        newExecutor().executeOp(core, new VfpOp.Alu(VfpOp.VfpOperation.NMLS, true, 2, 0, 1, Condition.AL), 0);
         assertEquals(-4.0, core.vfp().dDouble(2)); // -10 + (2*3), NÃO 10 - (2*3) = 4
     }
 
@@ -177,7 +178,7 @@ class IrVfpExecutorTest {
         core.vfp().setDDouble(0, 2.0);
         core.vfp().setDDouble(1, 3.0);
         core.vfp().setDDouble(2, 10.0);
-        newExecutor().executeOp(core, new IrOp.VfpAlu(IrOp.VfpOperation.NMLA, true, 2, 0, 1, Condition.AL), 0);
+        newExecutor().executeOp(core, new VfpOp.Alu(VfpOp.VfpOperation.NMLA, true, 2, 0, 1, Condition.AL), 0);
         assertEquals(-16.0, core.vfp().dDouble(2)); // -10 - (2*3)
     }
 
@@ -187,7 +188,7 @@ class IrVfpExecutorTest {
         core.vfp().setSFloat(0, 2.0f);
         core.vfp().setSFloat(1, 3.0f);
         core.vfp().setSFloat(2, 10.0f);
-        newExecutor().executeOp(core, new IrOp.VfpAlu(IrOp.VfpOperation.NMLS, false, 2, 0, 1, Condition.AL), 0);
+        newExecutor().executeOp(core, new VfpOp.Alu(VfpOp.VfpOperation.NMLS, false, 2, 0, 1, Condition.AL), 0);
         assertEquals(-4.0f, core.vfp().sFloat(2));
     }
 
@@ -198,7 +199,7 @@ class IrVfpExecutorTest {
         int nanWithPayload = 0x7FC00001; // NaN quieto com payload não-zero
         ArmCore core = newCore();
         core.vfp().setS(0, nanWithPayload);
-        newExecutor().executeOp(core, new IrOp.VfpAlu(IrOp.VfpOperation.NEG, false, 1, 0, 0, Condition.AL), 0);
+        newExecutor().executeOp(core, new VfpOp.Alu(VfpOp.VfpOperation.NEG, false, 1, 0, 0, Condition.AL), 0);
         assertEquals(nanWithPayload ^ Integer.MIN_VALUE, core.vfp().s(1));
     }
 
@@ -206,7 +207,7 @@ class IrVfpExecutorTest {
     void negOfPositiveZeroIsNegativeZeroBitwise() {
         ArmCore core = newCore();
         core.vfp().setSFloat(0, 0.0f);
-        newExecutor().executeOp(core, new IrOp.VfpAlu(IrOp.VfpOperation.NEG, false, 1, 0, 0, Condition.AL), 0);
+        newExecutor().executeOp(core, new VfpOp.Alu(VfpOp.VfpOperation.NEG, false, 1, 0, 0, Condition.AL), 0);
         assertEquals(Integer.MIN_VALUE, core.vfp().s(1)); // bits de -0.0f
     }
 
@@ -215,7 +216,7 @@ class IrVfpExecutorTest {
         long nanWithPayload = 0xFFF8_0000_0000_0001L; // NaN de sinal negativo, payload não-zero
         ArmCore core = newCore();
         core.vfp().setD(0, nanWithPayload);
-        newExecutor().executeOp(core, new IrOp.VfpAlu(IrOp.VfpOperation.ABS, true, 1, 0, 0, Condition.AL), 0);
+        newExecutor().executeOp(core, new VfpOp.Alu(VfpOp.VfpOperation.ABS, true, 1, 0, 0, Condition.AL), 0);
         assertEquals(nanWithPayload & Long.MAX_VALUE, core.vfp().d(1));
     }
 
@@ -225,7 +226,7 @@ class IrVfpExecutorTest {
     void sqrtOfNegativeIsNaN() {
         ArmCore core = newCore();
         core.vfp().setDDouble(0, -1.0);
-        newExecutor().executeOp(core, new IrOp.VfpAlu(IrOp.VfpOperation.SQRT, true, 1, 0, 0, Condition.AL), 0);
+        newExecutor().executeOp(core, new VfpOp.Alu(VfpOp.VfpOperation.SQRT, true, 1, 0, 0, Condition.AL), 0);
         assertTrue(Double.isNaN(core.vfp().dDouble(1)));
     }
 
@@ -233,7 +234,7 @@ class IrVfpExecutorTest {
     void sqrtSingleIsCorrectlyRoundedBitExact() {
         ArmCore core = newCore();
         core.vfp().setSFloat(0, 2.0f);
-        newExecutor().executeOp(core, new IrOp.VfpAlu(IrOp.VfpOperation.SQRT, false, 1, 0, 0, Condition.AL), 0);
+        newExecutor().executeOp(core, new VfpOp.Alu(VfpOp.VfpOperation.SQRT, false, 1, 0, 0, Condition.AL), 0);
         assertEquals(0x3FB504F3, core.vfp().s(1));
     }
 
@@ -247,11 +248,11 @@ class IrVfpExecutorTest {
     void sqrtWithTheRealDecoderSentinelVnDoesNotThrow() {
         ArmCore core = newCore();
         core.vfp().setSFloat(0, 2.0f);
-        newExecutor().executeOp(core, new IrOp.VfpAlu(IrOp.VfpOperation.SQRT, false, 1, -1, 0, Condition.AL), 0);
+        newExecutor().executeOp(core, new VfpOp.Alu(VfpOp.VfpOperation.SQRT, false, 1, -1, 0, Condition.AL), 0);
         assertEquals(0x3FB504F3, core.vfp().s(1));
 
         core.vfp().setDDouble(0, 2.0);
-        newExecutor().executeOp(core, new IrOp.VfpAlu(IrOp.VfpOperation.SQRT, true, 2, -1, 0, Condition.AL), 0);
+        newExecutor().executeOp(core, new VfpOp.Alu(VfpOp.VfpOperation.SQRT, true, 2, -1, 0, Condition.AL), 0);
         assertEquals(Math.sqrt(2.0), core.vfp().dDouble(2));
     }
 
@@ -282,7 +283,7 @@ class IrVfpExecutorTest {
         core.vfp().setSFloat(0, vd);
         core.vfp().setSFloat(1, vm);
         newExecutor().executeOp(core,
-                new IrOp.VfpCompare(false, false, false, 0, 1, Condition.AL), 0);
+                new VfpOp.Compare(false, false, false, 0, 1, Condition.AL), 0);
         return core;
     }
 
@@ -300,7 +301,7 @@ class IrVfpExecutorTest {
     void convertF32ToF64IsExact() {
         ArmCore core = newCore();
         core.vfp().setSFloat(0, 1.5f);
-        newExecutor().executeOp(core, new IrOp.VfpConvert(IrOp.VfpConversion.F32_TO_F64, 1, 0, Condition.AL), 0);
+        newExecutor().executeOp(core, new VfpOp.Convert(VfpOp.VfpConversion.F32_TO_F64, 1, 0, Condition.AL), 0);
         assertEquals(1.5, core.vfp().dDouble(1));
     }
 
@@ -308,7 +309,7 @@ class IrVfpExecutorTest {
     void convertF64ToF32Rounds() {
         ArmCore core = newCore();
         core.vfp().setDDouble(0, 1.5);
-        newExecutor().executeOp(core, new IrOp.VfpConvert(IrOp.VfpConversion.F64_TO_F32, 1, 0, Condition.AL), 0);
+        newExecutor().executeOp(core, new VfpOp.Convert(VfpOp.VfpConversion.F64_TO_F32, 1, 0, Condition.AL), 0);
         assertEquals(1.5f, core.vfp().sFloat(1));
     }
 
@@ -316,7 +317,7 @@ class IrVfpExecutorTest {
     void convertS32ToF32() {
         ArmCore core = newCore();
         core.vfp().setS(0, -5);
-        newExecutor().executeOp(core, new IrOp.VfpConvert(IrOp.VfpConversion.S32_TO_F32, 1, 0, Condition.AL), 0);
+        newExecutor().executeOp(core, new VfpOp.Convert(VfpOp.VfpConversion.S32_TO_F32, 1, 0, Condition.AL), 0);
         assertEquals(-5.0f, core.vfp().sFloat(1));
     }
 
@@ -324,7 +325,7 @@ class IrVfpExecutorTest {
     void convertS32ToF64() {
         ArmCore core = newCore();
         core.vfp().setS(0, -5);
-        newExecutor().executeOp(core, new IrOp.VfpConvert(IrOp.VfpConversion.S32_TO_F64, 1, 0, Condition.AL), 0);
+        newExecutor().executeOp(core, new VfpOp.Convert(VfpOp.VfpConversion.S32_TO_F64, 1, 0, Condition.AL), 0);
         assertEquals(-5.0, core.vfp().dDouble(1));
     }
 
@@ -332,7 +333,7 @@ class IrVfpExecutorTest {
     void convertU32ToF32TreatsBitsAsUnsigned() {
         ArmCore core = newCore();
         core.vfp().setS(0, 0xFFFFFFFF); // -1 assinado == 4294967295 sem sinal
-        newExecutor().executeOp(core, new IrOp.VfpConvert(IrOp.VfpConversion.U32_TO_F32, 1, 0, Condition.AL), 0);
+        newExecutor().executeOp(core, new VfpOp.Convert(VfpOp.VfpConversion.U32_TO_F32, 1, 0, Condition.AL), 0);
         assertEquals(4294967295.0f, core.vfp().sFloat(1));
     }
 
@@ -340,7 +341,7 @@ class IrVfpExecutorTest {
     void convertU32ToF64TreatsBitsAsUnsigned() {
         ArmCore core = newCore();
         core.vfp().setS(0, 0xFFFFFFFF);
-        newExecutor().executeOp(core, new IrOp.VfpConvert(IrOp.VfpConversion.U32_TO_F64, 1, 0, Condition.AL), 0);
+        newExecutor().executeOp(core, new VfpOp.Convert(VfpOp.VfpConversion.U32_TO_F64, 1, 0, Condition.AL), 0);
         assertEquals(4294967295.0, core.vfp().dDouble(1));
     }
 
@@ -348,7 +349,7 @@ class IrVfpExecutorTest {
     void convertF32ToS32NanBecomesZero() {
         ArmCore core = newCore();
         core.vfp().setSFloat(0, Float.NaN);
-        newExecutor().executeOp(core, new IrOp.VfpConvert(IrOp.VfpConversion.F32_TO_S32, 1, 0, Condition.AL), 0);
+        newExecutor().executeOp(core, new VfpOp.Convert(VfpOp.VfpConversion.F32_TO_S32, 1, 0, Condition.AL), 0);
         assertEquals(0, core.vfp().s(1));
     }
 
@@ -356,7 +357,7 @@ class IrVfpExecutorTest {
     void convertF32ToS32SaturatesAtMaxValue() {
         ArmCore core = newCore();
         core.vfp().setSFloat(0, 1e30f);
-        newExecutor().executeOp(core, new IrOp.VfpConvert(IrOp.VfpConversion.F32_TO_S32, 1, 0, Condition.AL), 0);
+        newExecutor().executeOp(core, new VfpOp.Convert(VfpOp.VfpConversion.F32_TO_S32, 1, 0, Condition.AL), 0);
         assertEquals(Integer.MAX_VALUE, core.vfp().s(1));
     }
 
@@ -364,7 +365,7 @@ class IrVfpExecutorTest {
     void convertF64ToS32TruncatesTowardZero() {
         ArmCore core = newCore();
         core.vfp().setDDouble(0, 2.9);
-        newExecutor().executeOp(core, new IrOp.VfpConvert(IrOp.VfpConversion.F64_TO_S32, 1, 0, Condition.AL), 0);
+        newExecutor().executeOp(core, new VfpOp.Convert(VfpOp.VfpConversion.F64_TO_S32, 1, 0, Condition.AL), 0);
         assertEquals(2, core.vfp().s(1));
     }
 
@@ -372,7 +373,7 @@ class IrVfpExecutorTest {
     void convertF32ToU32NegativeBecomesZero() {
         ArmCore core = newCore();
         core.vfp().setSFloat(0, -1.5f);
-        newExecutor().executeOp(core, new IrOp.VfpConvert(IrOp.VfpConversion.F32_TO_U32, 1, 0, Condition.AL), 0);
+        newExecutor().executeOp(core, new VfpOp.Convert(VfpOp.VfpConversion.F32_TO_U32, 1, 0, Condition.AL), 0);
         assertEquals(0, core.vfp().s(1));
     }
 
@@ -380,7 +381,7 @@ class IrVfpExecutorTest {
     void convertF64ToU32SaturatesAtAllOnes() {
         ArmCore core = newCore();
         core.vfp().setDDouble(0, 4294967040.0); // 0xFFFFFF00, exato em double e float
-        newExecutor().executeOp(core, new IrOp.VfpConvert(IrOp.VfpConversion.F64_TO_U32, 1, 0, Condition.AL), 0);
+        newExecutor().executeOp(core, new VfpOp.Convert(VfpOp.VfpConversion.F64_TO_U32, 1, 0, Condition.AL), 0);
         assertEquals(0xFFFFFF00, core.vfp().s(1));
     }
 
@@ -393,14 +394,14 @@ class IrVfpExecutorTest {
         core.vfp().setDDouble(1, 3.5);
         IrBlockExecutor executor = newExecutor();
 
-        executor.executeOp(core, new IrOp.VfpStore(true, 1, 0, -1, 8, Condition.AL), 0);
+        executor.executeOp(core, new VfpOp.Store(true, 1, 0, -1, 8, Condition.AL), 0);
         // Metade baixa (bits 31:0 de 3.5) no endereço menor (16+8=24), alta em 24+4=28.
         long bits = Double.doubleToRawLongBits(3.5);
         TestAddressSpace memory = (TestAddressSpace) core.memory();
         assertEquals((int) bits, memory.read32(24));
         assertEquals((int) (bits >>> 32), memory.read32(28));
 
-        executor.executeOp(core, new IrOp.VfpLoad(true, 2, 0, -1, 8, Condition.AL), 0);
+        executor.executeOp(core, new VfpOp.Load(true, 2, 0, -1, 8, Condition.AL), 0);
         assertEquals(3.5, core.vfp().dDouble(2));
     }
 
@@ -414,7 +415,7 @@ class IrVfpExecutorTest {
         memory.put32(8, Float.floatToRawIntBits(3.0f));
 
         newExecutor().executeOp(core,
-                new IrOp.VfpMultipleTransfer(true, false, 0, -1, 4, 3, true, false, Condition.AL), 0);
+                new VfpOp.MultipleTransfer(true, false, 0, -1, 4, 3, true, false, Condition.AL), 0);
 
         assertEquals(1.0f, core.vfp().sFloat(4));
         assertEquals(2.0f, core.vfp().sFloat(5));
@@ -430,7 +431,7 @@ class IrVfpExecutorTest {
         core.vfp().setDDouble(1, 2.0);
 
         newExecutor().executeOp(core,
-                new IrOp.VfpMultipleTransfer(false, true, 13, -1, 0, 2, true, true, Condition.AL), 0);
+                new VfpOp.MultipleTransfer(false, true, 13, -1, 0, 2, true, true, Condition.AL), 0);
 
         assertEquals(16, core.register(13)); // writeback DB: base -= 2*8 = 16
         TestAddressSpace memory = (TestAddressSpace) core.memory();
@@ -450,7 +451,7 @@ class IrVfpExecutorTest {
         core.cpsr().setSaturation(true);
         core.cpsr().setThumbMode(true); // isThumbMode() checado depois
 
-        newExecutor().executeOp(core, new IrOp.VfpSystemTransfer(true, 15, Condition.AL), 0);
+        newExecutor().executeOp(core, new VfpOp.SystemTransfer(true, 15, Condition.AL), 0);
 
         assertTrue(core.cpsr().negative());
         assertFalse(core.cpsr().zero());
@@ -471,7 +472,7 @@ class IrVfpExecutorTest {
     void vmrsRegularCopiesFpscrValueIntoRegister() {
         ArmCore core = newCore();
         core.fpscr().setValue(FpscrRegister.ZERO_FLAG);
-        newExecutor().executeOp(core, new IrOp.VfpSystemTransfer(true, 3, Condition.AL), 0);
+        newExecutor().executeOp(core, new VfpOp.SystemTransfer(true, 3, Condition.AL), 0);
         assertEquals(FpscrRegister.ZERO_FLAG, core.register(3));
     }
 
@@ -479,7 +480,7 @@ class IrVfpExecutorTest {
     void vmsrWritesRegisterIntoFpscr() {
         ArmCore core = newCore();
         core.setRegister(3, FpscrRegister.CARRY_FLAG);
-        newExecutor().executeOp(core, new IrOp.VfpSystemTransfer(false, 3, Condition.AL), 0);
+        newExecutor().executeOp(core, new VfpOp.SystemTransfer(false, 3, Condition.AL), 0);
         assertEquals(FpscrRegister.CARRY_FLAG, core.fpscr().value());
     }
 
@@ -494,7 +495,7 @@ class IrVfpExecutorTest {
         core.vfp().setSFloat(2, 9.0f); // sentinela: não deve ser sobrescrito
         core.fpscr().setValue(FpscrRegister.ZERO_FLAG); // sentinela
 
-        IrOp.VfpAlu skippedAdd = new IrOp.VfpAlu(IrOp.VfpOperation.ADD, false, 2, 0, 1, Condition.EQ);
+        VfpOp.Alu skippedAdd = new VfpOp.Alu(VfpOp.VfpOperation.ADD, false, 2, 0, 1, Condition.EQ);
         IrBlock block = new IrBlock(0, 4, List.of(new IrOp.Fetch(0, 4), skippedAdd, new IrOp.Cycle(3)));
 
         int cycles = newExecutor().execute(block, core);
@@ -513,7 +514,7 @@ class IrVfpExecutorTest {
         core.vfp().setSFloat(0, 1.0f);
         core.vfp().setSFloat(1, 3.0f);
         core.fpscr().setValue(0b10 << FpscrRegister.ROUNDING_MODE_SHIFT); // RM
-        newExecutor().executeOp(core, new IrOp.VfpAlu(IrOp.VfpOperation.DIV, false, 2, 0, 1, Condition.AL), 0);
+        newExecutor().executeOp(core, new VfpOp.Alu(VfpOp.VfpOperation.DIV, false, 2, 0, 1, Condition.AL), 0);
         // 1.0f/3.0f round-to-nearest = 0x3eaaaaab; o exato fica abaixo -> RM tem que arredondar
         // para baixo (vizinho de baixo), diferente do default (ver DirectedFpRoundingTest).
         assertEquals(0x3eaaaaaa, core.vfp().s(2));
@@ -525,7 +526,7 @@ class IrVfpExecutorTest {
         ArmCore core = newCore();
         core.vfp().setSFloat(0, 1.0f);
         core.vfp().setSFloat(1, 3.0f);
-        newExecutor().executeOp(core, new IrOp.VfpAlu(IrOp.VfpOperation.DIV, false, 2, 0, 1, Condition.AL), 0);
+        newExecutor().executeOp(core, new VfpOp.Alu(VfpOp.VfpOperation.DIV, false, 2, 0, 1, Condition.AL), 0);
         assertEquals(Float.floatToRawIntBits(1.0f / 3.0f), core.vfp().s(2));
     }
 
@@ -536,7 +537,7 @@ class IrVfpExecutorTest {
         ArmCore core = newCore();
         core.setRegister(0, FpscrRegister.ROUNDING_MODE_MASK | FpscrRegister.FLUSH_TO_ZERO_FLAG
                 | FpscrRegister.LEN_MASK | FpscrRegister.STRIDE_MASK);
-        newExecutor().executeOp(core, new IrOp.VfpSystemTransfer(false, 0, Condition.AL), 0);
+        newExecutor().executeOp(core, new VfpOp.SystemTransfer(false, 0, Condition.AL), 0);
         assertEquals(FpRoundingMode.ROUND_TOWARD_ZERO, core.fpscr().roundingMode());
         assertTrue(core.fpscr().flushToZero());
     }
@@ -551,7 +552,7 @@ class IrVfpExecutorTest {
         core.vfp().setSFloat(1, -2.0f);
         // MIN_VALUE * -2 continua subnormal (magnitude só dobra) -> resultado exato != 0, mas FZ
         // ainda assim reduz para zero com o sinal do resultado matemático (negativo).
-        newExecutor().executeOp(core, new IrOp.VfpAlu(IrOp.VfpOperation.MUL, false, 2, 0, 1, Condition.AL), 0);
+        newExecutor().executeOp(core, new VfpOp.Alu(VfpOp.VfpOperation.MUL, false, 2, 0, 1, Condition.AL), 0);
         assertEquals(-0.0f, core.vfp().sFloat(2));
         assertTrue(1 / core.vfp().sFloat(2) < 0, "zero deveria ter sinal negativo (flush preserva o sinal)");
     }
@@ -561,7 +562,7 @@ class IrVfpExecutorTest {
         ArmCore core = newCore();
         core.fpscr().setValue(FpscrRegister.FLUSH_TO_ZERO_FLAG);
         core.vfp().setSFloat(0, Float.MIN_VALUE); // subnormal, seria >0 sem FZ
-        IrOp.VfpCompare cmp = new IrOp.VfpCompare(false, true, false, 0, 0, Condition.AL); // VCMP Vd, #0
+        VfpOp.Compare cmp = new VfpOp.Compare(false, true, false, 0, 0, Condition.AL); // VCMP Vd, #0
         newExecutor().executeOp(core, cmp, 0);
         assertTrue(core.fpscr().z(), "entrada subnormal deveria ser tratada como zero (denormal-as-zero)");
     }
@@ -572,7 +573,7 @@ class IrVfpExecutorTest {
         ArmCore core = newCore();
         core.vfp().setSFloat(0, Float.MIN_VALUE);
         core.vfp().setSFloat(1, 1.0f);
-        newExecutor().executeOp(core, new IrOp.VfpAlu(IrOp.VfpOperation.MUL, false, 2, 0, 1, Condition.AL), 0);
+        newExecutor().executeOp(core, new VfpOp.Alu(VfpOp.VfpOperation.MUL, false, 2, 0, 1, Condition.AL), 0);
         assertEquals(Float.MIN_VALUE, core.vfp().sFloat(2));
     }
 
@@ -583,7 +584,7 @@ class IrVfpExecutorTest {
         ArmCore core = newCore();
         core.vfp().setS(5, 0x1111_1111);
         core.vfp().setS(6, 0x2222_2222);
-        newExecutor().executeOp(core, new IrOp.VfpCorePairTransferSingle(true, 1, 2, 5, Condition.AL), 0);
+        newExecutor().executeOp(core, new VfpOp.CorePairTransferSingle(true, 1, 2, 5, Condition.AL), 0);
         assertEquals(0x1111_1111, core.register(1));
         assertEquals(0x2222_2222, core.register(2));
     }
@@ -593,7 +594,7 @@ class IrVfpExecutorTest {
         ArmCore core = newCore();
         core.setRegister(1, 0x3333_3333);
         core.setRegister(2, 0x4444_4444);
-        newExecutor().executeOp(core, new IrOp.VfpCorePairTransferSingle(false, 1, 2, 5, Condition.AL), 0);
+        newExecutor().executeOp(core, new VfpOp.CorePairTransferSingle(false, 1, 2, 5, Condition.AL), 0);
         assertEquals(0x3333_3333, core.vfp().s(5));
         assertEquals(0x4444_4444, core.vfp().s(6));
     }
@@ -605,7 +606,7 @@ class IrVfpExecutorTest {
         ArmCore core = newCore();
         core.vfp().setD(0, 0xAAAA_AAAA_1111_1111L); // S0=low, S1=high=0xAAAAAAAA
         core.vfp().setD(1, 0x2222_2222_BBBB_BBBBL); // S2=low=0x22222222, S3=high
-        newExecutor().executeOp(core, new IrOp.VfpCorePairTransferSingle(true, 3, 4, 1, Condition.AL), 0);
+        newExecutor().executeOp(core, new VfpOp.CorePairTransferSingle(true, 3, 4, 1, Condition.AL), 0);
         assertEquals(0xAAAA_AAAA, core.register(3)); // S1 (metade alta de D0)
         assertEquals(0xBBBB_BBBB, core.register(4)); // S2 (metade baixa de D1)
     }
@@ -618,7 +619,7 @@ class IrVfpExecutorTest {
         ArmCore core = newCore();
         core.vfp().setS(0, 0x0180);
         newExecutor().executeOp(core,
-                new IrOp.VfpConvertFixed(false, false, false, false, 8, 0, Condition.AL), 0);
+                new VfpOp.ConvertFixed(false, false, false, false, 8, 0, Condition.AL), 0);
         assertEquals(1.5f, core.vfp().sFloat(0));
     }
 
@@ -628,14 +629,14 @@ class IrVfpExecutorTest {
         ArmCore core = newCore();
         core.vfp().setSFloat(0, 1.9f);
         newExecutor().executeOp(core,
-                new IrOp.VfpConvertFixed(false, true, false, false, 8, 0, Condition.AL), 0);
+                new VfpOp.ConvertFixed(false, true, false, false, 8, 0, Condition.AL), 0);
         assertEquals((short) 486, (short) core.vfp().s(0));
 
         // Satura no MAX de um fixo COM sinal de 16 bits (32767) em vez de estourar.
         ArmCore satCore = newCore();
         satCore.vfp().setSFloat(0, 1000.0f);
         newExecutor().executeOp(satCore,
-                new IrOp.VfpConvertFixed(false, true, false, false, 8, 0, Condition.AL), 0);
+                new VfpOp.ConvertFixed(false, true, false, false, 8, 0, Condition.AL), 0);
         assertEquals(32767, core16(satCore.vfp().s(0)));
     }
 
@@ -648,11 +649,11 @@ class IrVfpExecutorTest {
         ArmCore core = newCore();
         core.vfp().setDDouble(0, 100.25);
         newExecutor().executeOp(core,
-                new IrOp.VfpConvertFixed(true, true, true, true, 2, 0, Condition.AL), 0);
+                new VfpOp.ConvertFixed(true, true, true, true, 2, 0, Condition.AL), 0);
         // 100.25 * 4 = 401 exato, sem sinal de 32 bits -> round-trip perfeito.
         assertEquals(401L, core.vfp().d(0));
         newExecutor().executeOp(core,
-                new IrOp.VfpConvertFixed(true, false, true, true, 2, 0, Condition.AL), 0);
+                new VfpOp.ConvertFixed(true, false, true, true, 2, 0, Condition.AL), 0);
         assertEquals(100.25, core.vfp().dDouble(0));
     }
 
@@ -661,7 +662,7 @@ class IrVfpExecutorTest {
         ArmCore core = newCore();
         core.vfp().setSFloat(0, -5.0f);
         newExecutor().executeOp(core,
-                new IrOp.VfpConvertFixed(false, true, true, false, 0, 0, Condition.AL), 0);
+                new VfpOp.ConvertFixed(false, true, true, false, 0, 0, Condition.AL), 0);
         assertEquals(0, core.vfp().s(0) & 0xFFFF);
     }
 }

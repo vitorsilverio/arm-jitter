@@ -14,6 +14,8 @@ import dev.vitorsilverio.armjitter.core.ArmCore;
 import dev.vitorsilverio.armjitter.core.Condition;
 import dev.vitorsilverio.armjitter.ir.IrBlock;
 import dev.vitorsilverio.armjitter.ir.IrOp;
+import dev.vitorsilverio.armjitter.ir.NeonFpOp;
+import dev.vitorsilverio.armjitter.ir.NeonIntegerOp;
 import dev.vitorsilverio.armjitter.ir.StandardIrBuilder;
 import dev.vitorsilverio.armjitter.support.TestAddressSpace;
 import dev.vitorsilverio.armjitter.swi.SwiDispatcher;
@@ -32,12 +34,12 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 ///
 /// B13.10: `VADDL`/`VSUBL`/`VABAL`/`VABDL`/`VMLAL`/`VMLSL`/`VMULL`/`VQDMLAL`/`VQDMLSL`/`VQDMULL`/
 /// `VMULL.P8` (forma Long), `VADDW`/`VSUBW` (forma Wide), `VADDHN`/`VRADDHN`/`VSUBHN`/`VRSUBHN`
-/// (forma Narrow) → `IrOp.NeonWidening`/`NeonWide`/`NeonNarrow`.
+/// (forma Narrow) → `NeonIntegerOp.Widening`/`NeonIntegerOp.Wide`/`NeonIntegerOp.Narrow`.
 ///
 /// B13.11: `VMLA`/`VMLS`/`VMUL` inteiro e `VQDMULH`/`VQRDMULH`/`VQRDMLAH`/`VQRDMLSH` (mesma
-/// largura) → `IrOp.NeonThreeSameByElement`; `VMLAL`/`VMLSL`/`VMULL`/`VQDMLAL`/`VQDMLSL`/
-/// `VQDMULL` (alargando) → `IrOp.NeonWideningByElement`; `VMLA_F`/`VMLS_F`/`VMUL_F` (F32 e F16
-/// desde a B13.24) → `IrOp.NeonFpThreeSameByElement`.
+/// largura) → `NeonIntegerOp.ThreeSameByElement`; `VMLAL`/`VMLSL`/`VMULL`/`VQDMLAL`/`VQDMLSL`/
+/// `VQDMULL` (alargando) → `NeonIntegerOp.WideningByElement`; `VMLA_F`/`VMLS_F`/`VMUL_F` (F32 e F16
+/// desde a B13.24) → `NeonFpOp.FpThreeSameByElement`.
 ///
 /// Execução pelo núcleo vetorial COMPARTILHADO com o lado A64 ({@code AdvSimdLanes.widening}/
 /// `wide`/`narrow`/`threeSameByElement`/`wideningByElement`/`fpThreeSameByElement`).
@@ -193,47 +195,47 @@ class NeonThreeRegDifferentDecoderTest {
 
     @Test
     void longFormDecodesWithRightOpEszAndRegisters() {
-        IrOp.NeonWidening addl = (IrOp.NeonWidening) liftedOf(enc(0, 0, 0, 0, 0b0000, 1));
+        NeonIntegerOp.Widening addl = (NeonIntegerOp.Widening) liftedOf(enc(0, 0, 0, 0, 0b0000, 1));
         assertEquals(AdvSimdWideningOp.SADDL, addl.op());
         assertEquals(0, addl.esz());
         assertEquals(0, addl.vd());
         assertEquals(0, addl.vn());
         assertEquals(1, addl.vm());
 
-        IrOp.NeonWidening mullP = (IrOp.NeonWidening) liftedOf(enc(0, 0, 1, 0, 0b1110, 2));
+        NeonIntegerOp.Widening mullP = (NeonIntegerOp.Widening) liftedOf(enc(0, 0, 1, 0, 0b1110, 2));
         assertEquals(AdvSimdWideningOp.PMULL, mullP.op());
 
-        IrOp.NeonWidening qdmull = (IrOp.NeonWidening) liftedOf(enc(0, 2, 1, 0, 0b1101, 2));
+        NeonIntegerOp.Widening qdmull = (NeonIntegerOp.Widening) liftedOf(enc(0, 2, 1, 0, 0b1101, 2));
         assertEquals(AdvSimdWideningOp.SQDMULL, qdmull.op());
         assertEquals(2, qdmull.esz());
     }
 
     @Test
     void wideFormDecodesWithRightOpEszAndRegisters() {
-        IrOp.NeonWide addw = (IrOp.NeonWide) liftedOf(enc(0, 0, 2, 0, 0b0001, 2));
+        NeonIntegerOp.Wide addw = (NeonIntegerOp.Wide) liftedOf(enc(0, 0, 2, 0, 0b0001, 2));
         assertEquals(AdvSimdWideOp.SADDW, addw.op());
         assertEquals(0, addw.esz());
         assertEquals(0, addw.vd());
         assertEquals(2, addw.vn());
         assertEquals(2, addw.vm());
 
-        IrOp.NeonWide subwU = (IrOp.NeonWide) liftedOf(enc(1, 1, 2, 0, 0b0011, 2));
+        NeonIntegerOp.Wide subwU = (NeonIntegerOp.Wide) liftedOf(enc(1, 1, 2, 0, 0b0011, 2));
         assertEquals(AdvSimdWideOp.USUBW, subwU.op());
     }
 
     @Test
     void narrowFormDecodesWithRightOpEszAndRegisters() {
-        IrOp.NeonNarrow addhn = (IrOp.NeonNarrow) liftedOf(enc(0, 1, 2, 0, 0b0100, 4));
+        NeonIntegerOp.Narrow addhn = (NeonIntegerOp.Narrow) liftedOf(enc(0, 1, 2, 0, 0b0100, 4));
         assertEquals(AdvSimdNarrowOp.ADDHN, addhn.op());
         assertEquals(1, addhn.esz());
         assertEquals(0, addhn.vd());
         assertEquals(2, addhn.vn());
         assertEquals(4, addhn.vm());
 
-        IrOp.NeonNarrow raddhn = (IrOp.NeonNarrow) liftedOf(enc(1, 2, 2, 0, 0b0100, 4));
+        NeonIntegerOp.Narrow raddhn = (NeonIntegerOp.Narrow) liftedOf(enc(1, 2, 2, 0, 0b0100, 4));
         assertEquals(AdvSimdNarrowOp.RADDHN, raddhn.op());
 
-        IrOp.NeonNarrow rsubhn = (IrOp.NeonNarrow) liftedOf(enc(1, 2, 2, 0, 0b0110, 4));
+        NeonIntegerOp.Narrow rsubhn = (NeonIntegerOp.Narrow) liftedOf(enc(1, 2, 2, 0, 0b0110, 4));
         assertEquals(AdvSimdNarrowOp.RSUBHN, rsubhn.op());
     }
 
@@ -425,8 +427,8 @@ class NeonThreeRegDifferentDecoderTest {
 
     @Test
     void sameWidthFormDecodesWithRightOpEszQuadAndIndex() {
-        IrOp.NeonThreeSameByElement mla =
-                (IrOp.NeonThreeSameByElement) liftedOf(enc2sc(1, 1, 2, 0, 0b0000, 1, 0b1010));
+        NeonIntegerOp.ThreeSameByElement mla =
+                (NeonIntegerOp.ThreeSameByElement) liftedOf(enc2sc(1, 1, 2, 0, 0b0000, 1, 0b1010));
         assertEquals(AdvSimdThreeSameOp.MLA, mla.op());
         assertEquals(1, mla.esz());
         assertTrue(mla.quad());
@@ -435,29 +437,29 @@ class NeonThreeRegDifferentDecoderTest {
         assertEquals(2, mla.vm());   // halfword: vmNibble(0b1010) & 0b111 = 2 (d2)
         assertEquals(3, mla.index()); // M:Vm[3] = 1:1 = 3
 
-        IrOp.NeonThreeSameByElement mul =
-                (IrOp.NeonThreeSameByElement) liftedOf(enc2sc(0, 1, 1, 0, 0b1000, 0, 0b0010));
+        NeonIntegerOp.ThreeSameByElement mul =
+                (NeonIntegerOp.ThreeSameByElement) liftedOf(enc2sc(0, 1, 1, 0, 0b1000, 0, 0b0010));
         assertEquals(AdvSimdThreeSameOp.MUL, mul.op());
         assertFalse(mul.quad());
         assertEquals(2, mul.vm());
         assertEquals(0, mul.index());
 
-        IrOp.NeonThreeSameByElement qdmulh =
-                (IrOp.NeonThreeSameByElement) liftedOf(enc2sc(1, 2, 2, 0, 0b1100, 1, 0b0101));
+        NeonIntegerOp.ThreeSameByElement qdmulh =
+                (NeonIntegerOp.ThreeSameByElement) liftedOf(enc2sc(1, 2, 2, 0, 0b1100, 1, 0b0101));
         assertEquals(AdvSimdThreeSameOp.SQDMULH, qdmulh.op());
         assertEquals(2, qdmulh.esz());
         assertEquals(5, qdmulh.vm());  // word: vmNibble = 5 (d5)
         assertEquals(1, qdmulh.index()); // M = 1
 
-        IrOp.NeonThreeSameByElement qrdmulh =
-                (IrOp.NeonThreeSameByElement) liftedOf(enc2sc(1, 2, 2, 0, 0b1101, 1, 0b0101));
+        NeonIntegerOp.ThreeSameByElement qrdmulh =
+                (NeonIntegerOp.ThreeSameByElement) liftedOf(enc2sc(1, 2, 2, 0, 0b1101, 1, 0b0101));
         assertEquals(AdvSimdThreeSameOp.SQRDMULH, qrdmulh.op());
     }
 
     @Test
     void wideningFormDecodesWithRightOpEszAndRegisters() {
-        IrOp.NeonWideningByElement mlalS =
-                (IrOp.NeonWideningByElement) liftedOf(enc2sc(0, 1, 1, 0, 0b0010, 1, 0b1010));
+        NeonIntegerOp.WideningByElement mlalS =
+                (NeonIntegerOp.WideningByElement) liftedOf(enc2sc(0, 1, 1, 0, 0b0010, 1, 0b1010));
         assertEquals(AdvSimdWideningOp.SMLAL, mlalS.op());
         assertEquals(1, mlalS.esz());
         assertEquals(0, mlalS.vd());
@@ -465,19 +467,19 @@ class NeonThreeRegDifferentDecoderTest {
         assertEquals(2, mlalS.vm());
         assertEquals(3, mlalS.index());
 
-        IrOp.NeonWideningByElement mlalU =
-                (IrOp.NeonWideningByElement) liftedOf(enc2sc(1, 2, 1, 0, 0b0010, 1, 0b0101));
+        NeonIntegerOp.WideningByElement mlalU =
+                (NeonIntegerOp.WideningByElement) liftedOf(enc2sc(1, 2, 1, 0, 0b0010, 1, 0b0101));
         assertEquals(AdvSimdWideningOp.UMLAL, mlalU.op());
 
-        IrOp.NeonWideningByElement qdmull =
-                (IrOp.NeonWideningByElement) liftedOf(enc2sc(0, 1, 1, 0, 0b1011, 1, 0b1010));
+        NeonIntegerOp.WideningByElement qdmull =
+                (NeonIntegerOp.WideningByElement) liftedOf(enc2sc(0, 1, 1, 0, 0b1011, 1, 0b1010));
         assertEquals(AdvSimdWideningOp.SQDMULL, qdmull.op());
     }
 
     @Test
     void fpFormDecodesAsNonFusedF32() {
-        IrOp.NeonFpThreeSameByElement mlaF =
-                (IrOp.NeonFpThreeSameByElement) liftedOf(enc2sc(0, 2, 1, 0, 0b0001, 1, 0b0010));
+        NeonFpOp.FpThreeSameByElement mlaF =
+                (NeonFpOp.FpThreeSameByElement) liftedOf(enc2sc(0, 2, 1, 0, 0b0001, 1, 0b0010));
         assertEquals(AdvSimdFpThreeSameOp.MLA, mlaF.op());
         assertFalse(mlaF.quad());
         assertEquals(2, mlaF.esz());
@@ -486,8 +488,8 @@ class NeonThreeRegDifferentDecoderTest {
         assertEquals(2, mlaF.vm());
         assertEquals(1, mlaF.index());
 
-        IrOp.NeonFpThreeSameByElement mulF =
-                (IrOp.NeonFpThreeSameByElement) liftedOf(enc2sc(1, 2, 2, 0, 0b1001, 1, 0b0101));
+        NeonFpOp.FpThreeSameByElement mulF =
+                (NeonFpOp.FpThreeSameByElement) liftedOf(enc2sc(1, 2, 2, 0, 0b1001, 1, 0b0101));
         assertEquals(AdvSimdFpThreeSameOp.MUL, mulF.op());
         assertTrue(mulF.quad());
         assertEquals(2, mulF.esz());
@@ -498,24 +500,24 @@ class NeonThreeRegDifferentDecoderTest {
     @Test
     void scalarIndexAtTheExtremes() {
         // halfword: d0[0] (m=0, vmNibble=0) e d7[3] (m=1, vmNibble=0b1111 -> reg=7, index=3)
-        IrOp.NeonThreeSameByElement d0i0 =
-                (IrOp.NeonThreeSameByElement) liftedOf(enc2sc(0, 1, 1, 0, 0b1000, 0, 0b0000));
+        NeonIntegerOp.ThreeSameByElement d0i0 =
+                (NeonIntegerOp.ThreeSameByElement) liftedOf(enc2sc(0, 1, 1, 0, 0b1000, 0, 0b0000));
         assertEquals(0, d0i0.vm());
         assertEquals(0, d0i0.index());
 
-        IrOp.NeonThreeSameByElement d7i3 =
-                (IrOp.NeonThreeSameByElement) liftedOf(enc2sc(0, 1, 1, 0, 0b1000, 1, 0b1111));
+        NeonIntegerOp.ThreeSameByElement d7i3 =
+                (NeonIntegerOp.ThreeSameByElement) liftedOf(enc2sc(0, 1, 1, 0, 0b1000, 1, 0b1111));
         assertEquals(7, d7i3.vm());
         assertEquals(3, d7i3.index());
 
         // word: d0[0] (m=0, vmNibble=0) e d15[1] (m=1, vmNibble=0b1111 -> reg=15, index=1)
-        IrOp.NeonThreeSameByElement d0i0Word =
-                (IrOp.NeonThreeSameByElement) liftedOf(enc2sc(0, 2, 1, 0, 0b1100, 0, 0b0000));
+        NeonIntegerOp.ThreeSameByElement d0i0Word =
+                (NeonIntegerOp.ThreeSameByElement) liftedOf(enc2sc(0, 2, 1, 0, 0b1100, 0, 0b0000));
         assertEquals(0, d0i0Word.vm());
         assertEquals(0, d0i0Word.index());
 
-        IrOp.NeonThreeSameByElement d15i1Word =
-                (IrOp.NeonThreeSameByElement) liftedOf(enc2sc(0, 2, 1, 0, 0b1100, 1, 0b1111));
+        NeonIntegerOp.ThreeSameByElement d15i1Word =
+                (NeonIntegerOp.ThreeSameByElement) liftedOf(enc2sc(0, 2, 1, 0, 0b1100, 1, 0b1111));
         assertEquals(15, d15i1Word.vm());
         assertEquals(1, d15i1Word.index());
     }
@@ -550,8 +552,8 @@ class NeonThreeRegDifferentDecoderTest {
 
     @Test
     void b1324FpHalfPrecisionFormDecodesWithEszOne() {
-        IrOp.NeonFpThreeSameByElement mlaF16 =
-                (IrOp.NeonFpThreeSameByElement) liftedOf(enc2sc(0, 1, 1, 0, 0b0001, 1, 0b0010));
+        NeonFpOp.FpThreeSameByElement mlaF16 =
+                (NeonFpOp.FpThreeSameByElement) liftedOf(enc2sc(0, 1, 1, 0, 0b0001, 1, 0b0010));
         assertEquals(AdvSimdFpThreeSameOp.MLA, mlaF16.op());
         assertFalse(mlaF16.quad());
         assertEquals(1, mlaF16.esz());
@@ -560,8 +562,8 @@ class NeonThreeRegDifferentDecoderTest {
         assertEquals(2, mlaF16.vm());
         assertEquals(2, mlaF16.index());
 
-        IrOp.NeonFpThreeSameByElement mulF16 =
-                (IrOp.NeonFpThreeSameByElement) liftedOf(enc2sc(1, 1, 2, 0, 0b1001, 1, 0b0010));
+        NeonFpOp.FpThreeSameByElement mulF16 =
+                (NeonFpOp.FpThreeSameByElement) liftedOf(enc2sc(1, 1, 2, 0, 0b1001, 1, 0b0010));
         assertEquals(AdvSimdFpThreeSameOp.MUL, mulF16.op());
         assertTrue(mulF16.quad());
         assertEquals(1, mulF16.esz());
@@ -570,7 +572,7 @@ class NeonThreeRegDifferentDecoderTest {
     @Test
     void b1324FpHalfPrecisionQuadMlsAndOddRegisters() {
         assertEquals(AdvSimdFpThreeSameOp.MLS,
-                ((IrOp.NeonFpThreeSameByElement) liftedOf(enc2sc(0, 1, 1, 0, 0b0101, 1, 0b0010))).op());
+                ((NeonFpOp.FpThreeSameByElement) liftedOf(enc2sc(0, 1, 1, 0, 0b0101, 1, 0b0010))).op());
         // Q com vd/vn ímpar é UNDEFINED em F16 também
         assertEquals(InstructionKind.UNIMPLEMENTED, decode(enc2sc(1, 1, 3, 0, 0b1001, 1, 0b0010)).kind());
         assertEquals(InstructionKind.UNIMPLEMENTED, decode(enc2sc(1, 1, 2, 1, 0b1001, 1, 0b0010)).kind());

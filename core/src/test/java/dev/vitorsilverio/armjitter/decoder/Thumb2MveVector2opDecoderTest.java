@@ -4,7 +4,7 @@ import dev.vitorsilverio.armjitter.advsimd.AdvSimdThreeSameOp;
 import dev.vitorsilverio.armjitter.advsimd.AdvSimdWideningOp;
 import dev.vitorsilverio.armjitter.arch.ArmArchitecture;
 import dev.vitorsilverio.armjitter.core.Condition;
-import dev.vitorsilverio.armjitter.ir.IrOp;
+import dev.vitorsilverio.armjitter.ir.MveIntegerOp;
 import dev.vitorsilverio.armjitter.support.TestAddressSpace;
 import org.junit.jupiter.api.Test;
 
@@ -53,7 +53,7 @@ class Thumb2MveVector2opDecoderTest {
     @Test
     void decodesVandWithSize0Forced() {
         int r = raw(0, 0b1111, 1, 0b00, 2, 0, 0, 0b0001, 1, 3, 1);
-        IrOp.MveVector2Op op = assertInstanceOf(IrOp.MveVector2Op.class, tryDecode(ArmArchitecture.ARMV8_1M_MVE, r).liftedOp());
+        MveIntegerOp.Vector2Op op = assertInstanceOf(MveIntegerOp.Vector2Op.class, tryDecode(ArmArchitecture.ARMV8_1M_MVE, r).liftedOp());
         assertEquals(AdvSimdThreeSameOp.AND, op.op());
         assertEquals(0, op.esz());
         assertEquals(1, op.qd());
@@ -64,20 +64,20 @@ class Thumb2MveVector2opDecoderTest {
     @Test
     void decodesVbicVorrVorn() {
         assertEquals(AdvSimdThreeSameOp.BIC,
-                ((IrOp.MveVector2Op) tryDecode(ArmArchitecture.ARMV8_1M_MVE,
+                ((MveIntegerOp.Vector2Op) tryDecode(ArmArchitecture.ARMV8_1M_MVE,
                         raw(0, 0b1111, 0, 0b01, 0, 0, 0, 0b0001, 1, 0, 1)).liftedOp()).op());
         assertEquals(AdvSimdThreeSameOp.ORR,
-                ((IrOp.MveVector2Op) tryDecode(ArmArchitecture.ARMV8_1M_MVE,
+                ((MveIntegerOp.Vector2Op) tryDecode(ArmArchitecture.ARMV8_1M_MVE,
                         raw(0, 0b1111, 0, 0b10, 0, 0, 0, 0b0001, 1, 0, 1)).liftedOp()).op());
         assertEquals(AdvSimdThreeSameOp.ORN,
-                ((IrOp.MveVector2Op) tryDecode(ArmArchitecture.ARMV8_1M_MVE,
+                ((MveIntegerOp.Vector2Op) tryDecode(ArmArchitecture.ARMV8_1M_MVE,
                         raw(0, 0b1111, 0, 0b11, 0, 0, 0, 0b0001, 1, 0, 1)).liftedOp()).op());
     }
 
     @Test
     void decodesVeorWithBit28AndTop24Set() {
         int r = raw(1, 0b1111, 0, 0b00, 0, 0, 0, 0b0001, 1, 0, 1);
-        IrOp.MveVector2Op op = assertInstanceOf(IrOp.MveVector2Op.class, tryDecode(ArmArchitecture.ARMV8_1M_MVE, r).liftedOp());
+        MveIntegerOp.Vector2Op op = assertInstanceOf(MveIntegerOp.Vector2Op.class, tryDecode(ArmArchitecture.ARMV8_1M_MVE, r).liftedOp());
         assertEquals(AdvSimdThreeSameOp.EOR, op.op());
     }
 
@@ -86,13 +86,13 @@ class Thumb2MveVector2opDecoderTest {
     @Test
     void decodesVaddVsubVmulWithRealSizeField() {
         assertEquals(AdvSimdThreeSameOp.ADD,
-                ((IrOp.MveVector2Op) tryDecode(ArmArchitecture.ARMV8_1M_MVE,
+                ((MveIntegerOp.Vector2Op) tryDecode(ArmArchitecture.ARMV8_1M_MVE,
                         raw(0, 0b1111, 0, 0b10, 0, 0, 0, 0b1000, 1, 0, 0)).liftedOp()).op());
         assertEquals(AdvSimdThreeSameOp.SUB,
-                ((IrOp.MveVector2Op) tryDecode(ArmArchitecture.ARMV8_1M_MVE,
+                ((MveIntegerOp.Vector2Op) tryDecode(ArmArchitecture.ARMV8_1M_MVE,
                         raw(1, 0b1111, 0, 0b10, 0, 0, 0, 0b1000, 1, 0, 0)).liftedOp()).op());
         assertEquals(AdvSimdThreeSameOp.MUL,
-                ((IrOp.MveVector2Op) tryDecode(ArmArchitecture.ARMV8_1M_MVE,
+                ((MveIntegerOp.Vector2Op) tryDecode(ArmArchitecture.ARMV8_1M_MVE,
                         raw(0, 0b1111, 0, 0b10, 0, 0, 0, 0b1001, 1, 0, 1)).liftedOp()).op());
     }
 
@@ -138,7 +138,7 @@ class Thumb2MveVector2opDecoderTest {
         // deslocado é o registrador na posição de bits "%qm" (6), e a contagem vem da posição
         // "%qn" (5) — exatamente o que o comentário do `mve.decode` real descreve.
         int r = raw(0, 0b1111, 1, 0b01, 5, 0, 0, 0b0100, 1, 6, 0);
-        IrOp.MveVector2Op op = assertInstanceOf(IrOp.MveVector2Op.class, tryDecode(ArmArchitecture.ARMV8_1M_MVE, r).liftedOp());
+        MveIntegerOp.Vector2Op op = assertInstanceOf(MveIntegerOp.Vector2Op.class, tryDecode(ArmArchitecture.ARMV8_1M_MVE, r).liftedOp());
         assertEquals(AdvSimdThreeSameOp.SSHL, op.op());
         assertEquals(6, op.qn(), "posição de bits '%qm' (6) vira op.qn() do IR = registrador do VALOR deslocado");
         assertEquals(5, op.qm(), "posição de bits '%qn' (5) vira op.qm() do IR = registrador da CONTAGEM de deslocamento");
@@ -157,7 +157,7 @@ class Thumb2MveVector2opDecoderTest {
     void decodesIntegerWideningMultiplyBottomAndTop() {
         // VMULL_BS: bit28=0(S), size real=1(halfword), bit12=0(bottom).
         int rb = raw(0, 0b1110, 0, 0b01, 0, 1, 0, 0b1110, 0, 0, 0);
-        IrOp.MveVector2OpWidening b = assertInstanceOf(IrOp.MveVector2OpWidening.class,
+        MveIntegerOp.Vector2OpWidening b = assertInstanceOf(MveIntegerOp.Vector2OpWidening.class,
                 tryDecode(ArmArchitecture.ARMV8_1M_MVE, rb).liftedOp());
         assertEquals(AdvSimdWideningOp.SMULL, b.op());
         assertEquals(1, b.esz());
@@ -165,7 +165,7 @@ class Thumb2MveVector2opDecoderTest {
 
         // VMULL_TU: bit28=1(U), size real=2(word), bit12=1(top).
         int rt = raw(1, 0b1110, 0, 0b10, 0, 1, 1, 0b1110, 0, 0, 0);
-        IrOp.MveVector2OpWidening t = assertInstanceOf(IrOp.MveVector2OpWidening.class,
+        MveIntegerOp.Vector2OpWidening t = assertInstanceOf(MveIntegerOp.Vector2OpWidening.class,
                 tryDecode(ArmArchitecture.ARMV8_1M_MVE, rt).liftedOp());
         assertEquals(AdvSimdWideningOp.UMULL, t.op());
         assertEquals(2, t.esz());
@@ -176,7 +176,7 @@ class Thumb2MveVector2opDecoderTest {
     void decodesPolynomialWideningMultiplyWithSourceEszFromBit28() {
         // VMULLP_B: bits[21:20]="11" literal, bit28=0 -> esz FONTE = 0 (byte->halfword).
         int rb = raw(0, 0b1110, 0, 0b11, 0, 1, 0, 0b1110, 0, 0, 0);
-        IrOp.MveVector2OpWidening b = assertInstanceOf(IrOp.MveVector2OpWidening.class,
+        MveIntegerOp.Vector2OpWidening b = assertInstanceOf(MveIntegerOp.Vector2OpWidening.class,
                 tryDecode(ArmArchitecture.ARMV8_1M_MVE, rb).liftedOp());
         assertEquals(AdvSimdWideningOp.PMULL, b.op());
         assertEquals(0, b.esz());
@@ -184,7 +184,7 @@ class Thumb2MveVector2opDecoderTest {
 
         // VMULLP_T: bit28=1 -> esz FONTE = 1 (halfword->word).
         int rt = raw(1, 0b1110, 0, 0b11, 0, 1, 1, 0b1110, 0, 0, 0);
-        IrOp.MveVector2OpWidening t = assertInstanceOf(IrOp.MveVector2OpWidening.class,
+        MveIntegerOp.Vector2OpWidening t = assertInstanceOf(MveIntegerOp.Vector2OpWidening.class,
                 tryDecode(ArmArchitecture.ARMV8_1M_MVE, rt).liftedOp());
         assertEquals(AdvSimdWideningOp.PMULL, t.op());
         assertEquals(1, t.esz());
@@ -195,22 +195,22 @@ class Thumb2MveVector2opDecoderTest {
 
     @Test
     void decodesVadcVadciVsbcVsbci() {
-        IrOp.MveVectorCarry vadc = assertInstanceOf(IrOp.MveVectorCarry.class,
+        MveIntegerOp.VectorCarry vadc = assertInstanceOf(MveIntegerOp.VectorCarry.class,
                 tryDecode(ArmArchitecture.ARMV8_1M_MVE, raw(0, 0b1110, 0, 0b11, 0, 0, 0, 0b1111, 0, 0, 0)).liftedOp());
         assertEquals(true, vadc.add());
         assertEquals(false, vadc.immediateCarry());
 
-        IrOp.MveVectorCarry vadci = assertInstanceOf(IrOp.MveVectorCarry.class,
+        MveIntegerOp.VectorCarry vadci = assertInstanceOf(MveIntegerOp.VectorCarry.class,
                 tryDecode(ArmArchitecture.ARMV8_1M_MVE, raw(0, 0b1110, 0, 0b11, 0, 0, 1, 0b1111, 0, 0, 0)).liftedOp());
         assertEquals(true, vadci.add());
         assertEquals(true, vadci.immediateCarry());
 
-        IrOp.MveVectorCarry vsbc = assertInstanceOf(IrOp.MveVectorCarry.class,
+        MveIntegerOp.VectorCarry vsbc = assertInstanceOf(MveIntegerOp.VectorCarry.class,
                 tryDecode(ArmArchitecture.ARMV8_1M_MVE, raw(1, 0b1110, 0, 0b11, 0, 0, 0, 0b1111, 0, 0, 0)).liftedOp());
         assertEquals(false, vsbc.add());
         assertEquals(false, vsbc.immediateCarry());
 
-        IrOp.MveVectorCarry vsbci = assertInstanceOf(IrOp.MveVectorCarry.class,
+        MveIntegerOp.VectorCarry vsbci = assertInstanceOf(MveIntegerOp.VectorCarry.class,
                 tryDecode(ArmArchitecture.ARMV8_1M_MVE, raw(1, 0b1110, 0, 0b11, 0, 0, 1, 0b1111, 0, 0, 0)).liftedOp());
         assertEquals(false, vsbci.add());
         assertEquals(true, vsbci.immediateCarry());
@@ -218,22 +218,22 @@ class Thumb2MveVector2opDecoderTest {
 
     @Test
     void decodesVhcaddAndVcaddRotations() {
-        IrOp.MveVectorComplexAdd hcadd90 = assertInstanceOf(IrOp.MveVectorComplexAdd.class,
+        MveIntegerOp.VectorComplexAdd hcadd90 = assertInstanceOf(MveIntegerOp.VectorComplexAdd.class,
                 tryDecode(ArmArchitecture.ARMV8_1M_MVE, raw(0, 0b1110, 0, 0b01, 0, 0, 0, 0b1111, 0, 0, 0)).liftedOp());
         assertEquals(true, hcadd90.rotate90());
         assertEquals(true, hcadd90.halving());
 
-        IrOp.MveVectorComplexAdd hcadd270 = assertInstanceOf(IrOp.MveVectorComplexAdd.class,
+        MveIntegerOp.VectorComplexAdd hcadd270 = assertInstanceOf(MveIntegerOp.VectorComplexAdd.class,
                 tryDecode(ArmArchitecture.ARMV8_1M_MVE, raw(0, 0b1110, 0, 0b01, 0, 0, 1, 0b1111, 0, 0, 0)).liftedOp());
         assertEquals(false, hcadd270.rotate90());
         assertEquals(true, hcadd270.halving());
 
-        IrOp.MveVectorComplexAdd cadd90 = assertInstanceOf(IrOp.MveVectorComplexAdd.class,
+        MveIntegerOp.VectorComplexAdd cadd90 = assertInstanceOf(MveIntegerOp.VectorComplexAdd.class,
                 tryDecode(ArmArchitecture.ARMV8_1M_MVE, raw(1, 0b1110, 0, 0b01, 0, 0, 0, 0b1111, 0, 0, 0)).liftedOp());
         assertEquals(true, cadd90.rotate90());
         assertEquals(false, cadd90.halving());
 
-        IrOp.MveVectorComplexAdd cadd270 = assertInstanceOf(IrOp.MveVectorComplexAdd.class,
+        MveIntegerOp.VectorComplexAdd cadd270 = assertInstanceOf(MveIntegerOp.VectorComplexAdd.class,
                 tryDecode(ArmArchitecture.ARMV8_1M_MVE, raw(1, 0b1110, 0, 0b01, 0, 0, 1, 0b1111, 0, 0, 0)).liftedOp());
         assertEquals(false, cadd270.rotate90());
         assertEquals(false, cadd270.halving());
@@ -269,10 +269,10 @@ class Thumb2MveVector2opDecoderTest {
         memory.put16(2, r & 0xFFFF);
         DecodedInstruction decoded = new ThumbDecoder(ArmArchitecture.ARMV8_1M_MVE).decode(memory, 0);
         assertEquals(InstructionKind.LIFTED_IR_OP, decoded.kind());
-        assertInstanceOf(IrOp.MveVector2Op.class, decoded.liftedOp());
+        assertInstanceOf(MveIntegerOp.Vector2Op.class, decoded.liftedOp());
     }
 
     private static AdvSimdThreeSameOp opOf(int raw) {
-        return ((IrOp.MveVector2Op) tryDecode(ArmArchitecture.ARMV8_1M_MVE, raw).liftedOp()).op();
+        return ((MveIntegerOp.Vector2Op) tryDecode(ArmArchitecture.ARMV8_1M_MVE, raw).liftedOp()).op();
     }
 }

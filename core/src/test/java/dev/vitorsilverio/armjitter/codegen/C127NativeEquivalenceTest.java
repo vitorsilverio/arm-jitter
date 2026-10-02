@@ -13,6 +13,7 @@ import dev.vitorsilverio.armjitter.decoder.ThumbDecoder;
 import dev.vitorsilverio.armjitter.ir.IrBlock;
 import dev.vitorsilverio.armjitter.ir.StandardIrBlockLifter;
 import dev.vitorsilverio.armjitter.ir.StandardIrBuilder;
+import dev.vitorsilverio.armjitter.ir.SystemOp;
 import dev.vitorsilverio.armjitter.support.EquivalenceTestSupport;
 import dev.vitorsilverio.armjitter.support.TestAddressSpace;
 import dev.vitorsilverio.armjitter.swi.SwiDispatcher;
@@ -363,7 +364,7 @@ class C127NativeEquivalenceTest {
                 }));
     }
 
-    // ── VfpCorePairTransferSingle / VfpConvertFixed (VFPv3, B9.5) ────────────────
+    // ── VfpOp.CorePairTransferSingle / VfpOp.ConvertFixed (VFPv3, B9.5) ────────────────
 
     private static int nibbleOf(int combined, boolean doublePrecision) {
         return doublePrecision ? combined & 0xF : combined >>> 1;
@@ -500,7 +501,7 @@ class C127NativeEquivalenceTest {
                 }));
     }
 
-    // ── HALT (HLT sob ARMV8A_32, B14.1b — reusa IrOp.Breakpoint, mesmo contrato de BKPT) ────
+    // ── HALT (HLT sob ARMV8A_32, B14.1b — reusa SystemOp.Breakpoint, mesmo contrato de BKPT) ────
 
     @Test
     void haltRaisesSameExceptionAsInterpreted() {
@@ -511,7 +512,7 @@ class C127NativeEquivalenceTest {
         IrBlock block = liftArm(ArmArchitecture.ARMV8A_32, memory, 1);
 
         assertTrue(asmEmitter.isNativeSupported(block),
-                "HLT reusa IrOp.Breakpoint, já aceito nativamente desde a C12.7");
+                "HLT reusa SystemOp.Breakpoint, já aceito nativamente desde a C12.7");
         harness.assertEquivalent(reference, asmEmitter, block,
                 EquivalenceTestSupport.independentPair(memory, core -> { }));
     }

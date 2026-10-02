@@ -12,7 +12,10 @@ import dev.vitorsilverio.armjitter.arch.ArmArchitecture;
 import dev.vitorsilverio.armjitter.arch.ArmFeature;
 import dev.vitorsilverio.armjitter.arch.DecoderExtension;
 import dev.vitorsilverio.armjitter.core.Condition;
-import dev.vitorsilverio.armjitter.ir.IrOp;
+import dev.vitorsilverio.armjitter.ir.NeonCryptoOp;
+import dev.vitorsilverio.armjitter.ir.NeonFpOp;
+import dev.vitorsilverio.armjitter.ir.NeonIntegerOp;
+import dev.vitorsilverio.armjitter.ir.NeonMoveOp;
 
 /// Decodifica o sub-grupo **`size == 0b11`** (bits[21:20]) do frame "two regs, or three regs of
 /// different lengths" do NEON/Advanced SIMD A32 (task B13.12) — especificamente o layout
@@ -47,7 +50,7 @@ import dev.vitorsilverio.armjitter.ir.IrOp;
 /// {@code shaTwoRegister}), RFC B13.2 D1 — migração completa em B13.12/B13.13/B13.15 (ver Javadoc de
 /// {@link AdvSimdUnaryOp}/{@link AdvSimdFpUnaryOp}/{@link AdvSimdFpConvertPrecisionOp}/
 /// {@link AdvSimdCryptoAesOp}/{@link AdvSimdCryptoShaOp}). `VSHLL` reaproveita 100% {@link
-/// IrOp.NeonShiftWidenImmediate} (B13.8): desloca por `esize` FIXO (`8 << esz`), não por um
+/// NeonIntegerOp.ShiftWidenImmediate} (B13.8): desloca por `esize` FIXO (`8 << esz`), não por um
 /// imediato — mesmo mecanismo de `SHLL` do A64 (B8.20).
 ///
 /// Gate: {@link ArmFeature#ADVANCED_SIMD} (checado no topo de {@link #tryDecode}, comum a todo o
@@ -132,13 +135,13 @@ public final class NeonTwoRegMiscDecoder implements DecoderExtension {
 
         if (opc1 == OPC1_NARROW_SHLL && opc2 == OPC2_VSHLL) {
             // `VSHLL` (2-reg-misc): desloca por `esize` FIXO — mesmo mecanismo de `SHLL` do A64
-            // (B8.20), reaproveitando 100% `NeonShiftWidenImmediate`/`AdvSimdShiftWidenOp.USHLL`
+            // (B8.20), reaproveitando 100% `NeonIntegerOp.ShiftWidenImmediate`/`AdvSimdShiftWidenOp.USHLL`
             // (`widenfns` do QEMU só tem 3 entradas: `size` 0-2, `size==3` é UNDEFINED).
             if (size == ESZ_DOUBLEWORD || (vd & 1) != 0) {
                 return unimplemented(address, raw, condition);
             }
             return DecodedInstruction.lifted(address, raw, InstructionSet.ARM, Condition.AL,
-                    new IrOp.NeonShiftWidenImmediate(AdvSimdShiftWidenOp.USHLL, size, 8 << size, vd, vm));
+                    new NeonIntegerOp.ShiftWidenImmediate(AdvSimdShiftWidenOp.USHLL, size, 8 << size, vd, vm));
         }
 
         if (opc1 == OPC1_NARROW_SHLL && opc2 <= OPC2_VZIP_MAX) {
@@ -160,7 +163,7 @@ public final class NeonTwoRegMiscDecoder implements DecoderExtension {
                 return unimplemented(address, raw, condition);
             }
             return DecodedInstruction.lifted(address, raw, InstructionSet.ARM, Condition.AL,
-                    new IrOp.NeonSwapPermute(swapOp, bit6, size, vd, vm));
+                    new NeonMoveOp.SwapPermute(swapOp, bit6, size, vd, vm));
         }
 
         AdvSimdNarrowUnaryOp narrowOp = narrowUnaryOperation(opc1, opc2, bit6);
@@ -171,7 +174,7 @@ public final class NeonTwoRegMiscDecoder implements DecoderExtension {
                 return unimplemented(address, raw, condition);
             }
             return DecodedInstruction.lifted(address, raw, InstructionSet.ARM, Condition.AL,
-                    new IrOp.NeonNarrowUnary(narrowOp, size, vd, vm));
+                    new NeonIntegerOp.NarrowUnary(narrowOp, size, vd, vm));
         }
 
         if (opc1 == OPC1_NARROW_SHLL && opc2 == OPC2_VCVT_NARROW_PRECISION) {
@@ -185,7 +188,7 @@ public final class NeonTwoRegMiscDecoder implements DecoderExtension {
             AdvSimdFpConvertPrecisionOp precisionOp = bit6
                     ? AdvSimdFpConvertPrecisionOp.NARROW_BF16 : AdvSimdFpConvertPrecisionOp.NARROW_F16;
             return DecodedInstruction.lifted(address, raw, InstructionSet.ARM, Condition.AL,
-                    new IrOp.NeonFpConvertPrecision(precisionOp, vd, vm));
+                    new NeonFpOp.FpConvertPrecision(precisionOp, vd, vm));
         }
 
         if (opc1 == OPC1_NARROW_SHLL && opc2 == OPC2_VCVT_WIDEN_PRECISION) {
@@ -195,7 +198,7 @@ public final class NeonTwoRegMiscDecoder implements DecoderExtension {
                 return unimplemented(address, raw, condition);
             }
             return DecodedInstruction.lifted(address, raw, InstructionSet.ARM, Condition.AL,
-                    new IrOp.NeonFpConvertPrecision(AdvSimdFpConvertPrecisionOp.WIDEN_F16, vd, vm));
+                    new NeonFpOp.FpConvertPrecision(AdvSimdFpConvertPrecisionOp.WIDEN_F16, vd, vm));
         }
 
         boolean quad = bit6;
@@ -210,7 +213,7 @@ public final class NeonTwoRegMiscDecoder implements DecoderExtension {
                 return unimplemented(address, raw, condition);
             }
             return DecodedInstruction.lifted(address, raw, InstructionSet.ARM, Condition.AL,
-                    new IrOp.NeonFpUnary(fpOp, quad, vd, vm));
+                    new NeonFpOp.FpUnary(fpOp, quad, vd, vm));
         }
 
         AdvSimdUnaryOp intOp = integerUnaryOperation(opc1, opc2);
@@ -222,7 +225,7 @@ public final class NeonTwoRegMiscDecoder implements DecoderExtension {
                 return unimplemented(address, raw, condition);
             }
             return DecodedInstruction.lifted(address, raw, InstructionSet.ARM, Condition.AL,
-                    new IrOp.NeonUnary(intOp, quad, size, vd, vm));
+                    new NeonIntegerOp.Unary(intOp, quad, size, vd, vm));
         }
 
         // `AESE`/`AESD`/`AESMC`/`AESIMC` (B13.15) — `size` fixo em `0b00` (QEMU `DO_2M_CRYPTO`:
@@ -235,7 +238,7 @@ public final class NeonTwoRegMiscDecoder implements DecoderExtension {
                 return unimplemented(address, raw, condition);
             }
             return DecodedInstruction.lifted(address, raw, InstructionSet.ARM, Condition.AL,
-                    new IrOp.NeonCryptoAes(aesOp, vd, vm));
+                    new NeonCryptoOp.Aes(aesOp, vd, vm));
         }
 
         // `SHA1H`/`SHA1SU1`/`SHA256SU0` (B13.15) — `size` fixo em `0b10` (QEMU `DO_2M_CRYPTO`:
@@ -248,7 +251,7 @@ public final class NeonTwoRegMiscDecoder implements DecoderExtension {
                 return unimplemented(address, raw, condition);
             }
             return DecodedInstruction.lifted(address, raw, InstructionSet.ARM, Condition.AL,
-                    new IrOp.NeonCryptoSha(shaOp, vd, vm));
+                    new NeonCryptoOp.Sha(shaOp, vd, vm));
         }
 
         // Sub-espaço `size==0b11` COMPLETO desde B13.13 (ver Javadoc da classe): o que sobra são as

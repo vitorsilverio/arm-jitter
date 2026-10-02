@@ -2,8 +2,11 @@ package dev.vitorsilverio.armjitter.codegen;
 
 import dev.vitorsilverio.armjitter.codegen.equivalence.BlockEquivalenceTest;
 import dev.vitorsilverio.armjitter.decoder.ArmDecoder;
+import dev.vitorsilverio.armjitter.ir.BranchOp;
+import dev.vitorsilverio.armjitter.ir.IntegerOp;
 import dev.vitorsilverio.armjitter.ir.IrBlock;
 import dev.vitorsilverio.armjitter.ir.IrOp;
+import dev.vitorsilverio.armjitter.ir.MemoryOp;
 import dev.vitorsilverio.armjitter.ir.StandardIrBlockLifter;
 import dev.vitorsilverio.armjitter.ir.StandardIrBuilder;
 import dev.vitorsilverio.armjitter.ir.opt.StandardIrOptimizer;
@@ -156,19 +159,19 @@ class AsmFallbackPolicyTest extends BlockEquivalenceTest {
     void supportedOpsContainsExpectedTypes() {
         var ops = AsmCodeEmitter.supportedOps();
 
-        assertTrue(ops.contains(IrOp.Alu.class));
-        assertTrue(ops.contains(IrOp.Multiply.class));
-        assertTrue(ops.contains(IrOp.Branch.class));
-        assertTrue(ops.contains(IrOp.Load.class));
+        assertTrue(ops.contains(IntegerOp.Alu.class));
+        assertTrue(ops.contains(IntegerOp.Multiply.class));
+        assertTrue(ops.contains(BranchOp.Branch.class));
+        assertTrue(ops.contains(MemoryOp.Load.class));
         assertTrue(ops.contains(IrOp.Cycle.class));
         assertTrue(ops.contains(IrOp.Fetch.class));
-        assertFalse(ops.contains(IrOp.Swap.class), "Swap must NOT be in supportedOps");
+        assertFalse(ops.contains(MemoryOp.Swap.class), "Swap must NOT be in supportedOps");
     }
 
     @Test
     void supportedOpsHas20Types() {
-        // F3: IrOp.CoprocessorDouble (MCRR/MRRC) somado à lista, mesmo padrão nativo de
-        // IrOp.Coprocessor (helper estático, sem bytecode especializado).
+        // F3: SystemOp.CoprocessorDouble (MCRR/MRRC) somado à lista, mesmo padrão nativo de
+        // SystemOp.Coprocessor (helper estático, sem bytecode especializado).
         assertEquals(20, AsmCodeEmitter.supportedOps().size());
     }
 

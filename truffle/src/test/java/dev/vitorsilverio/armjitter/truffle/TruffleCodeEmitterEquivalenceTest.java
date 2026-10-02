@@ -11,6 +11,7 @@ import dev.vitorsilverio.armjitter.codegen.equivalence.EquivalencePairFactory;
 import dev.vitorsilverio.armjitter.core.ArmCore;
 import dev.vitorsilverio.armjitter.core.Condition;
 import dev.vitorsilverio.armjitter.decoder.ArmDecoder;
+import dev.vitorsilverio.armjitter.ir.IntegerOp;
 import dev.vitorsilverio.armjitter.ir.IrBlock;
 import dev.vitorsilverio.armjitter.ir.IrOp;
 import dev.vitorsilverio.armjitter.ir.IrOpCode;
@@ -60,11 +61,11 @@ class TruffleCodeEmitterEquivalenceTest {
     void pureAluBlockCompilesNativelyAndMatchesInterpreter() {
         TruffleCodeEmitter emitter = new TruffleCodeEmitter(ArmArchitecture.ARMV4T);
         IrBlock block = new IrBlock(0, 16, List.of(
-                new IrOp.Alu(IrOpCode.ADD, 2, 0, -1, new IrOperand.Register(1, -1), false, Condition.AL),
-                new IrOp.Alu(IrOpCode.SUB, 3, 2, -1, new IrOperand.Immediate(1), false, Condition.AL),
-                new IrOp.Alu(IrOpCode.CMP, 3, 3, -1, new IrOperand.Register(0, -1), true, Condition.AL),
-                new IrOp.Alu(IrOpCode.MOV, 4, -1, -1, new IrOperand.Immediate(0xCAFE), false, Condition.AL),
-                new IrOp.Alu(IrOpCode.AND, 5, 4, -1, new IrOperand.Immediate(0xFF), false, Condition.AL),
+                new IntegerOp.Alu(IrOpCode.ADD, 2, 0, -1, new IrOperand.Register(1, -1), false, Condition.AL),
+                new IntegerOp.Alu(IrOpCode.SUB, 3, 2, -1, new IrOperand.Immediate(1), false, Condition.AL),
+                new IntegerOp.Alu(IrOpCode.CMP, 3, 3, -1, new IrOperand.Register(0, -1), true, Condition.AL),
+                new IntegerOp.Alu(IrOpCode.MOV, 4, -1, -1, new IrOperand.Immediate(0xCAFE), false, Condition.AL),
+                new IntegerOp.Alu(IrOpCode.AND, 5, 4, -1, new IrOperand.Immediate(0xFF), false, Condition.AL),
                 new IrOp.Cycle(3),
                 new IrOp.Fetch(0, 4)));
 
@@ -79,8 +80,8 @@ class TruffleCodeEmitterEquivalenceTest {
         // já que executeOp delega ao mesmo IrAluExecutor do interpretador.
         TruffleCodeEmitter emitter = new TruffleCodeEmitter(ArmArchitecture.ARMV4T);
         IrBlock block = new IrBlock(0, 8, List.of(
-                new IrOp.Alu(IrOpCode.ADD, 2, 0, -1, new IrOperand.Register(1, -1), false, Condition.AL),
-                new IrOp.Alu(IrOpCode.MOV, 3, -1, -1,
+                new IntegerOp.Alu(IrOpCode.ADD, 2, 0, -1, new IrOperand.Register(1, -1), false, Condition.AL),
+                new IntegerOp.Alu(IrOpCode.MOV, 3, -1, -1,
                         new IrOperand.ShiftedRegister(0, ShiftType.LSL, 2, -1, -1, -1, false, false),
                         false, Condition.AL),
                 new IrOp.Cycle(2),

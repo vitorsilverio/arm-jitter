@@ -6,6 +6,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import dev.vitorsilverio.armjitter.arch.ArmArchitecture;
 import dev.vitorsilverio.armjitter.codegen.executor.IrBlockExecutor;
 import dev.vitorsilverio.armjitter.ir.IrOp;
+import dev.vitorsilverio.armjitter.ir.MveMoveOp;
 import dev.vitorsilverio.armjitter.support.TestAddressSpace;
 import dev.vitorsilverio.armjitter.swi.SwiDispatcher;
 import org.junit.jupiter.api.Test;
@@ -203,7 +204,7 @@ class MveLoadStoreTest {
         int pcBefore = core.programCounter();
 
         boolean pcChanged = new IrBlockExecutor(ArmArchitecture.ARMV8_1M_MVE)
-                .executeOp(core, new IrOp.MveLoadStore(0, 1, 0, true, false, false, Condition.AL), pcBefore);
+                .executeOp(core, new MveMoveOp.LoadStore(0, 1, 0, true, false, false, Condition.AL), pcBefore);
 
         assertTrue(pcChanged);
         assertEquals(MProfileException.USAGE_FAULT.number(), model.currentException());
@@ -219,7 +220,7 @@ class MveLoadStoreTest {
         core.setRegister(1, DATA_BASE);
 
         boolean pcChanged = new IrBlockExecutor(ArmArchitecture.ARMV8_1M_MVE)
-                .executeOp(core, new IrOp.MveLoadStore(0, 1, 4, true, true, false, Condition.EQ),
+                .executeOp(core, new MveMoveOp.LoadStore(0, 1, 4, true, true, false, Condition.EQ),
                         core.programCounter());
 
         assertTrue(!pcChanged);

@@ -6,10 +6,12 @@ import dev.vitorsilverio.armjitter.codegen.executor.IrSystemExecutor;
 import dev.vitorsilverio.armjitter.codegen.executor.IrVfpExecutor;
 import dev.vitorsilverio.armjitter.core.ArmCore;
 import dev.vitorsilverio.armjitter.ir.IrOp;
+import dev.vitorsilverio.armjitter.ir.SystemOp;
+import dev.vitorsilverio.armjitter.ir.VfpOp;
 
-/// Nó Truffle para a categoria de VFP (task A10.3): `VfpAlu`, `VfpMoveImmediate`, `VfpCompare`,
-/// `VfpConvert`, `VfpLoad`, `VfpStore`, `VfpMultipleTransfer`, `VfpCoreTransfer`,
-/// `VfpCorePairTransfer`, `VfpSystemTransfer`, `VfpCorePairTransferSingle`, `VfpConvertFixed`,
+/// Nó Truffle para a categoria de VFP (task A10.3): `VfpOp.Alu`, `VfpOp.MoveImmediate`, `VfpOp.Compare`,
+/// `VfpOp.Convert`, `VfpOp.Load`, `VfpOp.Store`, `VfpOp.MultipleTransfer`, `VfpOp.CoreTransfer`,
+/// `VfpOp.CorePairTransfer`, `VfpOp.SystemTransfer`, `VfpOp.CorePairTransferSingle`, `VfpOp.ConvertFixed`,
 /// `CoprocessorDouble`, `MProfileSystemRegister` — o maior bloco descoberto sem nó especializado
 /// (14 `Kind`): qualquer binário ARM com uma instrução de ponto flutuante usava o fallback do
 /// bloco inteiro. Delega DIRETO a {@link IrVfpExecutor} (nenhuma semântica de FPSCR/arredondamento
@@ -17,7 +19,7 @@ import dev.vitorsilverio.armjitter.ir.IrOp;
 /// {@link IrSystemExecutor} por agrupamento do plano da A10.3 (o primeiro não é estritamente VFP,
 /// é o espaço `MCRR`/`MRRC`; o segundo é do perfil M, não VFP).
 ///
-/// <p>Só `VfpLoad`/`VfpStore`/`VfpMultipleTransfer` (acessam `AddressSpace`, implementação opaca
+/// <p>Só `VfpOp.Load`/`VfpOp.Store`/`VfpOp.MultipleTransfer` (acessam `AddressSpace`, implementação opaca
 /// do hospedeiro) e `CoprocessorDouble` (acessa `CoprocessorBus`, idem) escapam para código do
 /// hospedeiro — só esses ficam atrás de {@link TruffleBoundary} (item 3 da especificação da A6,
 /// mesmo critério de {@link SystemOpNode}). O resto só lê/escreve `VfpRegisters`/`FPSCR`/CPSR/
@@ -38,48 +40,48 @@ final class VfpOpNode extends IrOpNode {
     @Override
     boolean doExecute(ArmCore core, int blockEndPc) {
         return switch (op) {
-            case IrOp.VfpAlu vfpAlu -> {
+            case VfpOp.Alu vfpAlu -> {
                 vfpExecutor.executeVfpAlu(core, vfpAlu);
                 yield false;
             }
-            case IrOp.VfpMoveImmediate vfpMoveImmediate -> {
+            case VfpOp.MoveImmediate vfpMoveImmediate -> {
                 vfpExecutor.executeVfpMoveImmediate(core, vfpMoveImmediate);
                 yield false;
             }
-            case IrOp.VfpCompare vfpCompare -> {
+            case VfpOp.Compare vfpCompare -> {
                 vfpExecutor.executeVfpCompare(core, vfpCompare);
                 yield false;
             }
-            case IrOp.VfpConvert vfpConvert -> {
+            case VfpOp.Convert vfpConvert -> {
                 vfpExecutor.executeVfpConvert(core, vfpConvert);
                 yield false;
             }
-            case IrOp.VfpLoad vfpLoad -> executeVfpLoadAtBoundary(vfpLoad, core);
-            case IrOp.VfpStore vfpStore -> executeVfpStoreAtBoundary(vfpStore, core);
-            case IrOp.VfpMultipleTransfer vfpMultipleTransfer ->
+            case VfpOp.Load vfpLoad -> executeVfpLoadAtBoundary(vfpLoad, core);
+            case VfpOp.Store vfpStore -> executeVfpStoreAtBoundary(vfpStore, core);
+            case VfpOp.MultipleTransfer vfpMultipleTransfer ->
                     executeVfpMultipleTransferAtBoundary(vfpMultipleTransfer, core);
-            case IrOp.VfpCoreTransfer vfpCoreTransfer -> {
+            case VfpOp.CoreTransfer vfpCoreTransfer -> {
                 vfpExecutor.executeVfpCoreTransfer(core, vfpCoreTransfer);
                 yield false;
             }
-            case IrOp.VfpCorePairTransfer vfpCorePairTransfer -> {
+            case VfpOp.CorePairTransfer vfpCorePairTransfer -> {
                 vfpExecutor.executeVfpCorePairTransfer(core, vfpCorePairTransfer);
                 yield false;
             }
-            case IrOp.VfpSystemTransfer vfpSystemTransfer -> {
+            case VfpOp.SystemTransfer vfpSystemTransfer -> {
                 vfpExecutor.executeVfpSystemTransfer(core, vfpSystemTransfer);
                 yield false;
             }
-            case IrOp.VfpCorePairTransferSingle vfpCorePairTransferSingle -> {
+            case VfpOp.CorePairTransferSingle vfpCorePairTransferSingle -> {
                 vfpExecutor.executeVfpCorePairTransferSingle(core, vfpCorePairTransferSingle);
                 yield false;
             }
-            case IrOp.VfpConvertFixed vfpConvertFixed -> {
+            case VfpOp.ConvertFixed vfpConvertFixed -> {
                 vfpExecutor.executeVfpConvertFixed(core, vfpConvertFixed);
                 yield false;
             }
-            case IrOp.CoprocessorDouble coprocessorDouble -> executeCoprocessorDoubleAtBoundary(coprocessorDouble, core);
-            case IrOp.MProfileSystemRegister mProfileSystemRegister -> {
+            case SystemOp.CoprocessorDouble coprocessorDouble -> executeCoprocessorDoubleAtBoundary(coprocessorDouble, core);
+            case SystemOp.MProfileSystemRegister mProfileSystemRegister -> {
                 systemExecutor.executeMProfileSystemRegister(core, mProfileSystemRegister);
                 yield false;
             }
@@ -88,25 +90,25 @@ final class VfpOpNode extends IrOpNode {
     }
 
     @TruffleBoundary
-    private boolean executeVfpLoadAtBoundary(IrOp.VfpLoad vfpLoad, ArmCore core) {
+    private boolean executeVfpLoadAtBoundary(VfpOp.Load vfpLoad, ArmCore core) {
         vfpExecutor.executeVfpLoad(core, vfpLoad);
         return false;
     }
 
     @TruffleBoundary
-    private boolean executeVfpStoreAtBoundary(IrOp.VfpStore vfpStore, ArmCore core) {
+    private boolean executeVfpStoreAtBoundary(VfpOp.Store vfpStore, ArmCore core) {
         vfpExecutor.executeVfpStore(core, vfpStore);
         return false;
     }
 
     @TruffleBoundary
-    private boolean executeVfpMultipleTransferAtBoundary(IrOp.VfpMultipleTransfer vfpMultipleTransfer, ArmCore core) {
+    private boolean executeVfpMultipleTransferAtBoundary(VfpOp.MultipleTransfer vfpMultipleTransfer, ArmCore core) {
         vfpExecutor.executeVfpMultipleTransfer(core, vfpMultipleTransfer);
         return false;
     }
 
     @TruffleBoundary
-    private boolean executeCoprocessorDoubleAtBoundary(IrOp.CoprocessorDouble coprocessorDouble, ArmCore core) {
+    private boolean executeCoprocessorDoubleAtBoundary(SystemOp.CoprocessorDouble coprocessorDouble, ArmCore core) {
         return systemExecutor.executeCoprocessorDouble(core, coprocessorDouble);
     }
 }

@@ -3,8 +3,9 @@ package dev.vitorsilverio.armjitter.core;
 import dev.vitorsilverio.armjitter.arch.ArmArchitecture;
 import dev.vitorsilverio.armjitter.codegen.AsmCodeEmitter;
 import dev.vitorsilverio.armjitter.codegen.InterpretedCodeEmitter;
+import dev.vitorsilverio.armjitter.ir.BranchOp;
 import dev.vitorsilverio.armjitter.ir.IrBlock;
-import dev.vitorsilverio.armjitter.ir.IrOp;
+import dev.vitorsilverio.armjitter.ir.SystemOp;
 import dev.vitorsilverio.armjitter.support.TestAddressSpace;
 import dev.vitorsilverio.armjitter.swi.CpuState;
 import dev.vitorsilverio.armjitter.swi.SwiDispatcher;
@@ -93,7 +94,7 @@ class MProfileExceptionModelTest {
         core.cpsr().setNzcv(true, false, true, false);
 
         IrBlock svcBlock = IrBlock.builder(0x80)
-                .add(new IrOp.Swi(0, Condition.AL))
+                .add(new SystemOp.Swi(0, Condition.AL))
                 .endPc(0x82)
                 .sealed();
         new InterpretedCodeEmitter(ArmArchitecture.ARMV4T).emit(svcBlock).execute(core);
@@ -106,7 +107,7 @@ class MProfileExceptionModelTest {
 
         // Handler termina com BX LR.
         IrBlock returnBlock = IrBlock.builder(SVCALL_HANDLER_PC)
-                .add(new IrOp.BranchExchange(14, -1, false, 0, Condition.AL))
+                .add(new BranchOp.BranchExchange(14, -1, false, 0, Condition.AL))
                 .endPc(SVCALL_HANDLER_PC + 2)
                 .sealed();
         new InterpretedCodeEmitter(ArmArchitecture.ARMV4T).emit(returnBlock).execute(core);
@@ -151,7 +152,7 @@ class MProfileExceptionModelTest {
 
         // Retorno em cadeia: primeiro sai do usage fault (volta ao SVCALL handler), depois do SVCALL.
         IrBlock returnBlock = IrBlock.builder(0)
-                .add(new IrOp.BranchExchange(14, -1, false, 0, Condition.AL))
+                .add(new BranchOp.BranchExchange(14, -1, false, 0, Condition.AL))
                 .endPc(2)
                 .sealed();
         new InterpretedCodeEmitter(ArmArchitecture.ARMV4T).emit(returnBlock).execute(core);
@@ -179,7 +180,7 @@ class MProfileExceptionModelTest {
         core.setProgramCounter(0x1004);
 
         IrBlock returnBlock = IrBlock.builder(0)
-                .add(new IrOp.BranchExchange(14, -1, false, 0, Condition.AL))
+                .add(new BranchOp.BranchExchange(14, -1, false, 0, Condition.AL))
                 .endPc(2)
                 .sealed();
         new InterpretedCodeEmitter(ArmArchitecture.ARMV4T).emit(returnBlock).execute(core);
@@ -204,7 +205,7 @@ class MProfileExceptionModelTest {
         assertEquals(0, core.cpsr().itState(), "ITSTATE zerado ao entrar no handler");
 
         IrBlock returnBlock = IrBlock.builder(0)
-                .add(new IrOp.BranchExchange(14, -1, false, 0, Condition.AL))
+                .add(new BranchOp.BranchExchange(14, -1, false, 0, Condition.AL))
                 .endPc(2)
                 .sealed();
         new InterpretedCodeEmitter(ArmArchitecture.ARMV4T).emit(returnBlock).execute(core);
@@ -240,7 +241,7 @@ class MProfileExceptionModelTest {
         }
 
         IrBlock svcBlock = IrBlock.builder(0x40)
-                .add(new IrOp.Swi(0, Condition.AL))
+                .add(new SystemOp.Swi(0, Condition.AL))
                 .endPc(0x42)
                 .sealed();
         new AsmCodeEmitter(ArmArchitecture.ARMV4T).emit(svcBlock).execute(asmCore);
@@ -256,7 +257,7 @@ class MProfileExceptionModelTest {
         }
 
         IrBlock returnBlock = IrBlock.builder(SVCALL_HANDLER_PC)
-                .add(new IrOp.BranchExchange(14, -1, false, 0, Condition.AL))
+                .add(new BranchOp.BranchExchange(14, -1, false, 0, Condition.AL))
                 .endPc(SVCALL_HANDLER_PC + 2)
                 .sealed();
         new AsmCodeEmitter(ArmArchitecture.ARMV4T).emit(returnBlock).execute(asmCore);

@@ -64,14 +64,20 @@ class IrOpContractTest {
     private static final int UNKNOWN_KIND = -1;
     /// Índice do PC (`R15`) — escrever nele é o que tira várias ops da emissão nativa.
     private static final int PC = 15;
-    /// `op2` de `SMLAWy`/`SMULWy` em {@link IrOp.DspMultiply} — a única forma que também lê `Rn`.
+    /// `op2` de `SMLAWy`/`SMULWy` em {@link IntegerOp.DspMultiply} — a única forma que também lê `Rn`.
     private static final int DSP_MULTIPLY_WORD_BY_HALFWORD = 2;
 
     private static final ArmArchitecture A_PROFILE = ArmArchitecture.ARMV8_6A_32_NEON;
     private static final ArmArchitecture M_PROFILE = ArmArchitecture.ARMV8_1M_MVE;
 
     static Stream<Named<IrOp>> samples() {
-        return IrOpSamples.irOps().stream().map(op -> Named.of(op.getClass().getSimpleName(), op));
+        return IrOpSamples.irOps().stream().map(op -> Named.of(displayName(op.getClass()), op));
+    }
+
+    /// `Família.Record` — o nome simples sozinho se repete entre famílias (`IntegerOp.Alu` ×
+    /// `VfpOp.Alu`).
+    private static String displayName(Class<?> recordClass) {
+        return recordClass.getEnclosingClass().getSimpleName() + "." + recordClass.getSimpleName();
     }
 
     private static ArmArchitecture architectureOf(IrOp op) {
@@ -84,8 +90,8 @@ class IrOpContractTest {
         List<IrOp> ops = new ArrayList<>();
         ops.add(new IrOp.Fetch(BLOCK_START, INSTRUCTION_SIZE));
         ops.add(new IrOp.Cycle(1));
-        if (op instanceof IrOp.AdvanceVpt || op instanceof IrOp.AdvanceEci) {
-            ops.add(IrOpSamples.sample(IrOp.MveVector2Op.class));
+        if (op instanceof MvePredicationOp.AdvanceVpt || op instanceof MvePredicationOp.AdvanceEci) {
+            ops.add(IrOpSamples.sample(MveIntegerOp.Vector2Op.class));
         }
         ops.add(op);
         return new IrBlock(BLOCK_START, BLOCK_END, ops);
@@ -146,7 +152,7 @@ class IrOpContractTest {
         int expectedCycles = block.operations().stream()
                 .mapToInt(each -> each instanceof IrOp.Cycle cycle ? cycle.count() : 0).sum();
         assertEquals(expectedCycles, cycles);
-        CpuSnapshot.capture(viaBlock).assertEqualTo(CpuSnapshot.capture(viaOp), op.getClass().getSimpleName());
+        CpuSnapshot.capture(viaBlock).assertEqualTo(CpuSnapshot.capture(viaOp), displayName(op.getClass()));
         assertEquals(viaBlock.vpr().value(), viaOp.vpr().value());
         assertArrayEquals(memoryOf(viaBlock), memoryOf(viaOp));
     }
@@ -177,28 +183,28 @@ class IrOpContractTest {
 
     static Stream<Arguments> carveOuts() {
         return Stream.of(
-                carveOut(false, IrOp.Alu.class, Map.of("dst", PC, "setFlags", true)),
-                carveOut(true, IrOp.Alu.class, Map.of("dst", PC)),
-                carveOut(true, IrOp.Alu.class, Map.of("setFlags", true)),
-                carveOut(false, IrOp.Alu.class, Map.of("opcode", IrOpCode.ORN)),
-                carveOut(false, IrOp.Saturating.class, Map.of("dst", PC)),
-                carveOut(false, IrOp.DspMultiply.class, Map.of("dst", PC)),
-                carveOut(false, IrOp.DspMultiply.class, Map.of("op2", DSP_MULTIPLY_WORD_BY_HALFWORD, "rn", PC)),
-                carveOut(true, IrOp.DspMultiply.class, Map.of("op2", DSP_MULTIPLY_WORD_BY_HALFWORD)),
-                carveOut(false, IrOp.DoubleTransfer.class, Map.of("load", true, "first", PC)),
-                carveOut(false, IrOp.DoubleTransfer.class, Map.of("load", true, "second", PC)),
-                carveOut(true, IrOp.DoubleTransfer.class, Map.of("load", true, "second", 1)),
-                carveOut(true, IrOp.DoubleTransfer.class, Map.of("first", PC)),
-                carveOut(false, IrOp.Load.class, Map.of("unprivileged", true)),
-                carveOut(false, IrOp.Store.class, Map.of("unprivileged", true)),
-                carveOut(false, IrOp.BranchExchange.class, Map.of("link", true)),
-                carveOut(false, IrOp.ThumbBlSuffix.class, Map.of("exchange", true)));
+                carveOut(false, IntegerOp.Alu.class, Map.of("dst", PC, "setFlags", true)),
+                carveOut(true, IntegerOp.Alu.class, Map.of("dst", PC)),
+                carveOut(true, IntegerOp.Alu.class, Map.of("setFlags", true)),
+                carveOut(false, IntegerOp.Alu.class, Map.of("opcode", IrOpCode.ORN)),
+                carveOut(false, IntegerOp.Saturating.class, Map.of("dst", PC)),
+                carveOut(false, IntegerOp.DspMultiply.class, Map.of("dst", PC)),
+                carveOut(false, IntegerOp.DspMultiply.class, Map.of("op2", DSP_MULTIPLY_WORD_BY_HALFWORD, "rn", PC)),
+                carveOut(true, IntegerOp.DspMultiply.class, Map.of("op2", DSP_MULTIPLY_WORD_BY_HALFWORD)),
+                carveOut(false, MemoryOp.DoubleTransfer.class, Map.of("load", true, "first", PC)),
+                carveOut(false, MemoryOp.DoubleTransfer.class, Map.of("load", true, "second", PC)),
+                carveOut(true, MemoryOp.DoubleTransfer.class, Map.of("load", true, "second", 1)),
+                carveOut(true, MemoryOp.DoubleTransfer.class, Map.of("first", PC)),
+                carveOut(false, MemoryOp.Load.class, Map.of("unprivileged", true)),
+                carveOut(false, MemoryOp.Store.class, Map.of("unprivileged", true)),
+                carveOut(false, BranchOp.BranchExchange.class, Map.of("link", true)),
+                carveOut(false, BranchOp.ThumbBlSuffix.class, Map.of("exchange", true)));
     }
 
     private static Arguments carveOut(boolean expectedSupport, Class<? extends IrOp> recordClass,
             Map<String, Object> fields) {
         IrOp variant = IrOpSamples.sample(recordClass, fields);
-        return Arguments.of(Named.of(recordClass.getSimpleName() + fields, variant), expectedSupport);
+        return Arguments.of(Named.of(displayName(recordClass) + fields, variant), expectedSupport);
     }
 
     /// A DCE conhece a op (uso/definição de registradores sem lançar) e não a remove: na saída do
@@ -217,7 +223,7 @@ class IrOpContractTest {
     void advanceIsSkippedAfterThePcChanged(IrOp advance) {
         IrBlockExecutor executor = new IrBlockExecutor(M_PROFILE);
         List<IrOp> prefix = List.of(
-                new IrOp.Fetch(BLOCK_START, INSTRUCTION_SIZE), new IrOp.Cycle(1), IrOpSamples.sample(IrOp.Undefined.class));
+                new IrOp.Fetch(BLOCK_START, INSTRUCTION_SIZE), new IrOp.Cycle(1), IrOpSamples.sample(SystemOp.Undefined.class));
         List<IrOp> withAdvance = new ArrayList<>(prefix);
         withAdvance.add(advance);
 
@@ -226,19 +232,19 @@ class IrOpContractTest {
         ArmCore with = newCore(M_PROFILE);
         executor.execute(new IrBlock(BLOCK_START, BLOCK_END, withAdvance), with);
 
-        CpuSnapshot.capture(without).assertEqualTo(CpuSnapshot.capture(with), advance.getClass().getSimpleName());
+        CpuSnapshot.capture(without).assertEqualTo(CpuSnapshot.capture(with), displayName(advance.getClass()));
         assertEquals(without.vpr().value(), with.vpr().value());
     }
 
     static Stream<Named<IrOp>> advanceOps() {
-        return Stream.of(IrOp.AdvanceVpt.class, IrOp.AdvanceEci.class)
-                .map(recordClass -> Named.of(recordClass.getSimpleName(), IrOpSamples.<IrOp>sample(recordClass)));
+        return Stream.of(MvePredicationOp.AdvanceVpt.class, MvePredicationOp.AdvanceEci.class)
+                .map(recordClass -> Named.of(displayName(recordClass), IrOpSamples.<IrOp>sample(recordClass)));
     }
 
     /// Um `Kind` que nenhum `record` devolve é recusado, nunca despachado para o executor errado.
     @Test
     void unknownKindIsRejected() {
-        IrBlock block = blockOf(IrOpSamples.sample(IrOp.MemoryBarrier.class));
+        IrBlock block = blockOf(IrOpSamples.sample(SystemOp.MemoryBarrier.class));
         block.kindsArray()[block.kindsArray().length - 1] = UNKNOWN_KIND;
 
         assertThrows(IllegalStateException.class,

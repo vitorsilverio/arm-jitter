@@ -106,7 +106,7 @@ public sealed interface FpOp64 extends Ir64Op permits FpOp64.Load64, FpOp64.Stor
 
     /// Sub-operação de {@link Alu} — leitura literal do épico B6.5 ("FMOV/FADD/FMUL/FDIV/
     /// FCMP/FCVT", task B6.5.2): `SQRT`/`MLA`/`MLS`/`NMUL` (existentes no precedente VFP32,
-    /// {@code IrOp.VfpOperation}) ficam FORA de propósito — não citados nesta leitura, ver
+    /// {@code VfpOp.VfpOperation}) ficam FORA de propósito — não citados nesta leitura, ver
     /// Armadilhas da task. `MOV` é a forma registrador↔registrador de `FMOV` (cópia de bits, sem
     /// aritmética) — não confundir com {@link MoveImmediate} (`FMOV` imediato).
     ///
@@ -152,7 +152,7 @@ public sealed interface FpOp64 extends Ir64Op permits FpOp64.Load64, FpOp64.Stor
     }
 
     /// `FCMP`/`FCMPE` (`ARM DDI 0487 C6.2` — seção a confirmar em B6.5.3), com ou sem comparação
-    /// com zero. **Escreve `PSTATE.NZCV` diretamente** (diferente de {@code IrOp.VfpCompare} no
+    /// com zero. **Escreve `PSTATE.NZCV` diretamente** (diferente de {@code VfpOp.Compare} no
     /// mundo de 32 bits, que escreve um `FpscrRegister.NZCV` separado, exigindo um segundo passo
     /// `VMRS APSR_nzcv` para chegar aos flags que os branches condicionais leem — em A64 não há
     /// registro de flags de FP separado do `PSTATE`, ver Fatos de referência #1 da task).
@@ -163,7 +163,7 @@ public sealed interface FpOp64 extends Ir64Op permits FpOp64.Load64, FpOp64.Stor
             boolean compareWithZero,
             /// `true` para `FCMPE` (bit E do encoding: sinaliza operação inválida também para NaN
             /// silencioso). Sem efeito observável adicional neste core — que não modela traps de
-            /// exceção de ponto flutuante, mesmo precedente de {@code IrOp.VfpCompare} no mundo de
+            /// exceção de ponto flutuante, mesmo precedente de {@code VfpOp.Compare} no mundo de
             /// 32 bits — carregado só para fidelidade ao encoding.
             boolean signalOnQuietNaN,
             /// Primeiro operando comparado (`Vn`, não `vd`: esta instrução nunca escreve um

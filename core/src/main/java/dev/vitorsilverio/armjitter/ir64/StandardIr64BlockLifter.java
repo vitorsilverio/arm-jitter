@@ -62,7 +62,7 @@ public final class StandardIr64BlockLifter implements Ir64BlockLifter {
 
     /// `Branch64`/`CompareBranch64`/`CompareAndBranchRegister`/`CompareAndBranchImmediate` podem
     /// trocar o PC; `Svc` pode ter efeito colateral arbitrário via {@code Aarch64SvcHandler} —
-    /// mesmo precedente de `IrOp.Swi`/`IrOp.Coprocessor` no lifter 32-bit terminarem o bloco.
+    /// mesmo precedente de `SystemOp.Swi`/`SystemOp.Coprocessor` no lifter 32-bit terminarem o bloco.
     /// `StreamingModeControl` (`SMSTART`/`SMSTOP`, B18.2) não troca o PC, mas muda o `VL` efetivo das
     /// instruções seguintes, então também fecha o bloco.
     ///

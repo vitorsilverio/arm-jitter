@@ -10,7 +10,7 @@ import dev.vitorsilverio.armjitter.support.TestAddressSpace;
 import dev.vitorsilverio.armjitter.swi.SwiDispatcher;
 import org.junit.jupiter.api.Test;
 
-/// B9.9 (`LDRxT`/`STRxT`): prova ponta a ponta — decoder → `IrOp.Load`/`Store#unprivileged()` →
+/// B9.9 (`LDRxT`/`STRxT`): prova ponta a ponta — decoder → `MemoryOp.Load`/`Store#unprivileged()` →
 /// `IrMemoryExecutor` → `TranslatingAddressSpace#withUnprivilegedAccess` — de que um `STRT`
 /// executado em modo PRIVILEGIADO sobre uma página `AP_USER_READ_ONLY` sofre a MESMA falta de
 /// permissão que um `STR` comum sofreria em modo `USER`, enquanto o `STR` comum (sem o sufixo `T`)
@@ -87,7 +87,7 @@ class LdrxtStrxtPrivilegeTest {
 
     @Test
     void strtInPrivilegedModeFailsUnderCompiledJitBlockToo() {
-        // O bloco compilado cai no interpretado por-op para IrOp.Load/Store#unprivileged() (ver
+        // O bloco compilado cai no interpretado por-op para MemoryOp.Load/Store#unprivileged() (ver
         // AsmNativePolicy) — prova que o fallback realmente acontece, não só o caminho step().
         TranslatingAddressSpace mmu = newMmuWithCodeAndUserReadOnlyData();
         mmu.write32(CODE_VA, STRT_R0_R1_POST4);

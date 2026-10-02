@@ -154,7 +154,7 @@ public enum InstructionKind {
     MOVE_TOP,
     /// `DMB`/`DSB`/`ISB` (ARMv7, Thumb-2 B2.5): barreira de memória. `immediate` carrega o campo
     /// `option` cru (bits 3:0) só para rastreabilidade — a semântica atual ignora o valor (NOP
-    /// observável, ver {@link dev.vitorsilverio.armjitter.ir.IrOp.MemoryBarrier}).
+    /// observável, ver {@link dev.vitorsilverio.armjitter.ir.SystemOp.MemoryBarrier}).
     MEMORY_BARRIER,
     /// `IT` (Thumb-2, ARMv6T2+, B2.4): abre um IT block. `immediate` carrega o ITSTATE\[7:0\] de
     /// ENTRADA já montado (`firstcond:4 ++ mask:4`, com `firstcond==0b1111` já normalizado para
@@ -201,13 +201,13 @@ public enum InstructionKind {
 
     // ── VFP (B3.5): decode do espaço coprocessador CP10/CP11 — ver `VfpDecoder`. Em todos os
     // kinds abaixo `signedAccess` é reaproveitado para carregar `doublePrecision` (exceto
-    // `VFP_CONVERT`, onde a própria `IrOp.VfpConversion` já fixa a precisão de cada lado) e
+    // `VFP_CONVERT`, onde a própria `VfpOp.VfpConversion` já fixa a precisão de cada lado) e
     // `link` para carregar a "direção" da transferência (ver cada kind). ──
 
     /// `VADD`/`VSUB`/`VMUL`/`VDIV`/`VMLA`/`VMLS`/`VNMUL`/`VNEG`/`VABS`/`VSQRT`/`VMOV` registrador
     /// (VFPv2). `destinationRegister`=Vd, `sourceRegister`=Vn (`-1` nas formas unárias
     /// NEG/ABS/SQRT/COPY), `secondSourceRegister`=Vm, `immediate`=ordinal de
-    /// `IrOp.VfpOperation`, `signedAccess`=precisão dupla.
+    /// `VfpOp.VfpOperation`, `signedAccess`=precisão dupla.
     VFP_ALU,
     /// `VMOV.F32`/`VMOV.F64 Vd,#imm` (VFPv3-d16). `destinationRegister`=Vd, `immediate`=`imm8`
     /// cru (0-255, ainda não expandido — `VFPExpandImm` roda no `StandardIrBuilder`),
@@ -218,13 +218,13 @@ public enum InstructionKind {
     /// `signedAccess`=precisão dupla.
     VFP_COMPARE,
     /// `VCVT` (forma default, não `VCVTR`/fixed-point). `destinationRegister`=Vd,
-    /// `sourceRegister`=Vm, `immediate`=ordinal de `IrOp.VfpConversion` (já fixa a precisão de
+    /// `sourceRegister`=Vm, `immediate`=ordinal de `VfpOp.VfpConversion` (já fixa a precisão de
     /// cada lado, sem precisar de `signedAccess` aqui).
     VFP_CONVERT,
     /// `VSEL` (B14.4, ARMv8-A, espaço VFP incondicional). `destinationRegister`=Vd,
     /// `sourceRegister`=Vn, `secondSourceRegister`=Vm, `immediate`=`cc` cru (0-3, mapeado para
     /// `EQ`/`VS`/`GE`/`GT` no `StandardIrBuilder` — nunca vira `condition` da instrução, ver
-    /// `IrOp.VfpSelect`), `signedAccess`=precisão dupla.
+    /// `VfpOp.Select`), `signedAccess`=precisão dupla.
     VFP_SELECT,
     /// `VRINT{A,N,P,M}` (B14.5, ARMv8-A, espaço VFP incondicional). `destinationRegister`=Vd,
     /// `secondSourceRegister`=Vm, `immediate`=ordinal de `AdvSimdLanes.RoundingMode` (direção do
@@ -233,17 +233,17 @@ public enum InstructionKind {
     /// `VCVT{A,N,P,M}{S,U}` (B14.5, ARMv8-A, espaço VFP incondicional). `destinationRegister`=Vd
     /// (sempre `S`), `secondSourceRegister`=Vm (`S` ou `D`, conforme `signedAccess`), `immediate`
     /// empacota bits 2:0 = ordinal de `AdvSimdLanes.RoundingMode`, bit 3 = sinal (`1`=`VCVTxS`),
-    /// `signedAccess`=precisão dupla da ORIGEM (`vd` é sempre simples, ver `IrOp.VfpConvertRounded`).
+    /// `signedAccess`=precisão dupla da ORIGEM (`vd` é sempre simples, ver `VfpOp.ConvertRounded`).
     VFP_CONVERT_ROUNDED,
     /// `VMOVX`/`VINS` (B14.6, `ArmFeature#FP16_ARITHMETIC`, ARMv8-A, espaço VFP incondicional) —
     /// troca CRUA de metades de 16 bits de um registrador `S` (sem interpretar o float).
     /// `destinationRegister`=Vd, `secondSourceRegister`=Vm, `immediate`=`1` para `VINS`, `0` para
-    /// `VMOVX` (ver `IrOp.VfpMoveHalfLane#insert`).
+    /// `VMOVX` (ver `VfpOp.MoveHalfLane#insert`).
     VFP_MOVE_HALF_LANE,
     /// `VCVTB`/`VCVTT` entre meia precisão e simples/dupla (`VCVT_f32_f16`/`VCVT_f64_f16`/
     /// `VCVT_f16_f32`/`VCVT_f16_f64`, VFPv3-HP) e `VCVT_b16_f32` (`FEAT_BF16`) — B22.7.
     /// `destinationRegister`=Vd, `secondSourceRegister`=Vm, `immediate` empacota bits 2:0 = ordinal
-    /// de `IrOp.HalfPrecisionConversion`, bit 3 = `t` (metade ALTA, `VCVTT`).
+    /// de `VfpOp.HalfPrecisionConversion`, bit 3 = `t` (metade ALTA, `VCVTT`).
     VFP_CONVERT_HALF_PRECISION,
     /// `VJCVT.S32.F64 Sd, Dm` (`FEAT_JSCVT`, B22.7): `destinationRegister`=Vd (`S`),
     /// `secondSourceRegister`=Vm (`D`).
@@ -256,7 +256,7 @@ public enum InstructionKind {
     /// `VADD_hp`…`VFNMA_hp`/`VABS_hp`/`VNEG_hp`/`VSQRT_hp` (espaço condicional) e
     /// `VMAXNM_hp`/`VMINNM_hp` (espaço incondicional), B14.6b. `destinationRegister`=Vd,
     /// `sourceRegister`=Vn (`-1` nas formas unárias), `secondSourceRegister`=Vm,
-    /// `immediate`=ordinal de `IrOp.VfpOperation`.
+    /// `immediate`=ordinal de `VfpOp.VfpOperation`.
     VFP_ALU_HALF,
     /// `VMOV.F16 Vd,#imm` (B14.6b). `destinationRegister`=Vd, `immediate`=`imm8` cru (ainda não
     /// expandido).
@@ -321,7 +321,7 @@ public enum InstructionKind {
     MPROFILE_MSR,
 
     /// `BKPT #imm` (B7.5, ARMv5T+): `immediate`=imediato de 8 (Thumb) ou 16 (ARM, não decodificado
-    /// ainda) bits, delegado ao `BkptDispatcher` do host (semihosting) via `IrOp.Breakpoint`. Sem
+    /// ainda) bits, delegado ao `BkptDispatcher` do host (semihosting) via `SystemOp.Breakpoint`. Sem
     /// {@link dev.vitorsilverio.armjitter.arch.ArmFeature#BREAKPOINT} cai no UNDEFINED de sempre.
     BREAKPOINT,
     /// `HLT #imm` (B22.1, ARM DDI 0487 — Halting debug, ARMv8-A / ARMv8-M): `immediate`=imediato
@@ -329,7 +329,7 @@ public enum InstructionKind {
     /// dev.vitorsilverio.armjitter.arch.ArmFeature#HALT} (nenhum preset pré-`ARMV8A_32` a declara)
     /// o encoding é reconhecido e recusado com `UNIMPLEMENTED`. Com a feature (`ARMV8A_32`, B14.1),
     /// executa pelo MESMO caminho de {@link #BREAKPOINT} (B14.1b, reuso de
-    /// {@link dev.vitorsilverio.armjitter.ir.IrOp.Breakpoint}): entrega ao debugger do host se
+    /// {@link dev.vitorsilverio.armjitter.ir.SystemOp.Breakpoint}): entrega ao debugger do host se
     /// houver handler registrado, ou {@code ArmException.UNDEFINED} sem um.
     HALT,
     /// `MCRR`/`MRRC` (ARMv5TE+, F3): transferência DUPLA de registrador de/para coprocessador —
@@ -396,34 +396,34 @@ public enum InstructionKind {
     /// explicitamente (em vez de cair no `UNIMPLEMENTED` generico por coincidencia) para que a
     /// tabela de cobertura distinga "sempre indefinida por definicao" de "gap de decode real"
     /// (ver `tasks/README.md`, invariante G8). Comportamento identico ao de `UNIMPLEMENTED`: gera
-    /// `IrOp.Undefined`.
+    /// `SystemOp.Undefined`.
     UDF,
     /// `HVC` (B9.8.2, ARM DDI 0406C A8.8.65, formas A32 e T32): entra em Hyp mode via
-    /// `IrOp.Hvc`/`ArmException#HVC`. `UNDEFINED` quando executada em modo `USER` (checado em
+    /// `SystemOp.Hvc`/`ArmException#HVC`. `UNDEFINED` quando executada em modo `USER` (checado em
     /// tempo de execução — o decode em si é independente de modo, ver
     /// `IrSystemExecutor#executeHvc`). `immediate` = `imm16` do encoding (sem uso funcional hoje,
     /// carregado só para fidelidade de trace/debug, mesmo padrão de `SWI`).
     HVC,
     /// `SMC` (B9.8.3, ARM DDI 0406C A8.8.20, formas A32 e T32): entra em Monitor mode via
-    /// `IrOp.Smc`/`ArmException#SMC`. `UNDEFINED` quando executada em modo `USER` (checado em
+    /// `SystemOp.Smc`/`ArmException#SMC`. `UNDEFINED` quando executada em modo `USER` (checado em
     /// tempo de execução, ver `IrSystemExecutor#executeSmc`). `immediate` = `imm4` do encoding
     /// (sem uso funcional hoje, mesmo padrão de `HVC`/`SWI`).
     SMC,
-    /// `ERET` A32 (B9.8.4, ARM DDI 0406C B9.3.3): retorna de exceção via `IrOp.Eret` — `PC`←
+    /// `ERET` A32 (B9.8.4, ARM DDI 0406C B9.3.3): retorna de exceção via `SystemOp.Eret` — `PC`←
     /// `ELR_hyp` em Hyp mode, `LR` do banco ativo em qualquer outro modo privilegiado, `CPSR`←SPSR
     /// do modo ativo. `UNDEFINED` quando executada em modo `USER` (checado em tempo de execução,
     /// ver `IrSystemExecutor#executeEret`). Sem `ArmException` própria — instrução de RETORNO pura
     /// (mesma categoria de `RETURN_FROM_EXCEPTION`/`RFE`), não entra em exceção nova.
     ERET,
     /// `MRS` (forma bancada, B9.8.5, ARM DDI 0406C A8.8.64, formas A32 e T32): lê um registrador
-    /// geral ou `SPSR` de outro modo (não o ativo) via `IrOp.MrsBank` — `sysm`/`r` já resolvidos
+    /// geral ou `SPSR` de outro modo (não o ativo) via `SystemOp.MrsBank` — `sysm`/`r` já resolvidos
     /// em `(modo, registrador)` em tempo de DECODE (`BankedRegisterSysm`, campos estáticos).
     /// `UNDEFINED` quando executada em modo `USER` (checado em tempo de execução, ver
     /// `IrSystemExecutor#executeMrsBank`). `destinationRegister` = `Rd`; `immediate` = valor
     /// empacotado de `BankedRegisterSysm#resolve`.
     MRS_BANK,
     /// `MSR` (forma bancada, B9.8.5): escreve um registrador geral num registrador geral ou
-    /// `SPSR` de outro modo via `IrOp.MsrBank` — mesma convenção de {@link #MRS_BANK}.
+    /// `SPSR` de outro modo via `SystemOp.MsrBank` — mesma convenção de {@link #MRS_BANK}.
     /// `sourceRegister` = `Rn`; `immediate` = valor empacotado de `BankedRegisterSysm#resolve`.
     MSR_BANK,
     /// `VLDR_sysreg` (perfil M, B15.3, `target/isa-decode/m-nocp.decode`): carrega o registrador de
@@ -440,7 +440,7 @@ public enum InstructionKind {
     /// `NOCP`/`NOCP_8_1` (perfil M, B15.2, `target/isa-decode/m-nocp.decode`): tentativa de
     /// acessar um coprocessador ausente/desabilitado — o espaço INTEIRO de encoding de
     /// coprocessador Thumb-2 (`MCR`/`MRC` clássico + extension register load/store), que o perfil M
-    /// não suporta de verdade (nenhuma FPU real neste emulador). Via `IrOp.Nocp`: seta
+    /// não suporta de verdade (nenhuma FPU real neste emulador). Via `SystemOp.Nocp`: seta
     /// `UFSR.NOCP` (`CFSR` em `0xE000ED28`) e entra em `MProfileException#USAGE_FAULT`. Só
     /// produzida sob {@link dev.vitorsilverio.armjitter.arch.ArmFeature#M_PROFILE}.
     /// `immediate` = número do coprocessador-alvo (`cp`, bits\[11:8\] do encoding; fixo em `10`
@@ -448,7 +448,7 @@ public enum InstructionKind {
     /// mesmo padrão de `HVC`/`SMC`.
     NOCP,
     /// `SG` (Secure Gateway, perfil M, B15.4, `t32.decode`): entra em estado Secure e limpa o
-    /// `bit0` do endereço de retorno em `LR` — via `IrOp.SecureGateway`. **Sem verificação de
+    /// `bit0` do endereço de retorno em `LR` — via `SystemOp.SecureGateway`. **Sem verificação de
     /// região Non-secure Callable real** (SAU não modelada, ver B15.4 "Não inclui") — SG executa
     /// sempre que decodificada, simplificação CONSCIENTE documentada, não segurança real. Só
     /// produzida sob {@link dev.vitorsilverio.armjitter.arch.ArmFeature#M_PROFILE_SECURITY}. Nenhum
@@ -456,19 +456,19 @@ public enum InstructionKind {
     SECURE_GATEWAY,
     /// `BXNS`/`BLXNS` (perfil M, B15.4, `t16.decode`): troca de estado Secure/Non-secure por
     /// `bit0` do valor de `Rm`, banking do `SP` ativo, e os mecanismos `EXC_RETURN`/`FNC_RETURN`
-    /// quando o destino é um valor mágico reconhecido — via `IrOp.SecureBranchExchange` (mesma
+    /// quando o destino é um valor mágico reconhecido — via `BranchOp.SecureBranchExchange` (mesma
     /// forma de campos de {@link #BRANCH_EXCHANGE}: `sourceRegister`=`Rm`; `link`=`true` só para
     /// `BLXNS`). Só produzida sob
     /// {@link dev.vitorsilverio.armjitter.arch.ArmFeature#M_PROFILE_SECURITY}.
     SECURE_BRANCH_EXCHANGE,
     /// `VLLDM`/`VLSTM` (perfil M, B15.5, `target/isa-decode/m-nocp.decode`): sem FPU real, sempre
-    /// `UNDEFINED` — via `IrOp.VlldmVlstm`, prioridade explícita sobre `NOCP` que a arquitetura real
+    /// `UNDEFINED` — via `VfpOp.VlldmVlstm`, prioridade explícita sobre `NOCP` que a arquitetura real
     /// exige para estas 2 formas específicas (ver Javadoc do `IrOp`). Só produzida sob
     /// {@link dev.vitorsilverio.armjitter.arch.ArmFeature#M_PROFILE}. Nenhum campo neutro é
     /// significativo neste kind.
     VLLDM_VLSTM,
     /// `VSCCLRM` (perfil M, B15.5, `target/isa-decode/m-nocp.decode`): zera um intervalo de
-    /// registradores FP via `IrOp.Vscclrm`. `destinationRegister` = primeiro registrador do
+    /// registradores FP via `VfpOp.Vscclrm`. `destinationRegister` = primeiro registrador do
     /// intervalo (`D<n>`/`S<n>` já resolvido pelo decoder a partir de `Vd`/`D`); `immediate` =
     /// último registrador do intervalo, inclusive; `link` = `true` para a forma de precisão dupla
     /// (`size=3`, `D`), `false` para simples (`size=2`, `S`) — reuso do campo neutro, mesmo padrão
@@ -476,7 +476,7 @@ public enum InstructionKind {
     /// {@link dev.vitorsilverio.armjitter.arch.ArmFeature#M_PROFILE}.
     VSCCLRM,
     /// `DLS`/`WLS` (perfil M, B15.6, Low Overhead Branch Extension, `t32.decode`): grava
-    /// `sourceRegister` em `LR` (contador de loop) via `IrOp.LoopStart`; `link=true` (`WLS`) desvia
+    /// `sourceRegister` em `LR` (contador de loop) via `BranchOp.LoopStart`; `link=true` (`WLS`) desvia
     /// para `immediate` (endereço já resolvido pelo decoder) quando `sourceRegister==0` — `DLS`
     /// (`link=false`) nunca desvia. **B16.15**: `DLSTP`/`WLSTP` usam o MESMO `Kind` com
     /// `destinationRegister` = `size` (`0`-`3`, vira `LTPSIZE`); as formas puras deixam `-1`. Só
@@ -486,7 +486,7 @@ public enum InstructionKind {
     /// `LE`/`LETP` (perfil M, B15.6/B16.15, Low Overhead Branch Extension, `t32.decode`;
     /// `immediateOperand=true` = `LETP`, tail-predicated, exige MVE) — antes só a forma pura (sem tail-
     /// predication, ver `Thumb2LowOverheadBranchDecoder`): via
-    /// `IrOp.LoopEnd`. `link=true` (`f=1`, "loop-forever") desvia incondicionalmente para
+    /// `BranchOp.LoopEnd`. `link=true` (`f=1`, "loop-forever") desvia incondicionalmente para
     /// `immediate` sem tocar `LR`; `link=false` decrementa `LR` e desvia de volta só se `LR`
     /// (não-assinado) `> 1` ANTES do decremento (achado medido contra `trans_LE` do QEMU, não
     /// deduzido do nome do bit `f`). Só produzida sob
@@ -501,23 +501,23 @@ public enum InstructionKind {
     LIFTED_IR_OP,
     /// `VPST` (perfil M, B16.2, MVE/Helium, `target/isa-decode/mve.decode`): grava
     /// `immediate` (mask de 4 bits, `%mask_22_13`) em `VPR.MASK01`/`MASK23` via
-    /// `IrOp.Vpst`/`MveVptState#vpstMask`. Só produzida sob
+    /// `MvePredicationOp.Vpst`/`MveVptState#vpstMask`. Só produzida sob
     /// {@link dev.vitorsilverio.armjitter.arch.ArmFeature#MVE_INTEGER}. Beatwise (ver
     /// {@link #isMveBeatwise()}).
     VPST,
     /// `VPNOT` (perfil M, B16.2, MVE/Helium): inverte `VPR.P0` nas lanes correspondentes aos beats
-    /// já executados via `IrOp.Vpnot` — encoding fixo (`VPST` com `mask=0` é literalmente `VPNOT`,
+    /// já executados via `MvePredicationOp.Vpnot` — encoding fixo (`VPST` com `mask=0` é literalmente `VPNOT`,
     /// achado da spec). Nenhum campo neutro é significativo. Só produzida sob
     /// {@link dev.vitorsilverio.armjitter.arch.ArmFeature#MVE_INTEGER}. Beatwise.
     VPNOT,
     /// `VPSEL` (perfil M, B16.2, MVE/Helium): seleciona lane a lane (byte a byte) entre
     /// `destinationRegister`=`Qd`, `sourceRegister`=`Qn`, `secondSourceRegister`=`Qm` conforme
-    /// `VPR.P0` via `IrOp.Vpsel`. Só produzida sob
+    /// `VPR.P0` via `MvePredicationOp.Vpsel`. Só produzida sob
     /// {@link dev.vitorsilverio.armjitter.arch.ArmFeature#MVE_INTEGER}. Beatwise.
     VPSEL,
     /// `VMSR`/`VMRS` com `reg=12` (`VPR`, B16.2 "Inclui" item 6 — a B15.3 documentou este valor
     /// como pendente até o B16 existir): transfere o `VPR` bruto de/para `destinationRegister`
-    /// via `IrOp.VprTransfer`. NÃO é beatwise (o QEMU real nunca chama `mve_advance_vpt` para
+    /// via `MvePredicationOp.VprTransfer`. NÃO é beatwise (o QEMU real nunca chama `mve_advance_vpt` para
     /// `VMSR_VMRS`, ao contrário de `VPST`/`VPNOT`/`VPSEL`). Só produzida sob
     /// {@link dev.vitorsilverio.armjitter.arch.ArmFeature#MVE_INTEGER}.
     VPR_TRANSFER,
@@ -527,22 +527,22 @@ public enum InstructionKind {
     /// Castagnoli (`1`=CRC32C, `0`=IEEE 802.3). Só produzida sob
     /// {@link dev.vitorsilverio.armjitter.arch.ArmFeature#CRC32}.
     CRC32,
-    /// `LCTP` (perfil M, B16.15, MVE): restaura `FPSCR.LTPSIZE = 4` via `IrOp.LoopClearTailPredication`.
+    /// `LCTP` (perfil M, B16.15, MVE): restaura `FPSCR.LTPSIZE = 4` via `MvePredicationOp.LoopClearTailPredication`.
     /// Sem campos neutros. Só produzida sob {@link dev.vitorsilverio.armjitter.arch.ArmFeature#MVE_INTEGER}
     /// (e `LOW_OVERHEAD_BRANCH`).
     LOOP_CLEAR_TAIL_PREDICATION,
     /// `VCTP.<size> Rn` (perfil M, B16.15, MVE): `sourceRegister`=`Rn`, `immediate`=`size` (log2 do
-    /// tamanho de elemento em bytes) via `IrOp.Vctp`. Beatwise (ver {@link #isMveBeatwise()}). Só
+    /// tamanho de elemento em bytes) via `MvePredicationOp.Vctp`. Beatwise (ver {@link #isMveBeatwise()}). Só
     /// produzida sob {@link dev.vitorsilverio.armjitter.arch.ArmFeature#MVE_INTEGER}.
     VCTP,
     /// `CLRM {list}` (perfil M com Security Extension, B16.15): `immediate`=`list` (16 bits: bits
-    /// 0-14 = `R0`-`R12`/`LR`, bit 15 = `APSR`) via `IrOp.ClearMultiple`. Só produzida sob
+    /// 0-14 = `R0`-`R12`/`LR`, bit 15 = `APSR`) via `IntegerOp.ClearMultiple`. Só produzida sob
     /// {@link dev.vitorsilverio.armjitter.arch.ArmFeature#M_PROFILE_SECURITY}.
     CLEAR_MULTIPLE,
     /// MVE "long shift" sobre GPR (perfil M, B16.16): `destinationRegister`=`Rda`/`RdaLo`,
     /// `sourceRegister`=`RdaHi` (`-1` nas formas de 32 bits), `secondSourceRegister`=`Rm` (`-1` nas
-    /// formas por imediato); `immediate` empacota o ordinal de `IrOp.WideShiftOperation` nos bits
-    /// 7:0 e a quantidade imediata (`1..32`) nos bits 15:8, via `IrOp.MveWideShift`. NÃO é beatwise
+    /// formas por imediato); `immediate` empacota o ordinal de `MveIntegerOp.WideShiftOperation` nos bits
+    /// 7:0 e a quantidade imediata (`1..32`) nos bits 15:8, via `MveIntegerOp.WideShift`. NÃO é beatwise
     /// (escalar, o QEMU nunca chama `mve_eci_check` aqui). Só produzida sob
     /// {@link dev.vitorsilverio.armjitter.arch.ArmFeature#MVE_INTEGER}.
     MVE_WIDE_SHIFT;

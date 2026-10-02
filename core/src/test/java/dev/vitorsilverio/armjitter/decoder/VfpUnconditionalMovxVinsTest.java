@@ -14,6 +14,7 @@ import dev.vitorsilverio.armjitter.ir.IrBlock;
 import dev.vitorsilverio.armjitter.ir.IrOp;
 import dev.vitorsilverio.armjitter.ir.StandardIrBlockLifter;
 import dev.vitorsilverio.armjitter.ir.StandardIrBuilder;
+import dev.vitorsilverio.armjitter.ir.VfpOp;
 import dev.vitorsilverio.armjitter.support.TestAddressSpace;
 import dev.vitorsilverio.armjitter.swi.SwiDispatcher;
 import java.util.List;
@@ -100,14 +101,14 @@ class VfpUnconditionalMovxVinsTest {
     void vmovxDecodesToVfpMoveHalfLaneWithInsertFalse() {
         DecodedInstruction decoded = decodeArm(FP16_TEST_ARCH, movxVinsWord(false, 2, 1));
         assertEquals(InstructionKind.VFP_MOVE_HALF_LANE, decoded.kind());
-        assertEquals(new IrOp.VfpMoveHalfLane(false, 2, 1, Condition.AL), liftSingleOp(decoded));
+        assertEquals(new VfpOp.MoveHalfLane(false, 2, 1, Condition.AL), liftSingleOp(decoded));
     }
 
     @Test
     void vinsDecodesToVfpMoveHalfLaneWithInsertTrue() {
         DecodedInstruction decoded = decodeArm(FP16_TEST_ARCH, movxVinsWord(true, 5, 3));
         assertEquals(InstructionKind.VFP_MOVE_HALF_LANE, decoded.kind());
-        assertEquals(new IrOp.VfpMoveHalfLane(true, 5, 3, Condition.AL), liftSingleOp(decoded));
+        assertEquals(new VfpOp.MoveHalfLane(true, 5, 3, Condition.AL), liftSingleOp(decoded));
     }
 
     @Test
@@ -158,7 +159,7 @@ class VfpUnconditionalMovxVinsTest {
     void vmovxMovesHighHalfToLowHalfZeroingRest() {
         ArmCore core = newCore();
         core.vfp().setS(0, 0x1234_5678);
-        new IrBlockExecutor(FP16_TEST_ARCH).executeOp(core, new IrOp.VfpMoveHalfLane(false, 1, 0, Condition.AL), 0);
+        new IrBlockExecutor(FP16_TEST_ARCH).executeOp(core, new VfpOp.MoveHalfLane(false, 1, 0, Condition.AL), 0);
         assertEquals(0x0000_1234, core.vfp().s(1));
     }
 
@@ -167,7 +168,7 @@ class VfpUnconditionalMovxVinsTest {
         ArmCore core = newCore();
         core.vfp().setS(0, 0x1234_5678); // vm: metade baixa 0x5678 vai para vd[31:16].
         core.vfp().setS(1, 0x0000_ABCD); // vd ANTES: metade baixa 0xABCD deve ser preservada.
-        new IrBlockExecutor(FP16_TEST_ARCH).executeOp(core, new IrOp.VfpMoveHalfLane(true, 1, 0, Condition.AL), 0);
+        new IrBlockExecutor(FP16_TEST_ARCH).executeOp(core, new VfpOp.MoveHalfLane(true, 1, 0, Condition.AL), 0);
         assertEquals(0x5678_ABCD, core.vfp().s(1));
     }
 
@@ -177,7 +178,7 @@ class VfpUnconditionalMovxVinsTest {
         core.vfp().setS(0, 0xFFFF_0000);
         core.fpscr().setValue(0x2468);
         int before = core.fpscr().value();
-        new IrBlockExecutor(FP16_TEST_ARCH).executeOp(core, new IrOp.VfpMoveHalfLane(false, 1, 0, Condition.AL), 0);
+        new IrBlockExecutor(FP16_TEST_ARCH).executeOp(core, new VfpOp.MoveHalfLane(false, 1, 0, Condition.AL), 0);
         assertEquals(before, core.fpscr().value());
     }
 
@@ -187,7 +188,7 @@ class VfpUnconditionalMovxVinsTest {
         core.vfp().setS(1, -1); // sentinela: não deve mudar.
         core.vfp().setS(0, 0x1234_5678);
         core.cpsr().setNzcv(false, true, false, false); // Z=1 -> NE falso.
-        new IrBlockExecutor(FP16_TEST_ARCH).executeOp(core, new IrOp.VfpMoveHalfLane(false, 1, 0, Condition.NE), 0);
+        new IrBlockExecutor(FP16_TEST_ARCH).executeOp(core, new VfpOp.MoveHalfLane(false, 1, 0, Condition.NE), 0);
         assertEquals(-1, core.vfp().s(1));
     }
 
@@ -198,7 +199,7 @@ class VfpUnconditionalMovxVinsTest {
         ArmCore core = newCore();
         core.vfp().setS(0, 0xABCD_1234);
         IrBlock.Builder builder = IrBlock.builder(0);
-        builder.add(new IrOp.VfpMoveHalfLane(false, 1, 0, Condition.AL));
+        builder.add(new VfpOp.MoveHalfLane(false, 1, 0, Condition.AL));
         builder.add(new IrOp.Cycle(1));
         builder.add(new IrOp.Fetch(4, 4));
         IrBlock block = builder.endPc(4).sealed();
@@ -206,12 +207,12 @@ class VfpUnconditionalMovxVinsTest {
         assertEquals(0x0000_ABCD, core.vfp().s(1));
     }
 
-    /// Prova DIRETA de que `AsmNativePolicy` recusa `VfpMoveHalfLane` ("Não inclui" da task —
-    /// decode + interpretado apenas, mesmo padrão de `VfpSelect`/`VfpRound`/`VfpConvertRounded`).
+    /// Prova DIRETA de que `AsmNativePolicy` recusa `VfpOp.MoveHalfLane` ("Não inclui" da task —
+    /// decode + interpretado apenas, mesmo padrão de `VfpOp.Select`/`VfpOp.Round`/`VfpOp.ConvertRounded`).
     @Test
     void asmNativePolicyRefusesVfpMoveHalfLane() {
-        assertEquals(false, AsmNativePolicy.supports(new IrOp.VfpMoveHalfLane(false, 0, 1, Condition.AL)));
-        assertEquals(false, AsmNativePolicy.supports(new IrOp.VfpMoveHalfLane(true, 0, 1, Condition.AL)));
+        assertEquals(false, AsmNativePolicy.supports(new VfpOp.MoveHalfLane(false, 0, 1, Condition.AL)));
+        assertEquals(false, AsmNativePolicy.supports(new VfpOp.MoveHalfLane(true, 0, 1, Condition.AL)));
     }
 
     // ── 5. Fechamento G8: combinações reservadas nunca viram null/misdecode ────────────────────
@@ -239,7 +240,7 @@ class VfpUnconditionalMovxVinsTest {
         StandardIrBlockLifter lifter = new StandardIrBlockLifter(new ArmDecoder(FP16_TEST_ARCH), new StandardIrBuilder());
         IrBlock block = lifter.lift(memory, 0, 2, 0);
         assertEquals(8, block.endPc(), "bloco deveria conter as DUAS instruções, não terminar na primeira");
-        long moveHalfLaneOps = block.operations().stream().filter(op -> op instanceof IrOp.VfpMoveHalfLane).count();
+        long moveHalfLaneOps = block.operations().stream().filter(op -> op instanceof VfpOp.MoveHalfLane).count();
         assertEquals(2, moveHalfLaneOps);
     }
 

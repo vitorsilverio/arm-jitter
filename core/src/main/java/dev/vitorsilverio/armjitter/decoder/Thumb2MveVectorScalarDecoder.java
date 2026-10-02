@@ -8,6 +8,8 @@ import dev.vitorsilverio.armjitter.arch.DecoderExtension;
 import dev.vitorsilverio.armjitter.core.Condition;
 import dev.vitorsilverio.armjitter.core.VfpRegisters;
 import dev.vitorsilverio.armjitter.ir.IrOp;
+import dev.vitorsilverio.armjitter.ir.MveFpOp;
+import dev.vitorsilverio.armjitter.ir.MveIntegerOp;
 
 /// Operações escalares (vetor × GPR broadcast, perfil M, B16.9, MVE/Helium, `target/isa-decode/
 /// mve.decode`, seção "Scalar operations", linhas 496-573, 35 encodings) — TODAS as formas
@@ -51,7 +53,7 @@ import dev.vitorsilverio.armjitter.ir.IrOp;
 /// para produzi-las — os dois valores de `bit28` decodificam a MESMA instrução.
 ///
 /// **`@shl_scalar` não tem `Qn`** (`&shl_scalar qda rm size`, só 3 campos): `Qd`={@code qda},
-/// `Qn`={@code qda} (mesmo valor) na {@link IrOp.MveVectorScalar} resultante — `Rm` é a CONTAGEM de
+/// `Qn`={@code qda} (mesmo valor) na {@link MveIntegerOp.VectorScalar} resultante — `Rm` é a CONTAGEM de
 /// deslocamento, não um valor replicado por lane (mesmo núcleo funciona porque só o byte baixo de
 /// `Rm` importa nessas 8 formas).
 ///
@@ -172,7 +174,7 @@ public final class Thumb2MveVectorScalarDecoder implements DecoderExtension {
                 if (!u) {
                     int qn = extractQn(raw);
                     return lifted(address, raw, condition,
-                            new IrOp.MveVectorScalar(AdvSimdThreeSameOp.MUL, size2120, qd, qn, rm, condition));
+                            new MveIntegerOp.VectorScalar(AdvSimdThreeSameOp.MUL, size2120, qd, qn, rm, condition));
                 }
                 return decodeVbrsr(raw, address, condition, qd, size2120, rm);
             }
@@ -184,11 +186,11 @@ public final class Thumb2MveVectorScalarDecoder implements DecoderExtension {
                 int qn = extractQn(raw);
                 int esz = u ? 1 : 2;
                 return lifted(address, raw, condition,
-                        new IrOp.MveVectorFpScalar(AdvSimdFpThreeSameOp.MUL, esz, qd, qn, rm, condition));
+                        new MveFpOp.VectorFpScalar(AdvSimdFpThreeSameOp.MUL, esz, qd, qn, rm, condition));
             }
             AdvSimdThreeSameOp op = u ? AdvSimdThreeSameOp.SQRDMULH : AdvSimdThreeSameOp.SQDMULH;
             int qn = extractQn(raw);
-            return lifted(address, raw, condition, new IrOp.MveVectorScalar(op, size2120, qd, qn, rm, condition));
+            return lifted(address, raw, condition, new MveIntegerOp.VectorScalar(op, size2120, qd, qn, rm, condition));
         }
         if (nibble3 == NIBBLE3_ACC) {
             // VMLA/VFMA_scalar (bit12=0) ou VMLAS/VFMAS_scalar (bit12=1) — "111 -": bit28 NÃO
@@ -200,15 +202,15 @@ public final class Thumb2MveVectorScalarDecoder implements DecoderExtension {
                 int qn = extractQn(raw);
                 int esz = u ? 1 : 2;
                 return lifted(address, raw, condition,
-                        new IrOp.MveVectorFpScalarFma(bit12, esz, qd, qn, rm, condition));
+                        new MveFpOp.VectorFpScalarFma(bit12, esz, qd, qn, rm, condition));
             }
             int qn = extractQn(raw);
             AdvSimdThreeSameOp op = AdvSimdThreeSameOp.MLA;
             if (bit12) {
-                return lifted(address, raw, condition, new IrOp.MveVectorScalarSpecial(
-                        IrOp.MveVectorScalarSpecial.SpecialOp.VMLAS, size2120, qd, qn, rm, condition));
+                return lifted(address, raw, condition, new MveIntegerOp.VectorScalarSpecial(
+                        MveIntegerOp.VectorScalarSpecial.SpecialOp.VMLAS, size2120, qd, qn, rm, condition));
             }
-            return lifted(address, raw, condition, new IrOp.MveVectorScalar(op, size2120, qd, qn, rm, condition));
+            return lifted(address, raw, condition, new MveIntegerOp.VectorScalar(op, size2120, qd, qn, rm, condition));
         }
         return null;
     }
@@ -231,12 +233,12 @@ public final class Thumb2MveVectorScalarDecoder implements DecoderExtension {
         int qn = extractQn(raw);
         boolean swap = bit12;
         boolean rounding = nibble3 == NIBBLE3_ACC;
-        IrOp.MveVectorScalarSpecial.SpecialOp op = rounding
-                ? (swap ? IrOp.MveVectorScalarSpecial.SpecialOp.VQRDMLASH
-                        : IrOp.MveVectorScalarSpecial.SpecialOp.VQRDMLAH)
-                : (swap ? IrOp.MveVectorScalarSpecial.SpecialOp.VQDMLASH
-                        : IrOp.MveVectorScalarSpecial.SpecialOp.VQDMLAH);
-        return lifted(address, raw, condition, new IrOp.MveVectorScalarSpecial(op, size2120, qd, qn, rm, condition));
+        MveIntegerOp.VectorScalarSpecial.SpecialOp op = rounding
+                ? (swap ? MveIntegerOp.VectorScalarSpecial.SpecialOp.VQRDMLASH
+                        : MveIntegerOp.VectorScalarSpecial.SpecialOp.VQRDMLAH)
+                : (swap ? MveIntegerOp.VectorScalarSpecial.SpecialOp.VQDMLASH
+                        : MveIntegerOp.VectorScalarSpecial.SpecialOp.VQDMLAH);
+        return lifted(address, raw, condition, new MveIntegerOp.VectorScalarSpecial(op, size2120, qd, qn, rm, condition));
     }
 
     /// `bits[11:8]=1111`, `bit16=1`: `VADD_scalar`(`bit12=0`)/`VSUB_scalar`(`bit12=1`) — `U` FIXO em
@@ -255,7 +257,7 @@ public final class Thumb2MveVectorScalarDecoder implements DecoderExtension {
         }
         int qn = extractQn(raw);
         AdvSimdThreeSameOp op = bit12 ? AdvSimdThreeSameOp.SUB : AdvSimdThreeSameOp.ADD;
-        return lifted(address, raw, condition, new IrOp.MveVectorScalar(op, size2120, qd, qn, rm, condition));
+        return lifted(address, raw, condition, new MveIntegerOp.VectorScalar(op, size2120, qd, qn, rm, condition));
     }
 
     /// `bits[11:8]=1111`, `bit16=0`: `bits[21:20]==0b11` (mais específico) seleciona a forma FP
@@ -273,7 +275,7 @@ public final class Thumb2MveVectorScalarDecoder implements DecoderExtension {
                 int qn = extractQn(raw);
                 int esz = u ? 1 : 2;
                 AdvSimdFpThreeSameOp op = bit12 ? AdvSimdFpThreeSameOp.SUB : AdvSimdFpThreeSameOp.ADD;
-                return lifted(address, raw, condition, new IrOp.MveVectorFpScalar(op, esz, qd, qn, rm, condition));
+                return lifted(address, raw, condition, new MveFpOp.VectorFpScalar(op, esz, qd, qn, rm, condition));
             }
             if (nibble3 == NIBBLE3_SAT) {
                 // VQDMULLB_scalar (bit12=0) / VQDMULLT_scalar (bit12=1): esz = bit28 direto.
@@ -283,7 +285,7 @@ public final class Thumb2MveVectorScalarDecoder implements DecoderExtension {
                 int esz = u ? 2 : 1;
                 int qn = extractQn(raw);
                 return lifted(address, raw, condition,
-                        new IrOp.MveVectorScalarWidening(esz, bit12, qd, qn, rm, condition));
+                        new MveIntegerOp.VectorScalarWidening(esz, bit12, qd, qn, rm, condition));
             }
             return null;
         }
@@ -291,12 +293,12 @@ public final class Thumb2MveVectorScalarDecoder implements DecoderExtension {
         if (nibble3 == NIBBLE3_ACC) {
             AdvSimdThreeSameOp op = bit12 ? (u ? AdvSimdThreeSameOp.UHSUB : AdvSimdThreeSameOp.SHSUB)
                     : (u ? AdvSimdThreeSameOp.UHADD : AdvSimdThreeSameOp.SHADD);
-            return lifted(address, raw, condition, new IrOp.MveVectorScalar(op, size2120, qd, qn, rm, condition));
+            return lifted(address, raw, condition, new MveIntegerOp.VectorScalar(op, size2120, qd, qn, rm, condition));
         }
         if (nibble3 == NIBBLE3_SAT) {
             AdvSimdThreeSameOp op = bit12 ? (u ? AdvSimdThreeSameOp.UQSUB : AdvSimdThreeSameOp.SQSUB)
                     : (u ? AdvSimdThreeSameOp.UQADD : AdvSimdThreeSameOp.SQADD);
-            return lifted(address, raw, condition, new IrOp.MveVectorScalar(op, size2120, qd, qn, rm, condition));
+            return lifted(address, raw, condition, new MveIntegerOp.VectorScalar(op, size2120, qd, qn, rm, condition));
         }
         return null;
     }
@@ -304,7 +306,7 @@ public final class Thumb2MveVectorScalarDecoder implements DecoderExtension {
     /// `@shl_scalar` (`bits[21:20]==0b11` fixo dentro do slot `nib2=1110,b16=1,b12=1,nib3=110`):
     /// `size` REAL em `bits[19:18]` (Armadilha 4 da task — NÃO onde `@2scalar` o coloca),
     /// `round`=`bit17`, `sat`=`bit7` (repropositado: `@shl_scalar` não tem `Qn`, então `Qd`={@code
-    /// qda} também vira {@link IrOp.MveVectorScalar#qn()}).
+    /// qda} também vira {@link MveIntegerOp.VectorScalar#qn()}).
     private DecodedInstruction decodeShiftScalar(int raw, int address, Condition condition, int qd, boolean u,
             int rm) {
         int size = (raw >>> SHL_SIZE_SHIFT) & SHL_SIZE_MASK;
@@ -321,14 +323,14 @@ public final class Thumb2MveVectorScalarDecoder implements DecoderExtension {
             op = sat ? (round ? AdvSimdThreeSameOp.SQRSHL : AdvSimdThreeSameOp.SQSHL)
                     : (round ? AdvSimdThreeSameOp.SRSHL : AdvSimdThreeSameOp.SSHL);
         }
-        return lifted(address, raw, condition, new IrOp.MveVectorScalar(op, size, qd, qd, rm, condition));
+        return lifted(address, raw, condition, new MveIntegerOp.VectorScalar(op, size, qd, qd, rm, condition));
     }
 
     /// `VBRSR` (`nib2=1110,b16=1,b12=1,nib3=110`, `U=1`, `size` livre 0-2).
     private DecodedInstruction decodeVbrsr(int raw, int address, Condition condition, int qd, int size, int rm) {
         int qn = extractQn(raw);
-        return lifted(address, raw, condition, new IrOp.MveVectorScalarSpecial(
-                IrOp.MveVectorScalarSpecial.SpecialOp.VBRSR, size, qd, qn, rm, condition));
+        return lifted(address, raw, condition, new MveIntegerOp.VectorScalarSpecial(
+                MveIntegerOp.VectorScalarSpecial.SpecialOp.VBRSR, size, qd, qn, rm, condition));
     }
 
     private int extractQn(int raw) {
@@ -337,11 +339,11 @@ public final class Thumb2MveVectorScalarDecoder implements DecoderExtension {
 
     private DecodedInstruction lifted(int address, int raw, Condition condition, IrOp op) {
         int qn = switch (op) {
-            case IrOp.MveVectorScalar s -> s.qn();
-            case IrOp.MveVectorScalarWidening w -> w.qn();
-            case IrOp.MveVectorFpScalar f -> f.qn();
-            case IrOp.MveVectorFpScalarFma f -> f.qn();
-            case IrOp.MveVectorScalarSpecial s -> s.qn();
+            case MveIntegerOp.VectorScalar s -> s.qn();
+            case MveIntegerOp.VectorScalarWidening w -> w.qn();
+            case MveFpOp.VectorFpScalar f -> f.qn();
+            case MveFpOp.VectorFpScalarFma f -> f.qn();
+            case MveIntegerOp.VectorScalarSpecial s -> s.qn();
             default -> -1;
         };
         if (qn >= 0 && !VfpRegisters.isValidMveQuadRegister(architecture, qn)) {

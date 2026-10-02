@@ -137,7 +137,7 @@ public sealed interface MemoryOp64 extends Ir64Op permits MemoryOp64.Load64, Mem
     /// deslocamento, ao contrário de {@link Load64}: a forma exclusiva não tem imediato nem
     /// endereçamento indexado) e marca o monitor de exclusividade com `(endereço, size.bytes())`.
     /// `acquireRelease` (`LDAXR`=`true`/`LDXR`=`false`) é NOP observável no interpretador — mesma
-    /// convenção de {@link dev.vitorsilverio.armjitter.ir.IrOp.MemoryBarrier} no IR de 32 bits —
+    /// convenção de {@link dev.vitorsilverio.armjitter.ir.SystemOp.MemoryBarrier} no IR de 32 bits —
     /// carregado no IR só para um futuro emissor nativo poder emitir a barreira de host real, se
     /// algum dia importar (single-thread por construção nesta fatia).
     record LoadExclusive(

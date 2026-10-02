@@ -164,10 +164,10 @@ class TruffleCodeEmitterSystemEquivalenceTest {
         assertBlockEquivalent(block, core -> core.setRegister(0, 0x40));
     }
 
-    // ── HALT (HLT sob ARMV8A_32, B14.1b) — reusa IrOp.Breakpoint, SystemOpNode não muda ──────
+    // ── HALT (HLT sob ARMV8A_32, B14.1b) — reusa SystemOp.Breakpoint, SystemOpNode não muda ──────
     // Vetor à parte (não usa liftArmV7/assertBlockEquivalent, presos a ARMV7A): prova que o
     // Truffle já reconhece HLT sem nenhum `case` novo em SystemOpNode, por dispatch de TIPO
-    // (IrOp.Breakpoint), não de InstructionKind de origem.
+    // (SystemOp.Breakpoint), não de InstructionKind de origem.
     @Test
     void haltBecomesUndefinedWithoutDispatcherHandlerUnderArmv8a32() {
         ByteArrayAddressSpace memory = new ByteArrayAddressSpace(4);

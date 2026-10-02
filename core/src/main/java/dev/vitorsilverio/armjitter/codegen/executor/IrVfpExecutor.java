@@ -5,7 +5,8 @@ import dev.vitorsilverio.armjitter.core.ArmCore;
 import dev.vitorsilverio.armjitter.core.FpRoundingMode;
 import dev.vitorsilverio.armjitter.core.FpscrRegister;
 import dev.vitorsilverio.armjitter.core.VfpRegisters;
-import dev.vitorsilverio.armjitter.ir.IrOp;
+import dev.vitorsilverio.armjitter.ir.NeonIntegerOp;
+import dev.vitorsilverio.armjitter.ir.VfpOp;
 
 /// Executa a IR de VFP (B3.4): aritmética/unárias, comparação, conversão, load/store, transferência
 /// múltipla e transferências de/para o banco de registradores ARM/FPSCR. Espelha
@@ -34,12 +35,12 @@ public final class IrVfpExecutor {
     /// NEON "three same" (`VADD`/`VSUB` inteiro): DELEGA a {@link IrNeonExecutor} — B13.3 extraiu
     /// a execução vetorial de 32 bits para lá. O método público continua existindo (G3): o
     /// dispatch de {@link IrBlockExecutor} para `NEON_THREE_SAME` ainda entra por aqui.
-    public void executeNeonThreeSame(ArmCore core, IrOp.NeonThreeSame op) {
+    public void executeNeonThreeSame(ArmCore core, NeonIntegerOp.ThreeSame op) {
         neon.executeNeonThreeSame(core, op);
     }
 
     /// `VADD`/`VSUB`/`VMUL`/`VDIV`/`VMLA`/`VMLS`/`VNMUL`/`VNEG`/`VABS`/`VSQRT`/`VMOV` registrador.
-    public void executeVfpAlu(ArmCore core, IrOp.VfpAlu op) {
+    public void executeVfpAlu(ArmCore core, VfpOp.Alu op) {
         if (!core.cpsr().evalCond(op.condition())) {
             return;
         }
@@ -59,7 +60,7 @@ public final class IrVfpExecutor {
     /// @see #SINGLE_SIGN_BIT
     private static final long DOUBLE_SIGN_BIT = Long.MIN_VALUE;
 
-    private static float computeSingle(VfpRegisters vfp, IrOp.VfpAlu op, FpRoundingMode mode, boolean flushToZero) {
+    private static float computeSingle(VfpRegisters vfp, VfpOp.Alu op, FpRoundingMode mode, boolean flushToZero) {
         return switch (op.op()) {
             // NEG/ABS/COPY são manipulação de bits, não aritmética — RMode/FZ não se aplicam
             // (ARM DDI 0406C A2.7.2: FZ só afeta instruções de processamento de dados aritmético).
@@ -70,7 +71,7 @@ public final class IrVfpExecutor {
         };
     }
 
-    private static float computeSingleArithmetic(VfpRegisters vfp, IrOp.VfpAlu op, FpRoundingMode mode,
+    private static float computeSingleArithmetic(VfpRegisters vfp, VfpOp.Alu op, FpRoundingMode mode,
             boolean flushToZero) {
         // `SQRT` é unário (só `Vm`) — o decoder marca `vn=-1` (sentinel "sem Vn", mesmo valor
         // usado para NEG/ABS/COPY em `VfpDecoder`) porque a instrução real não tem esse campo.
@@ -119,7 +120,7 @@ public final class IrVfpExecutor {
             case SQRT -> DirectedFpRounding.roundFloat((float) Math.sqrt((double) vm), Math.sqrt((double) vm), mode);
             // FMA/FMS/FNMA/FNMS (B9.6, VFPv4): FUNDIDO — um único arredondamento para produto+soma
             // (`Math.fma`), ao contrário de MLA/MLS/NMLA/NMLS acima. Mesma convenção de sinal
-            // (produto negado para *MS, acumulador negado para *NMA/*NMS — ver IrOp.VfpOperation).
+            // (produto negado para *MS, acumulador negado para *NMA/*NMS — ver VfpOp.VfpOperation).
             case FMA -> {
                 float vd = flushSingle(vfp.sFloat(op.vd()), flushToZero);
                 yield DirectedFpRounding.roundFloat(Math.fma(vn, vm, vd),
@@ -150,7 +151,7 @@ public final class IrVfpExecutor {
         return flushSingle(result, flushToZero);
     }
 
-    private static double computeDouble(VfpRegisters vfp, IrOp.VfpAlu op, FpRoundingMode mode, boolean flushToZero) {
+    private static double computeDouble(VfpRegisters vfp, VfpOp.Alu op, FpRoundingMode mode, boolean flushToZero) {
         return switch (op.op()) {
             case NEG -> Double.longBitsToDouble(Double.doubleToRawLongBits(vfp.dDouble(op.vm())) ^ DOUBLE_SIGN_BIT);
             case ABS -> Double.longBitsToDouble(Double.doubleToRawLongBits(vfp.dDouble(op.vm())) & ~DOUBLE_SIGN_BIT);
@@ -159,7 +160,7 @@ public final class IrVfpExecutor {
         };
     }
 
-    private static double computeDoubleArithmetic(VfpRegisters vfp, IrOp.VfpAlu op, FpRoundingMode mode,
+    private static double computeDoubleArithmetic(VfpRegisters vfp, VfpOp.Alu op, FpRoundingMode mode,
             boolean flushToZero) {
         // Mesma proteção de {@link #computeSingleArithmetic} — `SQRT` (`VSQRT.F64`) também não
         // tem `Vn` real, `vn=-1` do decoder.
@@ -235,7 +236,7 @@ public final class IrVfpExecutor {
     }
 
     /// `VMOV.F32`/`VMOV.F64 Vd, #imm`.
-    public void executeVfpMoveImmediate(ArmCore core, IrOp.VfpMoveImmediate op) {
+    public void executeVfpMoveImmediate(ArmCore core, VfpOp.MoveImmediate op) {
         if (!core.cpsr().evalCond(op.condition())) {
             return;
         }
@@ -246,8 +247,8 @@ public final class IrVfpExecutor {
         }
     }
 
-    /// `VCMP`/`VCMPE`: grava só `FPSCR.NZCV`, nunca o CPSR (ver {@link IrOp.VfpCompare}).
-    public void executeVfpCompare(ArmCore core, IrOp.VfpCompare op) {
+    /// `VCMP`/`VCMPE`: grava só `FPSCR.NZCV`, nunca o CPSR (ver {@link VfpOp.Compare}).
+    public void executeVfpCompare(ArmCore core, VfpOp.Compare op) {
         if (!core.cpsr().evalCond(op.condition())) {
             return;
         }
@@ -283,11 +284,11 @@ public final class IrVfpExecutor {
     }
 
     /// `VSEL` (B14.4): `vd = selectCondition ? vn : vm` — cópia de BITS crua (nunca aritmética:
-    /// não normaliza NaN, não toca `FPSCR`). {@link IrOp.VfpSelect#selectCondition} é avaliado
+    /// não normaliza NaN, não toca `FPSCR`). {@link VfpOp.Select#selectCondition} é avaliado
     /// contra o **CPSR** ({@link ArmCore#cpsr()}), nunca o FPSCR — diferente de {@link #executeVfpCompare}.
-    /// {@link IrOp.VfpSelect#condition} (sempre `AL`, espaço incondicional) só gate o bloco, nunca
+    /// {@link VfpOp.Select#condition} (sempre `AL`, espaço incondicional) só gate o bloco, nunca
     /// decide `vn`/`vm` (ver Armadilha 2 da task: os dois campos não podem se confundir).
-    public void executeVfpSelect(ArmCore core, IrOp.VfpSelect op) {
+    public void executeVfpSelect(ArmCore core, VfpOp.Select op) {
         if (!core.cpsr().evalCond(op.condition())) {
             return;
         }
@@ -301,11 +302,11 @@ public final class IrVfpExecutor {
     }
 
     /// `VRINT{A,N,P,M}` (B14.5): arredonda `vm` para valor integral MANTENDO ponto flutuante,
-    /// usando a direção da PRÓPRIA instrução ({@link IrOp.VfpRound#direction}) — nunca
+    /// usando a direção da PRÓPRIA instrução ({@link VfpOp.Round#direction}) — nunca
     /// `FPSCR.RMode`. Delega a {@link AdvSimdLanes#roundForConversion}, mesmo núcleo do `FRINTx`
     /// A64 (`NaN`/infinito passam adiante inalterados, tratado lá). Sem flush-to-zero (mesma
     /// decisão de {@link #executeVfpConvert}, que também não aplica `FZ`).
-    public void executeVfpRound(ArmCore core, IrOp.VfpRound op) {
+    public void executeVfpRound(ArmCore core, VfpOp.Round op) {
         if (!core.cpsr().evalCond(op.condition())) {
             return;
         }
@@ -321,10 +322,10 @@ public final class IrVfpExecutor {
 
     /// `VCVT{A,N,P,M}{S,U}` (B14.5): converte `vm` para inteiro de 32 bits em `vd` (SEMPRE `S`),
     /// com sinal `op.signed()`, arredondando pela direção da PRÓPRIA instrução
-    /// ({@link IrOp.VfpConvertRounded#direction}). Mesma composição de
+    /// ({@link VfpOp.ConvertRounded#direction}). Mesma composição de
     /// {@link AdvSimdLanes#roundForConversion} + {@link AdvSimdLanes#saturateToInteger} que o A64
     /// já usa para `FCVTAS`/`FCVTAU`/etc — `NaN`→`0`, fora de faixa→saturação, nunca duplicado.
-    public void executeVfpConvertRounded(ArmCore core, IrOp.VfpConvertRounded op) {
+    public void executeVfpConvertRounded(ArmCore core, VfpOp.ConvertRounded op) {
         if (!core.cpsr().evalCond(op.condition())) {
             return;
         }
@@ -336,10 +337,10 @@ public final class IrVfpExecutor {
     }
 
     /// `VMOVX`/`VINS` (B14.6): troca CRUA de metades de 16 bits de um `S`, sem interpretar o float
-    /// (nunca arredonda, nunca toca `FPSCR`) — ver Javadoc de {@link IrOp.VfpMoveHalfLane}.
+    /// (nunca arredonda, nunca toca `FPSCR`) — ver Javadoc de {@link VfpOp.MoveHalfLane}.
     /// `VMOVX` usa `>>>` (nunca `>>`) para zerar a metade alta do destino automaticamente. `VINS`
     /// lê o `vd` ATUAL antes de escrever, para preservar `vd[15:0]`.
-    public void executeVfpMoveHalfLane(ArmCore core, IrOp.VfpMoveHalfLane op) {
+    public void executeVfpMoveHalfLane(ArmCore core, VfpOp.MoveHalfLane op) {
         if (!core.cpsr().evalCond(op.condition())) {
             return;
         }
@@ -370,12 +371,12 @@ public final class IrVfpExecutor {
         };
     }
 
-    /// `VCVTB`/`VCVTT` (B22.7): ver {@link IrOp.VfpConvertHalfPrecision}. As metades de 16 bits de um
+    /// `VCVTB`/`VCVTT` (B22.7): ver {@link VfpOp.ConvertHalfPrecision}. As metades de 16 bits de um
     /// `S` são `bits[15:0]` (`VCVTB`) e `bits[31:16]` (`VCVTT`); as formas "para half" gravam SÓ a
     /// metade selecionada e preservam a outra (lendo o `vd` atual antes de escrever). `F64_TO_F16`
     /// arredonda UMA vez de `double` para binary16 ({@link AdvSimdLanes#doubleToHalfBits}, nunca via
     /// `float` intermediário — double rounding erraria os empates).
-    public void executeVfpConvertHalfPrecision(ArmCore core, IrOp.VfpConvertHalfPrecision op) {
+    public void executeVfpConvertHalfPrecision(ArmCore core, VfpOp.ConvertHalfPrecision op) {
         if (!core.cpsr().evalCond(op.condition())) {
             return;
         }
@@ -404,7 +405,7 @@ public final class IrVfpExecutor {
     /// {@link AdvSimdLanes#javascriptToInt32}) e `FPSCR.{N,Z,C,V} = 0,exato,0,0` — QEMU
     /// `HELPER(vjcvt)`: `Z` recebe a EXATIDÃO da conversão e os outros três são zerados. Os demais
     /// bits do `FPSCR` permanecem intactos.
-    public void executeVfpJavascriptConvert(ArmCore core, IrOp.VfpJavascriptConvert op) {
+    public void executeVfpJavascriptConvert(ArmCore core, VfpOp.JavascriptConvert op) {
         if (!core.cpsr().evalCond(op.condition())) {
             return;
         }
@@ -416,7 +417,7 @@ public final class IrVfpExecutor {
     }
 
     /// `VCVT` (forma default, round-toward-zero para inteiro).
-    public void executeVfpConvert(ArmCore core, IrOp.VfpConvert op) {
+    public void executeVfpConvert(ArmCore core, VfpOp.Convert op) {
         if (!core.cpsr().evalCond(op.condition())) {
             return;
         }
@@ -461,7 +462,7 @@ public final class IrVfpExecutor {
 
     /// `VLDR`: dupla precisão lê 2 palavras little-endian consecutivas (metade baixa no endereço
     /// menor — igual a `LDRD`/{@link IrMemoryExecutor#executeDoubleTransfer}).
-    public void executeVfpLoad(ArmCore core, IrOp.VfpLoad op) {
+    public void executeVfpLoad(ArmCore core, VfpOp.Load op) {
         if (!core.cpsr().evalCond(op.condition())) {
             return;
         }
@@ -476,7 +477,7 @@ public final class IrVfpExecutor {
     }
 
     /// `VSTR`: ver {@link #executeVfpLoad}.
-    public void executeVfpStore(ArmCore core, IrOp.VfpStore op) {
+    public void executeVfpStore(ArmCore core, VfpOp.Store op) {
         if (!core.cpsr().evalCond(op.condition())) {
             return;
         }
@@ -491,7 +492,7 @@ public final class IrVfpExecutor {
     }
 
     /// `VLDM`/`VSTM`/`VPUSH`/`VPOP`: registradores consecutivos, só formas `IA`/`DB`.
-    public void executeVfpMultipleTransfer(ArmCore core, IrOp.VfpMultipleTransfer op) {
+    public void executeVfpMultipleTransfer(ArmCore core, VfpOp.MultipleTransfer op) {
         if (!core.cpsr().evalCond(op.condition())) {
             return;
         }
@@ -528,9 +529,9 @@ public final class IrVfpExecutor {
     private static final int HALF_MASK = 0xFFFF;
 
     /// `VMOV Rt,Sn` / `VMOV Sn,Rt` (`FMRS`/`FMSR`): bits crus, sem conversão de tipo. Com
-    /// {@link IrOp.VfpCoreTransfer#halfWidth} (`VMOV_half`, B22.2) a transferência é de 16 bits:
+    /// {@link VfpOp.CoreTransfer#halfWidth} (`VMOV_half`, B22.2) a transferência é de 16 bits:
     /// leitura zero-estende `Sn[15:0]`; escrita altera só `Sn[15:0]`, preservando `Sn[31:16]`.
-    public void executeVfpCoreTransfer(ArmCore core, IrOp.VfpCoreTransfer op) {
+    public void executeVfpCoreTransfer(ArmCore core, VfpOp.CoreTransfer op) {
         if (!core.cpsr().evalCond(op.condition())) {
             return;
         }
@@ -552,7 +553,7 @@ public final class IrVfpExecutor {
     /// B22.10 — `VMOV.{S8,U8,S16,U16}` (`Rt = Dd[lane]`) e `VMOV.{8,16}` (`Dd[lane] = Rt`) do NEON: transfere
     /// UM elemento de `D<vn>` (`0`-`31`). Leitura estende por sinal ou zero conforme `signExtend`;
     /// escrita altera só o elemento, preservando o resto do `D`.
-    private void executeVfpLaneTransfer(ArmCore core, IrOp.VfpCoreTransfer op) {
+    private void executeVfpLaneTransfer(ArmCore core, VfpOp.CoreTransfer op) {
         int elementBits = op.laneBits();
         int shift = op.lane() * elementBits;
         long mask = (1L << elementBits) - 1;
@@ -572,7 +573,7 @@ public final class IrVfpExecutor {
 
     /// `VMOV Rt,Rt2,Dm` / `VMOV Dm,Rt,Rt2` (`FMRRD`/`FMDRR`): `armLow` = metade baixa,
     /// `armHigh` = metade alta (mesmo layout de {@link #executeVfpLoad}/{@link #executeVfpStore}).
-    public void executeVfpCorePairTransfer(ArmCore core, IrOp.VfpCorePairTransfer op) {
+    public void executeVfpCorePairTransfer(ArmCore core, VfpOp.CorePairTransfer op) {
         if (!core.cpsr().evalCond(op.condition())) {
             return;
         }
@@ -590,7 +591,7 @@ public final class IrVfpExecutor {
     /// `VMSR`/`VMRS FPSCR` (`FMXR`/`FMRX`). Caso especial obrigatório: `VMRS APSR_nzcv, FPSCR`
     /// (`read=true, armRegister=15`) copia só `FPSCR.NZCV` para `CPSR.NZCV`, sem tocar Q/GE/IT/modo
     /// e sem escrever `R15` (decisão nº 4 do épico B3).
-    public void executeVfpSystemTransfer(ArmCore core, IrOp.VfpSystemTransfer op) {
+    public void executeVfpSystemTransfer(ArmCore core, VfpOp.SystemTransfer op) {
         if (!core.cpsr().evalCond(op.condition())) {
             return;
         }
@@ -611,7 +612,7 @@ public final class IrVfpExecutor {
     /// {@link IrMemoryExecutor#executeStore} (`postIndexed ? base : base + offsetBytes`, seguido de
     /// `base + offsetBytes` quando {@code writeback}), só que o destino/origem é `ArmCore.fpscr()`,
     /// não um GPR.
-    public void executeVfpSysregMemoryTransfer(ArmCore core, IrOp.VfpSysregMemoryTransfer op) {
+    public void executeVfpSysregMemoryTransfer(ArmCore core, VfpOp.SysregMemoryTransfer op) {
         if (!core.cpsr().evalCond(op.condition())) {
             return;
         }
@@ -628,11 +629,11 @@ public final class IrVfpExecutor {
     }
 
     /// `VSCCLRM` (perfil M, B15.5): zera `D<primeiro>`..`D<último>` ou `S<primeiro>`..`S<último>`
-    /// (conforme {@link IrOp.Vscclrm#doublePrecision()}), recortando o limite superior ao tamanho
+    /// (conforme {@link VfpOp.Vscclrm#doublePrecision()}), recortando o limite superior ao tamanho
     /// real do banco (`lastRegister` pode vir de um `imm` grande, encoding `UNPREDICTABLE`) — nunca
     /// lança, só ignora os registradores fora do banco. Nenhuma dependência de FPU real: o
     /// armazenamento `D`/`S` já existe incondicionalmente desde a B3.3.
-    public void executeVscclrm(ArmCore core, IrOp.Vscclrm op) {
+    public void executeVscclrm(ArmCore core, VfpOp.Vscclrm op) {
         if (!core.cpsr().evalCond(op.condition())) {
             return;
         }
@@ -652,7 +653,7 @@ public final class IrVfpExecutor {
 
     /// `VMOV_64_sp`: `armLow`/`armHigh` de/para `Sm`/`Sm+1` (par consecutivo, NAO via `d()`/`setD()`
     /// — `m` pode ser ímpar, caso em que as duas metades pertencem a `D` diferentes).
-    public void executeVfpCorePairTransferSingle(ArmCore core, IrOp.VfpCorePairTransferSingle op) {
+    public void executeVfpCorePairTransferSingle(ArmCore core, VfpOp.CorePairTransferSingle op) {
         if (!core.cpsr().evalCond(op.condition())) {
             return;
         }
@@ -667,10 +668,10 @@ public final class IrVfpExecutor {
     }
 
     /// `VCVT_fix_{sp,dp}`: converte, NO MESMO `vd`, entre float e um inteiro fixo de 16/32 bits
-    /// com `fractionBits` bits fracionários (ver Javadoc de {@link IrOp.VfpConvertFixed}). Fixo →
+    /// com `fractionBits` bits fracionários (ver Javadoc de {@link VfpOp.ConvertFixed}). Fixo →
     /// float SEMPRE arredonda ao mais próximo (par); float → fixo SEMPRE trunca para zero e satura
     /// (QEMU `vfp_helper.c` `VFP_CONV_FIX*`, conferido antes de implementar).
-    public void executeVfpConvertFixed(ArmCore core, IrOp.VfpConvertFixed op) {
+    public void executeVfpConvertFixed(ArmCore core, VfpOp.ConvertFixed op) {
         if (!core.cpsr().evalCond(op.condition())) {
             return;
         }
@@ -690,8 +691,8 @@ public final class IrVfpExecutor {
     }
 
     /// `VCVT_fix_hp` (B14.6b) — espelho de {@link #executeVfpConvertFixed} em meia precisão (só a
-    /// forma `sp`-like existe, ver {@link IrOp.VfpConvertFixedHalf}).
-    public void executeVfpConvertFixedHalf(ArmCore core, IrOp.VfpConvertFixedHalf op) {
+    /// forma `sp`-like existe, ver {@link VfpOp.ConvertFixedHalf}).
+    public void executeVfpConvertFixedHalf(ArmCore core, VfpOp.ConvertFixedHalf op) {
         if (!core.cpsr().evalCond(op.condition())) {
             return;
         }
@@ -763,7 +764,7 @@ public final class IrVfpExecutor {
     /// `VADD_hp`…`VFNMA_hp`/`VABS_hp`/`VNEG_hp`/`VSQRT_hp`/`VMAXNM_hp`/`VMINNM_hp` (B14.6b).
     /// `NEG`/`ABS` são manipulação de BITS crua (bit de sinal na posição 15 do half) — não passam
     /// por flush/arredondamento, mesma decisão de {@link #computeSingle} para as formas `sp`.
-    public void executeVfpAluHalf(ArmCore core, IrOp.VfpAluHalf op) {
+    public void executeVfpAluHalf(ArmCore core, VfpOp.AluHalf op) {
         if (!core.cpsr().evalCond(op.condition())) {
             return;
         }
@@ -786,7 +787,7 @@ public final class IrVfpExecutor {
     /// `half`, o único arredondamento real é este narrow final — mesma composição de
     /// {@link AdvSimdLanes#halfThreeSame}). `MLA`/`MLS`/`NMLA`/`NMLS` (NÃO fundidos) narrowam o
     /// PRODUTO a half antes de acumular (dois arredondamentos), igual ao núcleo NEON.
-    private static int computeHalfArithmeticBits(VfpRegisters vfp, IrOp.VfpAluHalf op, boolean flushToZero) {
+    private static int computeHalfArithmeticBits(VfpRegisters vfp, VfpOp.AluHalf op, boolean flushToZero) {
         float vn = op.vn() >= 0 ? readHalfOperand(vfp, op.vn(), flushToZero) : 0f;
         float vm = readHalfOperand(vfp, op.vm(), flushToZero);
         float result = switch (op.op()) {
@@ -840,7 +841,7 @@ public final class IrVfpExecutor {
     }
 
     /// `VMOV.F16 Vd,#imm` (B14.6b).
-    public void executeVfpMoveImmediateHalf(ArmCore core, IrOp.VfpMoveImmediateHalf op) {
+    public void executeVfpMoveImmediateHalf(ArmCore core, VfpOp.MoveImmediateHalf op) {
         if (!core.cpsr().evalCond(op.condition())) {
             return;
         }
@@ -848,7 +849,7 @@ public final class IrVfpExecutor {
     }
 
     /// `VCMP_hp`/`VCMPE_hp` (B14.6b) — mesma tabela de {@link #executeVfpCompare}.
-    public void executeVfpCompareHalf(ArmCore core, IrOp.VfpCompareHalf op) {
+    public void executeVfpCompareHalf(ArmCore core, VfpOp.CompareHalf op) {
         if (!core.cpsr().evalCond(op.condition())) {
             return;
         }
@@ -874,7 +875,7 @@ public final class IrVfpExecutor {
 
     /// `VSEL_hp` (B14.6b) — cópia de BITS crua dos 16 bits baixos (zero-estendida ao escrever,
     /// mesma convenção de {@link #executeVfpMoveHalfLane}), nunca aritmética.
-    public void executeVfpSelectHalf(ArmCore core, IrOp.VfpSelectHalf op) {
+    public void executeVfpSelectHalf(ArmCore core, VfpOp.SelectHalf op) {
         if (!core.cpsr().evalCond(op.condition())) {
             return;
         }
@@ -885,7 +886,7 @@ public final class IrVfpExecutor {
     }
 
     /// `VRINT{A,N,P,M}_hp` (B14.6b) — mesmo núcleo de {@link #executeVfpRound}.
-    public void executeVfpRoundHalf(ArmCore core, IrOp.VfpRoundHalf op) {
+    public void executeVfpRoundHalf(ArmCore core, VfpOp.RoundHalf op) {
         if (!core.cpsr().evalCond(op.condition())) {
             return;
         }
@@ -896,7 +897,7 @@ public final class IrVfpExecutor {
     }
 
     /// `VCVT{A,N,P,M}{S,U}_hp` (B14.6b) — mesmo núcleo de {@link #executeVfpConvertRounded}.
-    public void executeVfpConvertRoundedHalf(ArmCore core, IrOp.VfpConvertRoundedHalf op) {
+    public void executeVfpConvertRoundedHalf(ArmCore core, VfpOp.ConvertRoundedHalf op) {
         if (!core.cpsr().evalCond(op.condition())) {
             return;
         }
@@ -908,7 +909,7 @@ public final class IrVfpExecutor {
     }
 
     /// `VLDR_hp` (B14.6b) — carrega um halfword (2 bytes), zero-estendendo `Vd[31:16]`.
-    public void executeVfpLoadHalf(ArmCore core, IrOp.VfpLoadHalf op) {
+    public void executeVfpLoadHalf(ArmCore core, VfpOp.LoadHalf op) {
         if (!core.cpsr().evalCond(op.condition())) {
             return;
         }
@@ -917,7 +918,7 @@ public final class IrVfpExecutor {
     }
 
     /// `VSTR_hp` (B14.6b) — grava só os 16 bits baixos de `Vd` (ver {@link #executeVfpLoadHalf}).
-    public void executeVfpStoreHalf(ArmCore core, IrOp.VfpStoreHalf op) {
+    public void executeVfpStoreHalf(ArmCore core, VfpOp.StoreHalf op) {
         if (!core.cpsr().evalCond(op.condition())) {
             return;
         }

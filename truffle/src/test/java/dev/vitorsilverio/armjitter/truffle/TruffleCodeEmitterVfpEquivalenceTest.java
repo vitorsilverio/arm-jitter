@@ -12,6 +12,8 @@ import dev.vitorsilverio.armjitter.core.Condition;
 import dev.vitorsilverio.armjitter.core.MProfileExceptionModel;
 import dev.vitorsilverio.armjitter.ir.IrBlock;
 import dev.vitorsilverio.armjitter.ir.IrOp;
+import dev.vitorsilverio.armjitter.ir.SystemOp;
+import dev.vitorsilverio.armjitter.ir.VfpOp;
 import dev.vitorsilverio.armjitter.swi.SwiDispatcher;
 import dev.vitorsilverio.armjitter.truffle.support.ByteArrayAddressSpace;
 import java.util.List;
@@ -53,7 +55,7 @@ class TruffleCodeEmitterVfpEquivalenceTest {
 
     @Test
     void vfpAluAddMatchesInterpreter() {
-        assertVfpBlockEquivalent(withTail(new IrOp.VfpAlu(IrOp.VfpOperation.ADD, false, 0, 1, 2, Condition.AL)),
+        assertVfpBlockEquivalent(withTail(new VfpOp.Alu(VfpOp.VfpOperation.ADD, false, 0, 1, 2, Condition.AL)),
                 core -> {
                     core.vfp().setSFloat(1, 2.5f);
                     core.vfp().setSFloat(2, 1.5f);
@@ -63,7 +65,7 @@ class TruffleCodeEmitterVfpEquivalenceTest {
     @Test
     void vfpMoveImmediateMatchesInterpreter() {
         assertVfpBlockEquivalent(
-                withTail(new IrOp.VfpMoveImmediate(false, 0, Float.floatToRawIntBits(1.5f) & 0xFFFF_FFFFL,
+                withTail(new VfpOp.MoveImmediate(false, 0, Float.floatToRawIntBits(1.5f) & 0xFFFF_FFFFL,
                         Condition.AL)),
                 core -> {
                 });
@@ -71,7 +73,7 @@ class TruffleCodeEmitterVfpEquivalenceTest {
 
     @Test
     void vfpCompareMatchesInterpreter() {
-        assertVfpBlockEquivalent(withTail(new IrOp.VfpCompare(false, false, false, 0, 1, Condition.AL)),
+        assertVfpBlockEquivalent(withTail(new VfpOp.Compare(false, false, false, 0, 1, Condition.AL)),
                 core -> {
                     core.vfp().setSFloat(0, 3.0f);
                     core.vfp().setSFloat(1, 2.0f);
@@ -80,13 +82,13 @@ class TruffleCodeEmitterVfpEquivalenceTest {
 
     @Test
     void vfpConvertMatchesInterpreter() {
-        assertVfpBlockEquivalent(withTail(new IrOp.VfpConvert(IrOp.VfpConversion.S32_TO_F32, 0, 1, Condition.AL)),
+        assertVfpBlockEquivalent(withTail(new VfpOp.Convert(VfpOp.VfpConversion.S32_TO_F32, 0, 1, Condition.AL)),
                 core -> core.vfp().setS(1, 42));
     }
 
     @Test
     void vfpLoadMatchesInterpreter() {
-        assertVfpBlockEquivalent(withTail(new IrOp.VfpLoad(false, 0, 1, -1, 0, Condition.AL)),
+        assertVfpBlockEquivalent(withTail(new VfpOp.Load(false, 0, 1, -1, 0, Condition.AL)),
                 core -> {
                     core.setRegister(1, 0x40);
                     core.memory().write32(0x40, Float.floatToRawIntBits(7.5f));
@@ -95,7 +97,7 @@ class TruffleCodeEmitterVfpEquivalenceTest {
 
     @Test
     void vfpStoreMatchesInterpreter() {
-        assertVfpBlockEquivalent(withTail(new IrOp.VfpStore(false, 0, 1, -1, 0, Condition.AL)),
+        assertVfpBlockEquivalent(withTail(new VfpOp.Store(false, 0, 1, -1, 0, Condition.AL)),
                 core -> {
                     core.setRegister(1, 0x40);
                     core.vfp().setSFloat(0, 9.25f);
@@ -105,7 +107,7 @@ class TruffleCodeEmitterVfpEquivalenceTest {
     @Test
     void vfpMultipleTransferMatchesInterpreter() {
         assertVfpBlockEquivalent(
-                withTail(new IrOp.VfpMultipleTransfer(true, false, 0, -1, 4, 2, false, false, Condition.AL)),
+                withTail(new VfpOp.MultipleTransfer(true, false, 0, -1, 4, 2, false, false, Condition.AL)),
                 core -> {
                     core.setRegister(0, 0x40);
                     core.memory().write32(0x40, Float.floatToRawIntBits(1.0f));
@@ -115,25 +117,25 @@ class TruffleCodeEmitterVfpEquivalenceTest {
 
     @Test
     void vfpCoreTransferMatchesInterpreter() {
-        assertVfpBlockEquivalent(withTail(new IrOp.VfpCoreTransfer(true, 3, 0, false, Condition.AL)),
+        assertVfpBlockEquivalent(withTail(new VfpOp.CoreTransfer(true, 3, 0, false, Condition.AL)),
                 core -> core.vfp().setS(0, 0x3F80_0000));
     }
 
     @Test
     void vfpCorePairTransferMatchesInterpreter() {
-        assertVfpBlockEquivalent(withTail(new IrOp.VfpCorePairTransfer(true, 3, 4, 0, Condition.AL)),
+        assertVfpBlockEquivalent(withTail(new VfpOp.CorePairTransfer(true, 3, 4, 0, Condition.AL)),
                 core -> core.vfp().setD(0, 0x1234_5678_9ABC_DEF0L));
     }
 
     @Test
     void vfpSystemTransferMatchesInterpreter() {
-        assertVfpBlockEquivalent(withTail(new IrOp.VfpSystemTransfer(true, 3, Condition.AL)),
+        assertVfpBlockEquivalent(withTail(new VfpOp.SystemTransfer(true, 3, Condition.AL)),
                 core -> core.fpscr().setValue(0x0800_0000));
     }
 
     @Test
     void vfpCorePairTransferSingleMatchesInterpreter() {
-        assertVfpBlockEquivalent(withTail(new IrOp.VfpCorePairTransferSingle(true, 3, 4, 0, Condition.AL)),
+        assertVfpBlockEquivalent(withTail(new VfpOp.CorePairTransferSingle(true, 3, 4, 0, Condition.AL)),
                 core -> {
                     core.vfp().setS(0, 111);
                     core.vfp().setS(1, 222);
@@ -142,7 +144,7 @@ class TruffleCodeEmitterVfpEquivalenceTest {
 
     @Test
     void vfpConvertFixedMatchesInterpreter() {
-        assertVfpBlockEquivalent(withTail(new IrOp.VfpConvertFixed(false, false, false, true, 8, 0, Condition.AL)),
+        assertVfpBlockEquivalent(withTail(new VfpOp.ConvertFixed(false, false, false, true, 8, 0, Condition.AL)),
                 core -> core.vfp().setS(0, 256));
     }
 
@@ -150,7 +152,7 @@ class TruffleCodeEmitterVfpEquivalenceTest {
     void coprocessorDoubleWithoutHandlerRequestsUndefinedMatchesInterpreter() {
         // Sem CoprocessorBus configurado, MCRR/MRRC cai no mesmo caminho UNDEFINED nos dois
         // backends (mesma chamada a IrSystemExecutor#executeCoprocessorDouble).
-        assertVfpBlockEquivalent(withTail(new IrOp.CoprocessorDouble(true, 15, 0, 0, 0, 1, 4, Condition.AL)),
+        assertVfpBlockEquivalent(withTail(new SystemOp.CoprocessorDouble(true, 15, 0, 0, 0, 1, 4, Condition.AL)),
                 core -> {
                 });
     }
@@ -158,7 +160,7 @@ class TruffleCodeEmitterVfpEquivalenceTest {
     @Test
     void mProfileSystemRegisterMatchesInterpreter() {
         assertVfpBlockEquivalent(ArmArchitecture.ARMV7M,
-                withTail(new IrOp.MProfileSystemRegister(false, 3, 0, Condition.AL)),
+                withTail(new SystemOp.MProfileSystemRegister(false, 3, 0, Condition.AL)),
                 core -> {
                     core.setExceptionModel(new MProfileExceptionModel());
                     core.setRegister(3, 0x1000);

@@ -14,7 +14,7 @@ import dev.vitorsilverio.armjitter.decoder.DecodedInstruction;
 import dev.vitorsilverio.armjitter.decoder.InstructionKind;
 import dev.vitorsilverio.armjitter.decoder.ThumbDecoder;
 import dev.vitorsilverio.armjitter.executor64.Ir64BlockExecutor;
-import dev.vitorsilverio.armjitter.ir.IrOp;
+import dev.vitorsilverio.armjitter.ir.IntegerOp;
 import dev.vitorsilverio.armjitter.ir64.IntegerOp64;
 import dev.vitorsilverio.armjitter.memory.AddressSpace64;
 import dev.vitorsilverio.armjitter.support.TestAddressSpace;
@@ -175,7 +175,7 @@ class Crc32ArithmeticTest {
             ArmCore core32 = newArmCore();
             core32.setRegister(0, acc);
             core32.setRegister(1, data);
-            executor32.executeOp(core32, new IrOp.Crc32(2, 0, 1, dataWidthBits, castagnoli, Condition.AL), 0);
+            executor32.executeOp(core32, new IntegerOp.Crc32(2, 0, 1, dataWidthBits, castagnoli, Condition.AL), 0);
 
             Ir64BlockExecutor executor64 = new Ir64BlockExecutor();
             Aarch64Core core64 = new Aarch64Core(AddressSpace64.wrapping(new TestAddressSpace(16)));
@@ -271,7 +271,7 @@ class Crc32ArithmeticTest {
         core.setRegister(2, 0x1234_5678);
         core.cpsr().setNzcv(false, true, false, false); // Z=1 -> NE (cond=0001) falha
         IrBlockExecutor executor = new IrBlockExecutor(ArmArchitecture.ARMV8A_32);
-        executor.executeOp(core, new IrOp.Crc32(2, 0, 1, 8, false, Condition.NE), 0);
+        executor.executeOp(core, new IntegerOp.Crc32(2, 0, 1, 8, false, Condition.NE), 0);
         assertEquals(0x1234_5678, core.register(2), "condição falsa não deve executar o CRC32");
     }
 
@@ -280,7 +280,7 @@ class Crc32ArithmeticTest {
     @Test
     void asmNativePolicyRejectsCrc32() {
         assertFalse(AsmNativePolicy.supports(
-                new IrOp.Crc32(0, 1, 2, 8, false, Condition.AL)),
+                new IntegerOp.Crc32(0, 1, 2, 8, false, Condition.AL)),
                 "CRC32 não tem emissor nativo (B14.3: decode+interpretado apenas)");
     }
 

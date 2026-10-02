@@ -12,6 +12,8 @@ import dev.vitorsilverio.armjitter.core.ArmCore;
 import dev.vitorsilverio.armjitter.core.Condition;
 import dev.vitorsilverio.armjitter.ir.IrBlock;
 import dev.vitorsilverio.armjitter.ir.IrOp;
+import dev.vitorsilverio.armjitter.ir.NeonFpOp;
+import dev.vitorsilverio.armjitter.ir.NeonIntegerOp;
 import dev.vitorsilverio.armjitter.ir.StandardIrBuilder;
 import dev.vitorsilverio.armjitter.support.TestAddressSpace;
 import dev.vitorsilverio.armjitter.swi.SwiDispatcher;
@@ -25,7 +27,7 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 
 /// NEON "2-reg-and-shift" com deslocamento por IMEDIATO A32 (task B13.7): `VSHR`/`VSRA`/`VRSHR`/
 /// `VRSRA`/`VSRI`/`VSHL`/`VSLI`/`VQSHLU`/`VQSHL` (14 famílias × 4 larguras) →
-/// `IrOp.NeonShiftImmediate` → execução pelo núcleo vetorial COMPARTILHADO com o lado A64
+/// `NeonIntegerOp.ShiftImmediate` → execução pelo núcleo vetorial COMPARTILHADO com o lado A64
 /// ({@code AdvSimdLanes.shiftImmediate}).
 ///
 /// Encodings golden conferidos com `arm-none-eabi-as -mfpu=neon -march=armv8-a` do devkitARM.
@@ -139,65 +141,65 @@ class NeonShiftImmediateDecoderTest {
     @Test
     void everyFamilyDecodesWithTheRightOperationEszAndShift() {
         // opc 0000: VSHR
-        assertEquals(new IrOp.NeonShiftImmediate(AdvSimdShiftImmediateOp.SSHR, false, 0, 1, 0, 1),
+        assertEquals(new NeonIntegerOp.ShiftImmediate(AdvSimdShiftImmediateOp.SSHR, false, 0, 1, 0, 1),
                 liftedOf(enc(0, 1, 7, 0b0000, false, 0, 1)));
-        assertEquals(new IrOp.NeonShiftImmediate(AdvSimdShiftImmediateOp.USHR, false, 0, 3, 0, 1),
+        assertEquals(new NeonIntegerOp.ShiftImmediate(AdvSimdShiftImmediateOp.USHR, false, 0, 3, 0, 1),
                 liftedOf(enc(1, 1, 5, 0b0000, false, 0, 1)));
         // opc 0001: VSRA
-        assertEquals(new IrOp.NeonShiftImmediate(AdvSimdShiftImmediateOp.SSRA, false, 1, 4, 2, 3),
+        assertEquals(new NeonIntegerOp.ShiftImmediate(AdvSimdShiftImmediateOp.SSRA, false, 1, 4, 2, 3),
                 liftedOf(enc(0, 3, 4, 0b0001, false, 2, 3)));
-        assertEquals(new IrOp.NeonShiftImmediate(AdvSimdShiftImmediateOp.USRA, false, 2, 8, 4, 5),
+        assertEquals(new NeonIntegerOp.ShiftImmediate(AdvSimdShiftImmediateOp.USRA, false, 2, 8, 4, 5),
                 liftedOf(enc(1, 7, 0, 0b0001, false, 4, 5)));
         // opc 0010: VRSHR
-        assertEquals(new IrOp.NeonShiftImmediate(AdvSimdShiftImmediateOp.SRSHR, false, 0, 1, 0, 1),
+        assertEquals(new NeonIntegerOp.ShiftImmediate(AdvSimdShiftImmediateOp.SRSHR, false, 0, 1, 0, 1),
                 liftedOf(enc(0, 1, 7, 0b0010, false, 0, 1)));
-        assertEquals(new IrOp.NeonShiftImmediate(AdvSimdShiftImmediateOp.URSHR, false, 3, 40, 6, 7),
+        assertEquals(new NeonIntegerOp.ShiftImmediate(AdvSimdShiftImmediateOp.URSHR, false, 3, 40, 6, 7),
                 liftedOf(enc(1, 11, 0, 0b0010, false, 6, 7)));
         // opc 0011: VRSRA
-        assertEquals(new IrOp.NeonShiftImmediate(AdvSimdShiftImmediateOp.SRSRA, false, 0, 2, 0, 1),
+        assertEquals(new NeonIntegerOp.ShiftImmediate(AdvSimdShiftImmediateOp.SRSRA, false, 0, 2, 0, 1),
                 liftedOf(enc(0, 1, 6, 0b0011, false, 0, 1)));
-        assertEquals(new IrOp.NeonShiftImmediate(AdvSimdShiftImmediateOp.URSRA, false, 1, 5, 2, 3),
+        assertEquals(new NeonIntegerOp.ShiftImmediate(AdvSimdShiftImmediateOp.URSRA, false, 1, 5, 2, 3),
                 liftedOf(enc(1, 3, 3, 0b0011, false, 2, 3)));
         // opc 0100 U=1: VSRI
-        assertEquals(new IrOp.NeonShiftImmediate(AdvSimdShiftImmediateOp.SRI, false, 0, 1, 0, 1),
+        assertEquals(new NeonIntegerOp.ShiftImmediate(AdvSimdShiftImmediateOp.SRI, false, 0, 1, 0, 1),
                 liftedOf(enc(1, 1, 7, 0b0100, false, 0, 1)));
         // opc 0101: VSHL (U=0) / VSLI (U=1) — deslocamento à ESQUERDA
-        assertEquals(new IrOp.NeonShiftImmediate(AdvSimdShiftImmediateOp.SHL, false, 0, 0, 0, 1),
+        assertEquals(new NeonIntegerOp.ShiftImmediate(AdvSimdShiftImmediateOp.SHL, false, 0, 0, 0, 1),
                 liftedOf(enc(0, 1, 0, 0b0101, false, 0, 1)));
-        assertEquals(new IrOp.NeonShiftImmediate(AdvSimdShiftImmediateOp.SHL, false, 0, 7, 0, 1),
+        assertEquals(new NeonIntegerOp.ShiftImmediate(AdvSimdShiftImmediateOp.SHL, false, 0, 7, 0, 1),
                 liftedOf(enc(0, 1, 7, 0b0101, false, 0, 1)));
-        assertEquals(new IrOp.NeonShiftImmediate(AdvSimdShiftImmediateOp.SLI, false, 1, 1, 0, 1),
+        assertEquals(new NeonIntegerOp.ShiftImmediate(AdvSimdShiftImmediateOp.SLI, false, 1, 1, 0, 1),
                 liftedOf(enc(1, 2, 1, 0b0101, false, 0, 1)));
         // opc 0110 U=1: VQSHLU (esquerda)
-        assertEquals(new IrOp.NeonShiftImmediate(AdvSimdShiftImmediateOp.SQSHLU, false, 0, 1, 0, 1),
+        assertEquals(new NeonIntegerOp.ShiftImmediate(AdvSimdShiftImmediateOp.SQSHLU, false, 0, 1, 0, 1),
                 liftedOf(enc(1, 1, 1, 0b0110, false, 0, 1)));
         // opc 0111: VQSHL S/U (esquerda)
-        assertEquals(new IrOp.NeonShiftImmediate(AdvSimdShiftImmediateOp.SQSHL, false, 0, 1, 0, 1),
+        assertEquals(new NeonIntegerOp.ShiftImmediate(AdvSimdShiftImmediateOp.SQSHL, false, 0, 1, 0, 1),
                 liftedOf(enc(0, 1, 1, 0b0111, false, 0, 1)));
-        assertEquals(new IrOp.NeonShiftImmediate(AdvSimdShiftImmediateOp.UQSHL, false, 2, 8, 6, 7),
+        assertEquals(new NeonIntegerOp.ShiftImmediate(AdvSimdShiftImmediateOp.UQSHL, false, 2, 8, 6, 7),
                 liftedOf(enc(1, 5, 0, 0b0111, false, 6, 7)));
     }
 
     @Test
     void rightShiftAmountSpansOneToEsizeOnEveryWidth() {
-        assertEquals(1, ((IrOp.NeonShiftImmediate) liftedOf(enc(0, 1, 7, 0b0000, false, 0, 1))).shift());   // .s8 #1
-        assertEquals(8, ((IrOp.NeonShiftImmediate) liftedOf(enc(0, 1, 0, 0b0000, false, 0, 1))).shift());   // .s8 #8
-        assertEquals(1, ((IrOp.NeonShiftImmediate) liftedOf(enc(0, 3, 7, 0b0000, false, 0, 1))).shift());   // .s16 #1
-        assertEquals(16, ((IrOp.NeonShiftImmediate) liftedOf(enc(0, 2, 0, 0b0000, false, 0, 1))).shift());  // .s16 #16
-        assertEquals(1, ((IrOp.NeonShiftImmediate) liftedOf(enc(0, 7, 7, 0b0000, false, 0, 1))).shift());   // .s32 #1
-        assertEquals(32, ((IrOp.NeonShiftImmediate) liftedOf(enc(0, 4, 0, 0b0000, false, 0, 1))).shift());  // .s32 #32
-        assertEquals(1, ((IrOp.NeonShiftImmediate) liftedOf(enc(0, 15, 7, 0b0000, false, 0, 1))).shift());  // .s64 #1
-        assertEquals(64, ((IrOp.NeonShiftImmediate) liftedOf(enc(0, 8, 0, 0b0000, false, 0, 1))).shift());  // .s64 #64
+        assertEquals(1, ((NeonIntegerOp.ShiftImmediate) liftedOf(enc(0, 1, 7, 0b0000, false, 0, 1))).shift());   // .s8 #1
+        assertEquals(8, ((NeonIntegerOp.ShiftImmediate) liftedOf(enc(0, 1, 0, 0b0000, false, 0, 1))).shift());   // .s8 #8
+        assertEquals(1, ((NeonIntegerOp.ShiftImmediate) liftedOf(enc(0, 3, 7, 0b0000, false, 0, 1))).shift());   // .s16 #1
+        assertEquals(16, ((NeonIntegerOp.ShiftImmediate) liftedOf(enc(0, 2, 0, 0b0000, false, 0, 1))).shift());  // .s16 #16
+        assertEquals(1, ((NeonIntegerOp.ShiftImmediate) liftedOf(enc(0, 7, 7, 0b0000, false, 0, 1))).shift());   // .s32 #1
+        assertEquals(32, ((NeonIntegerOp.ShiftImmediate) liftedOf(enc(0, 4, 0, 0b0000, false, 0, 1))).shift());  // .s32 #32
+        assertEquals(1, ((NeonIntegerOp.ShiftImmediate) liftedOf(enc(0, 15, 7, 0b0000, false, 0, 1))).shift());  // .s64 #1
+        assertEquals(64, ((NeonIntegerOp.ShiftImmediate) liftedOf(enc(0, 8, 0, 0b0000, false, 0, 1))).shift());  // .s64 #64
     }
 
     @Test
     void leftShiftAmountSpansZeroToEsizeMinusOne() {
-        assertEquals(0, ((IrOp.NeonShiftImmediate) liftedOf(enc(0, 1, 0, 0b0101, false, 0, 1))).shift());   // .i8 #0
-        assertEquals(7, ((IrOp.NeonShiftImmediate) liftedOf(enc(0, 1, 7, 0b0101, false, 0, 1))).shift());   // .i8 #7
-        assertEquals(0, ((IrOp.NeonShiftImmediate) liftedOf(enc(0, 2, 0, 0b0101, false, 0, 1))).shift());   // .i16 #0
-        assertEquals(15, ((IrOp.NeonShiftImmediate) liftedOf(enc(0, 3, 7, 0b0101, false, 0, 1))).shift());  // .i16 #15
-        assertEquals(0, ((IrOp.NeonShiftImmediate) liftedOf(enc(0, 4, 0, 0b0101, false, 0, 1))).shift());   // .i32 #0
-        assertEquals(63, ((IrOp.NeonShiftImmediate) liftedOf(enc(0, 15, 7, 0b0101, false, 0, 1))).shift()); // .i64 #63
+        assertEquals(0, ((NeonIntegerOp.ShiftImmediate) liftedOf(enc(0, 1, 0, 0b0101, false, 0, 1))).shift());   // .i8 #0
+        assertEquals(7, ((NeonIntegerOp.ShiftImmediate) liftedOf(enc(0, 1, 7, 0b0101, false, 0, 1))).shift());   // .i8 #7
+        assertEquals(0, ((NeonIntegerOp.ShiftImmediate) liftedOf(enc(0, 2, 0, 0b0101, false, 0, 1))).shift());   // .i16 #0
+        assertEquals(15, ((NeonIntegerOp.ShiftImmediate) liftedOf(enc(0, 3, 7, 0b0101, false, 0, 1))).shift());  // .i16 #15
+        assertEquals(0, ((NeonIntegerOp.ShiftImmediate) liftedOf(enc(0, 4, 0, 0b0101, false, 0, 1))).shift());   // .i32 #0
+        assertEquals(63, ((NeonIntegerOp.ShiftImmediate) liftedOf(enc(0, 15, 7, 0b0101, false, 0, 1))).shift()); // .i64 #63
     }
 
     // ── Execução: núcleo compartilhado com o A64 ──
@@ -403,41 +405,41 @@ class NeonShiftImmediateDecoderTest {
 
     @Test
     void b138NarrowingDecodesWithRightOpEszShift() {
-        assertEquals(new IrOp.NeonShiftNarrowImmediate(AdvSimdShiftNarrowOp.SHRN, 0, 4, 0, 2),
+        assertEquals(new NeonIntegerOp.ShiftNarrowImmediate(AdvSimdShiftNarrowOp.SHRN, 0, 4, 0, 2),
                 liftedOf(enc(0, 1, 4, 0b1000, false, 0, 2)));      // vshrn.i16 d0,q1,#4
-        assertEquals(new IrOp.NeonShiftNarrowImmediate(AdvSimdShiftNarrowOp.SHRN, 2, 16, 0, 2),
+        assertEquals(new NeonIntegerOp.ShiftNarrowImmediate(AdvSimdShiftNarrowOp.SHRN, 2, 16, 0, 2),
                 liftedOf(enc(0, 6, 0, 0b1000, false, 0, 2)));      // vshrn.i64 d0,q1,#16
-        assertEquals(new IrOp.NeonShiftNarrowImmediate(AdvSimdShiftNarrowOp.RSHRN, 0, 4, 0, 2),
+        assertEquals(new NeonIntegerOp.ShiftNarrowImmediate(AdvSimdShiftNarrowOp.RSHRN, 0, 4, 0, 2),
                 liftedOf(enc(0, 1, 4, 0b1000, true, 0, 2)));       // vrshrn.i16
-        assertEquals(new IrOp.NeonShiftNarrowImmediate(AdvSimdShiftNarrowOp.SQSHRUN, 0, 3, 0, 2),
+        assertEquals(new NeonIntegerOp.ShiftNarrowImmediate(AdvSimdShiftNarrowOp.SQSHRUN, 0, 3, 0, 2),
                 liftedOf(enc(1, 1, 5, 0b1000, false, 0, 2)));      // vqshrun.s16
-        assertEquals(new IrOp.NeonShiftNarrowImmediate(AdvSimdShiftNarrowOp.SQRSHRUN, 0, 3, 0, 2),
+        assertEquals(new NeonIntegerOp.ShiftNarrowImmediate(AdvSimdShiftNarrowOp.SQRSHRUN, 0, 3, 0, 2),
                 liftedOf(enc(1, 1, 5, 0b1000, true, 0, 2)));       // vqrshrun.s16
-        assertEquals(new IrOp.NeonShiftNarrowImmediate(AdvSimdShiftNarrowOp.SQSHRN, 0, 3, 0, 2),
+        assertEquals(new NeonIntegerOp.ShiftNarrowImmediate(AdvSimdShiftNarrowOp.SQSHRN, 0, 3, 0, 2),
                 liftedOf(enc(0, 1, 5, 0b1001, false, 0, 2)));      // vqshrn.s16
-        assertEquals(new IrOp.NeonShiftNarrowImmediate(AdvSimdShiftNarrowOp.SQRSHRN, 1, 5, 0, 2),
+        assertEquals(new NeonIntegerOp.ShiftNarrowImmediate(AdvSimdShiftNarrowOp.SQRSHRN, 1, 5, 0, 2),
                 liftedOf(enc(0, 3, 3, 0b1001, true, 0, 2)));       // vqrshrn.s32
-        assertEquals(new IrOp.NeonShiftNarrowImmediate(AdvSimdShiftNarrowOp.UQSHRN, 0, 3, 0, 2),
+        assertEquals(new NeonIntegerOp.ShiftNarrowImmediate(AdvSimdShiftNarrowOp.UQSHRN, 0, 3, 0, 2),
                 liftedOf(enc(1, 1, 5, 0b1001, false, 0, 2)));      // vqshrn.u16
-        assertEquals(new IrOp.NeonShiftNarrowImmediate(AdvSimdShiftNarrowOp.UQRSHRN, 0, 3, 0, 2),
+        assertEquals(new NeonIntegerOp.ShiftNarrowImmediate(AdvSimdShiftNarrowOp.UQRSHRN, 0, 3, 0, 2),
                 liftedOf(enc(1, 1, 5, 0b1001, true, 0, 2)));       // vqrshrn.u16
     }
 
     @Test
     void b138WideningAndVcvtDecode() {
-        assertEquals(new IrOp.NeonShiftWidenImmediate(AdvSimdShiftWidenOp.SSHLL, 0, 3, 0, 1),
+        assertEquals(new NeonIntegerOp.ShiftWidenImmediate(AdvSimdShiftWidenOp.SSHLL, 0, 3, 0, 1),
                 liftedOf(enc(0, 1, 3, 0b1010, false, 0, 1)));      // vshll.s8 q0,d1,#3
-        assertEquals(new IrOp.NeonShiftWidenImmediate(AdvSimdShiftWidenOp.USHLL, 0, 0, 0, 1),
+        assertEquals(new NeonIntegerOp.ShiftWidenImmediate(AdvSimdShiftWidenOp.USHLL, 0, 0, 0, 1),
                 liftedOf(enc(1, 1, 0, 0b1010, false, 0, 1)));      // vmovl.u8 q0,d1  (shift 0)
-        assertEquals(new IrOp.NeonShiftWidenImmediate(AdvSimdShiftWidenOp.SSHLL, 2, 7, 4, 3),
+        assertEquals(new NeonIntegerOp.ShiftWidenImmediate(AdvSimdShiftWidenOp.SSHLL, 2, 7, 4, 3),
                 liftedOf(enc(0, 4, 7, 0b1010, false, 4, 3)));      // vshll.s32 q2,d3,#7
-        assertEquals(new IrOp.NeonConvertFixedPoint(false, 2, 4, true, true, 0, 1),
+        assertEquals(new NeonFpOp.ConvertFixedPoint(false, 2, 4, true, true, 0, 1),
                 liftedOf(enc(0, 7, 4, 0b1110, false, 0, 1)));      // vcvt.f32.s32 d0,d1,#4
-        assertEquals(new IrOp.NeonConvertFixedPoint(false, 2, 8, true, false, 0, 1),
+        assertEquals(new NeonFpOp.ConvertFixedPoint(false, 2, 8, true, false, 0, 1),
                 liftedOf(enc(1, 7, 0, 0b1110, false, 0, 1)));      // vcvt.f32.u32 d0,d1,#8
-        assertEquals(new IrOp.NeonConvertFixedPoint(false, 2, 1, false, true, 0, 1),
+        assertEquals(new NeonFpOp.ConvertFixedPoint(false, 2, 1, false, true, 0, 1),
                 liftedOf(enc(0, 7, 7, 0b1111, false, 0, 1)));      // vcvt.s32.f32 d0,d1,#1
-        assertEquals(new IrOp.NeonConvertFixedPoint(true, 2, 16, false, false, 4, 6),
+        assertEquals(new NeonFpOp.ConvertFixedPoint(true, 2, 16, false, false, 4, 6),
                 liftedOf(enc(1, 6, 0, 0b1111, true, 4, 6)));       // vcvt.u32.f32 q2,q3,#16
     }
 
@@ -590,13 +592,13 @@ class NeonShiftImmediateDecoderTest {
 
     @Test
     void b1324DecodesWithFractionBitsAndEszOne() {
-        assertEquals(new IrOp.NeonConvertFixedPoint(false, 1, 4, true, true, 0, 1),
+        assertEquals(new NeonFpOp.ConvertFixedPoint(false, 1, 4, true, true, 0, 1),
                 liftedOf(enc(0, 7, 4, 0b1100, false, 0, 1)));      // vcvt.f16.s16 d0,d1,#4
-        assertEquals(new IrOp.NeonConvertFixedPoint(false, 1, 8, true, false, 0, 1),
+        assertEquals(new NeonFpOp.ConvertFixedPoint(false, 1, 8, true, false, 0, 1),
                 liftedOf(enc(1, 7, 0, 0b1100, false, 0, 1)));      // vcvt.f16.u16 d0,d1,#8
-        assertEquals(new IrOp.NeonConvertFixedPoint(false, 1, 1, false, true, 0, 1),
+        assertEquals(new NeonFpOp.ConvertFixedPoint(false, 1, 1, false, true, 0, 1),
                 liftedOf(enc(0, 7, 7, 0b1101, false, 0, 1)));      // vcvt.s16.f16 d0,d1,#1
-        assertEquals(new IrOp.NeonConvertFixedPoint(true, 1, 16, false, false, 4, 6),
+        assertEquals(new NeonFpOp.ConvertFixedPoint(true, 1, 16, false, false, 4, 6),
                 liftedOf(enc(1, 6, 0, 0b1101, true, 4, 6)));       // vcvt.u16.f16 q2,q3,#16
     }
 

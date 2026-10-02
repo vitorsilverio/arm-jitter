@@ -4,7 +4,8 @@ import dev.vitorsilverio.armjitter.advsimd.AdvSimdNarrowUnaryOp;
 import dev.vitorsilverio.armjitter.advsimd.AdvSimdThreeSameOp;
 import dev.vitorsilverio.armjitter.arch.ArmArchitecture;
 import dev.vitorsilverio.armjitter.core.Condition;
-import dev.vitorsilverio.armjitter.ir.IrOp;
+import dev.vitorsilverio.armjitter.ir.MveFpOp;
+import dev.vitorsilverio.armjitter.ir.MveIntegerOp;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -49,26 +50,26 @@ class Thumb2MveVectorOverlapDecoderTest {
     @Test
     void decodesCvtPrecisionFourForms() {
         // U=0,bit12=0 -> VCVTB_SH (estreita, top=false).
-        IrOp.MveVectorFpConvertPrecision b = decodeCvt(0, 0);
+        MveFpOp.VectorFpConvertPrecision b = decodeCvt(0, 0);
         assertFalse(b.widen());
         assertFalse(b.top());
         // U=0,bit12=1 -> VCVTT_SH (estreita, top=true).
-        IrOp.MveVectorFpConvertPrecision t = decodeCvt(0, 1);
+        MveFpOp.VectorFpConvertPrecision t = decodeCvt(0, 1);
         assertFalse(t.widen());
         assertTrue(t.top());
         // U=1,bit12=0 -> VCVTB_HS (alarga, top=false).
-        IrOp.MveVectorFpConvertPrecision bh = decodeCvt(1, 0);
+        MveFpOp.VectorFpConvertPrecision bh = decodeCvt(1, 0);
         assertTrue(bh.widen());
         assertFalse(bh.top());
         // U=1,bit12=1 -> VCVTT_HS (alarga, top=true).
-        IrOp.MveVectorFpConvertPrecision th = decodeCvt(1, 1);
+        MveFpOp.VectorFpConvertPrecision th = decodeCvt(1, 1);
         assertTrue(th.widen());
         assertTrue(th.top());
     }
 
-    private static IrOp.MveVectorFpConvertPrecision decodeCvt(int u, int bit12) {
+    private static MveFpOp.VectorFpConvertPrecision decodeCvt(int u, int bit12) {
         int r = raw(u, 0b11, 1, 0b1111, bit12, 0, 2);
-        return assertInstanceOf(IrOp.MveVectorFpConvertPrecision.class,
+        return assertInstanceOf(MveFpOp.VectorFpConvertPrecision.class,
                 tryDecode(ArmArchitecture.ARMV8_1M_MVE, r).liftedOp());
     }
 
@@ -81,22 +82,22 @@ class Thumb2MveVectorOverlapDecoderTest {
     @Test
     void decodesMaxNmaMinNmaWithPrecisionFromU() {
         // U=0,bit12=0 -> VMAXNMA, esz=2 (binary32).
-        IrOp.MveVectorFpAbsAccumulate maxSingle = decodeMaxMinNma(0, 0);
+        MveFpOp.VectorFpAbsAccumulate maxSingle = decodeMaxMinNma(0, 0);
         assertTrue(maxSingle.max());
         assertEquals(2, maxSingle.esz());
         // U=1,bit12=0 -> VMAXNMA, esz=1 (binary16).
-        IrOp.MveVectorFpAbsAccumulate maxHalf = decodeMaxMinNma(1, 0);
+        MveFpOp.VectorFpAbsAccumulate maxHalf = decodeMaxMinNma(1, 0);
         assertTrue(maxHalf.max());
         assertEquals(1, maxHalf.esz());
         // U=0,bit12=1 -> VMINNMA, esz=2.
-        IrOp.MveVectorFpAbsAccumulate minSingle = decodeMaxMinNma(0, 1);
+        MveFpOp.VectorFpAbsAccumulate minSingle = decodeMaxMinNma(0, 1);
         assertFalse(minSingle.max());
         assertEquals(2, minSingle.esz());
     }
 
-    private static IrOp.MveVectorFpAbsAccumulate decodeMaxMinNma(int u, int bit12) {
+    private static MveFpOp.VectorFpAbsAccumulate decodeMaxMinNma(int u, int bit12) {
         int r = raw(u, 0b11, 3, 0b1111, bit12, 1, 4);
-        IrOp.MveVectorFpAbsAccumulate op = assertInstanceOf(IrOp.MveVectorFpAbsAccumulate.class,
+        MveFpOp.VectorFpAbsAccumulate op = assertInstanceOf(MveFpOp.VectorFpAbsAccumulate.class,
                 tryDecode(ArmArchitecture.ARMV8_1M_MVE, r).liftedOp());
         assertEquals(3, op.qd());
         assertEquals(4, op.qm());
@@ -109,7 +110,7 @@ class Thumb2MveVectorOverlapDecoderTest {
     void decodesShllT2ByteAndHalfword() {
         // U=0(signed),bits[19:18]=00(byte,shift=8),bit12=0(bottom).
         int rb = raw(0, 0b11, 0, 0b0001, 0, 0, 1);
-        IrOp.MveVectorShiftWidenInterleaved b = assertInstanceOf(IrOp.MveVectorShiftWidenInterleaved.class,
+        MveIntegerOp.VectorShiftWidenInterleaved b = assertInstanceOf(MveIntegerOp.VectorShiftWidenInterleaved.class,
                 tryDecode(ArmArchitecture.ARMV8_1M_MVE, rb).liftedOp());
         assertTrue(b.signed());
         assertEquals(0, b.esz());
@@ -117,7 +118,7 @@ class Thumb2MveVectorOverlapDecoderTest {
 
         // U=1(unsigned),bits[19:18]=01(halfword,shift=16),bit12=1(top).
         int rt = raw(1, 0b11, 0, 0b0101, 1, 0, 1);
-        IrOp.MveVectorShiftWidenInterleaved t = assertInstanceOf(IrOp.MveVectorShiftWidenInterleaved.class,
+        MveIntegerOp.VectorShiftWidenInterleaved t = assertInstanceOf(MveIntegerOp.VectorShiftWidenInterleaved.class,
                 tryDecode(ArmArchitecture.ARMV8_1M_MVE, rt).liftedOp());
         assertFalse(t.signed());
         assertEquals(1, t.esz());
@@ -135,13 +136,13 @@ class Thumb2MveVectorOverlapDecoderTest {
     void decodesQmovunSignedAndMovnUnsignedAtSameSlot() {
         // U=0,bit7=1 -> VQMOVUNB (SQXTUN).
         int rqmovun = raw(0, 0b11, 0, 0b0001, 0, 1, 1);
-        IrOp.MveVectorNarrowInterleaved qmovun = assertInstanceOf(IrOp.MveVectorNarrowInterleaved.class,
+        MveIntegerOp.VectorNarrowInterleaved qmovun = assertInstanceOf(MveIntegerOp.VectorNarrowInterleaved.class,
                 tryDecode(ArmArchitecture.ARMV8_1M_MVE, rqmovun).liftedOp());
         assertEquals(AdvSimdNarrowUnaryOp.SQXTUN, qmovun.op());
 
         // U=1,bit7=1 -> VMOVNB (XTN, plain, sem saturação) — achado real: NÃO é "VQMOVUN unsigned".
         int rmovn = raw(1, 0b11, 0, 0b0001, 0, 1, 1);
-        IrOp.MveVectorNarrowInterleaved movn = assertInstanceOf(IrOp.MveVectorNarrowInterleaved.class,
+        MveIntegerOp.VectorNarrowInterleaved movn = assertInstanceOf(MveIntegerOp.VectorNarrowInterleaved.class,
                 tryDecode(ArmArchitecture.ARMV8_1M_MVE, rmovn).liftedOp());
         assertEquals(AdvSimdNarrowUnaryOp.XTN, movn.op());
     }
@@ -152,17 +153,17 @@ class Thumb2MveVectorOverlapDecoderTest {
     void decodesQmovnSignedAndUnsigned() {
         int rs = raw(0, 0b11, 0, 0b0011, 0, 0, 1);
         assertEquals(AdvSimdNarrowUnaryOp.SQXTN,
-                ((IrOp.MveVectorNarrowInterleaved) tryDecode(ArmArchitecture.ARMV8_1M_MVE, rs).liftedOp()).op());
+                ((MveIntegerOp.VectorNarrowInterleaved) tryDecode(ArmArchitecture.ARMV8_1M_MVE, rs).liftedOp()).op());
         int ru = raw(1, 0b11, 0, 0b0011, 0, 0, 1);
         assertEquals(AdvSimdNarrowUnaryOp.UQXTN,
-                ((IrOp.MveVectorNarrowInterleaved) tryDecode(ArmArchitecture.ARMV8_1M_MVE, ru).liftedOp()).op());
+                ((MveIntegerOp.VectorNarrowInterleaved) tryDecode(ArmArchitecture.ARMV8_1M_MVE, ru).liftedOp()).op());
     }
 
     @Test
     void decodesMaxAMinAOnlyForUnsigned0() {
         // U=0,bit12=0,bit7=1 -> VMAXA.
         int rmax = raw(0, 0b11, 2, 0b0011, 0, 1, 3);
-        IrOp.MveVectorAbsAccumulate max = assertInstanceOf(IrOp.MveVectorAbsAccumulate.class,
+        MveIntegerOp.VectorAbsAccumulate max = assertInstanceOf(MveIntegerOp.VectorAbsAccumulate.class,
                 tryDecode(ArmArchitecture.ARMV8_1M_MVE, rmax).liftedOp());
         assertTrue(max.max());
         assertEquals(2, max.qd());
@@ -170,7 +171,7 @@ class Thumb2MveVectorOverlapDecoderTest {
 
         // U=0,bit12=1,bit7=1 -> VMINA.
         int rmin = raw(0, 0b11, 2, 0b0011, 1, 1, 3);
-        IrOp.MveVectorAbsAccumulate min = assertInstanceOf(IrOp.MveVectorAbsAccumulate.class,
+        MveIntegerOp.VectorAbsAccumulate min = assertInstanceOf(MveIntegerOp.VectorAbsAccumulate.class,
                 tryDecode(ArmArchitecture.ARMV8_1M_MVE, rmin).liftedOp());
         assertFalse(min.max());
     }
@@ -203,7 +204,7 @@ class Thumb2MveVectorOverlapDecoderTest {
 
     private static AdvSimdThreeSameOp mulhOp(int u, int bit12) {
         int r = rawMulh(u, 1, 0, 2, bit12, 3);
-        IrOp.MveVector2Op op = assertInstanceOf(IrOp.MveVector2Op.class,
+        MveIntegerOp.Vector2Op op = assertInstanceOf(MveIntegerOp.Vector2Op.class,
                 tryDecode(ArmArchitecture.ARMV8_1M_MVE, r).liftedOp());
         assertEquals(1, op.esz());
         assertEquals(2, op.qn());

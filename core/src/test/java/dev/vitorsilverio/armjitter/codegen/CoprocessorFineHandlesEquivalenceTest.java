@@ -9,11 +9,12 @@ import dev.vitorsilverio.armjitter.decoder.ArmDecoder;
 import dev.vitorsilverio.armjitter.ir.IrBlock;
 import dev.vitorsilverio.armjitter.ir.StandardIrBlockLifter;
 import dev.vitorsilverio.armjitter.ir.StandardIrBuilder;
+import dev.vitorsilverio.armjitter.ir.SystemOp;
 import dev.vitorsilverio.armjitter.support.EquivalenceTestSupport;
 import dev.vitorsilverio.armjitter.support.TestAddressSpace;
 import org.junit.jupiter.api.Test;
 
-/// B4.0.4.1: prova que a emissão ASM nativa de {@link dev.vitorsilverio.armjitter.ir.IrOp.Coprocessor}
+/// B4.0.4.1: prova que a emissão ASM nativa de {@link dev.vitorsilverio.armjitter.ir.SystemOp.Coprocessor}
 /// (native desde sempre, ver {@code AsmNativePolicy}) consulta o mesmo predicado fino de
 /// {@link CoprocessorBus#handles(int, int, int, int, int)} que o interpretado — um bus que atende
 /// CP15 (grosso) mas só reivindica um registrador específico (fino) precisa produzir o MESMO
@@ -29,7 +30,7 @@ class CoprocessorFineHandlesEquivalenceTest extends BlockEquivalenceTest {
         IrBlock block = new StandardIrBlockLifter(
                 new ArmDecoder(ArmArchitecture.ARMV5TE), new StandardIrBuilder()).lift(memory, 0, 1);
 
-        assertTrue(asmEmitter.isNativeSupported(block), "IrOp.Coprocessor é nativo desde sempre");
+        assertTrue(asmEmitter.isNativeSupported(block), "SystemOp.Coprocessor é nativo desde sempre");
         harness.assertEquivalent(referenceEmitter, asmEmitter, block,
                 EquivalenceTestSupport.independentPair(memory, core -> core.setCoprocessorBus(new PartialCp15())));
     }
@@ -42,7 +43,7 @@ class CoprocessorFineHandlesEquivalenceTest extends BlockEquivalenceTest {
         IrBlock block = new StandardIrBlockLifter(
                 new ArmDecoder(ArmArchitecture.ARMV5TE), new StandardIrBuilder()).lift(memory, 0, 1);
 
-        assertTrue(asmEmitter.isNativeSupported(block), "IrOp.Coprocessor é nativo desde sempre");
+        assertTrue(asmEmitter.isNativeSupported(block), "SystemOp.Coprocessor é nativo desde sempre");
         harness.assertEquivalent(referenceEmitter, asmEmitter, block,
                 EquivalenceTestSupport.independentPair(memory, core -> {
                     core.setCoprocessorBus(new PartialCp15());

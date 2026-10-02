@@ -9,6 +9,7 @@ import dev.vitorsilverio.armjitter.core.ArmCore;
 import dev.vitorsilverio.armjitter.core.Condition;
 import dev.vitorsilverio.armjitter.ir.IrBlock;
 import dev.vitorsilverio.armjitter.ir.IrOp;
+import dev.vitorsilverio.armjitter.ir.NeonMoveOp;
 import dev.vitorsilverio.armjitter.ir.StandardIrBuilder;
 import dev.vitorsilverio.armjitter.support.TestAddressSpace;
 import dev.vitorsilverio.armjitter.swi.SwiDispatcher;
@@ -22,7 +23,7 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 
 /// NEON "1-reg-and-modified-immediate" A32 (task B13.9): `VMOV`/`VMVN`/`VORR`/`VBIC` imediato →
-/// `IrOp.NeonModifiedImmediate` → execução direta sobre a palavra `D` (o núcleo COMPARTILHADO
+/// `NeonMoveOp.ModifiedImmediate` → execução direta sobre a palavra `D` (o núcleo COMPARTILHADO
 /// {@code AdvSimdModifiedImmediate} só expande o imediato; não há lane a percorrer aqui, ao
 /// contrário de `AdvSimdLanes`).
 ///
@@ -133,46 +134,46 @@ class NeonModifiedImmediateDecoderTest {
 
     @Test
     void everyExpansionGroupDecodesToTheRightImm64() {
-        assertEquals(new IrOp.NeonModifiedImmediate(AdvSimdModifiedImmediateOp.MOV, false, 0x0000_00FF_0000_00FFL, 0),
+        assertEquals(new NeonMoveOp.ModifiedImmediate(AdvSimdModifiedImmediateOp.MOV, false, 0x0000_00FF_0000_00FFL, 0),
                 liftedOf(enc(1, 7, 0b0000, false, false, 0, 0xF))); // .i32 #0xFF
-        assertEquals(new IrOp.NeonModifiedImmediate(AdvSimdModifiedImmediateOp.MOV, false, 0x0000_FF00_0000_FF00L, 0),
+        assertEquals(new NeonMoveOp.ModifiedImmediate(AdvSimdModifiedImmediateOp.MOV, false, 0x0000_FF00_0000_FF00L, 0),
                 liftedOf(enc(1, 7, 0b0010, false, false, 0, 0xF))); // .i32 #0xFF00
-        assertEquals(new IrOp.NeonModifiedImmediate(AdvSimdModifiedImmediateOp.MOV, false, 0x00FF_0000_00FF_0000L, 0),
+        assertEquals(new NeonMoveOp.ModifiedImmediate(AdvSimdModifiedImmediateOp.MOV, false, 0x00FF_0000_00FF_0000L, 0),
                 liftedOf(enc(1, 7, 0b0100, false, false, 0, 0xF))); // .i32 #0xFF0000
-        assertEquals(new IrOp.NeonModifiedImmediate(AdvSimdModifiedImmediateOp.MOV, false, 0xFF00_0000_FF00_0000L, 0),
+        assertEquals(new NeonMoveOp.ModifiedImmediate(AdvSimdModifiedImmediateOp.MOV, false, 0xFF00_0000_FF00_0000L, 0),
                 liftedOf(enc(1, 7, 0b0110, false, false, 0, 0xF))); // .i32 #0xFF000000
-        assertEquals(new IrOp.NeonModifiedImmediate(AdvSimdModifiedImmediateOp.MOV, false, 0x00FF_00FF_00FF_00FFL, 0),
+        assertEquals(new NeonMoveOp.ModifiedImmediate(AdvSimdModifiedImmediateOp.MOV, false, 0x00FF_00FF_00FF_00FFL, 0),
                 liftedOf(enc(1, 7, 0b1000, false, false, 0, 0xF))); // .i16 #0xFF
-        assertEquals(new IrOp.NeonModifiedImmediate(AdvSimdModifiedImmediateOp.MOV, false, 0xFF00_FF00_FF00_FF00L, 0),
+        assertEquals(new NeonMoveOp.ModifiedImmediate(AdvSimdModifiedImmediateOp.MOV, false, 0xFF00_FF00_FF00_FF00L, 0),
                 liftedOf(enc(1, 7, 0b1010, false, false, 0, 0xF))); // .i16 #0xFF00
-        assertEquals(new IrOp.NeonModifiedImmediate(AdvSimdModifiedImmediateOp.MOV, false, 0x0000_FFFF_0000_FFFFL, 0),
+        assertEquals(new NeonMoveOp.ModifiedImmediate(AdvSimdModifiedImmediateOp.MOV, false, 0x0000_FFFF_0000_FFFFL, 0),
                 liftedOf(enc(1, 7, 0b1100, false, false, 0, 0xF))); // .i32 #0xFFFF (shifted ones, 8)
-        assertEquals(new IrOp.NeonModifiedImmediate(AdvSimdModifiedImmediateOp.MOV, false, 0x00FF_FFFF_00FF_FFFFL, 0),
+        assertEquals(new NeonMoveOp.ModifiedImmediate(AdvSimdModifiedImmediateOp.MOV, false, 0x00FF_FFFF_00FF_FFFFL, 0),
                 liftedOf(enc(1, 7, 0b1101, false, false, 0, 0xF))); // .i32 #0xFFFFFF (shifted ones, 16)
-        assertEquals(new IrOp.NeonModifiedImmediate(AdvSimdModifiedImmediateOp.MOV, false, 0xABAB_ABAB_ABAB_ABABL, 0),
+        assertEquals(new NeonMoveOp.ModifiedImmediate(AdvSimdModifiedImmediateOp.MOV, false, 0xABAB_ABAB_ABAB_ABABL, 0),
                 liftedOf(enc(1, 2, 0b1110, false, false, 0, 0xB))); // .i8 #0xAB
-        assertEquals(new IrOp.NeonModifiedImmediate(AdvSimdModifiedImmediateOp.MOV, false, 0xFF00_FF00_FF00_FF00L, 0),
+        assertEquals(new NeonMoveOp.ModifiedImmediate(AdvSimdModifiedImmediateOp.MOV, false, 0xFF00_FF00_FF00_FF00L, 0),
                 liftedOf(enc(1, 2, 0b1110, false, true, 0, 0xA))); // .i64 #0xFF00FF00FF00FF00
-        assertEquals(new IrOp.NeonModifiedImmediate(AdvSimdModifiedImmediateOp.MOV, false, 0x3FC0_0000_3FC0_0000L, 0),
+        assertEquals(new NeonMoveOp.ModifiedImmediate(AdvSimdModifiedImmediateOp.MOV, false, 0x3FC0_0000_3FC0_0000L, 0),
                 liftedOf(enc(0, 7, 0b1111, false, false, 0, 8))); // .f32 #1.5
     }
 
     @Test
     void classificationPicksTheRightOperation() {
         assertEquals(AdvSimdModifiedImmediateOp.MVN,
-                ((IrOp.NeonModifiedImmediate) liftedOf(enc(1, 7, 0b0000, false, true, 0, 0xF))).op()); // vmvn.i32
+                ((NeonMoveOp.ModifiedImmediate) liftedOf(enc(1, 7, 0b0000, false, true, 0, 0xF))).op()); // vmvn.i32
         assertEquals(AdvSimdModifiedImmediateOp.ORR,
-                ((IrOp.NeonModifiedImmediate) liftedOf(enc(1, 7, 0b0011, false, false, 0, 0xF))).op()); // vorr.i32
+                ((NeonMoveOp.ModifiedImmediate) liftedOf(enc(1, 7, 0b0011, false, false, 0, 0xF))).op()); // vorr.i32
         assertEquals(AdvSimdModifiedImmediateOp.BIC,
-                ((IrOp.NeonModifiedImmediate) liftedOf(enc(1, 7, 0b0011, false, true, 0, 0xF))).op()); // vbic.i32
+                ((NeonMoveOp.ModifiedImmediate) liftedOf(enc(1, 7, 0b0011, false, true, 0, 0xF))).op()); // vbic.i32
         // cmode=1110,op=1 é MOV (VMOV.I64), NÃO MVN — única exceção à regra "op=1 inverte".
         assertEquals(AdvSimdModifiedImmediateOp.MOV,
-                ((IrOp.NeonModifiedImmediate) liftedOf(enc(1, 2, 0b1110, false, true, 0, 0xA))).op());
+                ((NeonMoveOp.ModifiedImmediate) liftedOf(enc(1, 2, 0b1110, false, true, 0, 0xA))).op());
     }
 
     @Test
     void quadFormNamesTheDPairAndStaysWithinIt() {
-        IrOp.NeonModifiedImmediate op = (IrOp.NeonModifiedImmediate) liftedOf(enc(1, 7, 0b1001, true, false, 2, 0xF));
+        NeonMoveOp.ModifiedImmediate op = (NeonMoveOp.ModifiedImmediate) liftedOf(enc(1, 7, 0b1001, true, false, 2, 0xF));
         assertEquals(AdvSimdModifiedImmediateOp.ORR, op.op());
         assertEquals(2, op.vd());
         assertEquals(true, op.quad());
@@ -235,7 +236,7 @@ class NeonModifiedImmediateDecoderTest {
 
     /// `immh==0` (`L=0 && immH=000`) é o buraco que {@link NeonShiftImmediateDecoder} recusa DE
     /// PROPÓSITO. Com os DOIS decoders registrados (ordem: este primeiro), a mesma palavra agora
-    /// decodifica como `NeonModifiedImmediate`; e {@link NeonShiftImmediateDecoder} sozinho, na
+    /// decodifica como `NeonMoveOp.ModifiedImmediate`; e {@link NeonShiftImmediateDecoder} sozinho, na
     /// MESMA palavra, continua devolvendo `null` (contrato preservado, sem editar aquele teste).
     @Test
     void claimsExactlyTheHoleThatNeonShiftImmediateDecoderLeaves() {

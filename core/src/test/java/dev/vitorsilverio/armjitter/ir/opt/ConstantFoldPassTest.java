@@ -1,6 +1,7 @@
 package dev.vitorsilverio.armjitter.ir.opt;
 
 import dev.vitorsilverio.armjitter.core.Condition;
+import dev.vitorsilverio.armjitter.ir.IntegerOp;
 import dev.vitorsilverio.armjitter.ir.IrBlock;
 import dev.vitorsilverio.armjitter.ir.IrOp;
 import dev.vitorsilverio.armjitter.ir.IrOpCode;
@@ -20,12 +21,12 @@ class ConstantFoldPassTest {
         return b.sealed();
     }
 
-    private static IrOp.Alu alu(IrOpCode op, int dst, int src1Override, int imm) {
-        return new IrOp.Alu(op, dst, 0, src1Override, new IrOperand.Immediate(imm), false, Condition.AL);
+    private static IntegerOp.Alu alu(IrOpCode op, int dst, int src1Override, int imm) {
+        return new IntegerOp.Alu(op, dst, 0, src1Override, new IrOperand.Immediate(imm), false, Condition.AL);
     }
 
-    private static IrOp.Alu aluFlags(IrOpCode op, int dst, int src1Override, int imm) {
-        return new IrOp.Alu(op, dst, 0, src1Override, new IrOperand.Immediate(imm), true, Condition.AL);
+    private static IntegerOp.Alu aluFlags(IrOpCode op, int dst, int src1Override, int imm) {
+        return new IntegerOp.Alu(op, dst, 0, src1Override, new IrOperand.Immediate(imm), true, Condition.AL);
     }
 
     @Test
@@ -34,7 +35,7 @@ class ConstantFoldPassTest {
         IrBlock after = pass.optimize(before);
 
         assertEquals(1, after.operations().size());
-        IrOp.Alu folded = (IrOp.Alu) after.operations().getFirst();
+        IntegerOp.Alu folded = (IntegerOp.Alu) after.operations().getFirst();
         assertEquals(IrOpCode.MOV, folded.opcode());
         assertEquals(42, ((IrOperand.Immediate) folded.src2()).value());
     }
@@ -44,7 +45,7 @@ class ConstantFoldPassTest {
         IrBlock block = block(alu(IrOpCode.ADD, 1, 10, 5));
         IrBlock after = pass.optimize(block);
 
-        IrOp.Alu folded = (IrOp.Alu) after.operations().getFirst();
+        IntegerOp.Alu folded = (IntegerOp.Alu) after.operations().getFirst();
         assertEquals(IrOpCode.MOV, folded.opcode());
         assertEquals(15, ((IrOperand.Immediate) folded.src2()).value());
     }
@@ -54,7 +55,7 @@ class ConstantFoldPassTest {
         IrBlock block = block(alu(IrOpCode.SUB, 2, 20, 7));
         IrBlock after = pass.optimize(block);
 
-        assertEquals(13, ((IrOperand.Immediate) ((IrOp.Alu) after.operations().getFirst()).src2()).value());
+        assertEquals(13, ((IrOperand.Immediate) ((IntegerOp.Alu) after.operations().getFirst()).src2()).value());
     }
 
     @Test
@@ -62,7 +63,7 @@ class ConstantFoldPassTest {
         IrBlock block = block(alu(IrOpCode.AND, 3, 0xFF, 0x0F));
         IrBlock after = pass.optimize(block);
 
-        assertEquals(0x0F, ((IrOperand.Immediate) ((IrOp.Alu) after.operations().getFirst()).src2()).value());
+        assertEquals(0x0F, ((IrOperand.Immediate) ((IntegerOp.Alu) after.operations().getFirst()).src2()).value());
     }
 
     @Test
@@ -70,7 +71,7 @@ class ConstantFoldPassTest {
         IrBlock block = block(alu(IrOpCode.MVN, 0, -1, 0));
         IrBlock after = pass.optimize(block);
 
-        assertEquals(-1, ((IrOperand.Immediate) ((IrOp.Alu) after.operations().getFirst()).src2()).value());
+        assertEquals(-1, ((IrOperand.Immediate) ((IntegerOp.Alu) after.operations().getFirst()).src2()).value());
     }
 
     @Test
@@ -78,7 +79,7 @@ class ConstantFoldPassTest {
         IrBlock block = block(alu(IrOpCode.NEG, 0, -1, 5));
         IrBlock after = pass.optimize(block);
 
-        assertEquals(-5, ((IrOperand.Immediate) ((IrOp.Alu) after.operations().getFirst()).src2()).value());
+        assertEquals(-5, ((IrOperand.Immediate) ((IntegerOp.Alu) after.operations().getFirst()).src2()).value());
     }
 
     @Test
@@ -86,7 +87,7 @@ class ConstantFoldPassTest {
         IrBlock block = block(alu(IrOpCode.LSL, 0, 1, 3));  // 1 << 3 = 8
         IrBlock after = pass.optimize(block);
 
-        assertEquals(8, ((IrOperand.Immediate) ((IrOp.Alu) after.operations().getFirst()).src2()).value());
+        assertEquals(8, ((IrOperand.Immediate) ((IntegerOp.Alu) after.operations().getFirst()).src2()).value());
     }
 
     @Test
@@ -108,7 +109,7 @@ class ConstantFoldPassTest {
     @Test
     void unknownSrc1PreventsConstantFold() {
         // src1ValueOverride = -1 (desconhecido), opcode que precisa de src1
-        IrBlock block = block(new IrOp.Alu(IrOpCode.ADD, 0, 1, -1,
+        IrBlock block = block(new IntegerOp.Alu(IrOpCode.ADD, 0, 1, -1,
                 new IrOperand.Immediate(5), false, Condition.AL));
         IrBlock after = pass.optimize(block);
 
@@ -125,7 +126,7 @@ class ConstantFoldPassTest {
 
     @Test
     void cmpNotFoldedNoRegisterWrite() {
-        IrBlock block = block(new IrOp.Alu(IrOpCode.CMP, 0, 0, 5,
+        IrBlock block = block(new IntegerOp.Alu(IrOpCode.CMP, 0, 0, 5,
                 new IrOperand.Immediate(5), true, Condition.AL));
         IrBlock after = pass.optimize(block);
 
@@ -134,7 +135,7 @@ class ConstantFoldPassTest {
 
     @Test
     void identityOnBlockWithNoFoldableOps() {
-        IrOp.Alu unfoldable = new IrOp.Alu(IrOpCode.ADD, 0, 1, -1,
+        IntegerOp.Alu unfoldable = new IntegerOp.Alu(IrOpCode.ADD, 0, 1, -1,
                 new IrOperand.Immediate(1), false, Condition.AL);
         IrBlock block = block(unfoldable);
 
@@ -144,15 +145,15 @@ class ConstantFoldPassTest {
     @Test
     void multipleOpsPartiallyFolded() {
         IrOp foldable = alu(IrOpCode.ADD, 0, 3, 2);
-        IrOp unfoldable = new IrOp.Alu(IrOpCode.SUB, 1, 2, -1,
+        IrOp unfoldable = new IntegerOp.Alu(IrOpCode.SUB, 1, 2, -1,
                 new IrOperand.Immediate(1), false, Condition.AL);
         IrBlock block = block(foldable, unfoldable);
         IrBlock after = pass.optimize(block);
 
         assertEquals(2, after.operations().size());
-        assertEquals(IrOpCode.MOV, ((IrOp.Alu) after.operations().get(0)).opcode());
-        assertEquals(5, ((IrOperand.Immediate) ((IrOp.Alu) after.operations().get(0)).src2()).value());
-        assertEquals(IrOpCode.SUB, ((IrOp.Alu) after.operations().get(1)).opcode());
+        assertEquals(IrOpCode.MOV, ((IntegerOp.Alu) after.operations().get(0)).opcode());
+        assertEquals(5, ((IrOperand.Immediate) ((IntegerOp.Alu) after.operations().get(0)).src2()).value());
+        assertEquals(IrOpCode.SUB, ((IntegerOp.Alu) after.operations().get(1)).opcode());
     }
 
     @Test
@@ -161,7 +162,7 @@ class ConstantFoldPassTest {
         IrBlock block = block(alu(IrOpCode.ADD, 0, 10, 20));
         IrBlock after = pass.optimize(block);
 
-        IrOp.Alu folded = (IrOp.Alu) after.operations().getFirst();
+        IntegerOp.Alu folded = (IntegerOp.Alu) after.operations().getFirst();
         assertInstanceOf(IrOperand.Immediate.class, folded.src2());
         assertEquals(IrOpCode.MOV, folded.opcode());
     }

@@ -49,7 +49,7 @@ import dev.vitorsilverio.armjitter.core.ModeChangeListener;
 ///   `core.setCoprocessorBus(this)` para que isto aconteça (dois ganchos independentes do mesmo
 ///   `ArmCore`, mesmo padrão aditivo).
 /// - `c7` (manutenção de cache + barreiras `ISB`/`DSB`/`DMB`): NOP observável em toda escrita (sem
-///   cache nem pipeline modelados) e RAZ em leitura — mesmo precedente do `IrOp.MemoryBarrier`
+///   cache nem pipeline modelados) e RAZ em leitura — mesmo precedente do `SystemOp.MemoryBarrier`
 ///   32 bits.
 /// - `MCRR p15,0,Rt,Rt2,{c6,c14}` (F3, `virtual-arm-box`, sessão de decode `MCRR`/`MRRC`):
 ///   "invalidar" (`c6`) ou "limpar E invalidar" (`c14`) D-cache pela faixa `[Rt,Rt2]` (extensões

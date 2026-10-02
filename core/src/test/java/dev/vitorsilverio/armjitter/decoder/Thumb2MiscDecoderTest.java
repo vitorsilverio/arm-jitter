@@ -341,7 +341,7 @@ class Thumb2MiscDecoderTest {
     void msrThumb2RespectsFieldMaskLikeArmClassic() {
         // MSR CPSR_f (só o campo de flags, mask=1000): escreve NZCV, preserva controle (T/mode/I/F).
         // Comparado com o ARM clássico via mergePsr/cpsrWriteFieldMask compartilhados (mesmo
-        // IrOp.PsrTransfer) na task msrThumb2MatchesArmClassicRoundTripThroughCpsr acima (mask=fc,
+        // SystemOp.PsrTransfer) na task msrThumb2MatchesArmClassicRoundTripThroughCpsr acima (mask=fc,
         // ida-e-volta completa) — aqui o foco é só a preservação seletiva do campo, direto no
         // mesmo core, para não misturar o estado inicial de dois cores diferentes.
         ArmCore core = newCore(THUMB2_ARCH);

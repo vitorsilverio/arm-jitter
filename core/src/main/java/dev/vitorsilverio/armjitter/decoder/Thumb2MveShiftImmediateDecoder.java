@@ -6,7 +6,7 @@ import dev.vitorsilverio.armjitter.arch.ArmFeature;
 import dev.vitorsilverio.armjitter.arch.DecoderExtension;
 import dev.vitorsilverio.armjitter.core.Condition;
 import dev.vitorsilverio.armjitter.core.VfpRegisters;
-import dev.vitorsilverio.armjitter.ir.IrOp;
+import dev.vitorsilverio.armjitter.ir.MveIntegerOp;
 
 /// Deslocamentos por imediato, shift-and-insert e `VSHLL` forma **T1** (perfil M, B16.10, MVE/Helium,
 /// `target/isa-decode/mve.decode`, linhas 601-655, 38 encodings — confirmadas bit a bit contra o
@@ -78,9 +78,9 @@ import dev.vitorsilverio.armjitter.ir.IrOp;
 /// sem deslocar quando `shift=0`.
 ///
 /// **`VSHLL` T1 reusa o núcleo INTERCALADO da T2** (mesmo padrão `le*2 + (top?1:0)` de
-/// {@link IrOp.MveVectorShiftWidenInterleaved}, confirmado verbatim contra `DO_VSHLL` — a ÚNICA
+/// {@link MveIntegerOp.VectorShiftWidenInterleaved}, confirmado verbatim contra `DO_VSHLL` — a ÚNICA
 /// diferença real é que aqui `shift` vem do encoding, não fixo em `esize`) — ver
-/// {@link IrOp.MveVectorShiftWidenImmediateInterleaved}.
+/// {@link MveIntegerOp.VectorShiftWidenImmediateInterleaved}.
 ///
 /// Gate: {@link ArmFeature#MVE_INTEGER}. TEM que ser registrado ANTES de `Thumb2NocpDecoder` (mesmo
 /// espaço `bits[27:24] ∈ {1110,1111}` sob `M_PROFILE`). Usa o escape hatch de lifting
@@ -197,7 +197,7 @@ public final class Thumb2MveShiftImmediateDecoder implements DecoderExtension {
         boolean rightShift = isRightShiftNibble(nibble);
         int shift = rightShift ? (8 << esz) - rawShift : rawShift;
         return DecodedInstruction.lifted(address, raw, InstructionSet.THUMB, condition,
-                new IrOp.MveVectorShiftImmediate(op, esz, shift, qd, qm, condition));
+                new MveIntegerOp.VectorShiftImmediate(op, esz, shift, qd, qm, condition));
     }
 
     /// Os 6 nibbles REAIS desta família (`target/isa-decode/mve.decode`, linhas 601-655) — só estes
@@ -245,7 +245,7 @@ public final class Thumb2MveShiftImmediateDecoder implements DecoderExtension {
         }
         boolean signed = !u;
         return DecodedInstruction.lifted(address, raw, InstructionSet.THUMB, condition,
-                new IrOp.MveVectorShiftWidenImmediateInterleaved(signed, esz, shift, top, qd, qm, condition));
+                new MveIntegerOp.VectorShiftWidenImmediateInterleaved(signed, esz, shift, top, qd, qm, condition));
     }
 
     /// Deriva `{esz, rawShift}` do prefixo `bits[21:16]` (6 bits) das formas `VSHLI`/`VSHRI`/

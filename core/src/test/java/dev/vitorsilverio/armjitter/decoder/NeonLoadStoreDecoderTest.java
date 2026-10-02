@@ -7,6 +7,7 @@ import dev.vitorsilverio.armjitter.codegen.executor.IrBlockExecutor;
 import dev.vitorsilverio.armjitter.core.ArmCore;
 import dev.vitorsilverio.armjitter.ir.IrBlock;
 import dev.vitorsilverio.armjitter.ir.IrOp;
+import dev.vitorsilverio.armjitter.ir.NeonMoveOp;
 import dev.vitorsilverio.armjitter.ir.StandardIrBuilder;
 import dev.vitorsilverio.armjitter.support.TestAddressSpace;
 import dev.vitorsilverio.armjitter.swi.SwiDispatcher;
@@ -72,45 +73,45 @@ class NeonLoadStoreDecoderTest {
     void vld1SingleRegisterMultiple() {
         // vld1.8 {d0}, [r1]  (itype 7 = {1,1,1})
         assertEquals(InstructionKind.LIFTED_IR_OP, decode(0xF421_070F).kind());
-        assertEquals(new IrOp.NeonLoadStoreMultiple(true, 0, 1, 15, 0, 1, 1, 1), liftedOp(0xF421_070F));
+        assertEquals(new NeonMoveOp.LoadStoreMultiple(true, 0, 1, 15, 0, 1, 1, 1), liftedOp(0xF421_070F));
     }
 
     @Test
     void vld4WithDoubleSpacing() {
         // vld4.32 {d0,d2,d4,d6}, [r1]  (itype 1 = {1,4,2})
-        assertEquals(new IrOp.NeonLoadStoreMultiple(true, 0, 1, 15, 2, 1, 4, 2), liftedOp(0xF421_018F));
+        assertEquals(new NeonMoveOp.LoadStoreMultiple(true, 0, 1, 15, 2, 1, 4, 2), liftedOp(0xF421_018F));
     }
 
     @Test
     void vld2FourRegistersUsesRealQemuItype3Table() {
         // vld2.16 {d0-d3}, [r1]  — itype 3. A spec da task dizia {4,1,2}; o QEMU real é {2,2,2}.
-        assertEquals(new IrOp.NeonLoadStoreMultiple(true, 0, 1, 15, 1, 2, 2, 2), liftedOp(0xF421_034F));
+        assertEquals(new NeonMoveOp.LoadStoreMultiple(true, 0, 1, 15, 1, 2, 2, 2), liftedOp(0xF421_034F));
     }
 
     @Test
     void vst3Multiple() {
         // vst3.8 {d0,d1,d2}, [r1]  (itype 4 = {1,3,1}, l=0)
-        assertEquals(new IrOp.NeonLoadStoreMultiple(false, 0, 1, 15, 0, 1, 3, 1), liftedOp(0xF401_040F));
+        assertEquals(new NeonMoveOp.LoadStoreMultiple(false, 0, 1, 15, 0, 1, 3, 1), liftedOp(0xF401_040F));
     }
 
     @Test
     void multipleWritebackImmediateAndRegisterCarryRawRm() {
         // vld1.32 {d0,d1}, [r1]!    -> rm = 13 (imediato)
-        assertEquals(new IrOp.NeonLoadStoreMultiple(true, 0, 1, 13, 2, 2, 1, 1), liftedOp(0xF421_0A8D));
+        assertEquals(new NeonMoveOp.LoadStoreMultiple(true, 0, 1, 13, 2, 2, 1, 1), liftedOp(0xF421_0A8D));
         // vld1.32 {d0,d1}, [r1], r3 -> rm = 3
-        assertEquals(new IrOp.NeonLoadStoreMultiple(true, 0, 1, 3, 2, 2, 1, 1), liftedOp(0xF421_0A83));
+        assertEquals(new NeonMoveOp.LoadStoreMultiple(true, 0, 1, 3, 2, 2, 1, 1), liftedOp(0xF421_0A83));
     }
 
     @Test
     void multipleDoublewordElement() {
         // vld1.64 {d0}, [r1]  (size = 3)
-        assertEquals(new IrOp.NeonLoadStoreMultiple(true, 0, 1, 15, 3, 1, 1, 1), liftedOp(0xF421_07CF));
+        assertEquals(new NeonMoveOp.LoadStoreMultiple(true, 0, 1, 15, 3, 1, 1, 1), liftedOp(0xF421_07CF));
     }
 
     @Test
     void multipleAddressesD16WithD32Feature() {
         // vld1.16 {d16}, [r1]
-        assertEquals(new IrOp.NeonLoadStoreMultiple(true, 16, 1, 15, 1, 1, 1, 1), liftedOp(0xF461_074F));
+        assertEquals(new NeonMoveOp.LoadStoreMultiple(true, 16, 1, 15, 1, 1, 1, 1), liftedOp(0xF461_074F));
     }
 
     // ── Decode: single structure to one lane ─────────────────────────────────────────────────
@@ -118,19 +119,19 @@ class NeonLoadStoreDecoderTest {
     @Test
     void vld1SingleLane() {
         // vld1.8 {d0[3]}, [r1]
-        assertEquals(new IrOp.NeonLoadStoreSingle(true, 0, 1, 15, 0, 1, 1, 3), liftedOp(0xF4A1_006F));
+        assertEquals(new NeonMoveOp.LoadStoreSingle(true, 0, 1, 15, 0, 1, 1, 3), liftedOp(0xF4A1_006F));
     }
 
     @Test
     void vld2SingleLaneDoubleSpacing() {
         // vld2.32 {d0[1],d2[1]}, [r1]  (stride 2)
-        assertEquals(new IrOp.NeonLoadStoreSingle(true, 0, 1, 15, 2, 2, 2, 1), liftedOp(0xF4A1_09CF));
+        assertEquals(new NeonMoveOp.LoadStoreSingle(true, 0, 1, 15, 2, 2, 2, 1), liftedOp(0xF4A1_09CF));
     }
 
     @Test
     void vst1SingleLane() {
         // vst1.8 {d0[3]}, [r1]
-        assertEquals(new IrOp.NeonLoadStoreSingle(false, 0, 1, 15, 0, 1, 1, 3), liftedOp(0xF481_006F));
+        assertEquals(new NeonMoveOp.LoadStoreSingle(false, 0, 1, 15, 0, 1, 1, 3), liftedOp(0xF481_006F));
     }
 
     // ── Decode: single structure to all lanes ────────────────────────────────────────────────
@@ -138,19 +139,19 @@ class NeonLoadStoreDecoderTest {
     @Test
     void vld1AllLanes() {
         // vld1.8 {d0[]}, [r1]
-        assertEquals(new IrOp.NeonLoadAllLanes(0, 1, 15, 0, 1, 1, false), liftedOp(0xF4A1_0C0F));
+        assertEquals(new NeonMoveOp.LoadAllLanes(0, 1, 15, 0, 1, 1, false), liftedOp(0xF4A1_0C0F));
     }
 
     @Test
     void vld1AllLanesTwoRegistersSetsQuad() {
         // vld1.8 {d0[],d1[]}, [r1]  (bit t = 1 -> replica em DOIS D)
-        assertEquals(new IrOp.NeonLoadAllLanes(0, 1, 15, 0, 1, 2, true), liftedOp(0xF4A1_0C2F));
+        assertEquals(new NeonMoveOp.LoadAllLanes(0, 1, 15, 0, 1, 2, true), liftedOp(0xF4A1_0C2F));
     }
 
     @Test
     void vld4AllLanes() {
         // vld4.16 {d0[],d1[],d2[],d3[]}, [r1]
-        assertEquals(new IrOp.NeonLoadAllLanes(0, 1, 15, 1, 4, 1, false), liftedOp(0xF4A1_0F4F));
+        assertEquals(new NeonMoveOp.LoadAllLanes(0, 1, 15, 1, 4, 1, false), liftedOp(0xF4A1_0F4F));
     }
 
     // ── UNDEFINED ────────────────────────────────────────────────────────────────────────────

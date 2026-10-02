@@ -59,7 +59,7 @@ class VlldmVlstmTest {
         int pcBefore = core.programCounter();
 
         boolean pcChanged = new dev.vitorsilverio.armjitter.codegen.executor.IrBlockExecutor(ArmArchitecture.ARMV7M)
-                .executeOp(core, new dev.vitorsilverio.armjitter.ir.IrOp.VlldmVlstm(Condition.EQ), pcBefore);
+                .executeOp(core, new dev.vitorsilverio.armjitter.ir.VfpOp.VlldmVlstm(Condition.EQ), pcBefore);
 
         assertTrue(!pcChanged, "condição falsa não deve mudar o PC nem entrar em exceção");
         assertEquals(0, model.currentException(), "sem exceção quando a condição é falsa");

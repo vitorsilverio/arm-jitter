@@ -1,7 +1,7 @@
 package dev.vitorsilverio.armjitter.ir;
 
 /// Variante (prefixo) de uma operação de aritmética paralela ARMv6
-/// ({@link IrOp.ParallelAlu}). Regra de semântica por variante:
+/// ({@link IntegerOp.ParallelAlu}). Regra de semântica por variante:
 ///
 /// - sem prefixo (`SIGNED`/`UNSIGNED`): resultado com wrap E escrita dos flags GE do CPSR
 ///   (com sinal: lane ≥ 0; sem sinal: carry na soma, ausência de borrow na subtração);

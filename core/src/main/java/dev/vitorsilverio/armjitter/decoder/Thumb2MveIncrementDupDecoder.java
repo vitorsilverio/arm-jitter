@@ -6,6 +6,7 @@ import dev.vitorsilverio.armjitter.arch.DecoderExtension;
 import dev.vitorsilverio.armjitter.core.Condition;
 import dev.vitorsilverio.armjitter.core.VfpRegisters;
 import dev.vitorsilverio.armjitter.ir.IrOp;
+import dev.vitorsilverio.armjitter.ir.MveMoveOp;
 
 /// `VIDUP`/`VDDUP`/`VIWDUP`/`VDWDUP` (geradores de vetor incremental/decremental, perfil M, B16.5,
 /// MVE/Helium) — as 4 linhas de `target/isa-decode/mve.decode` (confirmadas bit a bit via leitura
@@ -55,7 +56,7 @@ import dev.vitorsilverio.armjitter.ir.IrOp;
 /// `13`/`15`). `size == 3` (doubleword) não existe em nenhuma forma (`fns[3] == NULL` real).
 ///
 /// Gate: {@link ArmFeature#MVE_INTEGER}. Não usa o escape hatch de lifting — os campos cabem nos
-/// `IrOp` novos ({@link IrOp.MveIncrementDup}/{@link IrOp.MveWrappingIncrementDup}), decodificados
+/// `IrOp` novos ({@link MveMoveOp.IncrementDup}/{@link MveMoveOp.WrappingIncrementDup}), decodificados
 /// diretamente para eles via {@link DecodedInstruction#lifted} do mesmo jeito, por simplicidade de
 /// não precisar de um `InstructionKind` novo (mesmo precedente das outras tasks da escada B16.5).
 public final class Thumb2MveIncrementDupDecoder implements DecoderExtension {
@@ -124,13 +125,13 @@ public final class Thumb2MveIncrementDupDecoder implements DecoderExtension {
         if (rmRaw == RM_RAW_NO_WRAP) {
             int signedImm = decrement ? -imm : imm;
             return DecodedInstruction.lifted(address, raw, InstructionSet.THUMB, condition,
-                    new IrOp.MveIncrementDup(qd, rn, size, signedImm, condition));
+                    new MveMoveOp.IncrementDup(qd, rn, size, signedImm, condition));
         }
         int rm = rmRaw * 2 + 1;
         if (rm == STACK_POINTER || rm == PROGRAM_COUNTER) {
             return null; // UNPREDICTABLE real (do_viwdup: a->rm == 13 || a->rm == 15)
         }
         return DecodedInstruction.lifted(address, raw, InstructionSet.THUMB, condition,
-                new IrOp.MveWrappingIncrementDup(qd, rn, rm, size, imm, decrement, condition));
+                new MveMoveOp.WrappingIncrementDup(qd, rn, rm, size, imm, decrement, condition));
     }
 }

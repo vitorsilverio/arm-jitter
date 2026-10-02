@@ -166,7 +166,7 @@ class MveVectorCompareExecutionTest {
         core.step();
 
         // ECI_NONE no início -> vpstMask grava mask nos DOIS campos; a etapa de avanço (que roda
-        // ANTES do Vpst desta VCMP, ver Javadoc de IrOp.MveVectorCompare) não mexe em MASK01/
+        // ANTES do Vpst desta VCMP, ver Javadoc de MvePredicationOp.VectorCompare) não mexe em MASK01/
         // MASK23 porque eles ainda estavam zerados quando o avanço rodou.
         assertEquals(0b1111, core.vpr().mask01());
         assertEquals(0b1111, core.vpr().mask23());
@@ -358,7 +358,7 @@ class MveVectorCompareExecutionTest {
         // Condição no encoding Thumb-2 vem do IT block corrente, não de bits fixos do próprio
         // raw — testado via IrOp direto (mesmo padrão de MvePredicationTest#conditionalVpstSkipped...).
         boolean pcChanged = new dev.vitorsilverio.armjitter.codegen.executor.IrBlockExecutor(ArmArchitecture.ARMV8_1M_MVE)
-                .executeOp(core, new dev.vitorsilverio.armjitter.ir.IrOp.MveVectorCompare(
+                .executeOp(core, new dev.vitorsilverio.armjitter.ir.MvePredicationOp.VectorCompare(
                         dev.vitorsilverio.armjitter.advsimd.MveCompareCondition.EQ, false, 0, 0, 0, 0b1111,
                         Condition.EQ), core.programCounter());
 

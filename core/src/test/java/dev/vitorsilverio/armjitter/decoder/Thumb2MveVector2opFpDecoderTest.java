@@ -4,7 +4,7 @@ import dev.vitorsilverio.armjitter.advsimd.AdvSimdFpThreeSameOp;
 import dev.vitorsilverio.armjitter.advsimd.AdvSimdLanes;
 import dev.vitorsilverio.armjitter.arch.ArmArchitecture;
 import dev.vitorsilverio.armjitter.core.Condition;
-import dev.vitorsilverio.armjitter.ir.IrOp;
+import dev.vitorsilverio.armjitter.ir.MveFpOp;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -53,7 +53,7 @@ class Thumb2MveVector2opFpDecoderTest {
 
     @Test
     void decodesTwoOpArithmeticOperationAndRegisters() {
-        IrOp.MveVectorFpTwoOp add = twoOp(VALUE_VADD_FP, 3, 4, 5, 0);
+        MveFpOp.VectorFpTwoOp add = twoOp(VALUE_VADD_FP, 3, 4, 5, 0);
         assertEquals(AdvSimdFpThreeSameOp.ADD, add.op());
         assertEquals(3, add.qd());
         assertEquals(4, add.qn());
@@ -75,22 +75,22 @@ class Thumb2MveVector2opFpDecoderTest {
         assertEquals(2, twoOp(VALUE_VADD_FP, 0, 0, 0, 0).esz());
     }
 
-    private static IrOp.MveVectorFpTwoOp twoOp(int value, int qd, int qn, int qm, int sizeBit) {
+    private static MveFpOp.VectorFpTwoOp twoOp(int value, int qd, int qn, int qm, int sizeBit) {
         int r = raw(value, qd, qn, qm, sizeBit);
-        return assertInstanceOf(IrOp.MveVectorFpTwoOp.class, tryDecode(ArmArchitecture.ARMV8_1M_MVE, r).liftedOp());
+        return assertInstanceOf(MveFpOp.VectorFpTwoOp.class, tryDecode(ArmArchitecture.ARMV8_1M_MVE, r).liftedOp());
     }
 
     // ── @2op_fp_size_rev: VCADD90_fp/VCADD270_fp ────────────────────────────────────────────────────
 
     @Test
     void decodesComplexAddRotationAndRegisters() {
-        IrOp.MveVectorFpComplexAdd rot90 = complexAdd(VALUE_VCADD90_FP, 6, 7, 2, 0);
+        MveFpOp.VectorFpComplexAdd rot90 = complexAdd(VALUE_VCADD90_FP, 6, 7, 2, 0);
         assertTrue(rot90.rotate90());
         assertEquals(6, rot90.qd());
         assertEquals(7, rot90.qn());
         assertEquals(2, rot90.qm());
 
-        IrOp.MveVectorFpComplexAdd rot270 = complexAdd(VALUE_VCADD270_FP, 0, 0, 0, 0);
+        MveFpOp.VectorFpComplexAdd rot270 = complexAdd(VALUE_VCADD270_FP, 0, 0, 0, 0);
         assertFalse(rot270.rotate90());
     }
 
@@ -102,9 +102,9 @@ class Thumb2MveVector2opFpDecoderTest {
         assertEquals(2, complexAdd(VALUE_VCADD90_FP, 0, 0, 0, 1).esz());
     }
 
-    private static IrOp.MveVectorFpComplexAdd complexAdd(int value, int qd, int qn, int qm, int sizeBit) {
+    private static MveFpOp.VectorFpComplexAdd complexAdd(int value, int qd, int qn, int qm, int sizeBit) {
         int r = raw(value, qd, qn, qm, sizeBit);
-        return assertInstanceOf(IrOp.MveVectorFpComplexAdd.class,
+        return assertInstanceOf(MveFpOp.VectorFpComplexAdd.class,
                 tryDecode(ArmArchitecture.ARMV8_1M_MVE, r).liftedOp());
     }
 
@@ -117,7 +117,7 @@ class Thumb2MveVector2opFpDecoderTest {
         assertEquals(AdvSimdLanes.COMPLEX_ROTATE_180, complexMla(VALUE_VCMLA180, 0, 0, 0, 0).rotation());
         assertEquals(AdvSimdLanes.COMPLEX_ROTATE_270, complexMla(VALUE_VCMLA270, 0, 0, 0, 0).rotation());
 
-        IrOp.MveVectorFpComplexMultiplyAccumulate op = complexMla(VALUE_VCMLA0, 1, 2, 3, 0);
+        MveFpOp.VectorFpComplexMultiplyAccumulate op = complexMla(VALUE_VCMLA0, 1, 2, 3, 0);
         assertEquals(1, op.qd());
         assertEquals(2, op.qn());
         assertEquals(3, op.qm());
@@ -129,10 +129,10 @@ class Thumb2MveVector2opFpDecoderTest {
         assertEquals(2, complexMla(VALUE_VCMLA0, 0, 0, 0, 1).esz());
     }
 
-    private static IrOp.MveVectorFpComplexMultiplyAccumulate complexMla(int value, int qd, int qn, int qm,
+    private static MveFpOp.VectorFpComplexMultiplyAccumulate complexMla(int value, int qd, int qn, int qm,
             int sizeBit) {
         int r = raw(value, qd, qn, qm, sizeBit);
-        return assertInstanceOf(IrOp.MveVectorFpComplexMultiplyAccumulate.class,
+        return assertInstanceOf(MveFpOp.VectorFpComplexMultiplyAccumulate.class,
                 tryDecode(ArmArchitecture.ARMV8_1M_MVE, r).liftedOp());
     }
 

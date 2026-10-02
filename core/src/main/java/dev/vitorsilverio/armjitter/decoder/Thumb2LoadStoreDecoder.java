@@ -22,7 +22,7 @@ import dev.vitorsilverio.armjitter.core.Condition;
 ///
 /// <p><b>`LDRT`/`STRT`/`LDRBT`/`STRBT`/`LDRHT`/`STRHT`/`LDRSBT`/`LDRSHT`</b> (acesso "unprivileged",
 /// B9.9): mesmo espaço de bits do T4 acima (`p&&u`, antes UNDEFINED controlado) — ver
-/// {@link #decodeT4}. `IrOp.Load`/`Store#unprivileged()` sinaliza o executor para ler/escrever
+/// {@link #decodeT4}. `MemoryOp.Load`/`Store#unprivileged()` sinaliza o executor para ler/escrever
 /// usando a permissão de modo `USER` mesmo em modo privilegiado ({@code
 /// dev.vitorsilverio.armjitter.memory.AddressSpace#withUnprivilegedAccess}).
 ///
@@ -589,9 +589,9 @@ public final class Thumb2LoadStoreDecoder implements DecoderExtension {
     /// encoding (`@strex_d`/`@ldrex_d`, ao contrário do ARM clássico que só tem um campo `Rt`), mas
     /// permanece UNPREDICTABLE se `Rt2 != Rt+1` ou `Rt` ímpar (ARM DDI 0406C A8.8.75/A8.8.212,
     /// "Rt2 must be Rt+1") — então, ao contrário de `LDRD`/`STRD` (B2.3), o par continua adjacente
-    /// na prática; {@code IrOp.LoadExclusive}/{@code IrOp.StoreExclusive} (B1.4) já assumem isso
+    /// na prática; {@code MemoryOp.LoadExclusive}/{@code MemoryOp.StoreExclusive} (B1.4) já assumem isso
     /// (`dst`/`dst+1`), sem precisar de um campo `second` independente como
-    /// {@code IrOp.DoubleTransfer} ganhou.
+    /// {@code MemoryOp.DoubleTransfer} ganhou.
     private DecodedInstruction decodeSizedExclusive(int raw, int address, Condition condition, boolean load, int sizeBytes) {
         return decodeSizedExclusive(raw, address, condition, load, sizeBytes, ArmFeature.EXCLUSIVE_SIZED);
     }

@@ -6,7 +6,7 @@ import dev.vitorsilverio.armjitter.arch.ArmFeature;
 import dev.vitorsilverio.armjitter.arch.DecoderExtension;
 import dev.vitorsilverio.armjitter.core.Condition;
 import dev.vitorsilverio.armjitter.core.VfpRegisters;
-import dev.vitorsilverio.armjitter.ir.IrOp;
+import dev.vitorsilverio.armjitter.ir.MvePredicationOp;
 
 /// `VCMPEQ`/`VCMPNE`/`VCMPGE`/`VCMPLT`/`VCMPGT`/`VCMPLE`/`VCMPCS`/`VCMPHI` e as formas `_fp`/
 /// `_scalar`/`_fp_scalar` correspondentes (perfil M, B16.8, MVE/Helium, `target/isa-decode/mve.decode`,
@@ -26,7 +26,7 @@ import dev.vitorsilverio.armjitter.ir.IrOp;
 /// comentário real (linhas 698-700) é explícito: "We expand out the conditions which are split
 /// across encodings T1, T2, T3 and the fc bits. These include VPT, which is effectively 'VCMP
 /// then VPST'. A plain VCMP has a mask field of zero." O `StandardIrBuilder` abre o `VPT`
-/// (`IrOp.Vpst`) quando `mask != 0`, ver Javadoc de {@link IrOp.MveVectorCompare}.
+/// (`MvePredicationOp.Vpst`) quando `mask != 0`, ver Javadoc de {@link MvePredicationOp.VectorCompare}.
 ///
 /// **`Qn` tem 3 bits (`0`-`7`, sempre válido); `Qm` tem 4 bits** (`%qm`, precisa de
 /// {@link VfpRegisters#isValidMveQuadRegister}) — comentário literal do arquivo real: "Vector
@@ -55,7 +55,7 @@ import dev.vitorsilverio.armjitter.ir.IrOp;
 ///
 /// Gate: {@link ArmFeature#MVE_INTEGER} para as inteiras, {@link ArmFeature#MVE_FLOAT} para as
 /// `_fp`/`_fp_scalar` (gate POR LINHA, mesma Armadilha 1 da B16.7). Usa o escape hatch de lifting
-/// ({@link IrOp.MveVectorCompare}/{@link IrOp.MveVectorCompareScalar}). Registrado ANTES de
+/// ({@link MvePredicationOp.VectorCompare}/{@link MvePredicationOp.VectorCompareScalar}). Registrado ANTES de
 /// {@link Thumb2NocpDecoder} em {@code ArmArchitecture#ARMV8_1M_MVE}.
 public final class Thumb2MveComparisonDecoder implements DecoderExtension {
     // ── Campos comuns (`%mask_22_13`, `%qm`, `qn:3` inline, `size:2` inline, `rm:4` inline) ──────
@@ -185,7 +185,7 @@ public final class Thumb2MveComparisonDecoder implements DecoderExtension {
         int esz = ((raw >>> FP_SIZE_BIT) & 1) != 0 ? ESZ_BINARY16 : ESZ_BINARY32;
         int mask = maskField(raw);
         return DecodedInstruction.lifted(address, raw, InstructionSet.THUMB, condition,
-                new IrOp.MveVectorCompare(compareCondition, true, esz, qn, qm, mask, condition));
+                new MvePredicationOp.VectorCompare(compareCondition, true, esz, qn, qm, mask, condition));
     }
 
     /// Grupo vetor×vetor inteiro (6 pares + `VCMPCS`/`VCMPHI`) — `@vcmp`, `size` extraído
@@ -220,7 +220,7 @@ public final class Thumb2MveComparisonDecoder implements DecoderExtension {
         }
         int mask = maskField(raw);
         return DecodedInstruction.lifted(address, raw, InstructionSet.THUMB, condition,
-                new IrOp.MveVectorCompare(compareCondition, false, size, qn, qm, mask, condition));
+                new MvePredicationOp.VectorCompare(compareCondition, false, size, qn, qm, mask, condition));
     }
 
     /// Grupo vetor×escalar inteiro (6 pares + `VCMPCS_scalar`/`VCMPHI_scalar`) — `@vcmp_scalar`,
@@ -255,7 +255,7 @@ public final class Thumb2MveComparisonDecoder implements DecoderExtension {
         int qn = (raw >>> QN_SHIFT) & QN_MASK;
         int mask = maskField(raw);
         return DecodedInstruction.lifted(address, raw, InstructionSet.THUMB, condition,
-                new IrOp.MveVectorCompareScalar(compareCondition, false, size, qn, rm, mask, condition));
+                new MvePredicationOp.VectorCompareScalar(compareCondition, false, size, qn, rm, mask, condition));
     }
 
     /// Grupo vetor×escalar `_fp` (6 formas, `@vcmp_fp_scalar`) — bit 28 NÃO decodificado, `esz`
@@ -296,7 +296,7 @@ public final class Thumb2MveComparisonDecoder implements DecoderExtension {
         int qn = (raw >>> QN_SHIFT) & QN_MASK;
         int mask = maskField(raw);
         return DecodedInstruction.lifted(address, raw, InstructionSet.THUMB, condition,
-                new IrOp.MveVectorCompareScalar(compareCondition, true, esz, qn, rm, mask, condition));
+                new MvePredicationOp.VectorCompareScalar(compareCondition, true, esz, qn, rm, mask, condition));
     }
 
     /// `%qm 5:1 1:3` (bit alto concatenado com 3 bits baixos) — MESMA convenção de

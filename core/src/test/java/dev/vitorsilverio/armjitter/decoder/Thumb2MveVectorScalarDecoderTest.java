@@ -5,7 +5,8 @@ import dev.vitorsilverio.armjitter.advsimd.AdvSimdThreeSameOp;
 import dev.vitorsilverio.armjitter.arch.ArmArchitecture;
 import dev.vitorsilverio.armjitter.arch.ArmFeature;
 import dev.vitorsilverio.armjitter.core.Condition;
-import dev.vitorsilverio.armjitter.ir.IrOp;
+import dev.vitorsilverio.armjitter.ir.MveFpOp;
+import dev.vitorsilverio.armjitter.ir.MveIntegerOp;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -48,8 +49,8 @@ class Thumb2MveVectorScalarDecoderTest {
         return new Thumb2MveVectorScalarDecoder(architecture).tryDecode(raw, 0, Condition.AL);
     }
 
-    private static IrOp.MveVectorScalar decodeScalar(int raw) {
-        return assertInstanceOf(IrOp.MveVectorScalar.class,
+    private static MveIntegerOp.VectorScalar decodeScalar(int raw) {
+        return assertInstanceOf(MveIntegerOp.VectorScalar.class,
                 tryDecode(ArmArchitecture.ARMV8_1M_MVE, raw).liftedOp());
     }
 
@@ -57,7 +58,7 @@ class Thumb2MveVectorScalarDecoderTest {
 
     @Test
     void decodesVaddScalar() {
-        IrOp.MveVectorScalar op = decodeScalar(raw2scalar(0, 1, 4, 5, 1, 0, 0b1111, 0b100, 6));
+        MveIntegerOp.VectorScalar op = decodeScalar(raw2scalar(0, 1, 4, 5, 1, 0, 0b1111, 0b100, 6));
         assertEquals(AdvSimdThreeSameOp.ADD, op.op());
         assertEquals(1, op.esz());
         assertEquals(4, op.qd());
@@ -67,7 +68,7 @@ class Thumb2MveVectorScalarDecoderTest {
 
     @Test
     void decodesVsubScalar() {
-        IrOp.MveVectorScalar op = decodeScalar(raw2scalar(0, 2, 0, 1, 1, 1, 0b1111, 0b100, 2));
+        MveIntegerOp.VectorScalar op = decodeScalar(raw2scalar(0, 2, 0, 1, 1, 1, 0b1111, 0b100, 2));
         assertEquals(AdvSimdThreeSameOp.SUB, op.op());
         assertEquals(2, op.esz());
     }
@@ -81,7 +82,7 @@ class Thumb2MveVectorScalarDecoderTest {
 
     @Test
     void decodesVshlSScalarQdaIsSourceAndDestNotQn() {
-        IrOp.MveVectorScalar op = assertInstanceOf(IrOp.MveVectorScalar.class,
+        MveIntegerOp.VectorScalar op = assertInstanceOf(MveIntegerOp.VectorScalar.class,
                 tryDecode(ArmArchitecture.ARMV8_1M_MVE, rawShl(0, 1, 3, 0, 0, 5)).liftedOp());
         assertEquals(AdvSimdThreeSameOp.SSHL, op.op());
         assertEquals(1, op.esz());
@@ -111,14 +112,14 @@ class Thumb2MveVectorScalarDecoderTest {
     }
 
     private static AdvSimdThreeSameOp decodeShl(int raw) {
-        return assertInstanceOf(IrOp.MveVectorScalar.class,
+        return assertInstanceOf(MveIntegerOp.VectorScalar.class,
                 tryDecode(ArmArchitecture.ARMV8_1M_MVE, raw).liftedOp()).op();
     }
 
     @Test
     void shlScalarSizeIsAtBits19_18NotWhereTwoScalarPutsIt() {
         // size=2 (word) em bits[19:18]; bits[21:20] continuam fixos em 11.
-        IrOp.MveVectorScalar op = assertInstanceOf(IrOp.MveVectorScalar.class,
+        MveIntegerOp.VectorScalar op = assertInstanceOf(MveIntegerOp.VectorScalar.class,
                 tryDecode(ArmArchitecture.ARMV8_1M_MVE, rawShl(0, 2, 0, 0, 0, 1)).liftedOp());
         assertEquals(2, op.esz());
     }
@@ -127,7 +128,7 @@ class Thumb2MveVectorScalarDecoderTest {
 
     @Test
     void decodesVmulScalarWhenSizeFieldIsNotThree() {
-        IrOp.MveVectorScalar op = decodeScalar(raw2scalar(0, 1, 2, 3, 1, 1, 0b1110, 0b110, 4));
+        MveIntegerOp.VectorScalar op = decodeScalar(raw2scalar(0, 1, 2, 3, 1, 1, 0b1110, 0b110, 4));
         assertEquals(AdvSimdThreeSameOp.MUL, op.op());
         assertEquals(1, op.esz());
         assertEquals(2, op.qd());
@@ -136,9 +137,9 @@ class Thumb2MveVectorScalarDecoderTest {
 
     @Test
     void decodesVbrsr() {
-        IrOp.MveVectorScalarSpecial op = assertInstanceOf(IrOp.MveVectorScalarSpecial.class,
+        MveIntegerOp.VectorScalarSpecial op = assertInstanceOf(MveIntegerOp.VectorScalarSpecial.class,
                 tryDecode(ArmArchitecture.ARMV8_1M_MVE, raw2scalar(1, 0, 1, 2, 1, 1, 0b1110, 0b110, 3)).liftedOp());
-        assertEquals(IrOp.MveVectorScalarSpecial.SpecialOp.VBRSR, op.op());
+        assertEquals(MveIntegerOp.VectorScalarSpecial.SpecialOp.VBRSR, op.op());
         assertEquals(0, op.esz());
         assertEquals(1, op.qd());
         assertEquals(2, op.qn());
@@ -183,11 +184,11 @@ class Thumb2MveVectorScalarDecoderTest {
 
     @Test
     void decodesVaddFpScalarAndVsubFpScalar() {
-        IrOp.MveVectorFpScalar add = assertInstanceOf(IrOp.MveVectorFpScalar.class,
+        MveFpOp.VectorFpScalar add = assertInstanceOf(MveFpOp.VectorFpScalar.class,
                 tryDecode(ArmArchitecture.ARMV8_1M_MVE, raw2scalar(0, 3, 0, 1, 0, 0, 0b1111, 0b100, 2)).liftedOp());
         assertEquals(AdvSimdFpThreeSameOp.ADD, add.op());
         assertEquals(2, add.esz(), "bit28=0 -> binary32");
-        IrOp.MveVectorFpScalar sub = assertInstanceOf(IrOp.MveVectorFpScalar.class,
+        MveFpOp.VectorFpScalar sub = assertInstanceOf(MveFpOp.VectorFpScalar.class,
                 tryDecode(ArmArchitecture.ARMV8_1M_MVE, raw2scalar(1, 3, 0, 1, 0, 1, 0b1111, 0b100, 2)).liftedOp());
         assertEquals(AdvSimdFpThreeSameOp.SUB, sub.op());
         assertEquals(1, sub.esz(), "bit28=1 -> binary16");
@@ -202,11 +203,11 @@ class Thumb2MveVectorScalarDecoderTest {
 
     @Test
     void decodesVqdmullbAndVqdmulltScalar() {
-        IrOp.MveVectorScalarWidening b = assertInstanceOf(IrOp.MveVectorScalarWidening.class,
+        MveIntegerOp.VectorScalarWidening b = assertInstanceOf(MveIntegerOp.VectorScalarWidening.class,
                 tryDecode(ArmArchitecture.ARMV8_1M_MVE, raw2scalar(0, 3, 0, 1, 0, 0, 0b1111, 0b110, 2)).liftedOp());
         assertEquals(1, b.esz(), "bit28=0 -> halfword fonte");
         assertEquals(false, b.top());
-        IrOp.MveVectorScalarWidening t = assertInstanceOf(IrOp.MveVectorScalarWidening.class,
+        MveIntegerOp.VectorScalarWidening t = assertInstanceOf(MveIntegerOp.VectorScalarWidening.class,
                 tryDecode(ArmArchitecture.ARMV8_1M_MVE, raw2scalar(1, 3, 0, 1, 0, 1, 0b1111, 0b110, 2)).liftedOp());
         assertEquals(2, t.esz(), "bit28=1 -> word fonte");
         assertEquals(true, t.top());
@@ -221,13 +222,13 @@ class Thumb2MveVectorScalarDecoderTest {
     @Test
     void vqdmullbScalarAllowsQdEqualsQnWithHalfwordSize() {
         // bit28=0 (esz=1, halfword): Qd==Qn é permitido (a restrição só vale para word).
-        assertInstanceOf(IrOp.MveVectorScalarWidening.class,
+        assertInstanceOf(MveIntegerOp.VectorScalarWidening.class,
                 tryDecode(ArmArchitecture.ARMV8_1M_MVE, raw2scalar(0, 3, 2, 2, 0, 0, 0b1111, 0b110, 2)).liftedOp());
     }
 
     @Test
     void vqdmullbScalarWithoutMveFloatStillDecodesUnderMveIntegerOnly() {
-        assertInstanceOf(IrOp.MveVectorScalarWidening.class,
+        assertInstanceOf(MveIntegerOp.VectorScalarWidening.class,
                 tryDecode(MVE_INTEGER_ONLY, raw2scalar(0, 3, 0, 1, 0, 0, 0b1111, 0b110, 2)).liftedOp());
     }
 
@@ -235,7 +236,7 @@ class Thumb2MveVectorScalarDecoderTest {
 
     @Test
     void decodesVmulFpScalar() {
-        IrOp.MveVectorFpScalar op = assertInstanceOf(IrOp.MveVectorFpScalar.class,
+        MveFpOp.VectorFpScalar op = assertInstanceOf(MveFpOp.VectorFpScalar.class,
                 tryDecode(ArmArchitecture.ARMV8_1M_MVE, raw2scalar(0, 3, 0, 1, 1, 0, 0b1110, 0b110, 2)).liftedOp());
         assertEquals(AdvSimdFpThreeSameOp.MUL, op.op());
         assertEquals(2, op.esz());
@@ -255,15 +256,15 @@ class Thumb2MveVectorScalarDecoderTest {
     void vmlaDecodesTheSameRegardlessOfBit28() {
         int rawU0 = raw2scalar(0, 1, 0, 1, 1, 0, 0b1110, 0b100, 2);
         int rawU1 = raw2scalar(1, 1, 0, 1, 1, 0, 0b1110, 0b100, 2);
-        IrOp.MveVectorScalar opU0 = decodeScalar(rawU0);
-        IrOp.MveVectorScalar opU1 = decodeScalar(rawU1);
+        MveIntegerOp.VectorScalar opU0 = decodeScalar(rawU0);
+        MveIntegerOp.VectorScalar opU1 = decodeScalar(rawU1);
         assertEquals(AdvSimdThreeSameOp.MLA, opU0.op());
         assertEquals(opU0, opU1, "os DOIS valores de bit 28 devem produzir a MESMA instrução");
     }
 
     @Test
     void decodesVfmaScalar() {
-        IrOp.MveVectorFpScalarFma op = assertInstanceOf(IrOp.MveVectorFpScalarFma.class,
+        MveFpOp.VectorFpScalarFma op = assertInstanceOf(MveFpOp.VectorFpScalarFma.class,
                 tryDecode(ArmArchitecture.ARMV8_1M_MVE, raw2scalar(0, 3, 0, 1, 1, 0, 0b1110, 0b100, 2)).liftedOp());
         assertEquals(false, op.swapAccumulator());
         assertEquals(2, op.esz());
@@ -280,17 +281,17 @@ class Thumb2MveVectorScalarDecoderTest {
     void vmlasDecodesTheSameRegardlessOfBit28() {
         int rawU0 = raw2scalar(0, 1, 0, 1, 1, 1, 0b1110, 0b100, 2);
         int rawU1 = raw2scalar(1, 1, 0, 1, 1, 1, 0b1110, 0b100, 2);
-        IrOp.MveVectorScalarSpecial opU0 = assertInstanceOf(IrOp.MveVectorScalarSpecial.class,
+        MveIntegerOp.VectorScalarSpecial opU0 = assertInstanceOf(MveIntegerOp.VectorScalarSpecial.class,
                 tryDecode(ArmArchitecture.ARMV8_1M_MVE, rawU0).liftedOp());
-        IrOp.MveVectorScalarSpecial opU1 = assertInstanceOf(IrOp.MveVectorScalarSpecial.class,
+        MveIntegerOp.VectorScalarSpecial opU1 = assertInstanceOf(MveIntegerOp.VectorScalarSpecial.class,
                 tryDecode(ArmArchitecture.ARMV8_1M_MVE, rawU1).liftedOp());
-        assertEquals(IrOp.MveVectorScalarSpecial.SpecialOp.VMLAS, opU0.op());
+        assertEquals(MveIntegerOp.VectorScalarSpecial.SpecialOp.VMLAS, opU0.op());
         assertEquals(opU0, opU1);
     }
 
     @Test
     void decodesVfmasScalar() {
-        IrOp.MveVectorFpScalarFma op = assertInstanceOf(IrOp.MveVectorFpScalarFma.class,
+        MveFpOp.VectorFpScalarFma op = assertInstanceOf(MveFpOp.VectorFpScalarFma.class,
                 tryDecode(ArmArchitecture.ARMV8_1M_MVE, raw2scalar(0, 3, 0, 1, 1, 1, 0b1110, 0b100, 2)).liftedOp());
         assertEquals(true, op.swapAccumulator());
     }
@@ -299,14 +300,14 @@ class Thumb2MveVectorScalarDecoderTest {
 
     @Test
     void decodesAllFourDoublingAccumulateForms() {
-        assertOp(IrOp.MveVectorScalarSpecial.SpecialOp.VQRDMLAH, raw2scalar(0, 1, 0, 1, 0, 0, 0b1110, 0b100, 2));
-        assertOp(IrOp.MveVectorScalarSpecial.SpecialOp.VQRDMLASH, raw2scalar(0, 1, 0, 1, 0, 1, 0b1110, 0b100, 2));
-        assertOp(IrOp.MveVectorScalarSpecial.SpecialOp.VQDMLAH, raw2scalar(0, 1, 0, 1, 0, 0, 0b1110, 0b110, 2));
-        assertOp(IrOp.MveVectorScalarSpecial.SpecialOp.VQDMLASH, raw2scalar(0, 1, 0, 1, 0, 1, 0b1110, 0b110, 2));
+        assertOp(MveIntegerOp.VectorScalarSpecial.SpecialOp.VQRDMLAH, raw2scalar(0, 1, 0, 1, 0, 0, 0b1110, 0b100, 2));
+        assertOp(MveIntegerOp.VectorScalarSpecial.SpecialOp.VQRDMLASH, raw2scalar(0, 1, 0, 1, 0, 1, 0b1110, 0b100, 2));
+        assertOp(MveIntegerOp.VectorScalarSpecial.SpecialOp.VQDMLAH, raw2scalar(0, 1, 0, 1, 0, 0, 0b1110, 0b110, 2));
+        assertOp(MveIntegerOp.VectorScalarSpecial.SpecialOp.VQDMLASH, raw2scalar(0, 1, 0, 1, 0, 1, 0b1110, 0b110, 2));
     }
 
-    private static void assertOp(IrOp.MveVectorScalarSpecial.SpecialOp expected, int raw) {
-        IrOp.MveVectorScalarSpecial op = assertInstanceOf(IrOp.MveVectorScalarSpecial.class,
+    private static void assertOp(MveIntegerOp.VectorScalarSpecial.SpecialOp expected, int raw) {
+        MveIntegerOp.VectorScalarSpecial op = assertInstanceOf(MveIntegerOp.VectorScalarSpecial.class,
                 tryDecode(ArmArchitecture.ARMV8_1M_MVE, raw).liftedOp());
         assertEquals(expected, op.op());
     }
@@ -351,7 +352,7 @@ class Thumb2MveVectorScalarDecoderTest {
     @Test
     void fullPipelineNeverDecodesAsNocp() {
         int r = raw2scalar(0, 1, 4, 5, 1, 0, 0b1111, 0b100, 6);
-        assertInstanceOf(IrOp.MveVectorScalar.class, decodeThumb32(r).liftedOp());
+        assertInstanceOf(MveIntegerOp.VectorScalar.class, decodeThumb32(r).liftedOp());
     }
 
     private static DecodedInstruction decodeThumb32(int raw32) {

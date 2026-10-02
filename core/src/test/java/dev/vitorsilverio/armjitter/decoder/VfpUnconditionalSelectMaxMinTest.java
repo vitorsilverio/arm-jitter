@@ -14,6 +14,7 @@ import dev.vitorsilverio.armjitter.core.Condition;
 import dev.vitorsilverio.armjitter.ir.IrBlock;
 import dev.vitorsilverio.armjitter.ir.IrOp;
 import dev.vitorsilverio.armjitter.ir.StandardIrBuilder;
+import dev.vitorsilverio.armjitter.ir.VfpOp;
 import dev.vitorsilverio.armjitter.support.TestAddressSpace;
 import dev.vitorsilverio.armjitter.swi.SwiDispatcher;
 import java.util.List;
@@ -118,26 +119,26 @@ class VfpUnconditionalSelectMaxMinTest {
             DecodedInstruction decoded = decodeArm(VFP_V8_TEST_ARCH, vselWord(cc, false, 2, 0, 1));
             assertEquals(InstructionKind.VFP_SELECT, decoded.kind());
             IrOp op = liftSingleOp(decoded);
-            assertEquals(new IrOp.VfpSelect(false, 2, 0, 1, expected[cc], Condition.AL), op);
+            assertEquals(new VfpOp.Select(false, 2, 0, 1, expected[cc], Condition.AL), op);
         }
     }
 
     @Test
     void vselDoubleDecodesToVfpSelect() {
         IrOp op = liftSingleOp(decodeArm(VFP_V8_TEST_ARCH, vselWord(3, true, 5, 1, 2)));
-        assertEquals(new IrOp.VfpSelect(true, 5, 1, 2, Condition.GT, Condition.AL), op);
+        assertEquals(new VfpOp.Select(true, 5, 1, 2, Condition.GT, Condition.AL), op);
     }
 
     @Test
     void vmaxnmSingleDecodesToVfpAlu() {
         IrOp op = liftSingleOp(decodeArm(VFP_V8_TEST_ARCH, maxNmMinNmWord(false, false, 4, 0, 1)));
-        assertEquals(new IrOp.VfpAlu(IrOp.VfpOperation.MAXNM, false, 4, 0, 1, Condition.AL), op);
+        assertEquals(new VfpOp.Alu(VfpOp.VfpOperation.MAXNM, false, 4, 0, 1, Condition.AL), op);
     }
 
     @Test
     void vminnmDoubleDecodesToVfpAlu() {
         IrOp op = liftSingleOp(decodeArm(VFP_V8_TEST_ARCH, maxNmMinNmWord(true, true, 4, 0, 1)));
-        assertEquals(new IrOp.VfpAlu(IrOp.VfpOperation.MINNM, true, 4, 0, 1, Condition.AL), op);
+        assertEquals(new VfpOp.Alu(VfpOp.VfpOperation.MINNM, true, 4, 0, 1, Condition.AL), op);
     }
 
     @Test
@@ -210,17 +211,17 @@ class VfpUnconditionalSelectMaxMinTest {
         core.vfp().setSFloat(1, 22.0f);
         core.cpsr().setNzcv(false, true, false, false); // Z=1 -> EQ verdadeiro -> escolhe vn.
         IrBlockExecutor executor = new IrBlockExecutor(VFP_V8_TEST_ARCH);
-        executor.executeOp(core, new IrOp.VfpSelect(false, 2, 0, 1, Condition.EQ, Condition.AL), 0);
+        executor.executeOp(core, new VfpOp.Select(false, 2, 0, 1, Condition.EQ, Condition.AL), 0);
         assertEquals(11.0f, core.vfp().sFloat(2));
 
         core.cpsr().setNzcv(false, false, false, false); // Z=0 -> EQ falso -> escolhe vm.
-        executor.executeOp(core, new IrOp.VfpSelect(false, 2, 0, 1, Condition.EQ, Condition.AL), 0);
+        executor.executeOp(core, new VfpOp.Select(false, 2, 0, 1, Condition.EQ, Condition.AL), 0);
         assertEquals(22.0f, core.vfp().sFloat(2));
     }
 
     /// Fecha o branch `false` de `IrVfpExecutor#executeVfpSelect` — `op.condition()` (gate do
     /// BLOCO) é sempre `AL` no que o decoder produz, mas o record aceita qualquer `Condition` (é
-    /// código real, alcançável por quem monta `IrOp.VfpSelect` na mão, mesmo padrão de
+    /// código real, alcançável por quem monta `VfpOp.Select` na mão, mesmo padrão de
     /// `executeVfpCompare`/`executeVfpConvert` etc.). Prova direta da Armadilha 2: `condition`
     /// (bloco) e `selectCondition` (dado) são campos INDEPENDENTES — aqui `condition=NE` é falso
     /// (Z=1) e a operação inteira é pulada, mesmo que `selectCondition=EQ` fosse verdadeiro.
@@ -232,7 +233,7 @@ class VfpUnconditionalSelectMaxMinTest {
         core.vfp().setSFloat(1, 22.0f);
         core.cpsr().setNzcv(false, true, false, false); // Z=1 -> NE falso, EQ verdadeiro.
         IrBlockExecutor executor = new IrBlockExecutor(VFP_V8_TEST_ARCH);
-        executor.executeOp(core, new IrOp.VfpSelect(false, 2, 0, 1, Condition.EQ, Condition.NE), 0);
+        executor.executeOp(core, new VfpOp.Select(false, 2, 0, 1, Condition.EQ, Condition.NE), 0);
         assertEquals(-1.0f, core.vfp().sFloat(2));
     }
 
@@ -243,7 +244,7 @@ class VfpUnconditionalSelectMaxMinTest {
         core.vfp().setDDouble(1, 7.5);
         core.cpsr().setNzcv(true, false, false, true); // N=1,V=1 -> GE (N==V) verdadeiro -> vn.
         IrBlockExecutor executor = new IrBlockExecutor(VFP_V8_TEST_ARCH);
-        executor.executeOp(core, new IrOp.VfpSelect(true, 2, 0, 1, Condition.GE, Condition.AL), 0);
+        executor.executeOp(core, new VfpOp.Select(true, 2, 0, 1, Condition.GE, Condition.AL), 0);
         assertEquals(Double.doubleToRawLongBits(Double.NaN), core.vfp().d(2));
     }
 
@@ -256,7 +257,7 @@ class VfpUnconditionalSelectMaxMinTest {
         core.vfp().setD(1, Double.doubleToRawLongBits(Double.NaN));
         core.cpsr().setNzcv(true, false, false, false); // N=1,V=0 -> GE (N==V) falso -> escolhe vm.
         IrBlockExecutor executor = new IrBlockExecutor(VFP_V8_TEST_ARCH);
-        executor.executeOp(core, new IrOp.VfpSelect(true, 2, 0, 1, Condition.GE, Condition.AL), 0);
+        executor.executeOp(core, new VfpOp.Select(true, 2, 0, 1, Condition.GE, Condition.AL), 0);
         assertEquals(Double.doubleToRawLongBits(Double.NaN), core.vfp().d(2));
     }
 
@@ -268,10 +269,10 @@ class VfpUnconditionalSelectMaxMinTest {
         core.vfp().setSFloat(0, Float.NaN);
         core.vfp().setSFloat(1, 1.0f);
         IrBlockExecutor executor = new IrBlockExecutor(VFP_V8_TEST_ARCH);
-        executor.executeOp(core, new IrOp.VfpAlu(IrOp.VfpOperation.MAXNM, false, 2, 0, 1, Condition.AL), 0);
+        executor.executeOp(core, new VfpOp.Alu(VfpOp.VfpOperation.MAXNM, false, 2, 0, 1, Condition.AL), 0);
         assertEquals(1.0f, core.vfp().sFloat(2));
 
-        executor.executeOp(core, new IrOp.VfpAlu(IrOp.VfpOperation.MAXNM, false, 2, 1, 0, Condition.AL), 0);
+        executor.executeOp(core, new VfpOp.Alu(VfpOp.VfpOperation.MAXNM, false, 2, 1, 0, Condition.AL), 0);
         assertEquals(1.0f, core.vfp().sFloat(2));
     }
 
@@ -281,7 +282,7 @@ class VfpUnconditionalSelectMaxMinTest {
         core.vfp().setSFloat(0, Float.NaN);
         core.vfp().setSFloat(1, Float.NaN);
         IrBlockExecutor executor = new IrBlockExecutor(VFP_V8_TEST_ARCH);
-        executor.executeOp(core, new IrOp.VfpAlu(IrOp.VfpOperation.MINNM, false, 2, 0, 1, Condition.AL), 0);
+        executor.executeOp(core, new VfpOp.Alu(VfpOp.VfpOperation.MINNM, false, 2, 0, 1, Condition.AL), 0);
         assertEquals(true, Float.isNaN(core.vfp().sFloat(2)));
     }
 
@@ -291,7 +292,7 @@ class VfpUnconditionalSelectMaxMinTest {
         core.vfp().setDDouble(0, 0.0);
         core.vfp().setDDouble(1, -0.0);
         IrBlockExecutor executor = new IrBlockExecutor(VFP_V8_TEST_ARCH);
-        executor.executeOp(core, new IrOp.VfpAlu(IrOp.VfpOperation.MAXNM, true, 2, 0, 1, Condition.AL), 0);
+        executor.executeOp(core, new VfpOp.Alu(VfpOp.VfpOperation.MAXNM, true, 2, 0, 1, Condition.AL), 0);
         assertEquals(dev.vitorsilverio.armjitter.advsimd.AdvSimdLanes.maxNum(0.0, -0.0), core.vfp().dDouble(2));
     }
 
@@ -303,7 +304,7 @@ class VfpUnconditionalSelectMaxMinTest {
         core.vfp().setDDouble(0, Double.NaN);
         core.vfp().setDDouble(1, 2.5);
         IrBlockExecutor executor = new IrBlockExecutor(VFP_V8_TEST_ARCH);
-        executor.executeOp(core, new IrOp.VfpAlu(IrOp.VfpOperation.MINNM, true, 2, 0, 1, Condition.AL), 0);
+        executor.executeOp(core, new VfpOp.Alu(VfpOp.VfpOperation.MINNM, true, 2, 0, 1, Condition.AL), 0);
         assertEquals(2.5, core.vfp().dDouble(2));
     }
 
@@ -318,11 +319,11 @@ class VfpUnconditionalSelectMaxMinTest {
         for (float[] pair : pairs) {
             core.vfp().setSFloat(0, pair[0]);
             core.vfp().setSFloat(1, pair[1]);
-            executor.executeOp(core, new IrOp.VfpAlu(IrOp.VfpOperation.MAXNM, false, 2, 0, 1, Condition.AL), 0);
+            executor.executeOp(core, new VfpOp.Alu(VfpOp.VfpOperation.MAXNM, false, 2, 0, 1, Condition.AL), 0);
             float expectedMax = dev.vitorsilverio.armjitter.advsimd.AdvSimdLanes.maxNum(pair[0], pair[1]);
             assertEquals(Float.floatToRawIntBits(expectedMax), Float.floatToRawIntBits(core.vfp().sFloat(2)));
 
-            executor.executeOp(core, new IrOp.VfpAlu(IrOp.VfpOperation.MINNM, false, 2, 0, 1, Condition.AL), 0);
+            executor.executeOp(core, new VfpOp.Alu(VfpOp.VfpOperation.MINNM, false, 2, 0, 1, Condition.AL), 0);
             float expectedMin = dev.vitorsilverio.armjitter.advsimd.AdvSimdLanes.minNum(pair[0], pair[1]);
             assertEquals(Float.floatToRawIntBits(expectedMin), Float.floatToRawIntBits(core.vfp().sFloat(2)));
         }
@@ -334,9 +335,9 @@ class VfpUnconditionalSelectMaxMinTest {
     /// `AsmNativePolicy` ficava sem teste algum (JaCoCo confirmou: 1 de 4 branches faltando).
     @Test
     void asmNativePolicyRefusesMaxNmAndMinNmButAcceptsRestOfVfpAlu() {
-        assertEquals(false, AsmNativePolicy.supports(new IrOp.VfpAlu(IrOp.VfpOperation.MAXNM, false, 0, 1, 2, Condition.AL)));
-        assertEquals(false, AsmNativePolicy.supports(new IrOp.VfpAlu(IrOp.VfpOperation.MINNM, true, 0, 1, 2, Condition.AL)));
-        assertEquals(true, AsmNativePolicy.supports(new IrOp.VfpAlu(IrOp.VfpOperation.ADD, false, 0, 1, 2, Condition.AL)));
+        assertEquals(false, AsmNativePolicy.supports(new VfpOp.Alu(VfpOp.VfpOperation.MAXNM, false, 0, 1, 2, Condition.AL)));
+        assertEquals(false, AsmNativePolicy.supports(new VfpOp.Alu(VfpOp.VfpOperation.MINNM, true, 0, 1, 2, Condition.AL)));
+        assertEquals(true, AsmNativePolicy.supports(new VfpOp.Alu(VfpOp.VfpOperation.ADD, false, 0, 1, 2, Condition.AL)));
     }
 
     // ── 6. Fechamento G8: o resto do espaço incondicional (B14.5/B14.6) é UNIMPLEMENTED, não `null` ─
@@ -426,7 +427,7 @@ class VfpUnconditionalSelectMaxMinTest {
         assertEquals(true, decoder.claimsEncodingSpace(conditionalWord));
         DecodedInstruction decoded = decoder.tryDecode(conditionalWord, 0, Condition.AL);
         assertEquals(InstructionKind.VFP_ALU, decoded.kind());
-        assertEquals(new IrOp.VfpAlu(IrOp.VfpOperation.ADD, false, 2, 0, 1, Condition.AL), liftSingleOp(decoded));
+        assertEquals(new VfpOp.Alu(VfpOp.VfpOperation.ADD, false, 2, 0, 1, Condition.AL), liftSingleOp(decoded));
     }
 
     private static boolean isUnconditionalWordForTest(int raw) {
@@ -443,7 +444,7 @@ class VfpUnconditionalSelectMaxMinTest {
         core.vfp().setSFloat(1, 9.0f);
         core.cpsr().setNzcv(false, false, false, false); // Z=0 -> EQ falso -> escolhe vm.
         IrBlock.Builder builder = IrBlock.builder(0);
-        builder.add(new IrOp.VfpSelect(false, 2, 0, 1, Condition.EQ, Condition.AL));
+        builder.add(new VfpOp.Select(false, 2, 0, 1, Condition.EQ, Condition.AL));
         builder.add(new IrOp.Cycle(1));
         builder.add(new IrOp.Fetch(4, 4));
         IrBlock block = builder.endPc(4).sealed();

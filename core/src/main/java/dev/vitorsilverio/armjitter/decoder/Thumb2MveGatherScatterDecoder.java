@@ -5,7 +5,7 @@ import dev.vitorsilverio.armjitter.arch.ArmFeature;
 import dev.vitorsilverio.armjitter.arch.DecoderExtension;
 import dev.vitorsilverio.armjitter.core.Condition;
 import dev.vitorsilverio.armjitter.core.VfpRegisters;
-import dev.vitorsilverio.armjitter.ir.IrOp;
+import dev.vitorsilverio.armjitter.ir.MveMoveOp;
 
 /// `VLDR_S_sg`/`VLDR_U_sg`/`VSTR_sg` (gather/scatter por vetor de offsets) e `VLDRW_sg_imm`/
 /// `VLDRD_sg_imm`/`VSTRW_sg_imm`/`VSTRD_sg_imm` (gather/scatter com base vetorial e imediato)
@@ -182,7 +182,7 @@ public final class Thumb2MveGatherScatterDecoder implements DecoderExtension {
             return null;
         }
         return DecodedInstruction.lifted(address, raw, InstructionSet.THUMB, condition,
-                new IrOp.MveGatherScatterOffset(qd, qm, rn, msize, size, signedForm, os, load, condition));
+                new MveMoveOp.GatherScatterOffset(qd, qm, rn, msize, size, signedForm, os, load, condition));
     }
 
     /// `fns[os][msize][size]` reais de `trans_VLDR_S_sg`/`trans_VLDR_U_sg`/`trans_VSTR_sg`
@@ -241,6 +241,6 @@ public final class Thumb2MveGatherScatterDecoder implements DecoderExtension {
         int scaledOffset = imm7 << sizeLog2;
         int signedOffset = add ? scaledOffset : -scaledOffset;
         return DecodedInstruction.lifted(address, raw, InstructionSet.THUMB, condition,
-                new IrOp.MveGatherScatterImmediate(qd, qm, signedOffset, sizeLog2, writeback, load, condition));
+                new MveMoveOp.GatherScatterImmediate(qd, qm, signedOffset, sizeLog2, writeback, load, condition));
     }
 }

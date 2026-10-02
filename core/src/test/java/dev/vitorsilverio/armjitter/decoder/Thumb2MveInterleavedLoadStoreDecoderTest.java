@@ -2,7 +2,7 @@ package dev.vitorsilverio.armjitter.decoder;
 
 import dev.vitorsilverio.armjitter.arch.ArmArchitecture;
 import dev.vitorsilverio.armjitter.core.Condition;
-import dev.vitorsilverio.armjitter.ir.IrOp;
+import dev.vitorsilverio.armjitter.ir.MveMoveOp;
 import dev.vitorsilverio.armjitter.support.TestAddressSpace;
 import org.junit.jupiter.api.Test;
 
@@ -36,7 +36,7 @@ class Thumb2MveInterleavedLoadStoreDecoderTest {
     void decodesVld2() {
         int r = raw(true, true, 1, 2, 1, 1, 0b00000);
         DecodedInstruction decoded = tryDecode(ArmArchitecture.ARMV8_1M_MVE, r);
-        IrOp.MveInterleavedLoadStore op = assertInstanceOf(IrOp.MveInterleavedLoadStore.class, decoded.liftedOp());
+        MveMoveOp.InterleavedLoadStore op = assertInstanceOf(MveMoveOp.InterleavedLoadStore.class, decoded.liftedOp());
         assertEquals(2, op.qd());
         assertEquals(1, op.rn());
         assertEquals(2, op.groupSize());
@@ -50,7 +50,7 @@ class Thumb2MveInterleavedLoadStoreDecoderTest {
     void decodesVld4() {
         int r = raw(true, false, 1, 4, 2, 3, 0b00001);
         DecodedInstruction decoded = tryDecode(ArmArchitecture.ARMV8_1M_MVE, r);
-        IrOp.MveInterleavedLoadStore op = assertInstanceOf(IrOp.MveInterleavedLoadStore.class, decoded.liftedOp());
+        MveMoveOp.InterleavedLoadStore op = assertInstanceOf(MveMoveOp.InterleavedLoadStore.class, decoded.liftedOp());
         assertEquals(4, op.groupSize());
         assertEquals(3, op.pat());
     }
@@ -59,7 +59,7 @@ class Thumb2MveInterleavedLoadStoreDecoderTest {
     void decodesVst2() {
         int r = raw(false, false, 1, 0, 0, 0, 0b00000);
         DecodedInstruction decoded = tryDecode(ArmArchitecture.ARMV8_1M_MVE, r);
-        IrOp.MveInterleavedLoadStore op = assertInstanceOf(IrOp.MveInterleavedLoadStore.class, decoded.liftedOp());
+        MveMoveOp.InterleavedLoadStore op = assertInstanceOf(MveMoveOp.InterleavedLoadStore.class, decoded.liftedOp());
         assertEquals(false, op.load());
     }
 
@@ -67,7 +67,7 @@ class Thumb2MveInterleavedLoadStoreDecoderTest {
     void decodesVst4() {
         int r = raw(false, false, 1, 0, 0, 2, 0b00001);
         DecodedInstruction decoded = tryDecode(ArmArchitecture.ARMV8_1M_MVE, r);
-        IrOp.MveInterleavedLoadStore op = assertInstanceOf(IrOp.MveInterleavedLoadStore.class, decoded.liftedOp());
+        MveMoveOp.InterleavedLoadStore op = assertInstanceOf(MveMoveOp.InterleavedLoadStore.class, decoded.liftedOp());
         assertEquals(false, op.load());
         assertEquals(4, op.groupSize());
     }
@@ -112,7 +112,7 @@ class Thumb2MveInterleavedLoadStoreDecoderTest {
     void acceptsStackPointerBaseWithoutWriteback() {
         int r = raw(true, false, 13, 0, 0, 0, 0b00000);
         DecodedInstruction decoded = tryDecode(ArmArchitecture.ARMV8_1M_MVE, r);
-        assertInstanceOf(IrOp.MveInterleavedLoadStore.class, decoded.liftedOp());
+        assertInstanceOf(MveMoveOp.InterleavedLoadStore.class, decoded.liftedOp());
     }
 
     @Test
@@ -129,6 +129,6 @@ class Thumb2MveInterleavedLoadStoreDecoderTest {
         memory.put16(2, r & 0xFFFF);
         DecodedInstruction decoded = new ThumbDecoder(ArmArchitecture.ARMV8_1M_MVE).decode(memory, 0);
         assertEquals(InstructionKind.LIFTED_IR_OP, decoded.kind());
-        assertInstanceOf(IrOp.MveInterleavedLoadStore.class, decoded.liftedOp());
+        assertInstanceOf(MveMoveOp.InterleavedLoadStore.class, decoded.liftedOp());
     }
 }

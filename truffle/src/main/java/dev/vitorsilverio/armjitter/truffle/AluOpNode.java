@@ -3,6 +3,7 @@ package dev.vitorsilverio.armjitter.truffle;
 import com.oracle.truffle.api.CompilerDirectives.CompilationFinal;
 import dev.vitorsilverio.armjitter.codegen.executor.IrAluExecutor;
 import dev.vitorsilverio.armjitter.core.ArmCore;
+import dev.vitorsilverio.armjitter.ir.IntegerOp;
 import dev.vitorsilverio.armjitter.ir.IrOp;
 
 /// Nó Truffle para a categoria ALU escalar (task A6, taxonomia da especificação): `Alu`,
@@ -25,40 +26,40 @@ final class AluOpNode extends IrOpNode {
     @Override
     boolean doExecute(ArmCore core, int blockEndPc) {
         return switch (op) {
-            case IrOp.Alu alu -> executor.execute(core, alu);
-            case IrOp.MoveTop moveTop -> {
+            case IntegerOp.Alu alu -> executor.execute(core, alu);
+            case IntegerOp.MoveTop moveTop -> {
                 executor.executeMoveTop(core, moveTop);
                 yield false;
             }
-            case IrOp.Sel sel -> {
+            case IntegerOp.Sel sel -> {
                 executor.executeSel(core, sel);
                 yield false;
             }
-            case IrOp.Saturate saturate -> {
+            case IntegerOp.Saturate saturate -> {
                 executor.executeSaturate(core, saturate);
                 yield false;
             }
-            case IrOp.AbsDiffSum absDiffSum -> {
+            case IntegerOp.AbsDiffSum absDiffSum -> {
                 executor.executeAbsDiffSum(core, absDiffSum);
                 yield false;
             }
-            case IrOp.Saturating saturating -> {
+            case IntegerOp.Saturating saturating -> {
                 executor.executeSaturating(core, saturating);
                 yield false;
             }
-            case IrOp.BitFieldExtract bitFieldExtract -> {
+            case IntegerOp.BitFieldExtract bitFieldExtract -> {
                 executor.executeBitFieldExtract(core, bitFieldExtract);
                 yield false;
             }
-            case IrOp.BitFieldInsert bitFieldInsert -> {
+            case IntegerOp.BitFieldInsert bitFieldInsert -> {
                 executor.executeBitFieldInsert(core, bitFieldInsert);
                 yield false;
             }
-            case IrOp.BitReverse bitReverse -> {
+            case IntegerOp.BitReverse bitReverse -> {
                 executor.executeBitReverse(core, bitReverse);
                 yield false;
             }
-            case IrOp.Divide divide -> {
+            case IntegerOp.Divide divide -> {
                 executor.executeDivide(core, divide);
                 yield false;
             }

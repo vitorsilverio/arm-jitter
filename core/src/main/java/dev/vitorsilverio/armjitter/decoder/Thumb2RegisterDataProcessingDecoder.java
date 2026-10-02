@@ -347,7 +347,7 @@ public final class Thumb2RegisterDataProcessingDecoder implements DecoderExtensi
         }
         // family (nibble[23:20]) -> "ttt" de ArmDecoder (000=ADD16,001=ASX,010=SAX,011=SUB16,
         // 100=ADD8,111=SUB8); op (nibble[7:4]) -> "ppp" de ArmDecoder (001=S,010=Q,011=SH,101=U,
-        // 110=UQ,111=UH) — reempacotado no MESMO formato que `IrOp.ParallelAlu`/`StandardIrBuilder`
+        // 110=UQ,111=UH) — reempacotado no MESMO formato que `IntegerOp.ParallelAlu`/`StandardIrBuilder`
         // já esperam (`packed = variantBits | (opBits << 3)`), sem IR nova.
         int armOpBits = switch (family) {
             case 0x9 -> 0b000; // ADD16

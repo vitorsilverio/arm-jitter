@@ -7,9 +7,9 @@ import dev.vitorsilverio.armjitter.core.CpuMode;
 import dev.vitorsilverio.armjitter.core.FpscrRegister;
 import dev.vitorsilverio.armjitter.core.VfpRegisters;
 import dev.vitorsilverio.armjitter.decoder.BlockTransferMode;
-import dev.vitorsilverio.armjitter.ir.IrOp;
 import dev.vitorsilverio.armjitter.ir.ParallelAluOp;
 import dev.vitorsilverio.armjitter.ir.ParallelAluVariant;
+import dev.vitorsilverio.armjitter.ir.VfpOp;
 import dev.vitorsilverio.armjitter.memory.MemoryAccessType;
 import dev.vitorsilverio.armjitter.swi.CpuState;
 
@@ -952,10 +952,10 @@ public final class AsmRuntimeHelpers {
     // VDIV/VNEG/VABS/VMOV registrador, VLDR/VSTR, VMOV Rt<->Sn, VMOV(imm)) é bytecode direto no
     // AsmBlockCompiler (sem passar por aqui); só as formas mais raras chamam um helper.
 
-    /// Cacheado: {@link IrOp.VfpOperation#values()} clona o array a cada chamada.
-    private static final IrOp.VfpOperation[] VFP_OPERATIONS = IrOp.VfpOperation.values();
-    /// Cacheado: {@link IrOp.VfpConversion#values()} clona o array a cada chamada.
-    private static final IrOp.VfpConversion[] VFP_CONVERSIONS = IrOp.VfpConversion.values();
+    /// Cacheado: {@link VfpOp.VfpOperation#values()} clona o array a cada chamada.
+    private static final VfpOp.VfpOperation[] VFP_OPERATIONS = VfpOp.VfpOperation.values();
+    /// Cacheado: {@link VfpOp.VfpConversion#values()} clona o array a cada chamada.
+    private static final VfpOp.VfpConversion[] VFP_CONVERSIONS = VfpOp.VfpConversion.values();
     /// Índice do registrador ARM que, em `VMRS Rt, FPSCR` com `Rt=15`, sinaliza o caso especial
     /// `VMRS APSR_nzcv, FPSCR` (ver {@link #executeVfpSystemTransfer} e
     /// {@link dev.vitorsilverio.armjitter.codegen.executor.IrVfpExecutor#APSR_NZCV_ENCODING}).
@@ -973,14 +973,14 @@ public final class AsmRuntimeHelpers {
         return (((long) high) << 32) | (low & 0xFFFF_FFFFL);
     }
 
-    /// `VMLA`/`VMLS`/`VNMUL`/`VSQRT` (formas de {@link IrOp.VfpAlu} FORA do caminho quente
+    /// `VMLA`/`VMLS`/`VNMUL`/`VSQRT` (formas de {@link VfpOp.Alu} FORA do caminho quente
     /// ADD/SUB/MUL/DIV/NEG/ABS/COPY, que o {@code AsmBlockCompiler} emite em bytecode direto).
     /// Espelha exatamente o subconjunto correspondente de
     /// {@code IrVfpExecutor#computeSingle}/{@code #computeDouble}: `VMLA`/`VMLS` NUNCA usam
     /// {@code Math.fma} (duas operações arredondadas separadamente).
     public static void vfpAluCold(ArmCore core, int opOrdinal, boolean doublePrecision, int vd, int vn, int vm) {
         VfpRegisters vfp = core.vfp();
-        IrOp.VfpOperation op = VFP_OPERATIONS[opOrdinal];
+        VfpOp.VfpOperation op = VFP_OPERATIONS[opOrdinal];
         if (doublePrecision) {
             double result = switch (op) {
                 case MLA -> vfp.dDouble(vd) + (vfp.dDouble(vn) * vfp.dDouble(vm));
@@ -1094,7 +1094,7 @@ public final class AsmRuntimeHelpers {
         VfpRegisters vfp = core.vfp();
         int registerSizeBytes = doublePrecision ? 8 : 4;
         int totalBytes = count * registerSizeBytes;
-        // `baseValueOverride` (`-1` = ausente): mesmo idioma de {@code IrOp.Load#baseValueOverride}
+        // `baseValueOverride` (`-1` = ausente): mesmo idioma de {@code MemoryOp.Load#baseValueOverride}
         // — `VLDM`/`VSTM Rn=pc` (raro, mas legal quando `W=0`) precisa do viés `+8` do `PC`
         // arquitetural, que `core.register(15)` NÃO reflete durante a execução deste helper (só
         // depois que o bloco termina — ver {@code IrVfpExecutor#executeVfpMultipleTransfer}).

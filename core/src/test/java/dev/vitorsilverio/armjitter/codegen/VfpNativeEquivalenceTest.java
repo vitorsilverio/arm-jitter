@@ -10,6 +10,7 @@ import dev.vitorsilverio.armjitter.core.ArmCore;
 import dev.vitorsilverio.armjitter.core.Condition;
 import dev.vitorsilverio.armjitter.ir.IrBlock;
 import dev.vitorsilverio.armjitter.ir.IrOp;
+import dev.vitorsilverio.armjitter.ir.VfpOp;
 import dev.vitorsilverio.armjitter.ir.opt.IrOptimizer;
 import dev.vitorsilverio.armjitter.support.EquivalenceTestSupport;
 import dev.vitorsilverio.armjitter.support.TestAddressSpace;
@@ -48,7 +49,7 @@ class VfpNativeEquivalenceTest extends BlockEquivalenceTest {
         harness.assertEquivalent(referenceEmitter, asmEmitter, ir, EquivalenceTestSupport.independentPair(memory, init));
     }
 
-    // ── 1. VfpAlu: ADD/SUB/MUL/DIV single+double (bytecode direto) ──────────────
+    // ── 1. VfpOp.Alu: ADD/SUB/MUL/DIV single+double (bytecode direto) ──────────────
 
     @Test
     void conditionalArithMatchInterpretedAcrossAllCodesAndFlagsSingleAndDouble() {
@@ -58,14 +59,14 @@ class VfpNativeEquivalenceTest extends BlockEquivalenceTest {
             Condition condition = cond(c);
             final int flags = c;
             IrBlock ir = block(
-                    new IrOp.VfpAlu(IrOp.VfpOperation.ADD, false, 2, 0, 1, condition),
-                    new IrOp.VfpAlu(IrOp.VfpOperation.SUB, false, 3, 0, 1, condition),
-                    new IrOp.VfpAlu(IrOp.VfpOperation.MUL, false, 4, 0, 1, condition),
-                    new IrOp.VfpAlu(IrOp.VfpOperation.DIV, false, 5, 0, 1, condition),
-                    new IrOp.VfpAlu(IrOp.VfpOperation.ADD, true, 10, 8, 9, condition),
-                    new IrOp.VfpAlu(IrOp.VfpOperation.SUB, true, 11, 8, 9, condition),
-                    new IrOp.VfpAlu(IrOp.VfpOperation.MUL, true, 12, 8, 9, condition),
-                    new IrOp.VfpAlu(IrOp.VfpOperation.DIV, true, 13, 8, 9, condition));
+                    new VfpOp.Alu(VfpOp.VfpOperation.ADD, false, 2, 0, 1, condition),
+                    new VfpOp.Alu(VfpOp.VfpOperation.SUB, false, 3, 0, 1, condition),
+                    new VfpOp.Alu(VfpOp.VfpOperation.MUL, false, 4, 0, 1, condition),
+                    new VfpOp.Alu(VfpOp.VfpOperation.DIV, false, 5, 0, 1, condition),
+                    new VfpOp.Alu(VfpOp.VfpOperation.ADD, true, 10, 8, 9, condition),
+                    new VfpOp.Alu(VfpOp.VfpOperation.SUB, true, 11, 8, 9, condition),
+                    new VfpOp.Alu(VfpOp.VfpOperation.MUL, true, 12, 8, 9, condition),
+                    new VfpOp.Alu(VfpOp.VfpOperation.DIV, true, 13, 8, 9, condition));
             assertEquivalentVfp(ir, core -> {
                 core.vfp().setSFloat(0, 0.1f);
                 core.vfp().setSFloat(1, 0.2f);
@@ -79,10 +80,10 @@ class VfpNativeEquivalenceTest extends BlockEquivalenceTest {
     @Test
     void divByZeroAndSubnormalMatchInterpreted() {
         IrBlock ir = block(
-                new IrOp.VfpAlu(IrOp.VfpOperation.DIV, false, 2, 0, 1, Condition.AL),
-                new IrOp.VfpAlu(IrOp.VfpOperation.DIV, false, 3, 4, 1, Condition.AL),
-                new IrOp.VfpAlu(IrOp.VfpOperation.ADD, false, 5, 6, 7, Condition.AL),
-                new IrOp.VfpAlu(IrOp.VfpOperation.DIV, true, 8, 10, 11, Condition.AL));
+                new VfpOp.Alu(VfpOp.VfpOperation.DIV, false, 2, 0, 1, Condition.AL),
+                new VfpOp.Alu(VfpOp.VfpOperation.DIV, false, 3, 4, 1, Condition.AL),
+                new VfpOp.Alu(VfpOp.VfpOperation.ADD, false, 5, 6, 7, Condition.AL),
+                new VfpOp.Alu(VfpOp.VfpOperation.DIV, true, 8, 10, 11, Condition.AL));
         assertEquivalentVfp(ir, core -> {
             core.vfp().setSFloat(0, 1.0f);
             core.vfp().setS(1, 0); // +0.0f — 1/0 = +Inf
@@ -94,17 +95,17 @@ class VfpNativeEquivalenceTest extends BlockEquivalenceTest {
         });
     }
 
-    // ── 2. VfpAlu: MLA/MLS/NMUL (helper vfpAluCold) ──────────────────────────────
+    // ── 2. VfpOp.Alu: MLA/MLS/NMUL (helper vfpAluCold) ──────────────────────────────
 
     @Test
     void mlaMlsNmulSingleAndDoubleMatchInterpreted() {
         IrBlock ir = block(
-                new IrOp.VfpAlu(IrOp.VfpOperation.MLA, false, 2, 0, 1, Condition.AL),
-                new IrOp.VfpAlu(IrOp.VfpOperation.MLS, false, 3, 0, 1, Condition.AL),
-                new IrOp.VfpAlu(IrOp.VfpOperation.NMUL, false, 4, 0, 1, Condition.AL),
-                new IrOp.VfpAlu(IrOp.VfpOperation.MLA, true, 8, 6, 7, Condition.AL),
-                new IrOp.VfpAlu(IrOp.VfpOperation.MLS, true, 9, 6, 7, Condition.AL),
-                new IrOp.VfpAlu(IrOp.VfpOperation.NMUL, true, 10, 6, 7, Condition.AL));
+                new VfpOp.Alu(VfpOp.VfpOperation.MLA, false, 2, 0, 1, Condition.AL),
+                new VfpOp.Alu(VfpOp.VfpOperation.MLS, false, 3, 0, 1, Condition.AL),
+                new VfpOp.Alu(VfpOp.VfpOperation.NMUL, false, 4, 0, 1, Condition.AL),
+                new VfpOp.Alu(VfpOp.VfpOperation.MLA, true, 8, 6, 7, Condition.AL),
+                new VfpOp.Alu(VfpOp.VfpOperation.MLS, true, 9, 6, 7, Condition.AL),
+                new VfpOp.Alu(VfpOp.VfpOperation.NMUL, true, 10, 6, 7, Condition.AL));
         assertEquivalentVfp(ir, core -> {
             core.vfp().setSFloat(0, 1.0000001f);
             core.vfp().setSFloat(1, 1.0000001f);
@@ -118,16 +119,16 @@ class VfpNativeEquivalenceTest extends BlockEquivalenceTest {
         });
     }
 
-    // ── 3. VfpAlu: NEG/ABS (bit de sinal, NaN payload, -0.0) ────────────────────
+    // ── 3. VfpOp.Alu: NEG/ABS (bit de sinal, NaN payload, -0.0) ────────────────────
 
     @Test
     void negAbsPreserveNanPayloadAndSignedZeroMatchInterpreted() {
         IrBlock ir = block(
-                new IrOp.VfpAlu(IrOp.VfpOperation.NEG, false, 1, 0, 0, Condition.AL),
-                new IrOp.VfpAlu(IrOp.VfpOperation.NEG, false, 3, 0, 2, Condition.AL),
-                new IrOp.VfpAlu(IrOp.VfpOperation.ABS, false, 5, 0, 4, Condition.AL),
-                new IrOp.VfpAlu(IrOp.VfpOperation.NEG, true, 9, 0, 8, Condition.AL),
-                new IrOp.VfpAlu(IrOp.VfpOperation.ABS, true, 11, 0, 10, Condition.AL));
+                new VfpOp.Alu(VfpOp.VfpOperation.NEG, false, 1, 0, 0, Condition.AL),
+                new VfpOp.Alu(VfpOp.VfpOperation.NEG, false, 3, 0, 2, Condition.AL),
+                new VfpOp.Alu(VfpOp.VfpOperation.ABS, false, 5, 0, 4, Condition.AL),
+                new VfpOp.Alu(VfpOp.VfpOperation.NEG, true, 9, 0, 8, Condition.AL),
+                new VfpOp.Alu(VfpOp.VfpOperation.ABS, true, 11, 0, 10, Condition.AL));
         assertEquivalentVfp(ir, core -> {
             core.vfp().setS(0, 0x7FC00001); // NaN quieto com payload
             core.vfp().setSFloat(2, 0.0f);
@@ -137,14 +138,14 @@ class VfpNativeEquivalenceTest extends BlockEquivalenceTest {
         });
     }
 
-    // ── 4. VfpAlu: SQRT (helper vfpAluCold) ──────────────────────────────────────
+    // ── 4. VfpOp.Alu: SQRT (helper vfpAluCold) ──────────────────────────────────────
 
     @Test
     void sqrtOfNegativeAndPositiveMatchInterpreted() {
         IrBlock ir = block(
-                new IrOp.VfpAlu(IrOp.VfpOperation.SQRT, false, 1, 0, 0, Condition.AL),
-                new IrOp.VfpAlu(IrOp.VfpOperation.SQRT, false, 3, 0, 2, Condition.AL),
-                new IrOp.VfpAlu(IrOp.VfpOperation.SQRT, true, 6, 0, 5, Condition.AL));
+                new VfpOp.Alu(VfpOp.VfpOperation.SQRT, false, 1, 0, 0, Condition.AL),
+                new VfpOp.Alu(VfpOp.VfpOperation.SQRT, false, 3, 0, 2, Condition.AL),
+                new VfpOp.Alu(VfpOp.VfpOperation.SQRT, true, 6, 0, 5, Condition.AL));
         assertEquivalentVfp(ir, core -> {
             core.vfp().setSFloat(0, -1.0f);
             core.vfp().setSFloat(2, 2.0f);
@@ -152,30 +153,30 @@ class VfpNativeEquivalenceTest extends BlockEquivalenceTest {
         });
     }
 
-    // ── 5. VfpAlu: COPY ──────────────────────────────────────────────────────────
+    // ── 5. VfpOp.Alu: COPY ──────────────────────────────────────────────────────────
 
     @Test
     void copySingleAndDoubleMatchInterpreted() {
         IrBlock ir = block(
-                new IrOp.VfpAlu(IrOp.VfpOperation.COPY, false, 1, 0, 0, Condition.AL),
-                new IrOp.VfpAlu(IrOp.VfpOperation.COPY, true, 3, 0, 2, Condition.AL));
+                new VfpOp.Alu(VfpOp.VfpOperation.COPY, false, 1, 0, 0, Condition.AL),
+                new VfpOp.Alu(VfpOp.VfpOperation.COPY, true, 3, 0, 2, Condition.AL));
         assertEquivalentVfp(ir, core -> {
             core.vfp().setS(0, 0x7FC00001);
             core.vfp().setD(2, 0xFFF8_0000_0000_0001L);
         });
     }
 
-    // ── 6. VfpMoveImmediate ──────────────────────────────────────────────────────
+    // ── 6. VfpOp.MoveImmediate ──────────────────────────────────────────────────────
 
     @Test
     void moveImmediateSingleAndDoubleMatchInterpreted() {
         IrBlock ir = block(
-                new IrOp.VfpMoveImmediate(false, 0, 0x3F000000L, Condition.AL), // 0.5f
-                new IrOp.VfpMoveImmediate(true, 2, 0x3FE0000000000000L, Condition.AL)); // 0.5
+                new VfpOp.MoveImmediate(false, 0, 0x3F000000L, Condition.AL), // 0.5f
+                new VfpOp.MoveImmediate(true, 2, 0x3FE0000000000000L, Condition.AL)); // 0.5
         assertEquivalentVfp(ir, core -> { });
     }
 
-    // ── 7. VfpCompare: 4 quadrantes × 14 condições ──────────────────────────────
+    // ── 7. VfpOp.Compare: 4 quadrantes × 14 condições ──────────────────────────────
 
     @Test
     void conditionalCompareAllQuadrantsMatchInterpretedAcrossAllCodes() {
@@ -183,12 +184,12 @@ class VfpNativeEquivalenceTest extends BlockEquivalenceTest {
             Condition condition = cond(c);
             final int flags = c;
             IrBlock ir = block(
-                    new IrOp.VfpCompare(false, false, false, 0, 1, condition), // eq
-                    new IrOp.VfpCompare(false, false, false, 2, 3, condition), // lt
-                    new IrOp.VfpCompare(false, false, false, 4, 5, condition), // gt
-                    new IrOp.VfpCompare(false, false, false, 6, 7, condition), // unordered (NaN)
-                    new IrOp.VfpCompare(false, true, false, 8, 0, condition),  // compare-with-zero
-                    new IrOp.VfpCompare(true, false, false, 10, 12, condition));
+                    new VfpOp.Compare(false, false, false, 0, 1, condition), // eq
+                    new VfpOp.Compare(false, false, false, 2, 3, condition), // lt
+                    new VfpOp.Compare(false, false, false, 4, 5, condition), // gt
+                    new VfpOp.Compare(false, false, false, 6, 7, condition), // unordered (NaN)
+                    new VfpOp.Compare(false, true, false, 8, 0, condition),  // compare-with-zero
+                    new VfpOp.Compare(true, false, false, 10, 12, condition));
             assertEquivalentVfp(ir, core -> {
                 core.vfp().setSFloat(0, 1.0f);
                 core.vfp().setSFloat(1, 1.0f);
@@ -205,56 +206,56 @@ class VfpNativeEquivalenceTest extends BlockEquivalenceTest {
         }
     }
 
-    // ── 8. VfpConvert: os 10 membros de VfpConversion ───────────────────────────
+    // ── 8. VfpOp.Convert: os 10 membros de VfpConversion ───────────────────────────
 
     @Test
     void allConversionsIncludingNanAndSaturationMatchInterpreted() {
         // Cada conversão roda num bloco/par de cores independente (EquivalenceTestSupport):
         // evita qualquer overlap entre bancos S/D de casos diferentes.
         assertEquivalentVfp(
-                block(new IrOp.VfpConvert(IrOp.VfpConversion.F32_TO_F64, 1, 0, Condition.AL)),
+                block(new VfpOp.Convert(VfpOp.VfpConversion.F32_TO_F64, 1, 0, Condition.AL)),
                 core -> core.vfp().setSFloat(0, 1.5f));
         assertEquivalentVfp(
-                block(new IrOp.VfpConvert(IrOp.VfpConversion.F64_TO_F32, 2, 0, Condition.AL)),
+                block(new VfpOp.Convert(VfpOp.VfpConversion.F64_TO_F32, 2, 0, Condition.AL)),
                 core -> core.vfp().setDDouble(0, 2.5));
         assertEquivalentVfp(
-                block(new IrOp.VfpConvert(IrOp.VfpConversion.S32_TO_F32, 1, 0, Condition.AL)),
+                block(new VfpOp.Convert(VfpOp.VfpConversion.S32_TO_F32, 1, 0, Condition.AL)),
                 core -> core.vfp().setS(0, -7));
         assertEquivalentVfp(
-                block(new IrOp.VfpConvert(IrOp.VfpConversion.S32_TO_F64, 1, 0, Condition.AL)),
+                block(new VfpOp.Convert(VfpOp.VfpConversion.S32_TO_F64, 1, 0, Condition.AL)),
                 core -> core.vfp().setS(0, -7));
         assertEquivalentVfp(
-                block(new IrOp.VfpConvert(IrOp.VfpConversion.U32_TO_F32, 1, 0, Condition.AL)),
+                block(new VfpOp.Convert(VfpOp.VfpConversion.U32_TO_F32, 1, 0, Condition.AL)),
                 core -> core.vfp().setS(0, -7));
         assertEquivalentVfp(
-                block(new IrOp.VfpConvert(IrOp.VfpConversion.U32_TO_F64, 1, 0, Condition.AL)),
+                block(new VfpOp.Convert(VfpOp.VfpConversion.U32_TO_F64, 1, 0, Condition.AL)),
                 core -> core.vfp().setS(0, -7));
         assertEquivalentVfp( // NaN -> 0
-                block(new IrOp.VfpConvert(IrOp.VfpConversion.F32_TO_S32, 1, 0, Condition.AL)),
+                block(new VfpOp.Convert(VfpOp.VfpConversion.F32_TO_S32, 1, 0, Condition.AL)),
                 core -> core.vfp().setSFloat(0, Float.NaN));
         assertEquivalentVfp( // 1e30f -> Integer.MAX_VALUE (satura)
-                block(new IrOp.VfpConvert(IrOp.VfpConversion.F32_TO_S32, 1, 0, Condition.AL)),
+                block(new VfpOp.Convert(VfpOp.VfpConversion.F32_TO_S32, 1, 0, Condition.AL)),
                 core -> core.vfp().setSFloat(0, 1e30f));
         assertEquivalentVfp(
-                block(new IrOp.VfpConvert(IrOp.VfpConversion.F64_TO_S32, 1, 0, Condition.AL)),
+                block(new VfpOp.Convert(VfpOp.VfpConversion.F64_TO_S32, 1, 0, Condition.AL)),
                 core -> core.vfp().setDDouble(0, -1.5));
         assertEquivalentVfp( // -1.5f -> 0 (sem sinal, negativo clampa para 0)
-                block(new IrOp.VfpConvert(IrOp.VfpConversion.F32_TO_U32, 1, 0, Condition.AL)),
+                block(new VfpOp.Convert(VfpOp.VfpConversion.F32_TO_U32, 1, 0, Condition.AL)),
                 core -> core.vfp().setSFloat(0, -1.5f));
         assertEquivalentVfp( // 4294967040.0 -> 0xFFFFFF00
-                block(new IrOp.VfpConvert(IrOp.VfpConversion.F64_TO_U32, 1, 0, Condition.AL)),
+                block(new VfpOp.Convert(VfpOp.VfpConversion.F64_TO_U32, 1, 0, Condition.AL)),
                 core -> core.vfp().setDDouble(0, 4294967040.0));
     }
 
-    // ── 9. VfpLoad/VfpStore: single+double, ida e volta ─────────────────────────
+    // ── 9. VfpOp.Load/VfpOp.Store: single+double, ida e volta ─────────────────────────
 
     @Test
     void loadStoreRoundTripSingleAndDoubleMatchInterpreted() {
         IrBlock ir = block(
-                new IrOp.VfpStore(false, 0, 13, -1, 0, Condition.AL),
-                new IrOp.VfpLoad(false, 1, 13, -1, 0, Condition.AL),
-                new IrOp.VfpStore(true, 2, 13, -1, 8, Condition.AL),
-                new IrOp.VfpLoad(true, 4, 13, -1, 8, Condition.AL));
+                new VfpOp.Store(false, 0, 13, -1, 0, Condition.AL),
+                new VfpOp.Load(false, 1, 13, -1, 0, Condition.AL),
+                new VfpOp.Store(true, 2, 13, -1, 8, Condition.AL),
+                new VfpOp.Load(true, 4, 13, -1, 8, Condition.AL));
         assertEquivalentVfp(ir, core -> {
             core.setRegister(13, 0);
             core.vfp().setS(0, 0x7FC00001);
@@ -271,10 +272,10 @@ class VfpNativeEquivalenceTest extends BlockEquivalenceTest {
     @Test
     void loadStorePcRelativeBaseOverrideMatchesInterpreted() {
         IrBlock ir = block(
-                new IrOp.VfpStore(true, 0, 15, 32, 0, Condition.AL),   // [override+0] = D0
-                new IrOp.VfpLoad(true, 1, 15, 32, 0, Condition.AL),    // D1 = [override+0]
-                new IrOp.VfpStore(false, 2, 15, 48, 4, Condition.AL),  // [override+4] = S2
-                new IrOp.VfpLoad(false, 3, 15, 48, 4, Condition.AL));  // S3 = [override+4]
+                new VfpOp.Store(true, 0, 15, 32, 0, Condition.AL),   // [override+0] = D0
+                new VfpOp.Load(true, 1, 15, 32, 0, Condition.AL),    // D1 = [override+0]
+                new VfpOp.Store(false, 2, 15, 48, 4, Condition.AL),  // [override+4] = S2
+                new VfpOp.Load(false, 3, 15, 48, 4, Condition.AL));  // S3 = [override+4]
         assertEquivalentVfp(ir, core -> {
             core.setProgramCounter(0xDEAD_0000); // baseValueOverride não depende do PC ao vivo
             core.vfp().setD(0, 0xAABBCCDD11223344L);
@@ -282,15 +283,15 @@ class VfpNativeEquivalenceTest extends BlockEquivalenceTest {
         });
     }
 
-    // ── 10. VfpMultipleTransfer: VLDM/VSTM IA/DB, single+double, com writeback ──
+    // ── 10. VfpOp.MultipleTransfer: VLDM/VSTM IA/DB, single+double, com writeback ──
 
     @Test
     void multipleTransferIaAndDbSingleAndDoubleMatchInterpreted() {
         IrBlock ir = block(
-                new IrOp.VfpMultipleTransfer(false, false, 13, -1, 0, 4, true, false, Condition.AL),  // VSTM IA!
-                new IrOp.VfpMultipleTransfer(true, false, 13, -1, 8, 4, true, false, Condition.AL),
-                new IrOp.VfpMultipleTransfer(false, true, 13, -1, 0, 2, true, true, Condition.AL),     // VPUSH
-                new IrOp.VfpMultipleTransfer(true, true, 13, -1, 4, 2, true, false, Condition.AL));    // VLDM IA
+                new VfpOp.MultipleTransfer(false, false, 13, -1, 0, 4, true, false, Condition.AL),  // VSTM IA!
+                new VfpOp.MultipleTransfer(true, false, 13, -1, 8, 4, true, false, Condition.AL),
+                new VfpOp.MultipleTransfer(false, true, 13, -1, 0, 2, true, true, Condition.AL),     // VPUSH
+                new VfpOp.MultipleTransfer(true, true, 13, -1, 4, 2, true, false, Condition.AL));    // VLDM IA
         assertEquivalentVfp(ir, core -> {
             core.setRegister(13, 0); // TestAddressSpace(64) — endereços ficam em [0,32), com folga
             for (int i = 0; i < 4; i++) {
@@ -307,8 +308,8 @@ class VfpNativeEquivalenceTest extends BlockEquivalenceTest {
             Condition condition = cond(c);
             final int flags = c;
             IrBlock ir = block(
-                    new IrOp.VfpMultipleTransfer(false, false, 13, -1, 0, 3, false, false, condition),
-                    new IrOp.VfpMultipleTransfer(true, false, 13, -1, 5, 3, false, false, condition));
+                    new VfpOp.MultipleTransfer(false, false, 13, -1, 0, 3, false, false, condition),
+                    new VfpOp.MultipleTransfer(true, false, 13, -1, 5, 3, false, false, condition));
             assertEquivalentVfp(ir, core -> {
                 core.setRegister(13, 32);
                 core.vfp().setS(0, 1);
@@ -319,7 +320,7 @@ class VfpNativeEquivalenceTest extends BlockEquivalenceTest {
         }
     }
 
-    // ── 11. VfpCoreTransfer: FMRS/FMSR, ambos os sentidos ───────────────────────
+    // ── 11. VfpOp.CoreTransfer: FMRS/FMSR, ambos os sentidos ───────────────────────
 
     @Test
     void conditionalCoreTransferBothDirectionsMatchInterpretedAcrossAllCodes() {
@@ -327,8 +328,8 @@ class VfpNativeEquivalenceTest extends BlockEquivalenceTest {
             Condition condition = cond(c);
             final int flags = c;
             IrBlock ir = block(
-                    new IrOp.VfpCoreTransfer(true, 0, 1, false, condition),  // Sn -> Rt
-                    new IrOp.VfpCoreTransfer(false, 2, 3, false, condition)); // Rt -> Sn
+                    new VfpOp.CoreTransfer(true, 0, 1, false, condition),  // Sn -> Rt
+                    new VfpOp.CoreTransfer(false, 2, 3, false, condition)); // Rt -> Sn
             assertEquivalentVfp(ir, core -> {
                 core.vfp().setS(1, 0xCAFEBABE);
                 core.setRegister(2, 0xDEADBEEF);
@@ -337,7 +338,7 @@ class VfpNativeEquivalenceTest extends BlockEquivalenceTest {
         }
     }
 
-    // ── 12. VfpCorePairTransfer: FMRRD/FMDRR, ambos os sentidos ─────────────────
+    // ── 12. VfpOp.CorePairTransfer: FMRRD/FMDRR, ambos os sentidos ─────────────────
 
     @Test
     void conditionalCorePairTransferBothDirectionsMatchInterpretedAcrossAllCodes() {
@@ -345,8 +346,8 @@ class VfpNativeEquivalenceTest extends BlockEquivalenceTest {
             Condition condition = cond(c);
             final int flags = c;
             IrBlock ir = block(
-                    new IrOp.VfpCorePairTransfer(true, 0, 1, 2, condition),  // Dm -> (armLow,armHigh)
-                    new IrOp.VfpCorePairTransfer(false, 3, 4, 5, condition)); // (armLow,armHigh) -> Dm
+                    new VfpOp.CorePairTransfer(true, 0, 1, 2, condition),  // Dm -> (armLow,armHigh)
+                    new VfpOp.CorePairTransfer(false, 3, 4, 5, condition)); // (armLow,armHigh) -> Dm
             assertEquivalentVfp(ir, core -> {
                 core.vfp().setD(2, 0x1122334455667788L);
                 core.setRegister(3, 0x11223344);
@@ -356,7 +357,7 @@ class VfpNativeEquivalenceTest extends BlockEquivalenceTest {
         }
     }
 
-    // ── 13. VfpSystemTransfer: VMSR/VMRS incl. APSR_nzcv, 14 condições ──────────
+    // ── 13. VfpOp.SystemTransfer: VMSR/VMRS incl. APSR_nzcv, 14 condições ──────────
 
     @Test
     void conditionalSystemTransferIncludingApsrNzcvMatchInterpretedAcrossAllCodes() {
@@ -364,10 +365,10 @@ class VfpNativeEquivalenceTest extends BlockEquivalenceTest {
             Condition condition = cond(c);
             final int flags = c;
             IrBlock ir = block(
-                    new IrOp.VfpCompare(false, false, false, 0, 1, condition), // grava FPSCR.NZCV
-                    new IrOp.VfpSystemTransfer(true, 15, condition),           // VMRS APSR_nzcv
-                    new IrOp.VfpSystemTransfer(false, 2, condition),           // VMSR desde Rt
-                    new IrOp.VfpSystemTransfer(true, 3, condition));           // VMRS Rt normal
+                    new VfpOp.Compare(false, false, false, 0, 1, condition), // grava FPSCR.NZCV
+                    new VfpOp.SystemTransfer(true, 15, condition),           // VMRS APSR_nzcv
+                    new VfpOp.SystemTransfer(false, 2, condition),           // VMSR desde Rt
+                    new VfpOp.SystemTransfer(true, 3, condition));           // VMRS Rt normal
             assertEquivalentVfp(ir, core -> {
                 core.vfp().setSFloat(0, 2.0f);
                 core.vfp().setSFloat(1, 1.0f); // gt: N=0,Z=0,C=1,V=0
@@ -390,20 +391,20 @@ class VfpNativeEquivalenceTest extends BlockEquivalenceTest {
             long vnBitsD = random.nextLong();
             long vmBitsD = random.nextLong();
             long vdBitsD = random.nextLong();
-            for (IrOp.VfpOperation op : IrOp.VfpOperation.values()) {
+            for (VfpOp.VfpOperation op : VfpOp.VfpOperation.values()) {
                 // MAXNM/MINNM (B14.4): sem emissor nativo ainda (task explicita "decode +
                 // interpretado apenas", `AsmNativePolicy` recusa e cai no fallback interpretado) —
-                // mesma exclusão que CRC32/VfpSelect/Nocp têm em outras suítes, não um esquecimento.
-                if (op == IrOp.VfpOperation.MAXNM || op == IrOp.VfpOperation.MINNM) {
+                // mesma exclusão que CRC32/VfpOp.Select/Nocp têm em outras suítes, não um esquecimento.
+                if (op == VfpOp.VfpOperation.MAXNM || op == VfpOp.VfpOperation.MINNM) {
                     continue;
                 }
-                IrBlock singleBlock = block(new IrOp.VfpAlu(op, false, 0, 1, 2, Condition.AL));
+                IrBlock singleBlock = block(new VfpOp.Alu(op, false, 0, 1, 2, Condition.AL));
                 assertEquivalentVfp(singleBlock, core -> {
                     core.vfp().setS(0, vdBits);
                     core.vfp().setS(1, vnBits);
                     core.vfp().setS(2, vmBits);
                 });
-                IrBlock doubleBlock = block(new IrOp.VfpAlu(op, true, 0, 1, 2, Condition.AL));
+                IrBlock doubleBlock = block(new VfpOp.Alu(op, true, 0, 1, 2, Condition.AL));
                 assertEquivalentVfp(doubleBlock, core -> {
                     core.vfp().setD(0, vdBitsD);
                     core.vfp().setD(1, vnBitsD);
@@ -420,11 +421,11 @@ class VfpNativeEquivalenceTest extends BlockEquivalenceTest {
         AsmCodeEmitter perOpEmitter = new AsmCodeEmitter(
                 ArmArchitecture.ARMV4T, AsmFallbackPolicy.PER_OP, IrOptimizer.identity());
         IrBlock ir = block(
-                new IrOp.VfpCoreTransfer(true, 0, 1, true, Condition.AL),                        // VMOV_half Rt <- S1
-                new IrOp.VfpCoreTransfer(false, 2, 3, true, Condition.AL),                       // VMOV_half S3 <- Rt
-                new IrOp.VfpCoreTransfer(true, 4, 20, false, 8, 5, true, Condition.AL),          // VMOV.S8 Rt, D20[5]
-                new IrOp.VfpCoreTransfer(true, 5, 20, false, 16, 2, false, Condition.AL),        // VMOV.U16 Rt, D20[2]
-                new IrOp.VfpCoreTransfer(false, 6, 21, false, 8, 7, false, Condition.AL));       // VMOV.8 D21[7], Rt
+                new VfpOp.CoreTransfer(true, 0, 1, true, Condition.AL),                        // VMOV_half Rt <- S1
+                new VfpOp.CoreTransfer(false, 2, 3, true, Condition.AL),                       // VMOV_half S3 <- Rt
+                new VfpOp.CoreTransfer(true, 4, 20, false, 8, 5, true, Condition.AL),          // VMOV.S8 Rt, D20[5]
+                new VfpOp.CoreTransfer(true, 5, 20, false, 16, 2, false, Condition.AL),        // VMOV.U16 Rt, D20[2]
+                new VfpOp.CoreTransfer(false, 6, 21, false, 8, 7, false, Condition.AL));       // VMOV.8 D21[7], Rt
         assertFalse(perOpEmitter.isNativeSupported(ir));
         perOpEmitter.emit(ir);
         assertEquals(5, perOpEmitter.perOpFallbackOpCount());
@@ -438,7 +439,7 @@ class VfpNativeEquivalenceTest extends BlockEquivalenceTest {
             core.setRegister(6, 0xABCD_EF5A);
         }));
         // Uma forma NATIVA (32 bits) continua nativa — o carve-out é só das duas formas acima.
-        assertTrue(asmEmitter.isNativeSupported(block(new IrOp.VfpCoreTransfer(true, 0, 1, false, Condition.AL))));
+        assertTrue(asmEmitter.isNativeSupported(block(new VfpOp.CoreTransfer(true, 0, 1, false, Condition.AL))));
     }
 
     // ── 15. perOpFallbackOpCount() == 0 num bloco sintético com todos os 10 kinds ─
@@ -448,17 +449,17 @@ class VfpNativeEquivalenceTest extends BlockEquivalenceTest {
         AsmCodeEmitter perOpEmitter = new AsmCodeEmitter(
                 ArmArchitecture.ARMV4T, AsmFallbackPolicy.PER_OP, IrOptimizer.identity());
         IrBlock ir = block(
-                new IrOp.VfpAlu(IrOp.VfpOperation.ADD, false, 2, 0, 1, Condition.AL),
-                new IrOp.VfpAlu(IrOp.VfpOperation.SQRT, false, 3, 0, 1, Condition.AL),
-                new IrOp.VfpMoveImmediate(false, 4, 0x3F000000L, Condition.AL),
-                new IrOp.VfpCompare(false, false, false, 0, 1, Condition.AL),
-                new IrOp.VfpConvert(IrOp.VfpConversion.F32_TO_F64, 6, 0, Condition.AL),
-                new IrOp.VfpStore(false, 0, 13, -1, 0, Condition.AL),
-                new IrOp.VfpLoad(false, 1, 13, -1, 0, Condition.AL),
-                new IrOp.VfpMultipleTransfer(false, false, 13, -1, 0, 2, true, false, Condition.AL),
-                new IrOp.VfpCoreTransfer(true, 0, 1, false, Condition.AL),
-                new IrOp.VfpCorePairTransfer(true, 0, 1, 2, Condition.AL),
-                new IrOp.VfpSystemTransfer(true, 15, Condition.AL));
+                new VfpOp.Alu(VfpOp.VfpOperation.ADD, false, 2, 0, 1, Condition.AL),
+                new VfpOp.Alu(VfpOp.VfpOperation.SQRT, false, 3, 0, 1, Condition.AL),
+                new VfpOp.MoveImmediate(false, 4, 0x3F000000L, Condition.AL),
+                new VfpOp.Compare(false, false, false, 0, 1, Condition.AL),
+                new VfpOp.Convert(VfpOp.VfpConversion.F32_TO_F64, 6, 0, Condition.AL),
+                new VfpOp.Store(false, 0, 13, -1, 0, Condition.AL),
+                new VfpOp.Load(false, 1, 13, -1, 0, Condition.AL),
+                new VfpOp.MultipleTransfer(false, false, 13, -1, 0, 2, true, false, Condition.AL),
+                new VfpOp.CoreTransfer(true, 0, 1, false, Condition.AL),
+                new VfpOp.CorePairTransfer(true, 0, 1, 2, Condition.AL),
+                new VfpOp.SystemTransfer(true, 15, Condition.AL));
         assertTrue(perOpEmitter.isNativeSupported(ir));
         perOpEmitter.emit(ir);
         assertEquals(0, perOpEmitter.perOpFallbackOpCount());

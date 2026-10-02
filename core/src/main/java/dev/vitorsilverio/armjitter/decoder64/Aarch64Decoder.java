@@ -7002,7 +7002,7 @@ public final class Aarch64Decoder {
     /// `SEV`/`SEVL`/`WFET`/`WFIT` (B6.6.7 + B8.3) — mesmo subgrupo de encoding `op0=0` (`CRn`
     /// distingue barreira de hint de "wait with timeout" de `MSR (immediate)`). Barreiras e a
     /// maior parte dos hints viram NOP observável, mesmo precedente de
-    /// {@link dev.vitorsilverio.armjitter.ir.IrOp.MemoryBarrier} 32-bit; `WFI`/`WFIT` têm
+    /// {@link dev.vitorsilverio.armjitter.ir.SystemOp.MemoryBarrier} 32-bit; `WFI`/`WFIT` têm
     /// semântica própria (ver {@link Ir64SystemInstructionOp#WFI}); `CLREX` fecha o monitor de
     /// exclusividade (ver {@link Ir64SystemInstructionOp#CLEAR_EXCLUSIVE}); `MSR (immediate)`
     /// (`CRn=0b0100`, junto de `CFINV`/`XAFLAG`/`AXFLAG`) delega em

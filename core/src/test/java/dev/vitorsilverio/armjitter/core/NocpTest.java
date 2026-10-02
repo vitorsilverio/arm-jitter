@@ -69,7 +69,7 @@ class NocpTest {
         assertEquals(CFSR_UFSR_NOCP_BIT, model.cfsr() & CFSR_UFSR_NOCP_BIT);
     }
 
-    // ── Condição falsa (via IrOp.Nocp direto, mesmo padrão de outras ops condicionais): não
+    // ── Condição falsa (via SystemOp.Nocp direto, mesmo padrão de outras ops condicionais): não
     // dispara a exceção nem muda o PC ──────────────────────────────────────────────────────
 
     @Test
@@ -80,7 +80,7 @@ class NocpTest {
         int pcBefore = core.programCounter();
 
         boolean pcChanged = new dev.vitorsilverio.armjitter.codegen.executor.IrBlockExecutor(ArmArchitecture.ARMV7M)
-                .executeOp(core, new dev.vitorsilverio.armjitter.ir.IrOp.Nocp(15, Condition.EQ), pcBefore);
+                .executeOp(core, new dev.vitorsilverio.armjitter.ir.SystemOp.Nocp(15, Condition.EQ), pcBefore);
 
         assertTrue(!pcChanged, "condição falsa não deve mudar o PC nem entrar em exceção");
         assertEquals(0, model.currentException(), "sem exceção quando a condição é falsa");

@@ -4,7 +4,7 @@ import dev.vitorsilverio.armjitter.arch.ArmArchitecture;
 import dev.vitorsilverio.armjitter.arch.ArmFeature;
 import dev.vitorsilverio.armjitter.arch.DecoderExtension;
 import dev.vitorsilverio.armjitter.core.Condition;
-import dev.vitorsilverio.armjitter.ir.IrOp.WideShiftOperation;
+import dev.vitorsilverio.armjitter.ir.MveIntegerOp.WideShiftOperation;
 
 /// MVE "long shift" sobre registradores de propósito geral (B16.16, perfil M, `FEAT_MVE_INTEGER`,
 /// `target/isa-decode/t32.decode`, linhas 93-131, 19 encodings, bit a bit contra o arquivo real):

@@ -12,6 +12,7 @@ import dev.vitorsilverio.armjitter.core.Condition;
 import dev.vitorsilverio.armjitter.ir.IrBlock;
 import dev.vitorsilverio.armjitter.ir.IrOp;
 import dev.vitorsilverio.armjitter.ir.StandardIrBuilder;
+import dev.vitorsilverio.armjitter.ir.VfpOp;
 import dev.vitorsilverio.armjitter.support.TestAddressSpace;
 import dev.vitorsilverio.armjitter.swi.SwiDispatcher;
 import org.junit.jupiter.api.Test;
@@ -50,7 +51,7 @@ class VfpDecoderTest {
     /// B22.2: mesma base de {@link #VFP_TEST_ARCH}, mais {@link ArmFeature#HALF_PRECISION_FP} — só
     /// para provar que `VMOV_half` decodifica e executa COM a feature. Nenhum preset real a declara;
     /// {@link #VFP_TEST_ARCH} (sem a feature) recusa `VMOV_half` com `UNIMPLEMENTED` (não mais um
-    /// `IrOp.Coprocessor` espúrio — a violação de G8 que a B22.2 fechou).
+    /// `SystemOp.Coprocessor` espúrio — a violação de G8 que a B22.2 fechou).
     private static final ArmArchitecture VFP_HALF_TEST_FEATURES =
             ArmArchitecture.extending(VFP_TEST_FEATURES, "ARMv7-TestVfpHalf", ArmFeature.HALF_PRECISION_FP);
     private static final ArmArchitecture VFP_HALF_TEST_ARCH = VFP_HALF_TEST_FEATURES
@@ -253,30 +254,30 @@ class VfpDecoderTest {
         DecodedInstruction decoded = decodeArm(word);
         assertEquals(InstructionKind.VFP_ALU, decoded.kind());
         IrOp op = liftSingleOp(decoded);
-        assertEquals(new IrOp.VfpAlu(IrOp.VfpOperation.ADD, false, 2, 0, 1, Condition.AL), op);
+        assertEquals(new VfpOp.Alu(VfpOp.VfpOperation.ADD, false, 2, 0, 1, Condition.AL), op);
     }
 
     @Test
     void subDoubleDecodesToVfpAlu() {
         int word = vfpAluWord(0b011, true, true, 3, 1, 2);
         IrOp op = liftSingleOp(decodeArm(word));
-        assertEquals(new IrOp.VfpAlu(IrOp.VfpOperation.SUB, true, 3, 1, 2, Condition.AL), op);
+        assertEquals(new VfpOp.Alu(VfpOp.VfpOperation.SUB, true, 3, 1, 2, Condition.AL), op);
     }
 
     @Test
     void mulNmulSelectedByBit6() {
         IrOp mul = liftSingleOp(decodeArm(vfpAluWord(0b010, false, false, 4, 0, 1)));
-        assertEquals(new IrOp.VfpAlu(IrOp.VfpOperation.MUL, false, 4, 0, 1, Condition.AL), mul);
+        assertEquals(new VfpOp.Alu(VfpOp.VfpOperation.MUL, false, 4, 0, 1, Condition.AL), mul);
         IrOp nmul = liftSingleOp(decodeArm(vfpAluWord(0b010, true, false, 4, 0, 1)));
-        assertEquals(new IrOp.VfpAlu(IrOp.VfpOperation.NMUL, false, 4, 0, 1, Condition.AL), nmul);
+        assertEquals(new VfpOp.Alu(VfpOp.VfpOperation.NMUL, false, 4, 0, 1, Condition.AL), nmul);
     }
 
     @Test
     void mlaMlsSelectedByBit6() {
         IrOp mla = liftSingleOp(decodeArm(vfpAluWord(0b000, false, true, 5, 0, 1)));
-        assertEquals(new IrOp.VfpAlu(IrOp.VfpOperation.MLA, true, 5, 0, 1, Condition.AL), mla);
+        assertEquals(new VfpOp.Alu(VfpOp.VfpOperation.MLA, true, 5, 0, 1, Condition.AL), mla);
         IrOp mls = liftSingleOp(decodeArm(vfpAluWord(0b000, true, true, 5, 0, 1)));
-        assertEquals(new IrOp.VfpAlu(IrOp.VfpOperation.MLS, true, 5, 0, 1, Condition.AL), mls);
+        assertEquals(new VfpOp.Alu(VfpOp.VfpOperation.MLS, true, 5, 0, 1, Condition.AL), mls);
     }
 
     /// `op1==0b001`: ao contrário de VMLA/VMLS e VMUL/VNMUL, aqui `bit6==1` é a forma **negada
@@ -285,11 +286,11 @@ class VfpDecoderTest {
     @Test
     void nmlsNmlaSelectedByBit6() {
         IrOp nmls = liftSingleOp(decodeArm(vfpAluWord(0b001, false, true, 5, 0, 1)));
-        assertEquals(new IrOp.VfpAlu(IrOp.VfpOperation.NMLS, true, 5, 0, 1, Condition.AL), nmls);
+        assertEquals(new VfpOp.Alu(VfpOp.VfpOperation.NMLS, true, 5, 0, 1, Condition.AL), nmls);
         IrOp nmla = liftSingleOp(decodeArm(vfpAluWord(0b001, true, true, 5, 0, 1)));
-        assertEquals(new IrOp.VfpAlu(IrOp.VfpOperation.NMLA, true, 5, 0, 1, Condition.AL), nmla);
+        assertEquals(new VfpOp.Alu(VfpOp.VfpOperation.NMLA, true, 5, 0, 1, Condition.AL), nmla);
         IrOp nmlsSingle = liftSingleOp(decodeArm(vfpAluWord(0b001, false, false, 2, 0, 1)));
-        assertEquals(new IrOp.VfpAlu(IrOp.VfpOperation.NMLS, false, 2, 0, 1, Condition.AL), nmlsSingle);
+        assertEquals(new VfpOp.Alu(VfpOp.VfpOperation.NMLS, false, 2, 0, 1, Condition.AL), nmlsSingle);
     }
 
     /// Encoding LITERAL emitido pelo gcc do devkitARM, achado no `textured_cube` dos exemplos 3DS
@@ -297,13 +298,13 @@ class VfpDecoderTest {
     @Test
     void vnmlsF64EncodingRealDoDevkitArm() {
         IrOp op = liftSingleOp(decodeArm(0xEE171B0C));
-        assertEquals(new IrOp.VfpAlu(IrOp.VfpOperation.NMLS, true, 1, 7, 12, Condition.AL), op);
+        assertEquals(new VfpOp.Alu(VfpOp.VfpOperation.NMLS, true, 1, 7, 12, Condition.AL), op);
     }
 
     @Test
     void divSingle() {
         IrOp op = liftSingleOp(decodeArm(vfpAluWord(0b100, false, false, 6, 0, 1)));
-        assertEquals(new IrOp.VfpAlu(IrOp.VfpOperation.DIV, false, 6, 0, 1, Condition.AL), op);
+        assertEquals(new VfpOp.Alu(VfpOp.VfpOperation.DIV, false, 6, 0, 1, Condition.AL), op);
     }
 
     @Test
@@ -326,7 +327,7 @@ class VfpDecoderTest {
         DecodedInstruction decoded = new ArmDecoder(VFP_D32_TEST_ARCH).decode(memory, 0);
         assertEquals(InstructionKind.VFP_ALU, decoded.kind());
         IrOp op = liftSingleOp(decoded);
-        assertEquals(new IrOp.VfpAlu(IrOp.VfpOperation.ADD, true, 16, 0, 1, Condition.AL), op);
+        assertEquals(new VfpOp.Alu(VfpOp.VfpOperation.ADD, true, 16, 0, 1, Condition.AL), op);
     }
 
     // ── B9.6: VFMA/VFMS/VFNMA/VFNMS (fundidas, VFPv4) — mesmo espaço `op1` de VMLA/VDIV acima ──
@@ -345,9 +346,9 @@ class VfpDecoderTest {
         assertEquals(0xEEA00A81, vfpAluWord(0b110, false, false, 0, 1, 2));
         assertEquals(0xEEA00AC1, vfpAluWord(0b110, true, false, 0, 1, 2));
         IrOp fma = liftSingleOp(decodeArmFused(vfpAluWord(0b110, false, false, 0, 1, 2)));
-        assertEquals(new IrOp.VfpAlu(IrOp.VfpOperation.FMA, false, 0, 1, 2, Condition.AL), fma);
+        assertEquals(new VfpOp.Alu(VfpOp.VfpOperation.FMA, false, 0, 1, 2, Condition.AL), fma);
         IrOp fms = liftSingleOp(decodeArmFused(vfpAluWord(0b110, true, false, 0, 1, 2)));
-        assertEquals(new IrOp.VfpAlu(IrOp.VfpOperation.FMS, false, 0, 1, 2, Condition.AL), fms);
+        assertEquals(new VfpOp.Alu(VfpOp.VfpOperation.FMS, false, 0, 1, 2, Condition.AL), fms);
     }
 
     /// `op1=0b101`: ordem invertida (mesmo padrão de `VNMLA`/`VNMLS`, ver `nmlsNmlaSelectedByBit6`)
@@ -359,16 +360,16 @@ class VfpDecoderTest {
         assertEquals(0xEE900AC1, vfpAluWord(0b101, true, false, 0, 1, 2));
         assertEquals(0xEE900A81, vfpAluWord(0b101, false, false, 0, 1, 2));
         IrOp fnma = liftSingleOp(decodeArmFused(vfpAluWord(0b101, true, false, 0, 1, 2)));
-        assertEquals(new IrOp.VfpAlu(IrOp.VfpOperation.FNMA, false, 0, 1, 2, Condition.AL), fnma);
+        assertEquals(new VfpOp.Alu(VfpOp.VfpOperation.FNMA, false, 0, 1, 2, Condition.AL), fnma);
         IrOp fnms = liftSingleOp(decodeArmFused(vfpAluWord(0b101, false, false, 0, 1, 2)));
-        assertEquals(new IrOp.VfpAlu(IrOp.VfpOperation.FNMS, false, 0, 1, 2, Condition.AL), fnms);
+        assertEquals(new VfpOp.Alu(VfpOp.VfpOperation.FNMS, false, 0, 1, 2, Condition.AL), fnms);
     }
 
     @Test
     void vfmaDoublePrecisionRealEncoding() {
         assertEquals(0xEEA10B02, vfpAluWord(0b110, false, true, 0, 1, 2));
         IrOp op = liftSingleOp(decodeArmFused(vfpAluWord(0b110, false, true, 0, 1, 2)));
-        assertEquals(new IrOp.VfpAlu(IrOp.VfpOperation.FMA, true, 0, 1, 2, Condition.AL), op);
+        assertEquals(new VfpOp.Alu(VfpOp.VfpOperation.FMA, true, 0, 1, 2, Condition.AL), op);
     }
 
     /// Thumb-2: `vfnma.f64 d3,d4,d5` → `0xee943b45` (real, devkitARM), decodificado via
@@ -384,7 +385,7 @@ class VfpDecoderTest {
                 new Thumb2VfpDecoder(VFP_FUSED_TEST_FEATURES)));
         DecodedInstruction decoded = new ThumbDecoder(fusedThumb2).decode(memory, 0);
         IrOp op = liftSingleOp(decoded);
-        assertEquals(new IrOp.VfpAlu(IrOp.VfpOperation.FNMA, true, 3, 4, 5, Condition.AL), op);
+        assertEquals(new VfpOp.Alu(VfpOp.VfpOperation.FNMA, true, 3, 4, 5, Condition.AL), op);
     }
 
     /// B9.6/triagem: sem `VFP_FUSED_MULTIPLY_ACCUMULATE` (arquitetura com só VFPv2, como o ARM11
@@ -401,13 +402,13 @@ class VfpDecoderTest {
 
     @Test
     void copyAbsNegSqrtUnaryOps() {
-        assertEquals(new IrOp.VfpAlu(IrOp.VfpOperation.COPY, false, 1, -1, 0, Condition.AL),
+        assertEquals(new VfpOp.Alu(VfpOp.VfpOperation.COPY, false, 1, -1, 0, Condition.AL),
                 liftSingleOp(decodeArm(vfpTwoOperandWord(0x0, false, false, 1, 0))));
-        assertEquals(new IrOp.VfpAlu(IrOp.VfpOperation.ABS, false, 1, -1, 0, Condition.AL),
+        assertEquals(new VfpOp.Alu(VfpOp.VfpOperation.ABS, false, 1, -1, 0, Condition.AL),
                 liftSingleOp(decodeArm(vfpTwoOperandWord(0x0, true, false, 1, 0))));
-        assertEquals(new IrOp.VfpAlu(IrOp.VfpOperation.NEG, true, 1, -1, 0, Condition.AL),
+        assertEquals(new VfpOp.Alu(VfpOp.VfpOperation.NEG, true, 1, -1, 0, Condition.AL),
                 liftSingleOp(decodeArm(vfpTwoOperandWord(0x1, false, true, 1, 0))));
-        assertEquals(new IrOp.VfpAlu(IrOp.VfpOperation.SQRT, true, 1, -1, 0, Condition.AL),
+        assertEquals(new VfpOp.Alu(VfpOp.VfpOperation.SQRT, true, 1, -1, 0, Condition.AL),
                 liftSingleOp(decodeArm(vfpTwoOperandWord(0x1, true, true, 1, 0))));
     }
 
@@ -428,60 +429,60 @@ class VfpDecoderTest {
     @Test
     void compareRegAndZeroSingleAndDouble() {
         IrOp cmpReg = liftSingleOp(decodeArm(vfpCmpWord(false, false, false, 2, 3)));
-        assertEquals(new IrOp.VfpCompare(false, false, false, 2, 3, Condition.AL), cmpReg);
+        assertEquals(new VfpOp.Compare(false, false, false, 2, 3, Condition.AL), cmpReg);
 
         IrOp cmpZero = liftSingleOp(decodeArm(vfpCmpWord(true, false, true, 2, 0)));
-        assertEquals(new IrOp.VfpCompare(true, true, false, 2, -1, Condition.AL), cmpZero);
+        assertEquals(new VfpOp.Compare(true, true, false, 2, -1, Condition.AL), cmpZero);
 
         IrOp cmpe = liftSingleOp(decodeArm(vfpCmpWord(false, true, false, 2, 3)));
-        assertEquals(new IrOp.VfpCompare(false, false, true, 2, 3, Condition.AL), cmpe);
+        assertEquals(new VfpOp.Compare(false, false, true, 2, 3, Condition.AL), cmpe);
     }
 
     @Test
     void convertPrecisionSingleDouble() {
         // VCVT_sp (size=single=0xA): fonte simples (Vm), destino dobro (Vd) -> F32_TO_F64.
         IrOp f32ToF64 = liftSingleOp(decodeArm(vfpAsymmetricTwoOperandWord(0x7, true, 0xA, 1, true, 5, false)));
-        assertEquals(new IrOp.VfpConvert(IrOp.VfpConversion.F32_TO_F64, 1, 5, Condition.AL), f32ToF64);
+        assertEquals(new VfpOp.Convert(VfpOp.VfpConversion.F32_TO_F64, 1, 5, Condition.AL), f32ToF64);
 
         // VCVT_dp (size=dobro=0xB): fonte dobro (Vm), destino simples (Vd) -> F64_TO_F32.
         IrOp f64ToF32 = liftSingleOp(decodeArm(vfpAsymmetricTwoOperandWord(0x7, true, 0xB, 1, false, 5, true)));
-        assertEquals(new IrOp.VfpConvert(IrOp.VfpConversion.F64_TO_F32, 1, 5, Condition.AL), f64ToF32);
+        assertEquals(new VfpOp.Convert(VfpOp.VfpConversion.F64_TO_F32, 1, 5, Condition.AL), f64ToF32);
     }
 
     @Test
     void convertIntToFloatSignedUnsigned() {
         // VCVT_int_{sp,dp}: Vm SEMPRE simples (fonte inteira de 32 bits); Vd segue `size` (destino).
-        assertEquals(new IrOp.VfpConvert(IrOp.VfpConversion.S32_TO_F32, 1, 5, Condition.AL),
+        assertEquals(new VfpOp.Convert(VfpOp.VfpConversion.S32_TO_F32, 1, 5, Condition.AL),
                 liftSingleOp(decodeArm(vfpAsymmetricTwoOperandWord(0x8, true, 0xA, 1, false, 5, false))));
-        assertEquals(new IrOp.VfpConvert(IrOp.VfpConversion.U32_TO_F32, 1, 5, Condition.AL),
+        assertEquals(new VfpOp.Convert(VfpOp.VfpConversion.U32_TO_F32, 1, 5, Condition.AL),
                 liftSingleOp(decodeArm(vfpAsymmetricTwoOperandWord(0x8, false, 0xA, 1, false, 5, false))));
-        assertEquals(new IrOp.VfpConvert(IrOp.VfpConversion.S32_TO_F64, 1, 5, Condition.AL),
+        assertEquals(new VfpOp.Convert(VfpOp.VfpConversion.S32_TO_F64, 1, 5, Condition.AL),
                 liftSingleOp(decodeArm(vfpAsymmetricTwoOperandWord(0x8, true, 0xB, 1, true, 5, false))));
-        assertEquals(new IrOp.VfpConvert(IrOp.VfpConversion.U32_TO_F64, 1, 5, Condition.AL),
+        assertEquals(new VfpOp.Convert(VfpOp.VfpConversion.U32_TO_F64, 1, 5, Condition.AL),
                 liftSingleOp(decodeArm(vfpAsymmetricTwoOperandWord(0x8, false, 0xB, 1, true, 5, false))));
     }
 
     @Test
     void convertFloatToIntSignedUnsignedRequiresRoundTowardZero() {
         // VCVT_{sp,dp}_int: Vd SEMPRE simples (destino inteiro de 32 bits); Vm segue `size` (fonte).
-        assertEquals(new IrOp.VfpConvert(IrOp.VfpConversion.F32_TO_S32, 1, 5, Condition.AL),
+        assertEquals(new VfpOp.Convert(VfpOp.VfpConversion.F32_TO_S32, 1, 5, Condition.AL),
                 liftSingleOp(decodeArm(vfpAsymmetricTwoOperandWord(0xD, true, 0xA, 1, false, 5, false))));
-        assertEquals(new IrOp.VfpConvert(IrOp.VfpConversion.F32_TO_U32, 1, 5, Condition.AL),
+        assertEquals(new VfpOp.Convert(VfpOp.VfpConversion.F32_TO_U32, 1, 5, Condition.AL),
                 liftSingleOp(decodeArm(vfpAsymmetricTwoOperandWord(0xC, true, 0xA, 1, false, 5, false))));
-        assertEquals(new IrOp.VfpConvert(IrOp.VfpConversion.F64_TO_S32, 1, 5, Condition.AL),
+        assertEquals(new VfpOp.Convert(VfpOp.VfpConversion.F64_TO_S32, 1, 5, Condition.AL),
                 liftSingleOp(decodeArm(vfpAsymmetricTwoOperandWord(0xD, true, 0xB, 1, false, 5, true))));
         // bit7=0 (rz=0) é VCVTR (B22.7): arredonda pelo FPSCR.RMode, `direction == null` no IR.
-        assertEquals(new IrOp.VfpConvertRounded(null, true, false, 1, 5, Condition.AL),
+        assertEquals(new VfpOp.ConvertRounded(null, true, false, 1, 5, Condition.AL),
                 liftSingleOp(decodeArm(vfpAsymmetricTwoOperandWord(0xD, false, 0xA, 1, false, 5, false))));
     }
 
     @Test
     void loadStoreOffsetSignAndPrecision() {
         IrOp load = liftSingleOp(decodeArm(vfpLoadStoreWord(true, true, false, 2, 5, 3)));
-        assertEquals(new IrOp.VfpLoad(false, 2, 5, -1, 12, Condition.AL), load);
+        assertEquals(new VfpOp.Load(false, 2, 5, -1, 12, Condition.AL), load);
 
         IrOp store = liftSingleOp(decodeArm(vfpLoadStoreWord(false, false, true, 2, 5, 3)));
-        assertEquals(new IrOp.VfpStore(true, 2, 5, -1, -12, Condition.AL), store);
+        assertEquals(new VfpOp.Store(true, 2, 5, -1, -12, Condition.AL), store);
     }
 
     /// Regressão: `VLDR`/`VSTR Vd, [pc, #imm]` (idioma padrão do `gcc` para literais `double`/
@@ -495,10 +496,10 @@ class VfpDecoderTest {
     @Test
     void loadStoreWithPcBaseAppliesArmProgramCounterBias() {
         IrOp load = liftSingleOp(decodeArm(vfpLoadStoreWord(true, true, true, 6, 15, 48)));
-        assertEquals(new IrOp.VfpLoad(true, 6, 15, 8, 192, Condition.AL), load);
+        assertEquals(new VfpOp.Load(true, 6, 15, 8, 192, Condition.AL), load);
 
         IrOp store = liftSingleOp(decodeArm(vfpLoadStoreWord(false, true, true, 7, 15, 48)));
-        assertEquals(new IrOp.VfpStore(true, 7, 15, 8, 192, Condition.AL), store);
+        assertEquals(new VfpOp.Store(true, 7, 15, 8, 192, Condition.AL), store);
     }
 
     /// Mesma regressão para `VLDM`/`VSTM Rn=pc` (raro comparado a `VLDR`, mas o mesmo mecanismo de
@@ -506,7 +507,7 @@ class VfpDecoderTest {
     @Test
     void multipleTransferWithPcBaseAppliesArmProgramCounterBias() {
         IrOp ldmIa = liftSingleOp(decodeArm(vfpMultipleIaWord(true, false, false, 0, 15, 3)));
-        assertEquals(new IrOp.VfpMultipleTransfer(true, false, 15, 8, 0, 3, false, false, Condition.AL), ldmIa);
+        assertEquals(new VfpOp.MultipleTransfer(true, false, 15, 8, 0, 3, false, false, Condition.AL), ldmIa);
     }
 
     /// Regressão end-to-end (interpretada): executa `VLDR Dx, [pc, #imm]` de fato via
@@ -539,11 +540,11 @@ class VfpDecoderTest {
     void multipleTransferIaAndDbWithVPushVPopAlias() {
         // VLDM Rn, {S0-S2} (IA, sem writeback).
         IrOp ldmIa = liftSingleOp(decodeArm(vfpMultipleIaWord(true, false, false, 0, 5, 3)));
-        assertEquals(new IrOp.VfpMultipleTransfer(true, false, 5, -1, 0, 3, false, false, Condition.AL), ldmIa);
+        assertEquals(new VfpOp.MultipleTransfer(true, false, 5, -1, 0, 3, false, false, Condition.AL), ldmIa);
 
         // VPUSH {D8-D9} == VSTMDB SP!, {D8-D9}: rn=SP(13), imm8=4 (2 registros dupla).
         IrOp push = liftSingleOp(decodeArm(vfpMultipleDbWord(false, true, 8, 13, 4)));
-        assertEquals(new IrOp.VfpMultipleTransfer(false, true, 13, -1, 8, 2, true, true, Condition.AL), push);
+        assertEquals(new VfpOp.MultipleTransfer(false, true, 13, -1, 8, 2, true, true, Condition.AL), push);
     }
 
     @Test
@@ -554,28 +555,28 @@ class VfpDecoderTest {
     @Test
     void coreTransferSingleBothDirections() {
         IrOp toArm = liftSingleOp(decodeArm(vfpCoreTransferWord(true, 2, 5)));
-        assertEquals(new IrOp.VfpCoreTransfer(true, 2, 5, false, Condition.AL), toArm);
+        assertEquals(new VfpOp.CoreTransfer(true, 2, 5, false, Condition.AL), toArm);
 
         IrOp toVfp = liftSingleOp(decodeArm(vfpCoreTransferWord(false, 2, 5)));
-        assertEquals(new IrOp.VfpCoreTransfer(false, 2, 5, false, Condition.AL), toVfp);
+        assertEquals(new VfpOp.CoreTransfer(false, 2, 5, false, Condition.AL), toVfp);
     }
 
     @Test
     void corePairTransferDoubleBothDirections() {
         IrOp toArm = liftSingleOp(decodeArm(vfpCorePairTransferWord(true, 1, 2, 8)));
-        assertEquals(new IrOp.VfpCorePairTransfer(true, 1, 2, 8, Condition.AL), toArm);
+        assertEquals(new VfpOp.CorePairTransfer(true, 1, 2, 8, Condition.AL), toArm);
 
         IrOp toVfp = liftSingleOp(decodeArm(vfpCorePairTransferWord(false, 1, 2, 8)));
-        assertEquals(new IrOp.VfpCorePairTransfer(false, 1, 2, 8, Condition.AL), toVfp);
+        assertEquals(new VfpOp.CorePairTransfer(false, 1, 2, 8, Condition.AL), toVfp);
     }
 
     @Test
     void systemTransferFpscrBothDirections() {
         IrOp vmrs = liftSingleOp(decodeArm(vfpSystemTransferWord(true, 15, 1)));
-        assertEquals(new IrOp.VfpSystemTransfer(true, 15, Condition.AL), vmrs);
+        assertEquals(new VfpOp.SystemTransfer(true, 15, Condition.AL), vmrs);
 
         IrOp vmsr = liftSingleOp(decodeArm(vfpSystemTransferWord(false, 2, 1)));
-        assertEquals(new IrOp.VfpSystemTransfer(false, 2, Condition.AL), vmsr);
+        assertEquals(new VfpOp.SystemTransfer(false, 2, Condition.AL), vmsr);
     }
 
     @Test
@@ -723,11 +724,11 @@ class VfpDecoderTest {
     void vmovHalfWithFeatureDecodesToHalfWidthCoreTransfer() {
         IrOp toArm = liftSingleOp(new ArmDecoder(VFP_HALF_TEST_ARCH)
                 .decode(wordAsMemory(vmovHalfWord(true, 2, 5)), 0));
-        assertEquals(new IrOp.VfpCoreTransfer(true, 2, 5, true, Condition.AL), toArm);
+        assertEquals(new VfpOp.CoreTransfer(true, 2, 5, true, Condition.AL), toArm);
 
         IrOp toVfp = liftSingleOp(new ArmDecoder(VFP_HALF_TEST_ARCH)
                 .decode(wordAsMemory(vmovHalfWord(false, 2, 5)), 0));
-        assertEquals(new IrOp.VfpCoreTransfer(false, 2, 5, true, Condition.AL), toVfp);
+        assertEquals(new VfpOp.CoreTransfer(false, 2, 5, true, Condition.AL), toVfp);
     }
 
     @Test
@@ -812,20 +813,20 @@ class VfpDecoderTest {
     @Test
     void vmov64SpBothDirections() {
         IrOp toArm = liftSingleOp(decodeArm(vmov64SpWord(true, 1, 2, 8)));
-        assertEquals(new IrOp.VfpCorePairTransferSingle(true, 1, 2, 8, Condition.AL), toArm);
+        assertEquals(new VfpOp.CorePairTransferSingle(true, 1, 2, 8, Condition.AL), toArm);
 
         IrOp toVfp = liftSingleOp(decodeArm(vmov64SpWord(false, 1, 2, 8)));
-        assertEquals(new IrOp.VfpCorePairTransferSingle(false, 1, 2, 8, Condition.AL), toVfp);
+        assertEquals(new VfpOp.CorePairTransferSingle(false, 1, 2, 8, Condition.AL), toVfp);
     }
 
     @Test
     void vmovScalarGpWordFormReusesCoreTransfer() {
         // vn=3 (D combinado), index=1 -> S(2*3+1)=S7.
         IrOp toArm = liftSingleOp(decodeArm(vmovScalarGpWordForm(true, 1, 2, 3)));
-        assertEquals(new IrOp.VfpCoreTransfer(true, 2, 7, false, Condition.AL), toArm);
+        assertEquals(new VfpOp.CoreTransfer(true, 2, 7, false, Condition.AL), toArm);
 
         IrOp fromArm = liftSingleOp(decodeArm(vmovScalarGpWordForm(false, 0, 2, 3)));
-        assertEquals(new IrOp.VfpCoreTransfer(false, 2, 6, false, Condition.AL), fromArm);
+        assertEquals(new VfpOp.CoreTransfer(false, 2, 6, false, Condition.AL), fromArm);
     }
 
     @Test
@@ -840,13 +841,13 @@ class VfpDecoderTest {
     void vcvtFixSignedToFixedRoundToZero() {
         // op=1 (float->fixo), u=0 (com sinal), sx=1 (32 bits), imm=0 -> fractionBits=32.
         IrOp op = liftSingleOp(decodeArm(vfpConvertFixedWord(true, false, true, 0, false, 1)));
-        assertEquals(new IrOp.VfpConvertFixed(false, true, false, true, 32, 1, Condition.AL), op);
+        assertEquals(new VfpOp.ConvertFixed(false, true, false, true, 32, 1, Condition.AL), op);
     }
 
     @Test
     void vcvtFixUnsignedFromFixedRoundToNearest() {
         // op=0 (fixo->float), u=1 (sem sinal), sx=0 (16 bits), imm=4 -> fractionBits=12, dupla.
         IrOp op = liftSingleOp(decodeArm(vfpConvertFixedWord(false, true, false, 4, true, 2)));
-        assertEquals(new IrOp.VfpConvertFixed(true, false, true, false, 12, 2, Condition.AL), op);
+        assertEquals(new VfpOp.ConvertFixed(true, false, true, false, 12, 2, Condition.AL), op);
     }
 }
