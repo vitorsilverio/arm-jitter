@@ -1,103 +1,179 @@
-# E15 — Quebrar os arquivos-fonte gigantes citados por quase toda task de decoder/IR
+# E15 — Simplificação estrutural: arquivos pequenos, dispatch sem `switch` gigante, decoder por tabela, JaCoCo 100%
 
-**Trilha:** E · **Repo:** arm-jitter (+ revalidação G5 completa — toca código compartilhado) ·
-**Depende de:** — · **[REFINAR]** (ver "Por que REFINAR" abaixo)
-**Status:** ⬜ (registrada 2026-09-27, a pedido do usuário — sessões estourando orçamento de
-contexto em ~15 tasks/semana)
+**Trilha:** E · **Repo:** arm-jitter (+ G5 nas sub-tasks que tocam código de 32 bits) ·
+**Depende de:** — · **Tipo:** épico — não executar
+este arquivo; pegar a próxima sub-task ⬜ da escada.
+**Status:** 🟡 replanejada em 2026-10-02 (a versão de 2026-09-27 só dividia arquivos; o usuário
+pediu código mais simples, sem as cascatas de `switch`/`if` de feature, e 100% testável com JaCoCo).
 
-## Contexto
+## Por que o plano anterior não bastava
 
-Medido em 2026-09-27 (`wc -l` sobre `core/src/main/java`), maiores arquivos do projeto:
+A E15 original proibia abstração nova ("refactor puro, arquivo muda, `.class` não"). Dividir
+arquivo reduz custo de contexto, mas **não** tira nenhum `switch`, nenhum `if` de feature e nenhum
+branch do relatório JaCoCo. Os três problemas têm a mesma raiz e precisam ser atacados juntos.
 
-| Arquivo | Linhas |
-|---|---|
-| `decoder64/Aarch64Decoder.java` | 7741 |
-| `ir/IrOp.java` | 5036 |
-| `ir64/Ir64Op.java` | 4769 |
-| `advsimd/AdvSimdLanes.java` | 3677 |
-| `codegen/jvm/AsmBlockCompiler.java` | 2575 |
-| `codegen/executor/IrSystemExecutor.java` | 2508 |
-| `executor64/Ir64BlockExecutor.java` | 2281 |
-| `core64/Aarch64Core.java` | 1713 |
-| `ir/StandardIrBuilder.java` | 1352 |
-| `decoder/ArmDecoder.java` | 1174 |
-| `codegen/jvm/AsmRuntimeHelpers.java` | 1161 |
-| `codegen64/jvm64/Ir64BlockCompiler.java` | 1151 |
-| `decoder/VfpDecoder.java` | 1130 |
+## Diagnóstico medido (2026-10-02)
 
-O protocolo de sessão (`tasks/README.md` regra 2) manda ler "a task + os fontes que ela cita" — e
-praticamente toda task de decoder A64 (trilha B, épicos B17/B18/B19/B21) cita `Aarch64Decoder`
-e/ou `Ir64Op`/`IrOp`. Ler um desses arquivos inteiro já consome uma fatia grande do orçamento de
-contexto de UMA sessão; isso, multiplicado por ~15 tasks numa semana, é a causa raiz apontada pelo
-usuário para o esgotamento de crédito semanal (junto com G5 incondicional e o nag manual de
-JaCoCo — ambos já corrigidos no protocolo em 2026-09-27, ver `tasks/README.md` G5 e "Estrutura de
-uma task"). A instrução de leitura em `FILA-EXECUCAO.md` (Grep+offset em vez de `Read` inteiro)
-já mitiga o sintoma; esta task ataca a causa estrutural.
+**Tamanho** (`wc -l`, `core/src/main`): `Aarch64Decoder` 7842 · `Ir64Op` 5784 · `IrOp` 5036 ·
+`AdvSimdLanes` 3677 · `AsmBlockCompiler` 2575 · `IrSystemExecutor` 2508 · `Ir64BlockExecutor` 2335 ·
+`Aarch64Core` 1848. 14 arquivos acima de 1000 linhas. Maior método: `decodeAdvancedSimdInteger`,
+519 linhas.
 
-## Objetivo
+**Cobertura** (`core/target/site/jacoco/jacoco.csv`): linha 92,4% (2791 perdidas de 36817), branch
+87,5% (3248 perdidos de 26075); 731 de 878 classes já estão em 100%.
 
-Reduzir o tamanho de arquivo que uma sessão típica precisa carregar para executar uma task de
-decoder/IR, sem mudar comportamento (G1/G3) e sem quebrar API pública consumida por
-gbaemu/ndsemu/armbox/virtual-arm-box/n3dsemu (G3).
+**Raiz 1 — o conhecimento de cada op está espalhado.** Um `IrOp` novo exige registro em até 8
+lugares: `permits` + `Kind` + `record` (`IrOp`), `IrBlockExecutor#execute` (`switch` por `Kind`),
+`IrBlockExecutor#executeOp` (segundo `switch`, por tipo, com os mesmos 189 casos),
+`AsmNativePolicy#supports`, `AsmBlockCompiler` (`switch` de emissão), `DeadCodeEliminationPass`
+(`regUse` + `regDef`), `IrOpNodeFactory` (Truffle). Esquecer um deles só aparece em runtime
+(`default -> throw`). Essas classes são só roteamento, sem lógica, e concentram 458 dos branches
+perdidos: `DeadCodeEliminationPass` 203, `IrBlockExecutor` 131, `AsmNativePolicy` 124 (é o achado
+da E14, generalizado). No A64 o dispatch é duplo: `executeBlock` faz `switch (kinds[i])`, cai em
+`default -> executeOp`, que chama `op.kind()` virtual e faz um segundo `switch`.
 
-## Por que [REFINAR]
+**Raiz 2 — feature gating por cascata.** `Aarch64Decoder` tem 97 `architecture.has(...)`, quase
+todos no formato `if (has(FEAT)) { op = tenta(word); if (op != null) return op; }`, com a ordem
+justificada por comentário ("nunca colide — conferido exaustivamente"). São 4 branches por feature
+e a exclusão mútua não é verificada por máquina.
 
-Cada um dos arquivos acima tem uma estratégia de split diferente e um risco diferente; não é uma
-única task executável em 1 sessão. Antes de qualquer split, uma sessão de spec precisa:
+**O que já existe e aponta a saída:** `SmeArrayVectorRows`/`SmeArrayIndexedRows`/
+`SmeConstructiveRows` decodificam por tabela `mask`/`value` (uma linha por encoding do `.decode`);
+os executores A64 de SVE/SME já são `static execute(core, op)` por família;
+`JitCoverageReport#instantiate` já instancia qualquer `record` do IR por reflexão.
 
-1. Decidir, por arquivo, a linha de corte (ex.: `Aarch64Decoder` por família de encoding —
-   `sve.decode`/`sme.decode`/AdvSIMD/escalar —, tipicamente decoders parciais compostos, não um
-   split arbitrário por número de linha; `IrOp`/`Ir64Op` são `sealed interface` com centenas de
-   `record` — candidato a quebrar por família em arquivos irmãos no mesmo pacote, já que Java não
-   exige que todos os `permits` estejam no mesmo arquivo desde que fiquem no mesmo módulo/pacote
-   conforme a regra de `sealed`).
-2. Confirmar que o split não quebra `IsaCoverageReport`/`gerar-cobertura-isa.sh` (que podem
-   depender de reflexão sobre nomes de classe/pacote) nem serialização de savestate (se algum
-   `record` de `IrOp`/`Ir64Op` for serializado por nome/posição).
-3. Ordenar os splits por risco: `AdvSimdLanes` (tabelas de dados, baixo risco) antes de
-   `Aarch64Decoder`/`IrOp`/`Ir64Op` (lógica de dispatch, alto risco de regressão sutil).
-4. Escrever uma task por arquivo (ou por grupo pequeno), cada uma pequena o bastante para 1 sessão
-   fechar com G5 completo (esta mudança É código compartilhado — G5 sempre obrigatório aqui,
-   nenhuma exceção da regra nova se aplica a refactor de `IrOp`/`Aarch64Decoder`).
+## Decisões de desenho
+
+**D1 — `op.execute(...)` no lugar do `switch` de dispatch (a ideia do usuário, com um ajuste).**
+Cada `record` ganha uma ponte de 1 linha para o executor da sua família; a lógica continua nos
+executores (pôr a lógica dentro do `record` só mudaria o arquivo gigante de lugar):
+
+```java
+record SveIntegerUnpredicated(...) implements SveOp {
+    @Override public boolean execute(Aarch64Core core) { return SveIntegerOps.execute(core, this); }
+}
+```
+
+Método abstrato na interface selada: esquecer a ponte é erro de compilação, não de runtime. Os
+dois `switch` de 189 casos do `IrBlockExecutor` e o de 212 do `Ir64BlockExecutor` somem.
+
+**O ajuste: sem parâmetro "modo JIT/interpretado".** O JIT não executa a op, ele emite bytecode uma
+vez, em tempo de compilação. Um `mode` dentro de `execute` colocaria um `if` em cada op — mais
+branch, não menos. São capacidades separadas: `execute` (interpretar), metadados (D2) e emissão
+(D3). O Truffle fica num módulo Maven que o `core` não enxerga, então emissão não pode ser método
+do `record`.
+
+**Performance é gate, não suposição.** A C8 mediu −15,6% só mexendo em dispatch no interpretador
+de 32 bits. `Cycle` e `Fetch` são 2 de cada 3 ops e hoje são inlinados pelo `switch`. Forma de
+partida: `switch` mínimo só para `CYCLE`/`FETCH` + `default -> op.execute(...)` (é o que o A64 já
+faz hoje, sem o segundo `switch`). Critério na E15.4/E15.5.
+
+**D2 — metadados no `record`.** `regUse()`/`regDef()` com `default 0` em `IrOp`, sobrescritos só
+pelos records que tocam GPR. `DeadCodeEliminationPass` perde os dois `switch` de ~60 casos e vira
+o laço de vivência puro.
+
+**D3 — backends: um registro de emissores por `Kind`, e a política derivada dele.** No
+`AsmBlockCompiler`, tabela `emissores[Kind]` (emissor + predicado opcional, ex.: `dst != 15`).
+`AsmNativePolicy.supports(op)` passa a ser "tem emissor e o predicado aceita": política e
+compilador não podem mais divergir, e as 123 linhas `Xxx ignored -> false` (mais as 56
+`ignored -> true`) desaparecem (ausência = interpretado). Os emissores saem para classes por família
+(`AsmAluEmitter`/`AsmMemoryEmitter`/`AsmVfpEmitter`/...).
+
+**D4 — IR por família, via sub-interfaces seladas.** `IrOp permits IntegerOp, MemoryOp, BranchOp,
+SystemOp, VfpOp, NeonOp, MveOp`, cada uma no seu arquivo com seus records aninhados; idem
+`Ir64Op` (`Integer`/`Fp`/`AdvSimd`/`Sve`/`Sme`). `switch` por padrão continua exaustivo pela
+hierarquia selada. **Muda nome de tipo** (`IrOp.NeonThreeSame` → `NeonOp.ThreeSame`) — ver "Decisão
+do usuário".
+
+**D5 — decoder por tabela (estilo decodetree), generalizando os `Sme*Rows`.**
+
+```java
+record DecodeRow<T>(int mask, int value, Feature requires, WordDecoder<T> build)
+```
+
+A feature vira coluna da linha: a cascata de `if (has(...))` some. A tabela é indexada por bucket
+dos bits de classe na inicialização (decode continua O(1) amortizado). Dois testes saem de graça
+da própria tabela: **sobreposição** (duas linhas só podem casar a mesma palavra se estiverem num
+grupo de prioridade explícito — substitui os comentários "conferido exaustivamente" e é o
+invariante G8 verificado por máquina) e **alcance** (para cada linha, gera uma palavra que casa e
+afirma que a linha responde — toda linha é exercitada por construção). Migração grupo a grupo,
+com o decoder antigo como oráculo diferencial até o grupo fechar.
+
+**D6 — JaCoCo vira gate com catraca.** `jacoco:check` no `verify`, com piso = valor medido; o
+piso só sobe. Pacote que uma sub-task migra passa a exigir 100% linha+branch. `default -> throw
+"unreachable"` é a causa estrutural de branch incobrível: a regra é `switch` exaustivo sobre
+`enum`/selado, sem `default`.
+
+**D7 — limite de tamanho com catraca.** Teste-guarda que falha se algum fonte de `src/main` passar
+de 800 linhas fora de uma lista de exceções que só encolhe (mesmo padrão do
+`JitCoverageReportGuardTest`). Sem isso os arquivos voltam a crescer.
+
+## Escada
+
+Ordem: rede de segurança → mover sem mudar lógica → trocar dispatch → decoder → fechar cobertura.
+G5 = suites de gbaemu/ndsemu obrigatórias (regra do `tasks/README.md`).
+
+| Task | Escopo | G5 | Status |
+|---|---|---|---|
+| [E15.1](e15.1-rede-de-seguranca-contrato-e-catraca.md) | Testes de contrato por `record` do IR (absorve a E14) + catraca JaCoCo + guarda de tamanho. Zero mudança em `src/main` | não | ⬜ |
+| [E15.2](e15.2-ir64op-por-familia.md) | `Ir64Op` em sub-interfaces seladas por família (D4) | não | ⬜ |
+| [E15.3](e15.3-irop-por-familia.md) | `IrOp` idem (D4) | sim | ⬜ |
+| E15.4 | A64: `Ir64Op#execute` (D1), remove o dispatch duplo; `Ir64BlockExecutor` dividido por família | não | ⬜ [REFINAR] após E15.2 |
+| E15.5 | 32 bits: `IrOp#execute` (D1), funde `execute`+`executeOp`; **gate: `InterpretedThroughputBenchTest` (gbaemu, C8) ≥ −1%**, senão manter `switch` para os `Kind` quentes medidos | sim | ⬜ [REFINAR] após E15.3 |
+| E15.6 | `regUse`/`regDef` nos records (D2); DCE sem `switch` | sim | ⬜ [REFINAR] |
+| E15.7 | Registro de emissores ASM 32 bits + política derivada (D3); `AsmBlockCompiler`/`AsmRuntimeHelpers` por família | sim | ⬜ [REFINAR] |
+| E15.8 | `IrSystemExecutor` (2508) → `IrMveExecutor` + sistema; `IrBlockExecutor` final | sim | ⬜ [REFINAR] |
+| E15.9 | Infra `DecodeTable` (D5) + **piloto**: a cascata `bit21=0` de `decodeAdvancedSimdInteger` (FP16/FP8/FAMINMAX/FP8FMA/FP8DOT2/FP8DOT4/FCMA). Gate de go/no-go: linhas, branches e tempo de lift antes/depois | não | ⬜ [REFINAR] |
+| E15.10–E15.15 | `Aarch64Decoder` grupo a grupo para tabela, um arquivo por grupo: DP-imediato · branch/exceção/sistema (inclui `decodeSystemRegisterId` → encoding no próprio `Aarch64SystemRegisterId`) · load/store · DP-registrador · FP escalar · AdvSIMD | não | ⬜ [REFINAR] após E15.9 |
+| E15.16 | Decoders de 32 bits (`ArmDecoder`, `VfpDecoder`, `Thumb2*`) para tabela | sim | ⬜ [REFINAR] após E15.15 |
+| E15.17 | `AdvSimdLanes` (3677) por família de operação; `Aarch64Core` (1848): banco de sysreg para fora | sim | ⬜ [REFINAR] |
+| E15.18–E15.21 | Fechar o resíduo semântico até 100%, um pacote por task: `advsimd` · `codegen.jvm` · `core`/`memory.mmu` · `debug` (`GdbServer` por socket de loopback) | conforme pacote | ⬜ [REFINAR] |
+| E15.22 | `jacoco:check` em 100% linha+branch no `core`; lista de exceções de tamanho vazia | não | ⬜ [REFINAR] |
+
+`AdvSimdLanes` (E15.17) pode ser adiantada a qualquer momento depois da E15.1 — não depende das
+outras.
+
+**D8 — famílias sob demanda.** Hoje `IrBlockExecutor` instancia os oito executores no construtor e
+`Aarch64Decoder` constrói os decoders de SVE/SME mesmo num preset sem essas features. Com D1 e D5
+o executor/tabela de uma família só é tocado (e a classe só é carregada pela JVM) quando a
+primeira op dela aparece, ou quando o preset declara a feature. Nota: cada `record` já é um
+`.class` próprio carregado sob demanda — D4 melhora a leitura, o ganho de carga de classe vem
+daqui.
+
+## Decisão do usuário (2026-10-02) — exceção ao G3 em `ir`/`ir64`
+
+**Aceita a quebra de nome**: IR em arquivos pequenos por família vale mais que preservar
+`IrOp.Xxx`/`Ir64Op.Xxx`. Exceção ao G3 restrita aos tipos dos pacotes `ir` e `ir64`, na `1.4.0`
+(ainda não publicada); entra no `CHANGELOG.md` com a tabela de/para. Medido nos 5 consumidores:
+3 referências no total a records do IR (`IrOp.Load`, `IrOp.VfpLoad`, `Ir64Op.ShiftVariable`),
+nenhuma a `Kind` — ajustadas na mesma task que renomeia. E15.2/E15.3 seguem a forma completa de
+D4 (sem a alternativa de manter os records inteiro/sistema dentro de `IrOp`).
+
+## Pré-condição
+
+Árvore limpa antes de qualquer sub-task que mova código — um refactor por cima de diff pendente
+não é revisável. (O diff pendente do boot raspi3-64 foi commitado em 2026-10-02, `d8b6828`.)
 
 ## Não inclui
 
-- Mudar qualquer comportamento, semântica de instrução ou API pública (G1/G3) — é refactor puro,
-  arquivo muda, `.class`/comportamento não.
-- Arquivos de teste gigantes (`Aarch64DecoderCorpusTest` 4296 linhas, etc.) — são citados com menos
-  frequência que os fontes de produção; ficam de fora a menos que a sessão de spec ache barato
-  incluir junto.
-- Resolver o achado G8 do `VfpDecoder` (B14.4) ou o conflito `Thumb2NocpDecoder`×MVE (B16) —
-  achados de processo já rastreados em `FILA-EXECUCAO.md`, ortogonais a este split.
-
-## Passos (desta task, a de spec)
-
-1. Para cada um dos 4 arquivos de maior risco/tamanho (`Aarch64Decoder`, `IrOp`, `Ir64Op`,
-   `AdvSimdLanes`), decidir e documentar a linha de corte concreta (nomes de arquivo/pacote
-   resultantes, quantas linhas cada pedaço fica).
-2. Escrever as tasks executáveis (E15.1, E15.2, ... — 1 arquivo por task, ou menos se um arquivo
-   pedir mais de uma sessão) com `Especificação`/`Passos`/`Aceite`/`Validação` completos, ordenadas
-   por risco crescente.
-3. Atualizar `INDICE.md` da trilha E com as sub-tasks.
-
-## Aceite (desta task, a de spec)
-
-- Uma sub-task por arquivo (ou grupo), cada uma pequena o bastante para fechar em 1 sessão com G5
-  completo.
-- Nenhuma sub-task muda comportamento — só organização de arquivo/pacote.
-- Ordem de execução explícita (baixo risco primeiro).
-
-## Validação
-
-Esta task em si não toca `core/` — não há JaCoCo/G5 a rodar para ELA. As sub-tasks que ela gerar
-seguem G5 completo (código compartilhado, sem exceção da regra nova) e o passo de JaCoCo padrão de
-`tasks/README.md`.
+- Mudar semântica de instrução (G1) — toda sub-task fecha com as suites existentes verdes e
+  `docs/COBERTURA-ISA.md` em 29619/29619.
+- Gerar tabelas a partir dos `.decode` do QEMU (licença diferente da BSD-3 do projeto; eles seguem
+  só como inventário de medição em `target/`).
+- Emissão nativa nova (C12) ou nós Truffle novos (A10) — D3 só reorganiza o que já existe.
+- Arquivos de teste gigantes (`Aarch64DecoderCorpusTest` 4307) — ficam para depois da E15.15,
+  quando o teste de alcance da tabela tornar parte do corpus redundante.
 
 ## Armadilhas
 
-- Não confundir "arquivo grande" com "arquivo mal projetado" — `Aarch64Decoder`/`IrOp`/`Ir64Op` são
-  grandes porque o ARM é grande (regra máxima do projeto, topo de `tasks/README.md`); o objetivo
-  aqui é navegabilidade/custo de contexto, não reduzir escopo nem "simplificar" cobertura de ISA.
-- Split de `sealed interface` exige atenção ao `permits`/pacote — não vale a pena introduzir
-  abstração nova (ex.: interface extra) só para dividir arquivo; preferir arquivos irmãos no mesmo
-  pacote quando a linguagem permitir.
+- "Arquivo pequeno" não é o objetivo; é consequência. Dividir um `switch` de 189 casos em quatro
+  de 50 não resolve nada — a sub-task só fecha se o `switch`/cascata tiver sido eliminado ou
+  virado dado.
+- Lambda não "esconde" cobertura: o JaCoCo conta o corpo de cada lambda como método. Tabelas devem
+  usar referência de método para código que já tem teste, e o teste de alcance cobre a tabela.
+- `record` não estende classe: a ponte `execute` é método de interface (`invokeinterface`). É por
+  isso que a E15.5 tem gate de bench e a E15.4 não assume nada do resultado da outra.
+- Sub-interface selada exige que `JitCoverageReport`, `JitCoverageReportGuardTest` e qualquer
+  código com `getPermittedSubclasses()` passem a descer a hierarquia recursivamente.
+- `ADVANCE_VPT`/`ADVANCE_ECI` dependem de `pcChanged` acumulado no bloco e `SWI`/`HVC`/`SMC`/`ERET`
+  de `block.endPc()` — a assinatura de `IrOp#execute` precisa carregar os dois.

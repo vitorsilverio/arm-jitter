@@ -45,16 +45,15 @@ sem checar o status real ali.**
 
 **⚠️ "tabela 100%" NÃO é o gatilho da `1.4.0`**: seguem abertos **B20** (PMSA/MPU), **B21** (ARMv1-v3) e as dimensões 2/3 do `ROADMAP-100-ARM.md` (JIT nativo, Truffle). Release continua bloqueada — decisão do usuário pendente se a tabela a 100% basta.
 
-**Pegáveis a seguir:** `B21.2` em diante, `E14`, `E15` ([REFINAR]), `C12.5`. `B20.9` bloqueada no usuário. Pendências B18.2: `FEAT_SME_FA64` em preset; `ResetSVEState` na troca AArch64↔AArch32 com `SM=1`.
+**Pegáveis a seguir:** `B21.2` em diante, `E15.1` (absorve a `E14`; épico `E15` replanejado em 2026-10-02, depois `E15.2` → `E15.3`), `C12.5`. `B20.9` bloqueada no usuário. Pendências B18.2: `FEAT_SME_FA64` em preset; `ResetSVEState` na troca AArch64↔AArch32 com `SM=1`.
 
 **Protocolo (a pedido do usuário, sessões estourando orçamento de contexto em ~15 tasks/semana):** G5
 (`tasks/README.md`) agora é condicional — pula suites de gbaemu/ndsemu quando o diff fica só em
 `decoder64`/`executor64`/`ir64`/`codegen64`/`core64`/`Sve*`/`Sme*` (código que nenhum dos dois
 consumidores executa); fora dessa lista, G5 continua obrigatório inteiro. JaCoCo virou passo fixo de
 `Validação` no template de task (não é mais pedido manual). Regra 2 desta fila agora proíbe `Read`
-de fonte >~1500 linhas inteiro — Grep+offset primeiro. **`E15`** (nova, [REFINAR]) abre a causa
-estrutural: `Aarch64Decoder`/`IrOp`/`Ir64Op`/`AdvSimdLanes` são citados por quase toda task de
-decoder/IR e sozinhos já são caros de carregar.
+de fonte >~1500 linhas inteiro — Grep+offset primeiro. O épico **`E15`** ataca a causa estrutural
+(arquivos gigantes + `switch` de dispatch + cascata de feature no decoder).
 
 **Achados de processo ainda abertos, não resolvidos** (documentados nas specs para quem pegar a task
 resolver, não bloqueiam nada além de si mesmos): bug G8 em `VfpDecoder` (não checa `bits[31:28]`,
