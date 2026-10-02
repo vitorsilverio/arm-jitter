@@ -5,6 +5,8 @@ o projeto segue [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 
 ## [Não lançado]
 
+Próxima versão: **`2.0.0`** — o refactor estrutural (épico `E15`) quebra nomes de tipo da API pública.
+
 ### Alterado
 - **Quebra de nome no pacote `ir64`** (`E15.2`, exceção ao G3 aceita pelo usuário em 2026-10-02): os 209 records de instrução
   e os 7 enums que viviam aninhados em `Ir64Op` (5784 linhas) passaram para sub-interfaces seladas por família, um arquivo

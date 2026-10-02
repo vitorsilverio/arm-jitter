@@ -150,8 +150,13 @@ nenhuma a `Kind` — ajustadas na mesma task que renomeia. E15.2/E15.3 seguem a 
 D4 (sem a alternativa de manter os records inteiro/sistema dentro de `IrOp`).
 
 ⚠️ **Correção de fato (achado da E15.2, 2026-10-02):** a `1.4.0` JÁ está no Maven Central
-(`arm-jitter-1.4.0.pom` → `200`, tag `v1.4.0`). A quebra de nome sai na próxima versão; o número
-dela (`1.5.0` com a exceção ao G3 documentada, ou `2.0.0`) está pendente de decisão do usuário.
+(`arm-jitter-1.4.0.pom` → `200`, tag `v1.4.0`). A quebra de nome sai na próxima versão.
+
+**Decisão do usuário (2026-10-02): a versão que sair depois do refactor é a `2.0.0`** — a API
+muda demais para uma minor. Com isso as quebras de nome do épico deixam de ser "exceção ao G3" e
+passam a ser breaking change de major, todas listadas em `[Não lançado]` no `CHANGELOG.md` com
+tabela de/para. O `pom.xml` segue em `1.4.0` enquanto o refactor estiver em andamento; o bump
+para `2.0.0` é do release (procedimento F5 + F7 nos consumidores), não de uma sub-task.
 
 ## Pré-condição
 
