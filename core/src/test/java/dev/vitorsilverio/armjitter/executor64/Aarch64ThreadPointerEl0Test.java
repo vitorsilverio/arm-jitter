@@ -2,7 +2,7 @@ package dev.vitorsilverio.armjitter.executor64;
 
 import dev.vitorsilverio.armjitter.core64.Aarch64Core;
 import dev.vitorsilverio.armjitter.ir64.Aarch64SystemRegisterId;
-import dev.vitorsilverio.armjitter.ir64.Ir64Op;
+import dev.vitorsilverio.armjitter.ir64.SystemOp64;
 import dev.vitorsilverio.armjitter.memory.AddressSpace64;
 import dev.vitorsilverio.armjitter.support.TestAddressSpace;
 import org.junit.jupiter.api.Test;
@@ -23,16 +23,16 @@ class Aarch64ThreadPointerEl0Test {
         return new Aarch64Core(AddressSpace64.wrapping(raw));
     }
 
-    private static Ir64Op.SystemRegister decode(int word) {
+    private static SystemOp64.SystemRegister decode(int word) {
         TestAddressSpace raw = new TestAddressSpace(4);
         raw.put32(0, word);
-        return (Ir64Op.SystemRegister) DECODER.decode(AddressSpace64.wrapping(raw), 0);
+        return (SystemOp64.SystemRegister) DECODER.decode(AddressSpace64.wrapping(raw), 0);
     }
 
     @Test
     void msrTpidrEl0Decodes() {
         // d51bd040: msr tpidr_el0, x0
-        Ir64Op.SystemRegister op = decode(0xd51bd040);
+        SystemOp64.SystemRegister op = decode(0xd51bd040);
         assertEquals(false, op.read());
         assertEquals(Aarch64SystemRegisterId.TPIDR_EL0, op.register());
         assertEquals(0, op.rt());
@@ -41,7 +41,7 @@ class Aarch64ThreadPointerEl0Test {
     @Test
     void mrsTpidrEl0Decodes() {
         // d53bd041: mrs x1, tpidr_el0
-        Ir64Op.SystemRegister op = decode(0xd53bd041);
+        SystemOp64.SystemRegister op = decode(0xd53bd041);
         assertEquals(true, op.read());
         assertEquals(Aarch64SystemRegisterId.TPIDR_EL0, op.register());
         assertEquals(1, op.rt());
@@ -50,7 +50,7 @@ class Aarch64ThreadPointerEl0Test {
     @Test
     void msrTpidrroEl0Decodes() {
         // d51bd062: msr tpidrro_el0, x2
-        Ir64Op.SystemRegister op = decode(0xd51bd062);
+        SystemOp64.SystemRegister op = decode(0xd51bd062);
         assertEquals(false, op.read());
         assertEquals(Aarch64SystemRegisterId.TPIDRRO_EL0, op.register());
         assertEquals(2, op.rt());
@@ -59,7 +59,7 @@ class Aarch64ThreadPointerEl0Test {
     @Test
     void mrsTpidrroEl0Decodes() {
         // d53bd063: mrs x3, tpidrro_el0
-        Ir64Op.SystemRegister op = decode(0xd53bd063);
+        SystemOp64.SystemRegister op = decode(0xd53bd063);
         assertEquals(true, op.read());
         assertEquals(Aarch64SystemRegisterId.TPIDRRO_EL0, op.register());
         assertEquals(3, op.rt());
@@ -70,8 +70,8 @@ class Aarch64ThreadPointerEl0Test {
         Aarch64Core core = newCore();
         core.setX(5, 0x1234_5678_9ABC_DEF0L);
 
-        EXECUTOR.executeOp(core, new Ir64Op.SystemRegister(false, Aarch64SystemRegisterId.TPIDR_EL0, 5));
-        EXECUTOR.executeOp(core, new Ir64Op.SystemRegister(true, Aarch64SystemRegisterId.TPIDR_EL0, 6));
+        EXECUTOR.executeOp(core, new SystemOp64.SystemRegister(false, Aarch64SystemRegisterId.TPIDR_EL0, 5));
+        EXECUTOR.executeOp(core, new SystemOp64.SystemRegister(true, Aarch64SystemRegisterId.TPIDR_EL0, 6));
 
         assertEquals(0x1234_5678_9ABC_DEF0L, core.x(6));
     }
@@ -82,10 +82,10 @@ class Aarch64ThreadPointerEl0Test {
         core.setX(0, 0x1111L);
         core.setX(1, 0x2222L);
 
-        EXECUTOR.executeOp(core, new Ir64Op.SystemRegister(false, Aarch64SystemRegisterId.TPIDR_EL0, 0));
-        EXECUTOR.executeOp(core, new Ir64Op.SystemRegister(false, Aarch64SystemRegisterId.TPIDRRO_EL0, 1));
-        EXECUTOR.executeOp(core, new Ir64Op.SystemRegister(true, Aarch64SystemRegisterId.TPIDR_EL0, 2));
-        EXECUTOR.executeOp(core, new Ir64Op.SystemRegister(true, Aarch64SystemRegisterId.TPIDRRO_EL0, 3));
+        EXECUTOR.executeOp(core, new SystemOp64.SystemRegister(false, Aarch64SystemRegisterId.TPIDR_EL0, 0));
+        EXECUTOR.executeOp(core, new SystemOp64.SystemRegister(false, Aarch64SystemRegisterId.TPIDRRO_EL0, 1));
+        EXECUTOR.executeOp(core, new SystemOp64.SystemRegister(true, Aarch64SystemRegisterId.TPIDR_EL0, 2));
+        EXECUTOR.executeOp(core, new SystemOp64.SystemRegister(true, Aarch64SystemRegisterId.TPIDRRO_EL0, 3));
 
         assertEquals(0x1111L, core.x(2));
         assertEquals(0x2222L, core.x(3));

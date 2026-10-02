@@ -3,7 +3,7 @@ package dev.vitorsilverio.armjitter.executor64;
 import dev.vitorsilverio.armjitter.core64.Aarch64Core;
 import dev.vitorsilverio.armjitter.ir64.Aarch64SystemRegisterId;
 import dev.vitorsilverio.armjitter.ir64.Ir64Condition;
-import dev.vitorsilverio.armjitter.ir64.Ir64Op;
+import dev.vitorsilverio.armjitter.ir64.SystemOp64;
 import dev.vitorsilverio.armjitter.memory.AddressSpace64;
 import dev.vitorsilverio.armjitter.support.TestAddressSpace;
 import org.junit.jupiter.api.Test;
@@ -26,16 +26,16 @@ class Aarch64PstateSystemRegisterTest {
         return new Aarch64Core(AddressSpace64.wrapping(raw));
     }
 
-    private static Ir64Op.SystemRegister decode(int word) {
+    private static SystemOp64.SystemRegister decode(int word) {
         TestAddressSpace raw = new TestAddressSpace(4);
         raw.put32(0, word);
-        return (Ir64Op.SystemRegister) DECODER.decode(AddressSpace64.wrapping(raw), 0);
+        return (SystemOp64.SystemRegister) DECODER.decode(AddressSpace64.wrapping(raw), 0);
     }
 
     @Test
     void mrsNzcvDecodes() {
         // d53b4200: mrs x0, nzcv
-        Ir64Op.SystemRegister op = decode(0xd53b4200);
+        SystemOp64.SystemRegister op = decode(0xd53b4200);
         assertEquals(true, op.read());
         assertEquals(Aarch64SystemRegisterId.NZCV, op.register());
     }
@@ -43,7 +43,7 @@ class Aarch64PstateSystemRegisterTest {
     @Test
     void msrDaifDecodes() {
         // d51b4221: msr daif, x1
-        Ir64Op.SystemRegister op = decode(0xd51b4221);
+        SystemOp64.SystemRegister op = decode(0xd51b4221);
         assertEquals(false, op.read());
         assertEquals(Aarch64SystemRegisterId.DAIF, op.register());
         assertEquals(1, op.rt());
@@ -54,7 +54,7 @@ class Aarch64PstateSystemRegisterTest {
         Aarch64Core core = newCore();
         core.pstate().setNzcv(true, false, true, false); // N=1 Z=0 C=1 V=0
 
-        EXECUTOR.executeOp(core, new Ir64Op.SystemRegister(true, Aarch64SystemRegisterId.NZCV, 0));
+        EXECUTOR.executeOp(core, new SystemOp64.SystemRegister(true, Aarch64SystemRegisterId.NZCV, 0));
 
         assertEquals(0xA0000000L, core.x(0) & 0xF000_0000L, "N=1(bit31) C=1(bit29) -> 0xA em [31:28]");
     }
@@ -66,7 +66,7 @@ class Aarch64PstateSystemRegisterTest {
         assertFalse(core.pstate().evalCond(Ir64Condition.EQ), "Z=0 antes do MSR");
 
         core.setX(0, 1L << 30); // Z bit em [31:28] -> bit30 = Z
-        EXECUTOR.executeOp(core, new Ir64Op.SystemRegister(false, Aarch64SystemRegisterId.NZCV, 0));
+        EXECUTOR.executeOp(core, new SystemOp64.SystemRegister(false, Aarch64SystemRegisterId.NZCV, 0));
 
         assertTrue(core.pstate().evalCond(Ir64Condition.EQ),
                 "MSR NZCV muda o MESMO estado que B.cond consulta, não um escaninho paralelo");
@@ -78,18 +78,18 @@ class Aarch64PstateSystemRegisterTest {
         assertFalse(core.pstate().irqDisabled());
 
         core.setX(1, 1L << 7); // bit I
-        EXECUTOR.executeOp(core, new Ir64Op.SystemRegister(false, Aarch64SystemRegisterId.DAIF, 1));
+        EXECUTOR.executeOp(core, new SystemOp64.SystemRegister(false, Aarch64SystemRegisterId.DAIF, 1));
 
         assertTrue(core.pstate().irqDisabled(), "MSR DAIF muda o MESMO irqDisabled que enterIrq consulta");
 
-        EXECUTOR.executeOp(core, new Ir64Op.SystemRegister(true, Aarch64SystemRegisterId.DAIF, 2));
+        EXECUTOR.executeOp(core, new SystemOp64.SystemRegister(true, Aarch64SystemRegisterId.DAIF, 2));
         assertEquals(1L << 7, core.x(2));
     }
 
     @Test
     void cntvctEl0DecodesAsDistinctFromCntpctEl0() {
         // d53be042: mrs x2, cntvct_el0
-        Ir64Op.SystemRegister op = decode(0xd53be042);
+        SystemOp64.SystemRegister op = decode(0xd53be042);
         assertEquals(Aarch64SystemRegisterId.CNTVCT_EL0, op.register());
     }
 

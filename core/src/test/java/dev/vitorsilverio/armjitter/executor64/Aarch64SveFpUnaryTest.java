@@ -10,6 +10,7 @@ import dev.vitorsilverio.armjitter.ir64.Aarch64SystemRegisterId;
 import dev.vitorsilverio.armjitter.ir64.Ir64Block;
 import dev.vitorsilverio.armjitter.ir64.Ir64Op;
 import dev.vitorsilverio.armjitter.ir64.StandardIr64BlockLifter;
+import dev.vitorsilverio.armjitter.ir64.SveFpOp64;
 import dev.vitorsilverio.armjitter.memory.AddressSpace64;
 import dev.vitorsilverio.armjitter.support.TestAddressSpace;
 import org.junit.jupiter.api.Test;
@@ -260,7 +261,7 @@ class Aarch64SveFpUnaryTest {
 
     private static boolean decodes(Aarch64Architecture architecture, int word) {
         try {
-            return decode(architecture, word) instanceof Ir64Op.SveFpUnary;
+            return decode(architecture, word) instanceof SveFpOp64.FpUnary;
         } catch (UnsupportedOperationException refused) {
             return false;
         }
@@ -551,8 +552,8 @@ class Aarch64SveFpUnaryTest {
         for (Object[] row : ROWS) {
             for (int esz : (Boolean) row[2] ? new int[] {1, 2, 3} : new int[] {0}) {
                 Spec spec = spec(row, esz);
-                Ir64Op.SveFpUnary op = assertInstanceOf(Ir64Op.SveFpUnary.class, decode(FULL, spec.word()), spec.name());
-                assertEquals(Ir64Op.SveFpUnary.Op.valueOf(spec.base()), op.op(), spec.name());
+                SveFpOp64.FpUnary op = assertInstanceOf(SveFpOp64.FpUnary.class, decode(FULL, spec.word()), spec.name());
+                assertEquals(SveFpOp64.FpUnary.Op.valueOf(spec.base()), op.op(), spec.name());
                 assertEquals(spec.zeroing(), op.zeroing(), spec.name());
                 assertEquals(spec.source(), op.source(), spec.name());
                 assertEquals(spec.destination(), op.destination(), spec.name());
@@ -596,30 +597,30 @@ class Aarch64SveFpUnaryTest {
 
     static Stream<Arguments> assembled() {
         return Stream.of(
-                Arguments.of(0x6588a861, Ir64Op.SveFpUnary.Op.FCVT, 2, 1, false),
-                Arguments.of(0x6589a861, Ir64Op.SveFpUnary.Op.FCVT, 1, 2, false),
-                Arguments.of(0x658aa861, Ir64Op.SveFpUnary.Op.BFCVT, 2, 0, false),
-                Arguments.of(0x65d8a861, Ir64Op.SveFpUnary.Op.FCVTZS, 3, 2, false),
-                Arguments.of(0x65dda861, Ir64Op.SveFpUnary.Op.FCVTZU, 2, 3, false),
-                Arguments.of(0x65d0a861, Ir64Op.SveFpUnary.Op.SCVTF, 2, 3, false),
-                Arguments.of(0x6557a861, Ir64Op.SveFpUnary.Op.UCVTF, 3, 1, false),
-                Arguments.of(0x6580a861, Ir64Op.SveFpUnary.Op.FRINTN, 2, 2, false),
-                Arguments.of(0x65c7a861, Ir64Op.SveFpUnary.Op.FRINTI, 3, 3, false),
-                Arguments.of(0x654ca861, Ir64Op.SveFpUnary.Op.FRECPX, 1, 1, false),
-                Arguments.of(0x658da861, Ir64Op.SveFpUnary.Op.FSQRT, 2, 2, false),
-                Arguments.of(0x649a8861, Ir64Op.SveFpUnary.Op.FCVT, 2, 1, true),
-                Arguments.of(0x6511a861, Ir64Op.SveFpUnary.Op.FRINT32X, 2, 2, false),
-                Arguments.of(0x641dc861, Ir64Op.SveFpUnary.Op.FRINT64Z, 3, 3, true),
-                Arguments.of(0x641ac861, Ir64Op.SveFpUnary.Op.FCVTX, 3, 2, true),
-                Arguments.of(0x64dba861, Ir64Op.SveFpUnary.Op.FSQRT, 3, 3, true),
-                Arguments.of(0x645d8861, Ir64Op.SveFpUnary.Op.SCVTF, 2, 1, true));
+                Arguments.of(0x6588a861, SveFpOp64.FpUnary.Op.FCVT, 2, 1, false),
+                Arguments.of(0x6589a861, SveFpOp64.FpUnary.Op.FCVT, 1, 2, false),
+                Arguments.of(0x658aa861, SveFpOp64.FpUnary.Op.BFCVT, 2, 0, false),
+                Arguments.of(0x65d8a861, SveFpOp64.FpUnary.Op.FCVTZS, 3, 2, false),
+                Arguments.of(0x65dda861, SveFpOp64.FpUnary.Op.FCVTZU, 2, 3, false),
+                Arguments.of(0x65d0a861, SveFpOp64.FpUnary.Op.SCVTF, 2, 3, false),
+                Arguments.of(0x6557a861, SveFpOp64.FpUnary.Op.UCVTF, 3, 1, false),
+                Arguments.of(0x6580a861, SveFpOp64.FpUnary.Op.FRINTN, 2, 2, false),
+                Arguments.of(0x65c7a861, SveFpOp64.FpUnary.Op.FRINTI, 3, 3, false),
+                Arguments.of(0x654ca861, SveFpOp64.FpUnary.Op.FRECPX, 1, 1, false),
+                Arguments.of(0x658da861, SveFpOp64.FpUnary.Op.FSQRT, 2, 2, false),
+                Arguments.of(0x649a8861, SveFpOp64.FpUnary.Op.FCVT, 2, 1, true),
+                Arguments.of(0x6511a861, SveFpOp64.FpUnary.Op.FRINT32X, 2, 2, false),
+                Arguments.of(0x641dc861, SveFpOp64.FpUnary.Op.FRINT64Z, 3, 3, true),
+                Arguments.of(0x641ac861, SveFpOp64.FpUnary.Op.FCVTX, 3, 2, true),
+                Arguments.of(0x64dba861, SveFpOp64.FpUnary.Op.FSQRT, 3, 3, true),
+                Arguments.of(0x645d8861, SveFpOp64.FpUnary.Op.SCVTF, 2, 1, true));
     }
 
     @ParameterizedTest
     @MethodSource("assembled")
-    void everyAssembledWordDecodesToItsOperation(int word, Ir64Op.SveFpUnary.Op expected, int source, int destination,
+    void everyAssembledWordDecodesToItsOperation(int word, SveFpOp64.FpUnary.Op expected, int source, int destination,
             boolean zeroing) {
-        Ir64Op.SveFpUnary op = assertInstanceOf(Ir64Op.SveFpUnary.class, decode(FULL, word));
+        SveFpOp64.FpUnary op = assertInstanceOf(SveFpOp64.FpUnary.class, decode(FULL, word));
         assertEquals(expected, op.op());
         assertEquals(source, op.source());
         assertEquals(destination, op.destination());
@@ -632,8 +633,8 @@ class Aarch64SveFpUnaryTest {
     @Test
     void registerFieldsAreDecodedFromTheRightBits() {
         // frintx z31.d, p7/m, z30.d
-        Ir64Op.SveFpUnary op = assertInstanceOf(Ir64Op.SveFpUnary.class, decode(SVE, 0x65c6bfdf));
-        assertEquals(Ir64Op.SveFpUnary.Op.FRINTX, op.op());
+        SveFpOp64.FpUnary op = assertInstanceOf(SveFpOp64.FpUnary.class, decode(SVE, 0x65c6bfdf));
+        assertEquals(SveFpOp64.FpUnary.Op.FRINTX, op.op());
         assertEquals(31, op.rd());
         assertEquals(30, op.rn());
         assertEquals(7, op.pg());

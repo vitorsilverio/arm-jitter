@@ -4,6 +4,7 @@ import dev.vitorsilverio.armjitter.core64.Aarch64Core;
 import dev.vitorsilverio.armjitter.decoder64.Aarch64Decoder;
 import dev.vitorsilverio.armjitter.ir64.Aarch64SystemRegisterId;
 import dev.vitorsilverio.armjitter.ir64.Ir64Op;
+import dev.vitorsilverio.armjitter.ir64.SystemOp64;
 import dev.vitorsilverio.armjitter.memory.AddressSpace64;
 import dev.vitorsilverio.armjitter.support.TestAddressSpace;
 import org.junit.jupiter.api.Test;
@@ -31,20 +32,20 @@ class Aarch64CacheSizeIdRegistersTest {
     }
 
     private static void assertDecodes(int word, boolean read, Aarch64SystemRegisterId register, int rt) {
-        Ir64Op.SystemRegister op = (Ir64Op.SystemRegister) decode(word);
+        SystemOp64.SystemRegister op = (SystemOp64.SystemRegister) decode(word);
         assertEquals(read, op.read());
         assertEquals(register, op.register());
         assertEquals(rt, op.rt());
     }
 
     private static long read(Aarch64Core core, Aarch64SystemRegisterId register) {
-        EXECUTOR.executeOp(core, new Ir64Op.SystemRegister(true, register, 7));
+        EXECUTOR.executeOp(core, new SystemOp64.SystemRegister(true, register, 7));
         return core.x(7);
     }
 
     private static void select(Aarch64Core core, long csselr) {
         core.setX(6, csselr);
-        EXECUTOR.executeOp(core, new Ir64Op.SystemRegister(false, Aarch64SystemRegisterId.CSSELR_EL1, 6));
+        EXECUTOR.executeOp(core, new SystemOp64.SystemRegister(false, Aarch64SystemRegisterId.CSSELR_EL1, 6));
     }
 
     @Test

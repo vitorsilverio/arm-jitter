@@ -3,7 +3,8 @@ package dev.vitorsilverio.armjitter.executor64;
 import dev.vitorsilverio.armjitter.core64.Aarch64Core;
 import dev.vitorsilverio.armjitter.core64.Aarch64ScalableRegisters;
 import dev.vitorsilverio.armjitter.core64.Aarch64UndefinedInstructionException;
-import dev.vitorsilverio.armjitter.ir64.Ir64Op;
+import dev.vitorsilverio.armjitter.ir64.SveIntegerOp64;
+import dev.vitorsilverio.armjitter.ir64.SvePredicateOp64;
 
 /// Semântica dos predicados SVE (`FEAT_SVE`, B17.4) — o substrato que as tasks seguintes do épico B17
 /// reusam: leitura/escrita de predicado como `long[]`, `PredTest` (as flags `NZCV` de toda instrução
@@ -159,7 +160,7 @@ final class SvePredicateOps {
 
     // ── Lógica de predicado ─────────────────────────────────────────────────────────────────────
 
-    static boolean executeLogical(Aarch64Core core, Ir64Op.SvePredicateLogical op) {
+    static boolean executeLogical(Aarch64Core core, SvePredicateOp64.PredicateLogical op) {
         if (!accessAllowed(core, op.instructionAddress())) {
             return true;
         }
@@ -194,7 +195,7 @@ final class SvePredicateOps {
 
     // ── Misc: PTEST / PTRUE / PFALSE / FFR / PFIRST / PNEXT ──────────────────────────────────────
 
-    static boolean executeMisc(Aarch64Core core, Ir64Op.SvePredicateMisc op) {
+    static boolean executeMisc(Aarch64Core core, SvePredicateOp64.PredicateMisc op) {
         boolean usesFfr = switch (op.op()) {
             case SETFFR, RDFFR, RDFFR_PREDICATED, WRFFR -> true;
             default -> false;
@@ -239,7 +240,7 @@ final class SvePredicateOps {
 
     /// `PTRUE`/`PTRUES`. As flags de `PTRUES` seguem o `do_predset` do QEMU: `N = Z-invertido =
     /// (count != 0)`, `C = (count == 0)`, `V = 0` — a máscara do teste é o próprio resultado.
-    private static void predicateTrue(Aarch64Core core, Ir64Op.SvePredicateMisc op, int bits) {
+    private static void predicateTrue(Aarch64Core core, SvePredicateOp64.PredicateMisc op, int bits) {
         Aarch64ScalableRegisters regs = core.scalable();
         int elements = bits >> op.esz();
         int count = decodePredCount(op.pattern(), elements);
@@ -256,7 +257,7 @@ final class SvePredicateOps {
 
     /// `PFIRST Pdn, Pg, Pdn`: liga em `Pdn` o bit do primeiro elemento ativo de `Pg`; o resto de
     /// `Pdn` fica como está. Sempre seta flags (`PredTest(Pg, Pdn)`).
-    private static void predicateFirst(Aarch64Core core, Ir64Op.SvePredicateMisc op, int bits) {
+    private static void predicateFirst(Aarch64Core core, SvePredicateOp64.PredicateMisc op, int bits) {
         Aarch64ScalableRegisters regs = core.scalable();
         long[] pg = read(regs, op.pg());
         long[] pd = read(regs, op.pd());
@@ -273,7 +274,7 @@ final class SvePredicateOps {
     /// `PNEXT Pdn, Pg, Pdn`: `Pdn` passa a conter SÓ o próximo elemento ativo de `Pg` depois do
     /// último elemento verdadeiro de `Pdn` (sem nenhum, a busca começa no elemento 0); nada achado ⇒
     /// `Pdn` zerado. O "último elemento de `Pdn`" NÃO é mascarado por `Pg`. Sempre seta flags.
-    private static void predicateNext(Aarch64Core core, Ir64Op.SvePredicateMisc op, int bits) {
+    private static void predicateNext(Aarch64Core core, SvePredicateOp64.PredicateMisc op, int bits) {
         Aarch64ScalableRegisters regs = core.scalable();
         int esz = op.esz();
         long[] pg = read(regs, op.pg());
@@ -298,7 +299,7 @@ final class SvePredicateOps {
 
     // ── Partition break ─────────────────────────────────────────────────────────────────────────
 
-    static boolean executePartitionBreak(Aarch64Core core, Ir64Op.SvePartitionBreak op) {
+    static boolean executePartitionBreak(Aarch64Core core, SvePredicateOp64.PartitionBreak op) {
         if (!accessAllowed(core, op.instructionAddress())) {
             return true;
         }
@@ -311,7 +312,7 @@ final class SvePredicateOps {
             case BRKA -> result = brk(pg, pn, read(regs, op.pd()), bits, true, op.merging());
             case BRKB -> result = brk(pg, pn, read(regs, op.pd()), bits, false, op.merging());
             case BRKPA, BRKPB -> {
-                boolean after = op.op() == Ir64Op.SvePartitionBreak.Op.BRKPA;
+                boolean after = op.op() == SvePredicateOp64.PartitionBreak.Op.BRKPA;
                 result = lastActiveIsTrue(pg, pn, bits)
                         ? brk(pg, read(regs, op.pm()), null, bits, after, false)
                         : new long[pg.length];
@@ -373,7 +374,7 @@ final class SvePredicateOps {
 
     // ── Contagem por predicado ──────────────────────────────────────────────────────────────────
 
-    static boolean executePredicateCount(Aarch64Core core, Ir64Op.SvePredicateCount op) {
+    static boolean executePredicateCount(Aarch64Core core, SvePredicateOp64.PredicateCount op) {
         if (!accessAllowed(core, op.instructionAddress())) {
             return true;
         }
@@ -424,7 +425,7 @@ final class SvePredicateOps {
         return NOT_FOUND_INDEX;
     }
 
-    private static void applyCount(Aarch64Core core, Ir64Op.SvePredicateCount op, long count) {
+    private static void applyCount(Aarch64Core core, SvePredicateOp64.PredicateCount op, long count) {
         switch (op.op()) {
             case CNTP -> core.setX(op.rd(), count);
             case INCDECP_SCALAR ->
@@ -441,7 +442,7 @@ final class SvePredicateOps {
 
     // ── Contagem de elementos ───────────────────────────────────────────────────────────────────
 
-    static boolean executeElementCount(Aarch64Core core, Ir64Op.SveElementCount op) {
+    static boolean executeElementCount(Aarch64Core core, SveIntegerOp64.ElementCount op) {
         if (!accessAllowed(core, op.instructionAddress())) {
             return true;
         }

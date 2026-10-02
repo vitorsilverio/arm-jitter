@@ -5,7 +5,7 @@ import dev.vitorsilverio.armjitter.core64.Aarch64Core;
 import dev.vitorsilverio.armjitter.core64.Aarch64Fp8Format;
 import dev.vitorsilverio.armjitter.core64.Aarch64ScalableRegisters;
 import dev.vitorsilverio.armjitter.core64.Aarch64UndefinedInstructionException;
-import dev.vitorsilverio.armjitter.ir64.Ir64Op;
+import dev.vitorsilverio.armjitter.ir64.SmeOp64;
 
 /// SME2 multi-vetor SVE "constructive" (B18.12): conversões FP, estreitamento/alargamento inteiro, `*RSHR*`, `ZIP`/`UZP`,
 /// `*CLAMP` e `SEL` sobre grupos de `2`/`4` registradores `Z` (`translate-sme.c`/`sme_helper.c`/`fp8_helper.c` do QEMU).
@@ -36,7 +36,7 @@ final class SmeConstructiveOps {
     }
 
     /// @return `true` = a instrução já entrou numa exceção (acesso negado)
-    static boolean execute(Aarch64Core core, Ir64Op.SmeConstructive op) {
+    static boolean execute(Aarch64Core core, SmeOp64.Constructive op) {
         boolean sharedWithSve = isSharedRshrn(op);
         boolean allowed = sharedWithSve ? SvePredicateOps.accessAllowed(core, op.instructionAddress())
                 : core.smeStreamingEnabledCheck(op.instructionAddress());
@@ -59,9 +59,9 @@ final class SmeConstructiveOps {
         return false;
     }
 
-    private static boolean isSharedRshrn(Ir64Op.SmeConstructive op) {
-        return op.esz() == ESZ_SINGLE && op.sources() == PAIR && (op.op() == Ir64Op.SmeConstructive.Op.SQRSHRN
-                || op.op() == Ir64Op.SmeConstructive.Op.UQRSHRN || op.op() == Ir64Op.SmeConstructive.Op.SQRSHRUN);
+    private static boolean isSharedRshrn(SmeOp64.Constructive op) {
+        return op.esz() == ESZ_SINGLE && op.sources() == PAIR && (op.op() == SmeOp64.Constructive.Op.SQRSHRN
+                || op.op() == SmeOp64.Constructive.Op.UQRSHRN || op.op() == SmeOp64.Constructive.Op.SQRSHRUN);
     }
 
     // ── byte helpers ────────────────────────────────────────────────────────────────────────────
@@ -121,12 +121,12 @@ final class SmeConstructiveOps {
 
     // ── ZIP / UZP ───────────────────────────────────────────────────────────────────────────────
 
-    private static void permute(Aarch64ScalableRegisters regs, Ir64Op.SmeConstructive op, int vl) {
+    private static void permute(Aarch64ScalableRegisters regs, SmeOp64.Constructive op, int vl) {
         int elementBytes = esz4Bytes(op.esz());
         if (vl < op.sources() * elementBytes) {
             throw new Aarch64UndefinedInstructionException();
         }
-        boolean zip = op.op() == Ir64Op.SmeConstructive.Op.ZIP;
+        boolean zip = op.op() == SmeOp64.Constructive.Op.ZIP;
         int n = op.sources();
         byte[][] source = n == PAIR ? new byte[][] {read(regs, op.zn(), vl), read(regs, op.zm(), vl)}
                 : readGroup(regs, op.zn(), n, vl);
@@ -157,7 +157,7 @@ final class SmeConstructiveOps {
 
     // ── estreitamento inteiro ───────────────────────────────────────────────────────────────────
 
-    private static void narrowInteger(Aarch64ScalableRegisters regs, Ir64Op.SmeConstructive op, int vl) {
+    private static void narrowInteger(Aarch64ScalableRegisters regs, SmeOp64.Constructive op, int vl) {
         int wideBytes = 1 << op.esz();
         int narrowEsz = op.esz() - op.sources() / PAIR;
         int narrowBytes = 1 << narrowEsz;
@@ -221,11 +221,11 @@ final class SmeConstructiveOps {
 
     // ── alargamento inteiro ─────────────────────────────────────────────────────────────────────
 
-    private static void unpack(Aarch64ScalableRegisters regs, Ir64Op.SmeConstructive op, int vl) {
+    private static void unpack(Aarch64ScalableRegisters regs, SmeOp64.Constructive op, int vl) {
         int wideBytes = 1 << op.esz();
         int narrowBytes = wideBytes / PAIR;
         int n = vl / wideBytes;
-        boolean signed = op.op() == Ir64Op.SmeConstructive.Op.SUNPK;
+        boolean signed = op.op() == SmeOp64.Constructive.Op.SUNPK;
         byte[][] source = readGroup(regs, op.zn(), op.sources(), vl);
         byte[][] dest = new byte[op.destinations()][vl];
         for (int r = 0; r < op.sources(); r++) {
@@ -241,14 +241,14 @@ final class SmeConstructiveOps {
 
     // ── clamp / sel ─────────────────────────────────────────────────────────────────────────────
 
-    private static void clamp(Aarch64Core core, Aarch64ScalableRegisters regs, Ir64Op.SmeConstructive op, int vl) {
+    private static void clamp(Aarch64Core core, Aarch64ScalableRegisters regs, SmeOp64.Constructive op, int vl) {
         int bytes = 1 << op.esz();
         int elements = vl / bytes;
         byte[] lower = read(regs, op.zn(), vl);
         byte[] upper = read(regs, op.zm(), vl);
         byte[][] dest = readGroup(regs, op.zd(), op.destinations(), vl);
-        SveFloat.Env env = op.op() == Ir64Op.SmeConstructive.Op.FCLAMP ? SveFloat.Env.of(core, op.esz()) : null;
-        boolean unsigned = op.op() == Ir64Op.SmeConstructive.Op.UCLAMP;
+        SveFloat.Env env = op.op() == SmeOp64.Constructive.Op.FCLAMP ? SveFloat.Env.of(core, op.esz()) : null;
+        boolean unsigned = op.op() == SmeOp64.Constructive.Op.UCLAMP;
         for (int e = 0; e < elements; e++) {
             long n = get(lower, e, bytes);
             long m = get(upper, e, bytes);
@@ -273,7 +273,7 @@ final class SmeConstructiveOps {
         writeGroup(regs, op.zd(), dest);
     }
 
-    private static void select(Aarch64Core core, Aarch64ScalableRegisters regs, Ir64Op.SmeConstructive op, int vl) {
+    private static void select(Aarch64Core core, Aarch64ScalableRegisters regs, SmeOp64.Constructive op, int vl) {
         int bytes = 1 << op.esz();
         int elements = vl / bytes;
         SveCounterOps.Counter counter = SveCounterOps.Counter.decode(regs.pWord(op.pg(), 0), vl, op.esz());
@@ -291,14 +291,14 @@ final class SmeConstructiveOps {
 
     // ── FP8 ─────────────────────────────────────────────────────────────────────────────────────
 
-    private static void widenFp8(Aarch64Core core, Aarch64ScalableRegisters regs, Ir64Op.SmeConstructive op, int vl) {
-        Ir64Op.SmeConstructive.Op kind = op.op();
-        boolean stream2 = kind == Ir64Op.SmeConstructive.Op.F2CVT || kind == Ir64Op.SmeConstructive.Op.F2CVTL
-                || kind == Ir64Op.SmeConstructive.Op.BF2CVT || kind == Ir64Op.SmeConstructive.Op.BF2CVTL;
-        boolean bfloat = kind == Ir64Op.SmeConstructive.Op.BF1CVT || kind == Ir64Op.SmeConstructive.Op.BF2CVT
-                || kind == Ir64Op.SmeConstructive.Op.BF1CVTL || kind == Ir64Op.SmeConstructive.Op.BF2CVTL;
-        boolean interleaved = kind == Ir64Op.SmeConstructive.Op.F1CVTL || kind == Ir64Op.SmeConstructive.Op.F2CVTL
-                || kind == Ir64Op.SmeConstructive.Op.BF1CVTL || kind == Ir64Op.SmeConstructive.Op.BF2CVTL;
+    private static void widenFp8(Aarch64Core core, Aarch64ScalableRegisters regs, SmeOp64.Constructive op, int vl) {
+        SmeOp64.Constructive.Op kind = op.op();
+        boolean stream2 = kind == SmeOp64.Constructive.Op.F2CVT || kind == SmeOp64.Constructive.Op.F2CVTL
+                || kind == SmeOp64.Constructive.Op.BF2CVT || kind == SmeOp64.Constructive.Op.BF2CVTL;
+        boolean bfloat = kind == SmeOp64.Constructive.Op.BF1CVT || kind == SmeOp64.Constructive.Op.BF2CVT
+                || kind == SmeOp64.Constructive.Op.BF1CVTL || kind == SmeOp64.Constructive.Op.BF2CVTL;
+        boolean interleaved = kind == SmeOp64.Constructive.Op.F1CVTL || kind == SmeOp64.Constructive.Op.F2CVTL
+                || kind == SmeOp64.Constructive.Op.BF1CVTL || kind == SmeOp64.Constructive.Op.BF2CVTL;
         boolean e4m3 = (stream2 ? core.fp8SourceFormat2() : core.fp8SourceFormat1()) == Aarch64Fp8Format.E4M3;
         int scale = bfloat ? (stream2 ? core.fp8WidenScale2ForBFloat16() : core.fp8WidenScaleForBFloat16())
                 : (stream2 ? core.fp8WidenScale2() : core.fp8WidenScale());
@@ -316,13 +316,13 @@ final class SmeConstructiveOps {
         writeGroup(regs, op.zd(), dest);
     }
 
-    private static void narrowFp8(Aarch64Core core, Aarch64ScalableRegisters regs, Ir64Op.SmeConstructive op, int vl) {
+    private static void narrowFp8(Aarch64Core core, Aarch64ScalableRegisters regs, SmeOp64.Constructive op, int vl) {
         boolean e4m3 = core.fp8DestinationFormat() == Aarch64Fp8Format.E4M3;
         int scale = core.fp8NarrowScale();
         boolean saturate = core.fp8OverflowSaturatesToMaxNormal();
         int sourceBytes = 1 << op.esz();
         int n = vl / sourceBytes;
-        boolean interleave = op.op() == Ir64Op.SmeConstructive.Op.FCVTN_BS;
+        boolean interleave = op.op() == SmeOp64.Constructive.Op.FCVTN_BS;
         byte[][] source = readGroup(regs, op.zn(), op.sources(), vl);
         byte[] dest = new byte[vl];
         for (int i = 0; i < n; i++) {
@@ -338,19 +338,19 @@ final class SmeConstructiveOps {
 
     // ── conversões FP / inteiro↔FP / arredondamento ─────────────────────────────────────────────
 
-    private static void floatingPoint(Aarch64Core core, Aarch64ScalableRegisters regs, Ir64Op.SmeConstructive op,
+    private static void floatingPoint(Aarch64Core core, Aarch64ScalableRegisters regs, SmeOp64.Constructive op,
             int vl) {
-        Ir64Op.SmeConstructive.Op kind = op.op();
+        SmeOp64.Constructive.Op kind = op.op();
         byte[][] source = readGroup(regs, op.zn(), op.sources(), vl);
         byte[][] dest = new byte[op.destinations()][vl];
         SveFloat.Env result;
         switch (kind) {
             case BFCVT, BFCVTN, FCVT_N, FCVTN -> {
-                boolean bfloat = kind == Ir64Op.SmeConstructive.Op.BFCVT || kind == Ir64Op.SmeConstructive.Op.BFCVTN;
+                boolean bfloat = kind == SmeOp64.Constructive.Op.BFCVT || kind == SmeOp64.Constructive.Op.BFCVTN;
                 SveFloat.Env from = SveFloat.Env.ofConversionSource(core, ESZ_SINGLE);
                 result = SveFloat.Env.of(core, bfloat ? SveFloat.ESZ_BFLOAT16 : SveFloat.ESZ_HALF);
-                boolean interleave = kind == Ir64Op.SmeConstructive.Op.BFCVTN
-                        || kind == Ir64Op.SmeConstructive.Op.FCVTN;
+                boolean interleave = kind == SmeOp64.Constructive.Op.BFCVTN
+                        || kind == SmeOp64.Constructive.Op.FCVTN;
                 int n = vl / SINGLE_BYTES;
                 for (int i = 0; i < n; i++) {
                     for (int k = 0; k < PAIR; k++) {
@@ -365,7 +365,7 @@ final class SmeConstructiveOps {
                 int n = vl / SINGLE_BYTES;
                 for (int r = 0; r < PAIR; r++) {
                     for (int i = 0; i < n; i++) {
-                        int index = kind == Ir64Op.SmeConstructive.Op.FCVTL ? PAIR * i + r : r * n + i;
+                        int index = kind == SmeOp64.Constructive.Op.FCVTL ? PAIR * i + r : r * n + i;
                         put(dest[r], i, SINGLE_BYTES,
                                 SveFloat.convertPrecision(get(source[0], index, HALF_BYTES), from, result, false));
                     }

@@ -2,7 +2,7 @@ package dev.vitorsilverio.armjitter.ir64;
 
 /// Extensão aplicada ao registrador `Rm` na forma `Add/subtract (extended register)`
 /// (`ARM DDI 0487 C6.2.4`/`C6.2.339` variante estendida, campo `option` de 3 bits `[15:13]`) de
-/// {@link Ir64Op.AluExtendedRegister}. **NÃO reaproveita** {@link Ir64ExtendType} (usado por
+/// {@link IntegerOp64.AluExtendedRegister}. **NÃO reaproveita** {@link Ir64ExtendType} (usado por
 /// load/store, só 4 combinações válidas: `UXTW`/`LSL`/`SXTW`/`SXTX`) — a forma de ALU tem as
 /// **8** combinações válidas do campo `option` (tamanho lido de `Rm` × sinal), decisão D3 da
 /// task B6.3.1: o enum de load/store tem um contrato documentado de só 4 valores e não deveria

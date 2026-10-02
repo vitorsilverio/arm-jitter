@@ -4,6 +4,7 @@ import dev.vitorsilverio.armjitter.arch64.Aarch64Architecture;
 import dev.vitorsilverio.armjitter.ir64.Ir64AddressingMode;
 import dev.vitorsilverio.armjitter.ir64.Ir64MemSize;
 import dev.vitorsilverio.armjitter.ir64.Ir64Op;
+import dev.vitorsilverio.armjitter.ir64.MemoryOp64;
 import dev.vitorsilverio.armjitter.memory.AddressSpace64;
 import dev.vitorsilverio.armjitter.support.TestAddressSpace;
 import org.junit.jupiter.api.Test;
@@ -53,7 +54,7 @@ class Aarch64Lrcpc2DecoderTest {
 
     @Test
     void decodesLdapurZeroExtendWithPositiveOffset() {
-        Ir64Op.Load64 op = (Ir64Op.Load64) decode(LRCPC2_DECODER, LDAPUR_X);
+        MemoryOp64.Load64 op = (MemoryOp64.Load64) decode(LRCPC2_DECODER, LDAPUR_X);
         assertEquals(0, op.rt());
         assertEquals(1, op.rn());
         assertEquals(Ir64MemSize.DOUBLEWORD, op.size());
@@ -65,13 +66,13 @@ class Aarch64Lrcpc2DecoderTest {
 
     @Test
     void decodesLdapurbAndLdapurhZeroExtendToW() {
-        Ir64Op.Load64 b = (Ir64Op.Load64) decode(LRCPC2_DECODER, LDAPURB_W);
+        MemoryOp64.Load64 b = (MemoryOp64.Load64) decode(LRCPC2_DECODER, LDAPURB_W);
         assertEquals(Ir64MemSize.BYTE, b.size());
         assertFalse(b.signExtend());
         assertFalse(b.wide());
         assertEquals(8L, b.immediate());
 
-        Ir64Op.Load64 h = (Ir64Op.Load64) decode(LRCPC2_DECODER, LDAPURH_W);
+        MemoryOp64.Load64 h = (MemoryOp64.Load64) decode(LRCPC2_DECODER, LDAPURH_W);
         assertEquals(Ir64MemSize.HALF, h.size());
         assertFalse(h.signExtend());
         assertFalse(h.wide());
@@ -79,32 +80,32 @@ class Aarch64Lrcpc2DecoderTest {
 
     @Test
     void decodesStlurWithPositiveAndNarrowerOffsets() {
-        Ir64Op.Store64 x = (Ir64Op.Store64) decode(LRCPC2_DECODER, STLUR_X);
+        MemoryOp64.Store64 x = (MemoryOp64.Store64) decode(LRCPC2_DECODER, STLUR_X);
         assertEquals(0, x.rt());
         assertEquals(1, x.rn());
         assertEquals(Ir64MemSize.DOUBLEWORD, x.size());
         assertTrue(x.wide());
         assertEquals(8L, x.immediate());
 
-        Ir64Op.Store64 w = (Ir64Op.Store64) decode(LRCPC2_DECODER, STLUR_W);
+        MemoryOp64.Store64 w = (MemoryOp64.Store64) decode(LRCPC2_DECODER, STLUR_W);
         assertEquals(4, w.rt());
         assertEquals(5, w.rn());
         assertEquals(Ir64MemSize.WORD, w.size());
         assertFalse(w.wide());
         assertEquals(4L, w.immediate());
 
-        Ir64Op.Store64 h = (Ir64Op.Store64) decode(LRCPC2_DECODER, STLURH_W);
+        MemoryOp64.Store64 h = (MemoryOp64.Store64) decode(LRCPC2_DECODER, STLURH_W);
         assertEquals(Ir64MemSize.HALF, h.size());
         assertEquals(4L, h.immediate());
 
-        Ir64Op.Store64 b = (Ir64Op.Store64) decode(LRCPC2_DECODER, STLURB_W);
+        MemoryOp64.Store64 b = (MemoryOp64.Store64) decode(LRCPC2_DECODER, STLURB_W);
         assertEquals(Ir64MemSize.BYTE, b.size());
         assertEquals(4L, b.immediate());
     }
 
     @Test
     void decodesLdapurSignExtendFormsWithNegativeOffset() {
-        Ir64Op.Load64 sbX = (Ir64Op.Load64) decode(LRCPC2_DECODER, LDAPURSB_X);
+        MemoryOp64.Load64 sbX = (MemoryOp64.Load64) decode(LRCPC2_DECODER, LDAPURSB_X);
         assertEquals(2, sbX.rt());
         assertEquals(3, sbX.rn());
         assertEquals(Ir64MemSize.BYTE, sbX.size());
@@ -112,24 +113,24 @@ class Aarch64Lrcpc2DecoderTest {
         assertTrue(sbX.wide());
         assertEquals(-8L, sbX.immediate());
 
-        Ir64Op.Load64 sbW = (Ir64Op.Load64) decode(LRCPC2_DECODER, LDAPURSB_W);
+        MemoryOp64.Load64 sbW = (MemoryOp64.Load64) decode(LRCPC2_DECODER, LDAPURSB_W);
         assertEquals(Ir64MemSize.BYTE, sbW.size());
         assertTrue(sbW.signExtend());
         assertFalse(sbW.wide());
         assertEquals(-8L, sbW.immediate());
 
-        Ir64Op.Load64 shX = (Ir64Op.Load64) decode(LRCPC2_DECODER, LDAPURSH_X);
+        MemoryOp64.Load64 shX = (MemoryOp64.Load64) decode(LRCPC2_DECODER, LDAPURSH_X);
         assertEquals(Ir64MemSize.HALF, shX.size());
         assertTrue(shX.signExtend());
         assertTrue(shX.wide());
 
-        Ir64Op.Load64 shW = (Ir64Op.Load64) decode(LRCPC2_DECODER, LDAPURSH_W);
+        MemoryOp64.Load64 shW = (MemoryOp64.Load64) decode(LRCPC2_DECODER, LDAPURSH_W);
         assertEquals(Ir64MemSize.HALF, shW.size());
         assertTrue(shW.signExtend());
         assertFalse(shW.wide());
 
         // LDAPURSW só existe estendendo para X (não há forma "para W", size=WORD+opc=11 é reservado).
-        Ir64Op.Load64 sw = (Ir64Op.Load64) decode(LRCPC2_DECODER, LDAPURSW_X);
+        MemoryOp64.Load64 sw = (MemoryOp64.Load64) decode(LRCPC2_DECODER, LDAPURSW_X);
         assertEquals(Ir64MemSize.WORD, sw.size());
         assertTrue(sw.signExtend());
         assertTrue(sw.wide());
@@ -142,6 +143,6 @@ class Aarch64Lrcpc2DecoderTest {
         // acquire/release é NOP observável neste interpretador single-thread — LDAPUR/STLUR viram
         // Load64/Store64 comuns, sem nenhum estado extra de ordenação a testar.
         Ir64Op op = decode(LRCPC2_DECODER, LDAPUR_X);
-        assertTrue(op instanceof Ir64Op.Load64);
+        assertTrue(op instanceof MemoryOp64.Load64);
     }
 }

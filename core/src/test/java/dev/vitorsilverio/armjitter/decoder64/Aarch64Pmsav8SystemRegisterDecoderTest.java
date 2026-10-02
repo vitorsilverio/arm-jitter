@@ -2,7 +2,7 @@ package dev.vitorsilverio.armjitter.decoder64;
 
 import dev.vitorsilverio.armjitter.arch64.Aarch64Architecture;
 import dev.vitorsilverio.armjitter.ir64.Aarch64SystemRegisterId;
-import dev.vitorsilverio.armjitter.ir64.Ir64Op;
+import dev.vitorsilverio.armjitter.ir64.SystemOp64;
 import dev.vitorsilverio.armjitter.memory.AddressSpace64;
 import dev.vitorsilverio.armjitter.support.TestAddressSpace;
 import org.junit.jupiter.api.Test;
@@ -25,16 +25,16 @@ class Aarch64Pmsav8SystemRegisterDecoderTest {
     private static final Aarch64Decoder PMSA_DECODER = new Aarch64Decoder(Aarch64Architecture.ARMV8_R_64);
     private static final Aarch64Decoder BASELINE_DECODER = new Aarch64Decoder(Aarch64Architecture.ARMV8_0_A);
 
-    private static Ir64Op.SystemRegister decodeWord(Aarch64Decoder decoder, int word) {
+    private static SystemOp64.SystemRegister decodeWord(Aarch64Decoder decoder, int word) {
         TestAddressSpace raw = new TestAddressSpace(4);
         raw.put32(0, word);
-        return (Ir64Op.SystemRegister) decoder.decode(AddressSpace64.wrapping(raw), 0);
+        return (SystemOp64.SystemRegister) decoder.decode(AddressSpace64.wrapping(raw), 0);
     }
 
     @Test
     void mrsMpuirEl1IsReadOnlyRegionCount() {
         // mrs x0, mpuir_el1 (op0=3,op1=0,CRn=0,CRm=0,op2=4,Rt=0)
-        Ir64Op.SystemRegister op = decodeWord(PMSA_DECODER, 0xD5380080);
+        SystemOp64.SystemRegister op = decodeWord(PMSA_DECODER, 0xD5380080);
         assertTrue(op.read());
         assertEquals(Aarch64SystemRegisterId.MPUIR_EL1, op.register());
         assertEquals(0, op.rt());
@@ -42,45 +42,45 @@ class Aarch64Pmsav8SystemRegisterDecoderTest {
 
     @Test
     void msrAndMrsPrselrEl1() {
-        Ir64Op.SystemRegister msr = decodeWord(PMSA_DECODER, 0xD5186220);
+        SystemOp64.SystemRegister msr = decodeWord(PMSA_DECODER, 0xD5186220);
         assertFalse(msr.read());
         assertEquals(Aarch64SystemRegisterId.PRSELR_EL1, msr.register());
 
-        Ir64Op.SystemRegister mrs = decodeWord(PMSA_DECODER, 0xD5386220);
+        SystemOp64.SystemRegister mrs = decodeWord(PMSA_DECODER, 0xD5386220);
         assertTrue(mrs.read());
         assertEquals(Aarch64SystemRegisterId.PRSELR_EL1, mrs.register());
     }
 
     @Test
     void msrAndMrsPrbarEl1() {
-        Ir64Op.SystemRegister msr = decodeWord(PMSA_DECODER, 0xD5186801);
+        SystemOp64.SystemRegister msr = decodeWord(PMSA_DECODER, 0xD5186801);
         assertFalse(msr.read());
         assertEquals(Aarch64SystemRegisterId.PRBAR_EL1, msr.register());
         assertEquals(1, msr.rt());
 
-        Ir64Op.SystemRegister mrs = decodeWord(PMSA_DECODER, 0xD5386801);
+        SystemOp64.SystemRegister mrs = decodeWord(PMSA_DECODER, 0xD5386801);
         assertTrue(mrs.read());
         assertEquals(Aarch64SystemRegisterId.PRBAR_EL1, mrs.register());
     }
 
     @Test
     void msrAndMrsPrlarEl1() {
-        Ir64Op.SystemRegister msr = decodeWord(PMSA_DECODER, 0xD5186821);
+        SystemOp64.SystemRegister msr = decodeWord(PMSA_DECODER, 0xD5186821);
         assertFalse(msr.read());
         assertEquals(Aarch64SystemRegisterId.PRLAR_EL1, msr.register());
 
-        Ir64Op.SystemRegister mrs = decodeWord(PMSA_DECODER, 0xD5386821);
+        SystemOp64.SystemRegister mrs = decodeWord(PMSA_DECODER, 0xD5386821);
         assertTrue(mrs.read());
         assertEquals(Aarch64SystemRegisterId.PRLAR_EL1, mrs.register());
     }
 
     @Test
     void msrAndMrsPrenrEl1() {
-        Ir64Op.SystemRegister msr = decodeWord(PMSA_DECODER, 0xD5186120);
+        SystemOp64.SystemRegister msr = decodeWord(PMSA_DECODER, 0xD5186120);
         assertFalse(msr.read());
         assertEquals(Aarch64SystemRegisterId.PRENR_EL1, msr.register());
 
-        Ir64Op.SystemRegister mrs = decodeWord(PMSA_DECODER, 0xD5386120);
+        SystemOp64.SystemRegister mrs = decodeWord(PMSA_DECODER, 0xD5386120);
         assertTrue(mrs.read());
         assertEquals(Aarch64SystemRegisterId.PRENR_EL1, mrs.register());
     }

@@ -774,7 +774,7 @@ public sealed interface IrOp permits IrOp.Alu, IrOp.Multiply, IrOp.LongMultiply,
     }
 
     /// `CRC32{B,H,W}`/`CRC32C{B,H,W}` (A32+T32, ARMv8-A, B14.3) — espelho de 32 bits de
-    /// {@link dev.vitorsilverio.armjitter.ir64.Ir64Op.Crc32}, sem a forma `X` (dado de 64 bits, que
+    /// {@link dev.vitorsilverio.armjitter.ir64.IntegerOp64.Crc32}, sem a forma `X` (dado de 64 bits, que
     /// não existe em AArch32). O algoritmo (laço refletido bit-a-bit) vive em
     /// {@link dev.vitorsilverio.armjitter.advsimd.Crc32Checksum}, compartilhado com o lado A64.
     record Crc32(
@@ -1514,7 +1514,7 @@ public sealed interface IrOp permits IrOp.Alu, IrOp.Multiply, IrOp.LongMultiply,
     /// {@link AdvSimdLanes.RoundingMode} (5 valores, inclui `NEAREST_TIES_AWAY`) em vez de
     /// {@link dev.vitorsilverio.armjitter.core.FpRoundingMode} (4 valores, contrato do campo
     /// `RMODE` do FPSCR — não expressa "ties away", ver Armadilha 1 da task). `NaN`/infinito passam
-    /// adiante inalterados (mesma decisão de {@code Ir64Op.Fp64Round}/`FRINTx` A64).
+    /// adiante inalterados (mesma decisão de {@code FpOp64.Round}/`FRINTx` A64).
     record VfpRound(
             /// Direção de arredondamento (do campo `rm` do encoding), ou `null` para "modo CORRENTE
             /// do `FPSCR.RMode`" (`VRINTR`/`VRINTX`, B22.7).
@@ -2160,7 +2160,7 @@ public sealed interface IrOp permits IrOp.Alu, IrOp.Multiply, IrOp.LongMultiply,
 
     /// NEON/Advanced SIMD de 32 bits, forma "three same" (B13.2/B13.4): `Vd[i] = op(Vn[i], Vm[i])`
     /// para cada lane de `1 << esz` bytes do arranjo. Espelho de
-    /// {@link dev.vitorsilverio.armjitter.ir64.Ir64Op.VectorArithmeticThreeSame} no ENCODING/IR, mas
+    /// {@link dev.vitorsilverio.armjitter.ir64.AdvSimdIntegerOp64.ArithmeticThreeSame} no ENCODING/IR, mas
     /// a SEMÂNTICA de lane é a mesma dos dois lados: ambos os executores chamam
     /// {@link dev.vitorsilverio.armjitter.advsimd.AdvSimdLanes#threeSame} (RFC B13.2, D1).
     ///
@@ -2194,7 +2194,7 @@ public sealed interface IrOp permits IrOp.Alu, IrOp.Multiply, IrOp.LongMultiply,
     /// (`target/arm/tcg/translate-neon.c`).
     ///
     /// Espelho estrutural de
-    /// {@link dev.vitorsilverio.armjitter.ir64.Ir64Op.VectorLoadStoreMultiple}, mas com
+    /// {@link dev.vitorsilverio.armjitter.ir64.AdvSimdMoveOp64.LoadStoreMultiple}, mas com
     /// diferenças reais: NEON de 32 bits tem `stride` ("double spacing", inexistente no A64), NÃO
     /// faz wrap-around módulo 32 (registrador além de `D31` é UNDEFINED, recusado no decoder) e
     /// nunca escreve destrutivamente fora do `D` nomeado (VFP32 não zera bits altos).
@@ -2230,7 +2230,7 @@ public sealed interface IrOp permits IrOp.Alu, IrOp.Multiply, IrOp.LongMultiply,
     /// transfere UM elemento de `1 << esz` bytes para/de a lane {@link #index} de cada um dos
     /// {@link #selem} registradores `vd + stride * xs` (`xs` em `0..selem`), SEM afetar nenhum
     /// outro bit desses registradores. Espelho de
-    /// {@link dev.vitorsilverio.armjitter.ir64.Ir64Op.VectorLoadStoreSingle} (mesmas diferenças
+    /// {@link dev.vitorsilverio.armjitter.ir64.AdvSimdMoveOp64.LoadStoreSingle} (mesmas diferenças
     /// que {@link NeonLoadStoreMultiple}). {@link #condition()} sempre {@link Condition#AL}.
     record NeonLoadStoreSingle(
             /// `true` para `VLD1`-`VLD4`, `false` para `VST1`-`VST4`.
@@ -2262,7 +2262,7 @@ public sealed interface IrOp permits IrOp.Alu, IrOp.Multiply, IrOp.LongMultiply,
     /// {@link NeonLoadStoreSingle}, `selem` registradores por {@link #stride}) e REPLICA esse
     /// valor por todas as lanes do `D`; quando {@link #quad}, replica também no `D` seguinte do
     /// par (`selem` é sempre `1` nesse caso). Não existe forma `VST`. Espelho de
-    /// {@link dev.vitorsilverio.armjitter.ir64.Ir64Op.VectorLoadSingleReplicate}.
+    /// {@link dev.vitorsilverio.armjitter.ir64.AdvSimdMoveOp64.LoadSingleReplicate}.
     /// {@link #condition()} sempre {@link Condition#AL}.
     record NeonLoadAllLanes(
             /// Primeiro registrador `D` preenchido (índice `0`-`31`).
@@ -2291,7 +2291,7 @@ public sealed interface IrOp permits IrOp.Alu, IrOp.Multiply, IrOp.LongMultiply,
     /// `Vn`, metade alta de `Vm`). Só forma `D` no encoding A32 (`@3same_q0`), por isso não há
     /// campo `quad`.
     ///
-    /// Espelho de {@link dev.vitorsilverio.armjitter.ir64.Ir64Op.VectorArithmeticPairwise} no
+    /// Espelho de {@link dev.vitorsilverio.armjitter.ir64.AdvSimdIntegerOp64.ArithmeticPairwise} no
     /// ENCODING/IR; a SEMÂNTICA de lane vem do núcleo COMPARTILHADO
     /// ({@link dev.vitorsilverio.armjitter.advsimd.AdvSimdLanes#pairwise}), RFC B13.2 D1.
     ///
@@ -2317,7 +2317,7 @@ public sealed interface IrOp permits IrOp.Alu, IrOp.Multiply, IrOp.LongMultiply,
     /// (`esz=1`, `sz`=bit20=1 no encoding — MESMA linha `.decode` que F32, discriminada só pelo
     /// bit, não uma linha separada).
     ///
-    /// Espelho de {@link dev.vitorsilverio.armjitter.ir64.Ir64Op.VectorFpArithmeticThreeSame} no
+    /// Espelho de {@link dev.vitorsilverio.armjitter.ir64.AdvSimdFpOp64.FpArithmeticThreeSame} no
     /// ENCODING/IR; a SEMÂNTICA de lane vem do núcleo COMPARTILHADO
     /// ({@link dev.vitorsilverio.armjitter.advsimd.AdvSimdLanes#fpThreeSame}), RFC B13.2 D1. A
     /// distinção fundido × NÃO fundido do multiply-accumulate (`VFMA` vs `VMLA`) está na
@@ -2349,7 +2349,7 @@ public sealed interface IrOp permits IrOp.Alu, IrOp.Multiply, IrOp.LongMultiply,
     /// elementos e grava `8 >> esz` resultados em `Vd` (metade baixa vinda de `Vn`, metade alta de
     /// `Vm`). Só forma `D` no encoding A32 (`@3same_fp_q0`), por isso não há campo `quad`.
     ///
-    /// Espelho de {@link dev.vitorsilverio.armjitter.ir64.Ir64Op.VectorFpArithmeticPairwise} no
+    /// Espelho de {@link dev.vitorsilverio.armjitter.ir64.AdvSimdFpOp64.FpArithmeticPairwise} no
     /// ENCODING/IR; a SEMÂNTICA de lane vem do núcleo COMPARTILHADO
     /// ({@link dev.vitorsilverio.armjitter.advsimd.AdvSimdLanes#fpPairwise}), RFC B13.2 D1.
     ///
@@ -2375,7 +2375,7 @@ public sealed interface IrOp permits IrOp.Alu, IrOp.Multiply, IrOp.LongMultiply,
     /// INSERE no `Vd[i]` ATUAL (o campo {@link #vd} é destino E fonte nessas famílias). O
     /// deslocamento já vem resolvido do encoding (`immh:immb`), NUNCA recalculado no executor.
     ///
-    /// Espelho de {@link dev.vitorsilverio.armjitter.ir64.Ir64Op.VectorShiftImmediate} no
+    /// Espelho de {@link dev.vitorsilverio.armjitter.ir64.AdvSimdIntegerOp64.ShiftImmediate} no
     /// ENCODING/IR; a SEMÂNTICA de lane vem do núcleo COMPARTILHADO
     /// ({@link dev.vitorsilverio.armjitter.advsimd.AdvSimdLanes#shiftImmediate}), RFC B13.2 D1.
     /// **Não há `Vn`** — é forma de 2 registradores: {@link #vm} é a FONTE do valor deslocado.
@@ -2410,7 +2410,7 @@ public sealed interface IrOp permits IrOp.Alu, IrOp.Multiply, IrOp.LongMultiply,
     /// encoding. **Sem campo `quad`**: a fonte é sempre `Q` e o destino sempre `D`; o bit `Q` do
     /// encoding faz parte do OPCODE (escolhe entre `VSHRN`/`VRSHRN`, etc.), não da largura.
     ///
-    /// Espelho de {@link dev.vitorsilverio.armjitter.ir64.Ir64Op.VectorShiftNarrowImmediate} no
+    /// Espelho de {@link dev.vitorsilverio.armjitter.ir64.AdvSimdIntegerOp64.ShiftNarrowImmediate} no
     /// ENCODING/IR; a SEMÂNTICA de lane vem do núcleo COMPARTILHADO
     /// ({@link dev.vitorsilverio.armjitter.advsimd.AdvSimdLanes#shiftNarrowImmediate}), RFC B13.2 D1.
     ///
@@ -2438,7 +2438,7 @@ public sealed interface IrOp permits IrOp.Alu, IrOp.Multiply, IrOp.LongMultiply,
     /// motivo de {@link NeonShiftNarrowImmediate}: fonte `D`, destino `Q` fixos; o bit `Q` do
     /// encoding faz parte do OPCODE.
     ///
-    /// Espelho de {@link dev.vitorsilverio.armjitter.ir64.Ir64Op.VectorShiftWidenImmediate} no
+    /// Espelho de {@link dev.vitorsilverio.armjitter.ir64.AdvSimdIntegerOp64.ShiftWidenImmediate} no
     /// ENCODING/IR; a SEMÂNTICA vem do núcleo COMPARTILHADO
     /// ({@link dev.vitorsilverio.armjitter.advsimd.AdvSimdLanes#shiftWidenImmediate}), RFC B13.2 D1.
     ///
@@ -2466,7 +2466,7 @@ public sealed interface IrOp permits IrOp.Alu, IrOp.Multiply, IrOp.LongMultiply,
     /// largura ({@link #esz}) nos dois lados, `4`/`2` (F32) ou `8`/`4` (F16) lanes conforme
     /// {@link #quad}.
     ///
-    /// Espelho de {@link dev.vitorsilverio.armjitter.ir64.Ir64Op.VectorFpConvertFixedPoint} no
+    /// Espelho de {@link dev.vitorsilverio.armjitter.ir64.AdvSimdFpOp64.FpConvertFixedPoint} no
     /// ENCODING/IR (menos o campo `scalar`, que não existe em NEON A32); a SEMÂNTICA vem do núcleo
     /// COMPARTILHADO ({@link dev.vitorsilverio.armjitter.advsimd.AdvSimdLanes#convertFixedPoint}),
     /// RFC B13.2 D1 — já genérico em `esz` desde a B19.5.1, sem mudança de executor para a forma F16.
@@ -2529,7 +2529,7 @@ public sealed interface IrOp permits IrOp.Alu, IrOp.Multiply, IrOp.LongMultiply,
     /// `D` par que inicia o `Q`, como o NEON encoda operandos de 128 bits). **Sem campo `quad`**: o
     /// destino é SEMPRE `Q` nesta forma (não há "3-reg-different" com destino `D`).
     ///
-    /// Espelho de {@link dev.vitorsilverio.armjitter.ir64.Ir64Op.VectorArithmeticWidening} no
+    /// Espelho de {@link dev.vitorsilverio.armjitter.ir64.AdvSimdIntegerOp64.ArithmeticWidening} no
     /// ENCODING/IR (menos `scalar`/`q`, que não existem nesta seção do A32 — sem forma "2", sem
     /// forma escalar real); a SEMÂNTICA vem do núcleo COMPARTILHADO
     /// ({@link dev.vitorsilverio.armjitter.advsimd.AdvSimdLanes#widening}), RFC B13.2 D1.
@@ -2555,7 +2555,7 @@ public sealed interface IrOp permits IrOp.Alu, IrOp.Multiply, IrOp.LongMultiply,
     /// `VADDW`/`VSUBW`. `Vd`/`Vn` são `Q` (elementos de `esz+1`), `Vm` é `D` (elementos de
     /// {@link #esz}). **Sem campo `quad`**: `Vd`/`Vn` são SEMPRE `Q`, `Vm` SEMPRE `D` nesta forma.
     ///
-    /// Espelho de {@link dev.vitorsilverio.armjitter.ir64.Ir64Op.VectorArithmeticWide} no
+    /// Espelho de {@link dev.vitorsilverio.armjitter.ir64.AdvSimdIntegerOp64.ArithmeticWide} no
     /// ENCODING/IR (menos `q`, que não existe nesta seção do A32); a SEMÂNTICA vem do núcleo
     /// COMPARTILHADO ({@link dev.vitorsilverio.armjitter.advsimd.AdvSimdLanes#wide}), RFC B13.2 D1.
     ///
@@ -2582,7 +2582,7 @@ public sealed interface IrOp permits IrOp.Alu, IrOp.Multiply, IrOp.LongMultiply,
     /// **Sem campo `quad`**: `Vn`/`Vm` são SEMPRE `Q`, `Vd` SEMPRE `D` nesta forma (A32 não tem
     /// forma "2" — `laneOffset` é sempre `0` no executor).
     ///
-    /// Espelho de {@link dev.vitorsilverio.armjitter.ir64.Ir64Op.VectorArithmeticNarrow} no
+    /// Espelho de {@link dev.vitorsilverio.armjitter.ir64.AdvSimdIntegerOp64.ArithmeticNarrow} no
     /// ENCODING/IR (menos `q`, que não existe nesta seção do A32); a SEMÂNTICA vem do núcleo
     /// COMPARTILHADO ({@link dev.vitorsilverio.armjitter.advsimd.AdvSimdLanes#narrow}), RFC B13.2 D1.
     ///
@@ -2613,7 +2613,7 @@ public sealed interface IrOp permits IrOp.Alu, IrOp.Multiply, IrOp.LongMultiply,
     /// que estreita `Rm` a `V0`-`V15`), e {@link #index} já extraído (`M:Vm[3]` halfword / `M`
     /// word).
     ///
-    /// Espelho de {@link dev.vitorsilverio.armjitter.ir64.Ir64Op.VectorArithmeticThreeSameByElement}
+    /// Espelho de {@link dev.vitorsilverio.armjitter.ir64.AdvSimdIntegerOp64.ArithmeticThreeSameByElement}
     /// no ENCODING/IR (índice montado diferente, sem `scalar`, que não existe nesta seção do A32); a
     /// SEMÂNTICA vem do núcleo COMPARTILHADO
     /// ({@link dev.vitorsilverio.armjitter.advsimd.AdvSimdLanes#threeSameByElement}), RFC B13.2 D1.
@@ -2652,7 +2652,7 @@ public sealed interface IrOp permits IrOp.Alu, IrOp.Multiply, IrOp.LongMultiply,
     /// #vm} é o registrador do ESCALAR já restrito à faixa real e {@link #index} já extraído (mesma
     /// convenção de {@link NeonThreeSameByElement}).
     ///
-    /// Espelho de {@link dev.vitorsilverio.armjitter.ir64.Ir64Op.VectorArithmeticWideningByElement}
+    /// Espelho de {@link dev.vitorsilverio.armjitter.ir64.AdvSimdIntegerOp64.ArithmeticWideningByElement}
     /// no ENCODING/IR (índice montado diferente, sem `scalar`/`q`); a SEMÂNTICA vem do núcleo
     /// COMPARTILHADO ({@link dev.vitorsilverio.armjitter.advsimd.AdvSimdLanes#wideningByElement}),
     /// RFC B13.2 D1.
@@ -2688,7 +2688,7 @@ public sealed interface IrOp permits IrOp.Alu, IrOp.Multiply, IrOp.LongMultiply,
     /// formas inteiras) e {@link #index} (`M`, 1 ou 2 bits conforme {@link #esz}) já extraídos.
     ///
     /// Espelho de {@link
-    /// dev.vitorsilverio.armjitter.ir64.Ir64Op.VectorFpArithmeticThreeSameByElement} no ENCODING/IR
+    /// dev.vitorsilverio.armjitter.ir64.AdvSimdFpOp64.FpArithmeticThreeSameByElement} no ENCODING/IR
     /// (sem `scalar`, que não existe nesta seção do A32 — sempre vetorial); a SEMÂNTICA vem do
     /// núcleo COMPARTILHADO ({@link dev.vitorsilverio.armjitter.advsimd.AdvSimdLanes#fpThreeSameByElement}),
     /// RFC B13.2 D1, já genérico em `esz` desde a B19.5.1.
@@ -2727,7 +2727,7 @@ public sealed interface IrOp permits IrOp.Alu, IrOp.Multiply, IrOp.LongMultiply,
     /// (elemento de {@link #esz}), `opc1` = bits[17:16], `opc2` = bits[10:7], `q` = bit6 —
     /// {@link #esz} neste record é o CAMPO `size`, não uma largura fixa por forma.
     ///
-    /// Espelho de {@link dev.vitorsilverio.armjitter.ir64.Ir64Op.VectorArithmeticUnary} no
+    /// Espelho de {@link dev.vitorsilverio.armjitter.ir64.AdvSimdIntegerOp64.ArithmeticUnary} no
     /// ENCODING/IR (sem `scalar`, que não existe nesta seção do A32); a SEMÂNTICA vem do núcleo
     /// COMPARTILHADO ({@link dev.vitorsilverio.armjitter.advsimd.AdvSimdLanes#unary}), RFC B13.2 D1.
     ///
@@ -2757,7 +2757,7 @@ public sealed interface IrOp permits IrOp.Alu, IrOp.Multiply, IrOp.LongMultiply,
     /// `esz+1`), `Vd` é `D` (elementos de {@link #esz}). **Sem campo `quad`**: fonte SEMPRE `Q`,
     /// destino SEMPRE `D` (a forma "2-reg-misc" força `q=0` no encoding real, ver `neon-dp.decode`).
     ///
-    /// Espelho de {@link dev.vitorsilverio.armjitter.ir64.Ir64Op.VectorArithmeticNarrowUnary} no
+    /// Espelho de {@link dev.vitorsilverio.armjitter.ir64.AdvSimdIntegerOp64.ArithmeticNarrowUnary} no
     /// ENCODING/IR (sem `scalar`/`q`); a SEMÂNTICA vem do núcleo COMPARTILHADO
     /// ({@link dev.vitorsilverio.armjitter.advsimd.AdvSimdLanes#narrowUnary}), RFC B13.2 D1.
     ///
@@ -2781,7 +2781,7 @@ public sealed interface IrOp permits IrOp.Alu, IrOp.Multiply, IrOp.LongMultiply,
     /// (`esz=2`) existe neste sub-grupo em A32 (F16 é `FEAT_FP16`, task futura irmã da B19.5) —
     /// mesma convenção de {@link NeonFpThreeSameByElement}, que também fixa `esz=2` internamente.
     ///
-    /// Espelho de {@link dev.vitorsilverio.armjitter.ir64.Ir64Op.VectorFpArithmeticUnary} no
+    /// Espelho de {@link dev.vitorsilverio.armjitter.ir64.AdvSimdFpOp64.FpArithmeticUnary} no
     /// ENCODING/IR (sem `scalar`/`esz`); a SEMÂNTICA vem do núcleo COMPARTILHADO
     /// ({@link dev.vitorsilverio.armjitter.advsimd.AdvSimdLanes#fpUnary}), RFC B13.2 D1.
     ///
@@ -3225,7 +3225,7 @@ public sealed interface IrOp permits IrOp.Alu, IrOp.Multiply, IrOp.LongMultiply,
     /// distingue do resto de `size==0b11`). Concatena `Vm:Vn` (`Vn` nos bytes BAIXOS) e extrai uma
     /// janela de {@code datasize} bytes começando em {@link #imm} bytes — puramente reorganização de
     /// bytes, sem aritmética. Migração D1 do MESMO algoritmo de
-    /// {@link dev.vitorsilverio.armjitter.ir64.Ir64Op.VectorExtract} (B8.10) — núcleo COMPARTILHADO
+    /// {@link dev.vitorsilverio.armjitter.ir64.AdvSimdMoveOp64.Extract} (B8.10) — núcleo COMPARTILHADO
     /// {@link dev.vitorsilverio.armjitter.advsimd.AdvSimdLanes#extract}.
     ///
     /// NEON vive no espaço incondicional (`cond=0b1111`): {@link #condition()} é sempre
@@ -3254,7 +3254,7 @@ public sealed interface IrOp permits IrOp.Alu, IrOp.Multiply, IrOp.LongMultiply,
     /// G8) como UMA tabela contígua de bytes, e substitui cada byte de {@link #vm} pelo byte da
     /// tabela no índice que ele contém — índice fora da tabela produz `0` (`VTBL`) ou preserva o
     /// byte ATUAL de {@link #vd} (`VTBX`, {@link #tbx}). Migração D1 do MESMO algoritmo de
-    /// {@link dev.vitorsilverio.armjitter.ir64.Ir64Op.VectorTableLookup} (B8.10) — núcleo
+    /// {@link dev.vitorsilverio.armjitter.ir64.AdvSimdMoveOp64.TableLookup} (B8.10) — núcleo
     /// COMPARTILHADO {@link dev.vitorsilverio.armjitter.advsimd.AdvSimdLanes#tableLookup}.
     ///
     /// NEON vive no espaço incondicional (`cond=0b1111`): {@link #condition()} é sempre
@@ -3307,7 +3307,7 @@ public sealed interface IrOp permits IrOp.Alu, IrOp.Multiply, IrOp.LongMultiply,
     /// dev.vitorsilverio.armjitter.arch.ArmFeature#CRYPTO}, SEPARADO de `ADVANCED_SIMD` (um núcleo
     /// pode ter NEON sem a extensão cripto opcional).
     ///
-    /// Espelho de {@link dev.vitorsilverio.armjitter.ir64.Ir64Op.CryptoAes} no ENCODING/IR; a
+    /// Espelho de {@link dev.vitorsilverio.armjitter.ir64.CryptoOp64.Aes} no ENCODING/IR; a
     /// SEMÂNTICA vem do núcleo COMPARTILHADO ({@link
     /// dev.vitorsilverio.armjitter.advsimd.AdvSimdCrypto#aes}), RFC B13.2 D1 — migração completa em
     /// B13.15 (o A64 passou a delegar também).
@@ -3330,7 +3330,7 @@ public sealed interface IrOp permits IrOp.Alu, IrOp.Multiply, IrOp.LongMultiply,
     /// `opc1=0b01`/`opc2=0b0101` ou `opc1=0b10`/`opc2=0b0111`, `size` fixo em `0b10`, `Q` fixo).
     /// Gate: {@link dev.vitorsilverio.armjitter.arch.ArmFeature#CRYPTO}.
     ///
-    /// Espelho de {@link dev.vitorsilverio.armjitter.ir64.Ir64Op.CryptoShaTwoRegister} no
+    /// Espelho de {@link dev.vitorsilverio.armjitter.ir64.CryptoOp64.ShaTwoRegister} no
     /// ENCODING/IR; a SEMÂNTICA vem do núcleo COMPARTILHADO ({@link
     /// dev.vitorsilverio.armjitter.advsimd.AdvSimdCrypto#shaTwoRegister}), RFC B13.2 D1.
     ///
@@ -3352,7 +3352,7 @@ public sealed interface IrOp permits IrOp.Alu, IrOp.Multiply, IrOp.LongMultiply,
     /// {@link NeonCryptoAes}/{@link NeonCryptoSha}). Gate: {@link
     /// dev.vitorsilverio.armjitter.arch.ArmFeature#CRYPTO}.
     ///
-    /// Espelho de {@link dev.vitorsilverio.armjitter.ir64.Ir64Op.CryptoShaThreeRegister} no
+    /// Espelho de {@link dev.vitorsilverio.armjitter.ir64.CryptoOp64.ShaThreeRegister} no
     /// ENCODING/IR; a SEMÂNTICA vem do núcleo COMPARTILHADO ({@link
     /// dev.vitorsilverio.armjitter.advsimd.AdvSimdCrypto#shaThreeRegister}), RFC B13.2 D1 (o A64
     /// passou a delegar também).

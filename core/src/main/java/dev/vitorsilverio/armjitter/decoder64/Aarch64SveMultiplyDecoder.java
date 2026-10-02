@@ -3,6 +3,7 @@ package dev.vitorsilverio.armjitter.decoder64;
 import dev.vitorsilverio.armjitter.arch64.Aarch64Architecture;
 import dev.vitorsilverio.armjitter.arch64.Aarch64Feature;
 import dev.vitorsilverio.armjitter.ir64.Ir64Op;
+import dev.vitorsilverio.armjitter.ir64.SveIntegerOp64;
 
 /// Decoder SVE do multiply por elemento indexado e dos dot-products vetoriais (B17.8) — o recorte `01000100`
 /// de `#### SVE Multiply - Indexed` mais `DOT_zzzz`/`CDOT_zzzz` do `sve.decode`, transcrito linha a linha.
@@ -100,23 +101,23 @@ final class Aarch64SveMultiplyDecoder {
         int rn = (word >>> RN_SHIFT) & RN_MASK;
         int rm5 = (word >>> RM_SHIFT) & RM5_MASK;
         if (bit(word, BIT_DOT_HIGH_ESZ) && ((word >>> DOT_VECTOR_FIXED_SHIFT) & DOT_VECTOR_FIXED_MASK) == 0) {
-            return new Ir64Op.SveMultiplyIndexed(
-                    bit(word, BIT_DOT_UNSIGNED) ? Ir64Op.SveMultiplyIndexed.Op.UDOT : Ir64Op.SveMultiplyIndexed.Op.SDOT,
+            return new SveIntegerOp64.MultiplyIndexed(
+                    bit(word, BIT_DOT_UNSIGNED) ? SveIntegerOp64.MultiplyIndexed.Op.UDOT : SveIntegerOp64.MultiplyIndexed.Op.SDOT,
                     bit(word, BIT_DOT_SZ) ? ESZ_DOUBLEWORD : ESZ_WORD, rd, rn, rm5, false, 0, 0, false, WAYS_FOUR,
                     address);
         }
         int family = (word >>> FAMILY_SHIFT) & FAMILY_MASK;
         if (family == CDOT_VECTOR_FAMILY) {
             return esz >= ESZ_WORD && architecture.has(Aarch64Feature.SVE2)
-                    ? new Ir64Op.SveMultiplyIndexed(Ir64Op.SveMultiplyIndexed.Op.CDOT, esz, rd, rn, rm5, false, 0,
+                    ? new SveIntegerOp64.MultiplyIndexed(SveIntegerOp64.MultiplyIndexed.Op.CDOT, esz, rd, rn, rm5, false, 0,
                             (word >>> ROT_SHIFT) & ROT_MASK, false, 0, address)
                     : null;
         }
         if (esz == ESZ_WORD && family == DOT_TWO_WAY_FAMILY && bit(word, DOT_TWO_WAY_SELECT_BIT)) {
             return architecture.has(Aarch64Feature.SVE2_1) || architecture.has(Aarch64Feature.SVE2_2)
-                    ? new Ir64Op.SveMultiplyIndexed(
-                            bit(word, BIT_DOT_UNSIGNED) ? Ir64Op.SveMultiplyIndexed.Op.UDOT
-                                    : Ir64Op.SveMultiplyIndexed.Op.SDOT,
+                    ? new SveIntegerOp64.MultiplyIndexed(
+                            bit(word, BIT_DOT_UNSIGNED) ? SveIntegerOp64.MultiplyIndexed.Op.UDOT
+                                    : SveIntegerOp64.MultiplyIndexed.Op.SDOT,
                             ESZ_WORD, rd, rn, (word >>> RM_SHIFT) & RM3_MASK, true,
                             (word >>> INDEX_PAIR_SHIFT) & INDEX_PAIR_MASK, 0, false, WAYS_TWO, address)
                     : null;
@@ -148,7 +149,7 @@ final class Aarch64SveMultiplyDecoder {
     private static final int LOW_SECOND_SELECTOR_MASK = 0b10;
 
     /// As 21 linhas de multiply-add long NÃO-indexado (par sem índice das 71 linhas indexadas da B17.8) — MESMA
-    /// operação (`Ir64Op.SveMultiplyIndexed`, `indexed = false`), reusando a semântica em `SveMultiplyIndexedOps`
+    /// operação (`SveIntegerOp64.MultiplyIndexed`, `indexed = false`), reusando a semântica em `SveMultiplyIndexedOps`
     /// (Achado 4 da task: só a leitura de `Zm` muda). `rm` aqui é sempre `Z0`-`Z31` (`@rda_rn_rm`/`@rda_rn_rm_ex`,
     /// sem a restrição de 3/4 bits das formas indexadas). Feature por linha (`TRANS_FEAT` do QEMU): tudo
     /// `FEAT_SVE2`, exceto `USDOT_zzzz_4s` (`FEAT_I8MM`) e `SDOT_zzzz_2s`/`UDOT_zzzz_2s` (`FEAT_SVE2p1`).
@@ -158,38 +159,38 @@ final class Aarch64SveMultiplyDecoder {
         return switch (family) {
             case FAMILY_INTERLEAVED_LONG -> switch (low) {
                 case LOW_INTERLEAVED_LONG_ADD ->
-                        wideningVector(esz, Ir64Op.SveMultiplyIndexed.Op.SQDMLALBT, rd, rn, rm, false, 1, address);
+                        wideningVector(esz, SveIntegerOp64.MultiplyIndexed.Op.SQDMLALBT, rd, rn, rm, false, 1, address);
                 case LOW_INTERLEAVED_LONG_SUB ->
-                        wideningVector(esz, Ir64Op.SveMultiplyIndexed.Op.SQDMLSLBT, rd, rn, rm, false, 1, address);
+                        wideningVector(esz, SveIntegerOp64.MultiplyIndexed.Op.SQDMLSLBT, rd, rn, rm, false, 1, address);
                 default -> null;
             };
             case FAMILY_CMLA_VECTOR -> // esz 0..3 todos válidos — sem restrição (`cmla_fns` do QEMU tem as 4).
                     architecture.has(Aarch64Feature.SVE2)
-                            ? new Ir64Op.SveMultiplyIndexed(Ir64Op.SveMultiplyIndexed.Op.CMLA, esz, rd, rn, rm, false,
+                            ? new SveIntegerOp64.MultiplyIndexed(SveIntegerOp64.MultiplyIndexed.Op.CMLA, esz, rd, rn, rm, false,
                                     0, low, false, 0, address)
                             : null;
             case FAMILY_SQRDCMLAH_VECTOR ->
                     architecture.has(Aarch64Feature.SVE2)
-                            ? new Ir64Op.SveMultiplyIndexed(Ir64Op.SveMultiplyIndexed.Op.SQRDCMLAH, esz, rd, rn, rm,
+                            ? new SveIntegerOp64.MultiplyIndexed(SveIntegerOp64.MultiplyIndexed.Op.SQRDCMLAH, esz, rd, rn, rm,
                                     false, 0, low, false, 0, address)
                             : null;
             case FAMILY_LONG_SIGNED_UNSIGNED_ADD -> wideningVector(esz,
-                    (low & LOW_SECOND_SELECTOR_MASK) == 0 ? Ir64Op.SveMultiplyIndexed.Op.SMLAL
-                            : Ir64Op.SveMultiplyIndexed.Op.UMLAL,
+                    (low & LOW_SECOND_SELECTOR_MASK) == 0 ? SveIntegerOp64.MultiplyIndexed.Op.SMLAL
+                            : SveIntegerOp64.MultiplyIndexed.Op.UMLAL,
                     rd, rn, rm, top, top ? 1 : 0, address);
             case FAMILY_LONG_SIGNED_UNSIGNED_SUB -> wideningVector(esz,
-                    (low & LOW_SECOND_SELECTOR_MASK) == 0 ? Ir64Op.SveMultiplyIndexed.Op.SMLSL
-                            : Ir64Op.SveMultiplyIndexed.Op.UMLSL,
+                    (low & LOW_SECOND_SELECTOR_MASK) == 0 ? SveIntegerOp64.MultiplyIndexed.Op.SMLSL
+                            : SveIntegerOp64.MultiplyIndexed.Op.UMLSL,
                     rd, rn, rm, top, top ? 1 : 0, address);
             case FAMILY_SQDMLAL_STRAIGHT -> wideningVector(esz,
-                    (low & LOW_SECOND_SELECTOR_MASK) == 0 ? Ir64Op.SveMultiplyIndexed.Op.SQDMLAL
-                            : Ir64Op.SveMultiplyIndexed.Op.SQDMLSL,
+                    (low & LOW_SECOND_SELECTOR_MASK) == 0 ? SveIntegerOp64.MultiplyIndexed.Op.SQDMLAL
+                            : SveIntegerOp64.MultiplyIndexed.Op.SQDMLSL,
                     rd, rn, rm, top, top ? 1 : 0, address);
             case FAMILY_HIGH_MULTIPLY -> switch (low) {
-                case LOW_SQRDMLAH -> sameSizeVector(esz, Ir64Op.SveMultiplyIndexed.Op.SQRDMLAH, rd, rn, rm, address);
-                case LOW_SQRDMLSH -> sameSizeVector(esz, Ir64Op.SveMultiplyIndexed.Op.SQRDMLSH, rd, rn, rm, address);
+                case LOW_SQRDMLAH -> sameSizeVector(esz, SveIntegerOp64.MultiplyIndexed.Op.SQRDMLAH, rd, rn, rm, address);
+                case LOW_SQRDMLSH -> sameSizeVector(esz, SveIntegerOp64.MultiplyIndexed.Op.SQRDMLSH, rd, rn, rm, address);
                 case LOW_USDOT_ZZZZ_4S -> esz == ESZ_WORD && architecture.has(Aarch64Feature.INT8_MATRIX_MULTIPLY)
-                        ? new Ir64Op.SveMultiplyIndexed(Ir64Op.SveMultiplyIndexed.Op.USDOT, ESZ_WORD, rd, rn, rm,
+                        ? new SveIntegerOp64.MultiplyIndexed(SveIntegerOp64.MultiplyIndexed.Op.USDOT, ESZ_WORD, rd, rn, rm,
                                 false, 0, 0, false, WAYS_FOUR, address)
                         : null;
                 default -> null;
@@ -197,12 +198,12 @@ final class Aarch64SveMultiplyDecoder {
             // `1100`: `low` distingue `SCLAMP`(00)/`UCLAMP`(01) — B17.22, sem relação com multiply — de
             // `SDOT_zzzz_2s`(10)/`UDOT_zzzz_2s`(11), mesmo family bits que o dot de 2 vias indexado.
             case DOT_TWO_WAY_FAMILY -> switch (low) {
-                case 0b00 -> clamp(Ir64Op.SveClamp.Op.SCLAMP, esz, rd, rn, rm, address);
-                case 0b01 -> clamp(Ir64Op.SveClamp.Op.UCLAMP, esz, rd, rn, rm, address);
+                case 0b00 -> clamp(SveIntegerOp64.Clamp.Op.SCLAMP, esz, rd, rn, rm, address);
+                case 0b01 -> clamp(SveIntegerOp64.Clamp.Op.UCLAMP, esz, rd, rn, rm, address);
                 default -> esz == ESZ_BYTE && architecture.has(Aarch64Feature.SVE2_1)
-                        ? new Ir64Op.SveMultiplyIndexed(
-                                low == LOW_UDOT_ZZZZ_2S ? Ir64Op.SveMultiplyIndexed.Op.UDOT
-                                        : Ir64Op.SveMultiplyIndexed.Op.SDOT,
+                        ? new SveIntegerOp64.MultiplyIndexed(
+                                low == LOW_UDOT_ZZZZ_2S ? SveIntegerOp64.MultiplyIndexed.Op.UDOT
+                                        : SveIntegerOp64.MultiplyIndexed.Op.SDOT,
                                 ESZ_WORD, rd, rn, rm, false, 0, 0, false, WAYS_TWO, address)
                         : null;
             };
@@ -212,27 +213,27 @@ final class Aarch64SveMultiplyDecoder {
 
     /// `SCLAMP`/`UCLAMP` (B17.22, `FEAT_SME`/`FEAT_SVE2p1`): `Zd = min(max(Zd, Zn), Zm)`. Mora aqui (não num
     /// decoder próprio) porque compartilha o family `1100` do prefixo `0x44`/`bit 21 = 0` com o dot de 2 vias.
-    private Ir64Op clamp(Ir64Op.SveClamp.Op op, int esz, int rd, int rn, int rm, long address) {
+    private Ir64Op clamp(SveIntegerOp64.Clamp.Op op, int esz, int rd, int rn, int rm, long address) {
         return architecture.has(Aarch64Feature.SVE2_1) || architecture.has(Aarch64Feature.SCALABLE_MATRIX_EXTENSION)
-                ? new Ir64Op.SveClamp(op, esz, rd, rn, rm, address)
+                ? new SveIntegerOp64.Clamp(op, esz, rd, rn, rm, address)
                 : null;
     }
 
     /// `SMLALB/T`/`UMLALB/T`/`SMLSLB/T`/`UMLSLB/T`/`SQDMLALB/T`/`SQDMLSLB/T`/`SQDMLALBT`/`SQDMLSLBT` não-indexados:
     /// `esz = 0` (byte) não é alocado (`fns[0] = NULL` no QEMU — só `H`/`S`/`D`, ao contrário das formas indexadas
     /// da B17.8 que exigem `S`/`D`).
-    private Ir64Op wideningVector(int esz, Ir64Op.SveMultiplyIndexed.Op op, int rd, int rn, int rm, boolean topN,
+    private Ir64Op wideningVector(int esz, SveIntegerOp64.MultiplyIndexed.Op op, int rd, int rn, int rm, boolean topN,
             int topM, long address) {
         if (esz == ESZ_BYTE || !architecture.has(Aarch64Feature.SVE2)) {
             return null;
         }
-        return new Ir64Op.SveMultiplyIndexed(op, esz, rd, rn, rm, false, topM, 0, topN, 0, address);
+        return new SveIntegerOp64.MultiplyIndexed(op, esz, rd, rn, rm, false, topM, 0, topN, 0, address);
     }
 
     /// `SQRDMLAH_zzzz`/`SQRDMLSH_zzzz`: todo `esz` (`B`/`H`/`S`/`D`) é válido — os 4 helpers do QEMU existem.
-    private Ir64Op sameSizeVector(int esz, Ir64Op.SveMultiplyIndexed.Op op, int rd, int rn, int rm, long address) {
+    private Ir64Op sameSizeVector(int esz, SveIntegerOp64.MultiplyIndexed.Op op, int rd, int rn, int rm, long address) {
         return architecture.has(Aarch64Feature.SVE2)
-                ? new Ir64Op.SveMultiplyIndexed(op, esz, rd, rn, rm, false, 0, 0, false, 0, address)
+                ? new SveIntegerOp64.MultiplyIndexed(op, esz, rd, rn, rm, false, 0, 0, false, 0, address)
                 : null;
     }
 
@@ -247,69 +248,69 @@ final class Aarch64SveMultiplyDecoder {
         boolean wordOrDouble = esz >= ESZ_FIELD_WORD;
         return switch (family) {
             case FAMILY_DOT_MLA -> low <= LOW_UDOT_OR_SQRDMLSH_OR_SQRDMULH
-                    ? decodeDot(word, address, esz, low == 0 ? Ir64Op.SveMultiplyIndexed.Op.SDOT
-                            : Ir64Op.SveMultiplyIndexed.Op.UDOT, rd, rn)
-                    : sameSize(word, address, esz, low == LOW_MLA_OR_USDOT_OR_MUL ? Ir64Op.SveMultiplyIndexed.Op.MLA
-                            : Ir64Op.SveMultiplyIndexed.Op.MLS, rd, rn);
+                    ? decodeDot(word, address, esz, low == 0 ? SveIntegerOp64.MultiplyIndexed.Op.SDOT
+                            : SveIntegerOp64.MultiplyIndexed.Op.UDOT, rd, rn)
+                    : sameSize(word, address, esz, low == LOW_MLA_OR_USDOT_OR_MUL ? SveIntegerOp64.MultiplyIndexed.Op.MLA
+                            : SveIntegerOp64.MultiplyIndexed.Op.MLS, rd, rn);
             case FAMILY_SQRDMLA_USDOT -> low <= LOW_UDOT_OR_SQRDMLSH_OR_SQRDMULH
-                    ? sameSize(word, address, esz, low == 0 ? Ir64Op.SveMultiplyIndexed.Op.SQRDMLAH
-                            : Ir64Op.SveMultiplyIndexed.Op.SQRDMLSH, rd, rn)
+                    ? sameSize(word, address, esz, low == 0 ? SveIntegerOp64.MultiplyIndexed.Op.SQRDMLAH
+                            : SveIntegerOp64.MultiplyIndexed.Op.SQRDMLSH, rd, rn)
                     : mixedSignDot(word, address, esz, low == LOW_MLA_OR_USDOT_OR_MUL
-                            ? Ir64Op.SveMultiplyIndexed.Op.USDOT : Ir64Op.SveMultiplyIndexed.Op.SUDOT, rd, rn);
-            case FAMILY_SQDMLAL -> widening(word, address, wordOrDouble, esz, Ir64Op.SveMultiplyIndexed.Op.SQDMLAL,
+                            ? SveIntegerOp64.MultiplyIndexed.Op.USDOT : SveIntegerOp64.MultiplyIndexed.Op.SUDOT, rd, rn);
+            case FAMILY_SQDMLAL -> widening(word, address, wordOrDouble, esz, SveIntegerOp64.MultiplyIndexed.Op.SQDMLAL,
                     rd, rn);
-            case FAMILY_SQDMLSL -> widening(word, address, wordOrDouble, esz, Ir64Op.SveMultiplyIndexed.Op.SQDMLSL,
+            case FAMILY_SQDMLSL -> widening(word, address, wordOrDouble, esz, SveIntegerOp64.MultiplyIndexed.Op.SQDMLSL,
                     rd, rn);
-            case FAMILY_SMLAL -> widening(word, address, wordOrDouble, esz, Ir64Op.SveMultiplyIndexed.Op.SMLAL, rd, rn);
-            case FAMILY_UMLAL -> widening(word, address, wordOrDouble, esz, Ir64Op.SveMultiplyIndexed.Op.UMLAL, rd, rn);
-            case FAMILY_SMLSL -> widening(word, address, wordOrDouble, esz, Ir64Op.SveMultiplyIndexed.Op.SMLSL, rd, rn);
-            case FAMILY_UMLSL -> widening(word, address, wordOrDouble, esz, Ir64Op.SveMultiplyIndexed.Op.UMLSL, rd, rn);
-            case FAMILY_SMULL -> widening(word, address, wordOrDouble, esz, Ir64Op.SveMultiplyIndexed.Op.SMULL, rd, rn);
-            case FAMILY_UMULL -> widening(word, address, wordOrDouble, esz, Ir64Op.SveMultiplyIndexed.Op.UMULL, rd, rn);
+            case FAMILY_SMLAL -> widening(word, address, wordOrDouble, esz, SveIntegerOp64.MultiplyIndexed.Op.SMLAL, rd, rn);
+            case FAMILY_UMLAL -> widening(word, address, wordOrDouble, esz, SveIntegerOp64.MultiplyIndexed.Op.UMLAL, rd, rn);
+            case FAMILY_SMLSL -> widening(word, address, wordOrDouble, esz, SveIntegerOp64.MultiplyIndexed.Op.SMLSL, rd, rn);
+            case FAMILY_UMLSL -> widening(word, address, wordOrDouble, esz, SveIntegerOp64.MultiplyIndexed.Op.UMLSL, rd, rn);
+            case FAMILY_SMULL -> widening(word, address, wordOrDouble, esz, SveIntegerOp64.MultiplyIndexed.Op.SMULL, rd, rn);
+            case FAMILY_UMULL -> widening(word, address, wordOrDouble, esz, SveIntegerOp64.MultiplyIndexed.Op.UMULL, rd, rn);
             case FAMILY_SQDMULL ->
-                    widening(word, address, wordOrDouble, esz, Ir64Op.SveMultiplyIndexed.Op.SQDMULL, rd, rn);
-            case FAMILY_CDOT -> complex(word, address, esz, Ir64Op.SveMultiplyIndexed.Op.CDOT, esz, rd, rn);
-            case FAMILY_CMLA -> complex(word, address, esz, Ir64Op.SveMultiplyIndexed.Op.CMLA, esz - 1, rd, rn);
+                    widening(word, address, wordOrDouble, esz, SveIntegerOp64.MultiplyIndexed.Op.SQDMULL, rd, rn);
+            case FAMILY_CDOT -> complex(word, address, esz, SveIntegerOp64.MultiplyIndexed.Op.CDOT, esz, rd, rn);
+            case FAMILY_CMLA -> complex(word, address, esz, SveIntegerOp64.MultiplyIndexed.Op.CMLA, esz - 1, rd, rn);
             case FAMILY_SQRDCMLAH ->
-                    complex(word, address, esz, Ir64Op.SveMultiplyIndexed.Op.SQRDCMLAH, esz - 1, rd, rn);
+                    complex(word, address, esz, SveIntegerOp64.MultiplyIndexed.Op.SQRDCMLAH, esz - 1, rd, rn);
             case FAMILY_SQDMULH_MUL -> low > LOW_MLA_OR_USDOT_OR_MUL
                     ? null
                     : sameSize(word, address, esz, switch (low) {
-                        case LOW_SDOT_OR_SQRDMLAH_OR_SQDMULH -> Ir64Op.SveMultiplyIndexed.Op.SQDMULH;
-                        case LOW_UDOT_OR_SQRDMLSH_OR_SQRDMULH -> Ir64Op.SveMultiplyIndexed.Op.SQRDMULH;
-                        default -> Ir64Op.SveMultiplyIndexed.Op.MUL;
+                        case LOW_SDOT_OR_SQRDMLAH_OR_SQDMULH -> SveIntegerOp64.MultiplyIndexed.Op.SQDMULH;
+                        case LOW_UDOT_OR_SQRDMLSH_OR_SQRDMULH -> SveIntegerOp64.MultiplyIndexed.Op.SQRDMULH;
+                        default -> SveIntegerOp64.MultiplyIndexed.Op.MUL;
                     }, rd, rn);
             default -> null;
         };
     }
 
     /// `SDOT`/`UDOT` de 4 vias indexados: só `.S` (`esz = 10`, `_2`) e `.D` (`esz = 11`, `_1`); `FEAT_SVE`.
-    private Ir64Op decodeDot(int word, long address, int esz, Ir64Op.SveMultiplyIndexed.Op op, int rd, int rn) {
+    private Ir64Op decodeDot(int word, long address, int esz, SveIntegerOp64.MultiplyIndexed.Op op, int rd, int rn) {
         if (esz < ESZ_FIELD_WORD) {
             return null;
         }
         boolean word32 = esz == ESZ_WORD;
-        return new Ir64Op.SveMultiplyIndexed(op, esz, rd, rn, rm(word, word32), true, sameSizeIndex(word, esz), 0,
+        return new SveIntegerOp64.MultiplyIndexed(op, esz, rd, rn, rm(word, word32), true, sameSizeIndex(word, esz), 0,
                 false, WAYS_FOUR, address);
     }
 
     /// `USDOT`/`SUDOT` indexados: só `.S` (`_2`); `FEAT_I8MM`.
-    private Ir64Op mixedSignDot(int word, long address, int esz, Ir64Op.SveMultiplyIndexed.Op op, int rd, int rn) {
+    private Ir64Op mixedSignDot(int word, long address, int esz, SveIntegerOp64.MultiplyIndexed.Op op, int rd, int rn) {
         if (esz != ESZ_WORD || !architecture.has(Aarch64Feature.INT8_MATRIX_MULTIPLY)) {
             return null;
         }
-        return new Ir64Op.SveMultiplyIndexed(op, ESZ_WORD, rd, rn, rm(word, true), true, sameSizeIndex(word, esz), 0,
+        return new SveIntegerOp64.MultiplyIndexed(op, ESZ_WORD, rd, rn, rm(word, true), true, sameSizeIndex(word, esz), 0,
                 false, WAYS_FOUR, address);
     }
 
     /// Operações no tamanho do elemento: `esz = 0x` é half (`_3`, o bit 22 é o bit ALTO do índice), `10` é word
     /// (`_2`) e `11` é double (`_1`). `FEAT_SVE2`.
-    private Ir64Op sameSize(int word, long address, int esz, Ir64Op.SveMultiplyIndexed.Op op, int rd, int rn) {
+    private Ir64Op sameSize(int word, long address, int esz, SveIntegerOp64.MultiplyIndexed.Op op, int rd, int rn) {
         if (!architecture.has(Aarch64Feature.SVE2)) {
             return null;
         }
         int size = esz >= ESZ_FIELD_WORD ? esz : ESZ_HALFWORD;
-        return new Ir64Op.SveMultiplyIndexed(op, size, rd, rn, rm(word, size != ESZ_DOUBLEWORD), true,
+        return new SveIntegerOp64.MultiplyIndexed(op, size, rd, rn, rm(word, size != ESZ_DOUBLEWORD), true,
                 sameSizeIndex(word, esz), 0, false, 0, address);
     }
 
@@ -327,7 +328,7 @@ final class Aarch64SveMultiplyDecoder {
     }
 
     /// Alargantes `_3a`/`_2a`: só `.S` e `.D`; `bit 10` é `B`/`T`, `bit 11` é o bit baixo do índice.
-    private Ir64Op widening(int word, long address, boolean wordOrDouble, int esz, Ir64Op.SveMultiplyIndexed.Op op,
+    private Ir64Op widening(int word, long address, boolean wordOrDouble, int esz, SveIntegerOp64.MultiplyIndexed.Op op,
             int rd, int rn) {
         if (!wordOrDouble || !architecture.has(Aarch64Feature.SVE2)) {
             return null;
@@ -336,20 +337,20 @@ final class Aarch64SveMultiplyDecoder {
         int low = bit(word, BIT_INDEX_LOW) ? 1 : 0;
         int index = word32 ? (((word >>> INDEX_PAIR_SHIFT) & INDEX_PAIR_MASK) << 1) | low
                 : ((bit(word, BIT_INDEX_HIGH) ? 1 : 0) << 1) | low;
-        return new Ir64Op.SveMultiplyIndexed(op, esz, rd, rn, rm(word, word32), true, index, 0, bit(word, BIT_TOP),
+        return new SveIntegerOp64.MultiplyIndexed(op, esz, rd, rn, rm(word, word32), true, index, 0, bit(word, BIT_TOP),
                 0, address);
     }
 
     /// `CDOT` (destino `.S`/`.D`, `esz` do encoding) e `CMLA`/`SQRDCMLAH` (elemento `.H`/`.S`, `esz - 1`): as duas
     /// usam `index:2 rm:3` para `esz = 10` e `index:1 rm:4` para `esz = 11`; `bits[11:10]` é a rotação.
-    private Ir64Op complex(int word, long address, int esz, Ir64Op.SveMultiplyIndexed.Op op, int elementEsz, int rd,
+    private Ir64Op complex(int word, long address, int esz, SveIntegerOp64.MultiplyIndexed.Op op, int elementEsz, int rd,
             int rn) {
         if (esz < ESZ_FIELD_WORD || !architecture.has(Aarch64Feature.SVE2)) {
             return null;
         }
         boolean word32 = esz == ESZ_WORD;
         int index = word32 ? (word >>> INDEX_PAIR_SHIFT) & INDEX_PAIR_MASK : bit(word, BIT_INDEX_HIGH) ? 1 : 0;
-        return new Ir64Op.SveMultiplyIndexed(op, elementEsz, rd, rn, rm(word, word32), true, index,
+        return new SveIntegerOp64.MultiplyIndexed(op, elementEsz, rd, rn, rm(word, word32), true, index,
                 (word >>> ROT_SHIFT) & ROT_MASK, false, 0, address);
     }
 

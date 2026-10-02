@@ -3,6 +3,7 @@ package dev.vitorsilverio.armjitter.decoder64;
 import dev.vitorsilverio.armjitter.arch64.Aarch64Architecture;
 import dev.vitorsilverio.armjitter.arch64.Aarch64Feature;
 import dev.vitorsilverio.armjitter.ir64.Ir64Op;
+import dev.vitorsilverio.armjitter.ir64.SmeOp64;
 import dev.vitorsilverio.armjitter.memory.AddressSpace64;
 import dev.vitorsilverio.armjitter.support.TestAddressSpace;
 import org.junit.jupiter.api.Test;
@@ -61,7 +62,7 @@ class Aarch64SmeZt0FamilyDecoderTest {
             "0xC00E6007, 4, 1, 11, 7",   // zero za.d[w11, 7, vgx4]
     })
     void zeroArrayDecodesEveryNgrpNvecPairWithItsOwnOffsetScale(String hex, int ngrp, int nvec, int rv, int off) {
-        Ir64Op.SmeZeroArray zero = assertInstanceOf(Ir64Op.SmeZeroArray.class, decode(SME2P1, word(hex)));
+        SmeOp64.ZeroArray zero = assertInstanceOf(SmeOp64.ZeroArray.class, decode(SME2P1, word(hex)));
         assertEquals(ngrp, zero.ngrp());
         assertEquals(nvec, zero.nvec());
         assertEquals(rv, zero.registerIndex());
@@ -78,8 +79,8 @@ class Aarch64SmeZt0FamilyDecoderTest {
             "0xC04E53E4, X_TO_ZT, 4, 5",         // movt zt0[40], x4
             "0xC04E33FF, X_TO_ZT, 31, 3",        // movt zt0[24], xzr
     })
-    void movtWithGeneralRegisterNeedsOnlySme2(String hex, Ir64Op.SmeMovt.Form form, int rt, int off) {
-        Ir64Op.SmeMovt movt = assertInstanceOf(Ir64Op.SmeMovt.class, decode(SME2, word(hex)));
+    void movtWithGeneralRegisterNeedsOnlySme2(String hex, SmeOp64.Movt.Form form, int rt, int off) {
+        SmeOp64.Movt movt = assertInstanceOf(SmeOp64.Movt.class, decode(SME2, word(hex)));
         assertEquals(form, movt.form());
         assertEquals(rt, movt.rt());
         assertEquals(off, movt.off());
@@ -92,8 +93,8 @@ class Aarch64SmeZt0FamilyDecoderTest {
             "0xC04F33FF, 31, 3",    // movt zt0[3, mul vl], z31
     })
     void movtFromVectorNeedsLutv2(String hex, int rt, int off) {
-        Ir64Op.SmeMovt movt = assertInstanceOf(Ir64Op.SmeMovt.class, decode(LUTV2, word(hex)));
-        assertEquals(Ir64Op.SmeMovt.Form.VECTOR_TO_ZT, movt.form());
+        SmeOp64.Movt movt = assertInstanceOf(SmeOp64.Movt.class, decode(LUTV2, word(hex)));
+        assertEquals(SmeOp64.Movt.Form.VECTOR_TO_ZT, movt.form());
         assertEquals(rt, movt.rt());
         assertEquals(off, movt.off());
         assertThrows(UnsupportedOperationException.class, () -> decode(SME2P1, word(hex)));
@@ -144,7 +145,7 @@ class Aarch64SmeZt0FamilyDecoderTest {
     })
     void everyLutVariantDecodesItsOwnFields(String hex, boolean four, int esz, int count, boolean strided, int zd,
             int zn, int idx) {
-        Ir64Op.SmeLut lut = assertInstanceOf(Ir64Op.SmeLut.class, decode(ALL, word(hex)), hex);
+        SmeOp64.Lut lut = assertInstanceOf(SmeOp64.Lut.class, decode(ALL, word(hex)), hex);
         assertEquals(four, lut.fourBit(), hex + " fourBit");
         assertEquals(esz, lut.esz(), hex + " esz");
         assertEquals(count, lut.count(), hex + " count");
@@ -172,13 +173,13 @@ class Aarch64SmeZt0FamilyDecoderTest {
         assertUndefined(SME2, word("0xC00C8000"), "ZERO_za sem SME2p1");
         assertUndefined(SME2, word("0xC09C4000"), "LUTI2 strided sem SME2p1");
         assertUndefined(SME2, word("0xC09A9081"), "LUTI4 strided sem SME2p1");
-        assertInstanceOf(Ir64Op.SmeLut.class, decode(SME2P1, word("0xC09C4000")));
+        assertInstanceOf(SmeOp64.Lut.class, decode(SME2P1, word("0xC09C4000")));
         assertUndefined(SME2P1, word("0xC08B0104"), "LUTI4_c_4b sem LUTv2");
         assertUndefined(SME2, word("0xC08B0104"), "LUTI4_c_4b sem LUTv2");
-        assertInstanceOf(Ir64Op.SmeLut.class, decode(LUTV2, word("0xC08B0104")));
+        assertInstanceOf(SmeOp64.Lut.class, decode(LUTV2, word("0xC08B0104")));
         assertUndefined(LUTV2, word("0xC09B0101"), "LUTI4_s_4b com LUTv2 mas sem SME2p1");
         assertUndefined(SME2P1, word("0xC09B0101"), "LUTI4_s_4b com SME2p1 mas sem LUTv2");
-        assertInstanceOf(Ir64Op.SmeLut.class, decode(ALL, word("0xC09B0101")));
+        assertInstanceOf(SmeOp64.Lut.class, decode(ALL, word("0xC09B0101")));
     }
 
     @ParameterizedTest

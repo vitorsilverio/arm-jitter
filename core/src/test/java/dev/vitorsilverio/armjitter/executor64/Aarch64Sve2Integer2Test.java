@@ -6,6 +6,7 @@ import dev.vitorsilverio.armjitter.core64.Aarch64Core;
 import dev.vitorsilverio.armjitter.core64.Aarch64ExceptionLevel;
 import dev.vitorsilverio.armjitter.decoder64.Aarch64Decoder;
 import dev.vitorsilverio.armjitter.ir64.Ir64Op;
+import dev.vitorsilverio.armjitter.ir64.SveIntegerOp64;
 import dev.vitorsilverio.armjitter.memory.AddressSpace64;
 import dev.vitorsilverio.armjitter.support.TestAddressSpace;
 import org.junit.jupiter.api.Test;
@@ -212,39 +213,39 @@ class Aarch64Sve2Integer2Test {
     void assemblerWordsDecodeUnderSve2AndAreRefusedUnderPlainSve(int word, String expected) {
         Ir64Op decoded = decodeOrNull(SVE2, word);
         assertNotNull(decoded, "decodifica sob SVE2");
-        String actual = decoded instanceof Ir64Op.SveIntegerUnpredicated u ? u.op().name()
-                : ((Ir64Op.SveIntegerPredicated) decoded).op().name();
+        String actual = decoded instanceof SveIntegerOp64.IntegerUnpredicated u ? u.op().name()
+                : ((SveIntegerOp64.IntegerPredicated) decoded).op().name();
         assertEquals(expected, actual);
         assertNull(decodeOrNull(SVE, word), "recusada sob SVE puro (G8)");
     }
 
     @Test
     void shiftAndInsertImmediatesFollowTheTszimmEncoding() {
-        Ir64Op.SveIntegerUnpredicated ssra = (Ir64Op.SveIntegerUnpredicated) decodeOrNull(SVE2, 0x450de041);
+        SveIntegerOp64.IntegerUnpredicated ssra = (SveIntegerOp64.IntegerUnpredicated) decodeOrNull(SVE2, 0x450de041);
         assertEquals(0, ssra.esz());
         assertEquals(3L, ssra.imm());
-        Ir64Op.SveIntegerUnpredicated ursra = (Ir64Op.SveIntegerUnpredicated) decodeOrNull(SVE2, 0x459fec41);
+        SveIntegerOp64.IntegerUnpredicated ursra = (SveIntegerOp64.IntegerUnpredicated) decodeOrNull(SVE2, 0x459fec41);
         assertEquals(3, ursra.esz());
         assertEquals(33L, ursra.imm());
-        Ir64Op.SveIntegerUnpredicated sli = (Ir64Op.SveIntegerUnpredicated) decodeOrNull(SVE2, 0x45c8f441);
+        SveIntegerOp64.IntegerUnpredicated sli = (SveIntegerOp64.IntegerUnpredicated) decodeOrNull(SVE2, 0x45c8f441);
         assertEquals(3, sli.esz());
         assertEquals(40L, sli.imm());
     }
 
     @Test
     void adclSelectsAdcOrSbcByBit23AndTheSizeByBit22() {
-        Ir64Op.SveIntegerUnpredicated adclS = (Ir64Op.SveIntegerUnpredicated) decodeOrNull(SVE2, 0x4503d041);
-        assertEquals(Ir64Op.SveIntegerUnpredicated.Op.ADCL, adclS.op());
+        SveIntegerOp64.IntegerUnpredicated adclS = (SveIntegerOp64.IntegerUnpredicated) decodeOrNull(SVE2, 0x4503d041);
+        assertEquals(SveIntegerOp64.IntegerUnpredicated.Op.ADCL, adclS.op());
         assertEquals(2, adclS.esz());
-        Ir64Op.SveIntegerUnpredicated sbclD = (Ir64Op.SveIntegerUnpredicated) decodeOrNull(SVE2, 0x45c3d441);
-        assertEquals(Ir64Op.SveIntegerUnpredicated.Op.SBCL, sbclD.op());
+        SveIntegerOp64.IntegerUnpredicated sbclD = (SveIntegerOp64.IntegerUnpredicated) decodeOrNull(SVE2, 0x45c3d441);
+        assertEquals(SveIntegerOp64.IntegerUnpredicated.Op.SBCL, sbclD.op());
         assertEquals(3, sbclD.esz());
         assertEquals(1L, sbclD.imm(), "T");
     }
 
     // ── Decoder: varredura dos espaços ───────────────────────────────────────────────────────────
 
-    private static boolean isNewPredicated(Ir64Op.SveIntegerPredicated.Op op) {
+    private static boolean isNewPredicated(SveIntegerOp64.IntegerPredicated.Op op) {
         return switch (op) {
             case SRSHL, URSHL, SQSHL_VECTOR, UQSHL_VECTOR, SQRSHL, UQRSHL, SHADD, UHADD, SHSUB, UHSUB, SRHADD, URHADD,
                     SQADD, UQADD, SQSUB, UQSUB, SUQADD, USQADD -> true;
@@ -252,7 +253,7 @@ class Aarch64Sve2Integer2Test {
         };
     }
 
-    private static boolean isNewAccumulate(Ir64Op.SveIntegerUnpredicated.Op op) {
+    private static boolean isNewAccumulate(SveIntegerOp64.IntegerUnpredicated.Op op) {
         return switch (op) {
             case CADD, SQCADD, SABAL, UABAL, ADCL, SBCL, SSRA, USRA, SRSRA, URSRA, SRI, SLI, SABA, UABA -> true;
             default -> false;
@@ -268,10 +269,10 @@ class Aarch64Sve2Integer2Test {
         for (int esz = 0; esz < 4; esz++) {
             for (int opcode = 0; opcode < 64; opcode++) {
                 int word = predicatedWord(esz, opcode, Z1, Z3);
-                if (decodeOrNull(SVE2, word) instanceof Ir64Op.SveIntegerPredicated p && isNewPredicated(p.op())) {
+                if (decodeOrNull(SVE2, word) instanceof SveIntegerOp64.IntegerPredicated p && isNewPredicated(p.op())) {
                     decoded++;
                 }
-                if (decodeOrNull(SVE, word) instanceof Ir64Op.SveIntegerPredicated p && isNewPredicated(p.op())) {
+                if (decodeOrNull(SVE, word) instanceof SveIntegerOp64.IntegerPredicated p && isNewPredicated(p.op())) {
                     underPlainSve++;
                 }
             }
@@ -292,16 +293,16 @@ class Aarch64Sve2Integer2Test {
             for (int low = 0; low < 64; low++) {
                 for (int rm : new int[] {0, 1, 3}) {
                     int word = 0x45000000 | (esz << 22) | (rm << 16) | (low << 10) | (Z2 << 5) | Z1;
-                    if (decodeOrNull(SVE2, word) instanceof Ir64Op.SveIntegerUnpredicated u && isNewAccumulate(u.op())) {
-                        boolean isComplex = u.op() == Ir64Op.SveIntegerUnpredicated.Op.CADD
-                                || u.op() == Ir64Op.SveIntegerUnpredicated.Op.SQCADD;
+                    if (decodeOrNull(SVE2, word) instanceof SveIntegerOp64.IntegerUnpredicated u && isNewAccumulate(u.op())) {
+                        boolean isComplex = u.op() == SveIntegerOp64.IntegerUnpredicated.Op.CADD
+                                || u.op() == SveIntegerOp64.IntegerUnpredicated.Op.SQCADD;
                         if (isComplex) {
                             complex++;
                         } else if (rm == 3) {
                             other++;
                         }
                     }
-                    if (decodeOrNull(SVE, word) instanceof Ir64Op.SveIntegerUnpredicated u && isNewAccumulate(u.op())) {
+                    if (decodeOrNull(SVE, word) instanceof SveIntegerOp64.IntegerUnpredicated u && isNewAccumulate(u.op())) {
                         underPlainSve++;
                     }
                 }

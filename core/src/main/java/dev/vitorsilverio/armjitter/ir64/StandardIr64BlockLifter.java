@@ -81,7 +81,7 @@ public final class StandardIr64BlockLifter implements Ir64BlockLifter {
                     Ir64Op.Kind.PRIVILEGED_CALL, Ir64Op.Kind.BREAKPOINT,
                     Ir64Op.Kind.UNDEFINED_INSTRUCTION_TRAP -> true;
             case Ir64Op.Kind.SYSTEM_INSTRUCTION ->
-                    ((Ir64Op.SystemInstruction) op).opcode() == Ir64SystemInstructionOp.WFI;
+                    ((SystemOp64.SystemInstruction) op).opcode() == Ir64SystemInstructionOp.WFI;
             default -> false;
         };
     }

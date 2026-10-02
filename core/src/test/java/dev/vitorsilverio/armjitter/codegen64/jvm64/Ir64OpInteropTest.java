@@ -2,6 +2,7 @@ package dev.vitorsilverio.armjitter.codegen64.jvm64;
 
 import dev.vitorsilverio.armjitter.core64.Aarch64Core;
 import dev.vitorsilverio.armjitter.executor64.Ir64BlockExecutor;
+import dev.vitorsilverio.armjitter.ir64.IntegerOp64;
 import dev.vitorsilverio.armjitter.ir64.Ir64AluOp;
 import dev.vitorsilverio.armjitter.ir64.Ir64Op;
 import dev.vitorsilverio.armjitter.memory.AddressSpace64;
@@ -30,8 +31,8 @@ class Ir64OpInteropTest {
         Ir64BlockExecutor executorA = new Ir64BlockExecutor();
         Ir64BlockExecutor executorB = new Ir64BlockExecutor();
 
-        Ir64Op opA = new Ir64Op.Alu64(Ir64AluOp.ADD, 0, 1, 0x10, true, false, false, false);
-        Ir64Op opB = new Ir64Op.Alu64(Ir64AluOp.ADD, 0, 1, 0x20, true, false, false, false);
+        Ir64Op opA = new IntegerOp64.Alu64(Ir64AluOp.ADD, 0, 1, 0x10, true, false, false, false);
+        Ir64Op opB = new IntegerOp64.Alu64(Ir64AluOp.ADD, 0, 1, 0x20, true, false, false, false);
 
         int idA = Ir64OpInterop.register(opA, executorA);
         int idB = Ir64OpInterop.register(opB, executorB);
@@ -51,7 +52,7 @@ class Ir64OpInteropTest {
     @Test
     void registerIsAppendOnlyAndSequential() {
         Ir64BlockExecutor executor = new Ir64BlockExecutor();
-        Ir64Op op = new Ir64Op.Alu64(Ir64AluOp.ADD, 0, 1, 1, true, false, false, false);
+        Ir64Op op = new IntegerOp64.Alu64(Ir64AluOp.ADD, 0, 1, 1, true, false, false, false);
         int first = Ir64OpInterop.register(op, executor);
         int second = Ir64OpInterop.register(op, executor);
         assertTrue(second > first, "ids crescem monotonicamente (lista append-only)");

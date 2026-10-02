@@ -3,6 +3,7 @@ package dev.vitorsilverio.armjitter.decoder64;
 import dev.vitorsilverio.armjitter.arch64.Aarch64Architecture;
 import dev.vitorsilverio.armjitter.ir64.Ir64AddressingMode;
 import dev.vitorsilverio.armjitter.ir64.Ir64Op;
+import dev.vitorsilverio.armjitter.ir64.MemoryOp64;
 import dev.vitorsilverio.armjitter.memory.AddressSpace64;
 import dev.vitorsilverio.armjitter.support.TestAddressSpace;
 import org.junit.jupiter.api.Test;
@@ -30,7 +31,7 @@ class Aarch64UnsignedOffsetLoadStoreDecoderTest {
     void largeUnsignedOffsetLoadWithBit21AndPostIndexLookalikeBitsIsAPlainLdr() {
         for (Aarch64Architecture architecture : ARCHITECTURES) {
             // ldr x0, [x0, #31624]: imm12=0xF71 -> bits[11:10]=01, bit21=1 (parecia LDRA post-index)
-            Ir64Op.Load64 load = (Ir64Op.Load64) decode(architecture, 0xf97dc400);
+            MemoryOp64.Load64 load = (MemoryOp64.Load64) decode(architecture, 0xf97dc400);
             assertEquals(Ir64AddressingMode.OFFSET, load.addressingMode(), architecture.toString());
             assertEquals(31624L, load.immediate());
             assertEquals(0, load.rt());
@@ -42,7 +43,7 @@ class Aarch64UnsignedOffsetLoadStoreDecoderTest {
     void largeUnsignedOffsetLoadWithPreIndexLookalikeBitsIsAPlainLdr() {
         for (Aarch64Architecture architecture : ARCHITECTURES) {
             // ldr x0, [x0, #31640]: imm12=0xF73 -> bits[11:10]=11 (parecia LDRA pre-index)
-            Ir64Op.Load64 load = (Ir64Op.Load64) decode(architecture, 0xf97dcc00);
+            MemoryOp64.Load64 load = (MemoryOp64.Load64) decode(architecture, 0xf97dcc00);
             assertEquals(Ir64AddressingMode.OFFSET, load.addressingMode(), architecture.toString());
             assertEquals(31640L, load.immediate());
         }
@@ -52,8 +53,8 @@ class Aarch64UnsignedOffsetLoadStoreDecoderTest {
     void sameShapeStoresAreStillStores() {
         for (Aarch64Architecture architecture : ARCHITECTURES) {
             // str x0, [x0, #31624] / #31640
-            Ir64Op.Store64 first = (Ir64Op.Store64) decode(architecture, 0xf93dc400);
-            Ir64Op.Store64 second = (Ir64Op.Store64) decode(architecture, 0xf93dcc00);
+            MemoryOp64.Store64 first = (MemoryOp64.Store64) decode(architecture, 0xf93dc400);
+            MemoryOp64.Store64 second = (MemoryOp64.Store64) decode(architecture, 0xf93dcc00);
             assertEquals(31624L, first.immediate());
             assertEquals(31640L, second.immediate());
             assertEquals(Ir64AddressingMode.OFFSET, first.addressingMode());

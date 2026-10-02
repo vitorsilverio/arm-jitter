@@ -1,5 +1,7 @@
 package dev.vitorsilverio.armjitter.decoder64;
 
+import dev.vitorsilverio.armjitter.ir64.AdvSimdIntegerOp64;
+import dev.vitorsilverio.armjitter.ir64.CryptoOp64;
 import dev.vitorsilverio.armjitter.ir64.Ir64CryptoAesOp;
 import dev.vitorsilverio.armjitter.ir64.Ir64Op;
 import dev.vitorsilverio.armjitter.memory.AddressSpace64;
@@ -24,7 +26,7 @@ class Aarch64CryptoDecoderTest {
     @Test
     void aese() {
         // `aese v0.16b, v1.16b`
-        Ir64Op.CryptoAes op = (Ir64Op.CryptoAes) decodeWord(0x4e284820);
+        CryptoOp64.Aes op = (CryptoOp64.Aes) decodeWord(0x4e284820);
         assertEquals(Ir64CryptoAesOp.AESE, op.op());
         assertEquals(0, op.rd());
         assertEquals(1, op.rn());
@@ -33,7 +35,7 @@ class Aarch64CryptoDecoderTest {
     @Test
     void aesd() {
         // `aesd v2.16b, v3.16b`
-        Ir64Op.CryptoAes op = (Ir64Op.CryptoAes) decodeWord(0x4e285862);
+        CryptoOp64.Aes op = (CryptoOp64.Aes) decodeWord(0x4e285862);
         assertEquals(Ir64CryptoAesOp.AESD, op.op());
         assertEquals(2, op.rd());
         assertEquals(3, op.rn());
@@ -42,7 +44,7 @@ class Aarch64CryptoDecoderTest {
     @Test
     void aesmc() {
         // `aesmc v4.16b, v5.16b`
-        Ir64Op.CryptoAes op = (Ir64Op.CryptoAes) decodeWord(0x4e2868a4);
+        CryptoOp64.Aes op = (CryptoOp64.Aes) decodeWord(0x4e2868a4);
         assertEquals(Ir64CryptoAesOp.AESMC, op.op());
         assertEquals(4, op.rd());
         assertEquals(5, op.rn());
@@ -51,7 +53,7 @@ class Aarch64CryptoDecoderTest {
     @Test
     void aesimc() {
         // `aesimc v6.16b, v7.16b`
-        Ir64Op.CryptoAes op = (Ir64Op.CryptoAes) decodeWord(0x4e2878e6);
+        CryptoOp64.Aes op = (CryptoOp64.Aes) decodeWord(0x4e2878e6);
         assertEquals(Ir64CryptoAesOp.AESIMC, op.op());
         assertEquals(6, op.rd());
         assertEquals(7, op.rn());
@@ -60,7 +62,7 @@ class Aarch64CryptoDecoderTest {
     @Test
     void pmullP8() {
         // `pmull v8.8h, v9.8b, v10.8b`
-        Ir64Op.VectorPolynomialMultiplyLong op = (Ir64Op.VectorPolynomialMultiplyLong) decodeWord(0x0e2ae128);
+        AdvSimdIntegerOp64.PolynomialMultiplyLong op = (AdvSimdIntegerOp64.PolynomialMultiplyLong) decodeWord(0x0e2ae128);
         assertEquals(false, op.p64());
         assertEquals(false, op.q());
         assertEquals(8, op.rd());
@@ -71,7 +73,7 @@ class Aarch64CryptoDecoderTest {
     @Test
     void pmull2P8() {
         // `pmull2 v11.8h, v12.16b, v13.16b`
-        Ir64Op.VectorPolynomialMultiplyLong op = (Ir64Op.VectorPolynomialMultiplyLong) decodeWord(0x4e2de18b);
+        AdvSimdIntegerOp64.PolynomialMultiplyLong op = (AdvSimdIntegerOp64.PolynomialMultiplyLong) decodeWord(0x4e2de18b);
         assertEquals(false, op.p64());
         assertEquals(true, op.q());
         assertEquals(11, op.rd());
@@ -83,7 +85,7 @@ class Aarch64CryptoDecoderTest {
     void pmullP64() {
         // `pmull v14.1q, v5.1d, v6.1d` — registradores < 16, comparado com
         // {@link #pmullP64WithHighRmNowDecodesCorrectly} (registrador `Rm>=16`, mesma instrução).
-        Ir64Op.VectorPolynomialMultiplyLong op = (Ir64Op.VectorPolynomialMultiplyLong) decodeWord(0x0ee6e0ae);
+        AdvSimdIntegerOp64.PolynomialMultiplyLong op = (AdvSimdIntegerOp64.PolynomialMultiplyLong) decodeWord(0x0ee6e0ae);
         assertEquals(true, op.p64());
         assertEquals(false, op.q());
         assertEquals(14, op.rd());
@@ -94,7 +96,7 @@ class Aarch64CryptoDecoderTest {
     @Test
     void pmull2P64() {
         // `pmull2 v11.1q, v2.2d, v3.2d` — registradores < 16, mesmo motivo de `pmullP64`.
-        Ir64Op.VectorPolynomialMultiplyLong op = (Ir64Op.VectorPolynomialMultiplyLong) decodeWord(0x4ee3e04b);
+        AdvSimdIntegerOp64.PolynomialMultiplyLong op = (AdvSimdIntegerOp64.PolynomialMultiplyLong) decodeWord(0x4ee3e04b);
         assertEquals(true, op.p64());
         assertEquals(true, op.q());
         assertEquals(11, op.rd());
@@ -111,7 +113,7 @@ class Aarch64CryptoDecoderTest {
         // verdade), mas ERRADA para "three different"/`PMULL` (onde `Rm` É um registrador livre
         // `0`-`31`, herdado de B8.7/B8.8). Corrigido na E8 trocando o discriminador para bit11 (fixo
         // em `0` só em "three different", ver o achado em `decodeAdvancedSimdInteger`).
-        Ir64Op.VectorPolynomialMultiplyLong op = (Ir64Op.VectorPolynomialMultiplyLong) decodeWord(0x0ef0e1ee);
+        AdvSimdIntegerOp64.PolynomialMultiplyLong op = (AdvSimdIntegerOp64.PolynomialMultiplyLong) decodeWord(0x0ef0e1ee);
         assertEquals(true, op.p64());
         assertEquals(false, op.q());
         assertEquals(14, op.rd());

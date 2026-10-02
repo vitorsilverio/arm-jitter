@@ -10,6 +10,7 @@ import dev.vitorsilverio.armjitter.ir64.Aarch64SystemRegisterId;
 import dev.vitorsilverio.armjitter.ir64.Ir64Block;
 import dev.vitorsilverio.armjitter.ir64.Ir64Op;
 import dev.vitorsilverio.armjitter.ir64.StandardIr64BlockLifter;
+import dev.vitorsilverio.armjitter.ir64.SveIntegerOp64;
 import dev.vitorsilverio.armjitter.memory.AddressSpace64;
 import dev.vitorsilverio.armjitter.support.TestAddressSpace;
 import org.junit.jupiter.api.Test;
@@ -52,15 +53,15 @@ class Aarch64SvePermutePredicatedTest {
     private static final Aarch64Architecture SVE2P2 = Aarch64Architecture.extending(SVE2, "teste-SVE2p2",
             Aarch64Feature.SVE2_2);
 
-    private record Row(int word, String asm, Ir64Op.SvePermutePredicated.Op op, int esz, int rd, int rn, int rm,
+    private record Row(int word, String asm, SveIntegerOp64.PermutePredicated.Op op, int esz, int rd, int rn, int rm,
             int pg) {
-        Ir64Op.SvePermutePredicated expected() {
-            return new Ir64Op.SvePermutePredicated(op, esz, rd, rn, rm, pg, 0L);
+        SveIntegerOp64.PermutePredicated expected() {
+            return new SveIntegerOp64.PermutePredicated(op, esz, rd, rn, rm, pg, 0L);
         }
     }
 
     private static Row row(int word, String asm, String op, int esz, int rd, int rn, int rm, int pg) {
-        return new Row(word, asm, Ir64Op.SvePermutePredicated.Op.valueOf(op), esz, rd, rn, rm, pg);
+        return new Row(word, asm, SveIntegerOp64.PermutePredicated.Op.valueOf(op), esz, rd, rn, rm, pg);
     }
 
     private static Stream<Row> rows() {
@@ -165,7 +166,7 @@ class Aarch64SvePermutePredicatedTest {
 
     private static boolean decodesToPredicatedPermute(Aarch64Architecture architecture, int word) {
         try {
-            return decode(architecture, word) instanceof Ir64Op.SvePermutePredicated;
+            return decode(architecture, word) instanceof SveIntegerOp64.PermutePredicated;
         } catch (UnsupportedOperationException refused) {
             return false;
         }
@@ -257,7 +258,7 @@ class Aarch64SvePermutePredicatedTest {
     @Test
     void theTableCoversEveryOperationOfTheGroup() {
         assertEquals(76, rows().count());
-        assertEquals(Ir64Op.SvePermutePredicated.Op.values().length, rows().map(Row::op).distinct().count(),
+        assertEquals(SveIntegerOp64.PermutePredicated.Op.values().length, rows().map(Row::op).distinct().count(),
                 "toda operação do grupo (36 encodings) tem ao menos uma linha");
     }
 

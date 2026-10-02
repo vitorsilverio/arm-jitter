@@ -3,8 +3,12 @@ package dev.vitorsilverio.armjitter.decoder64;
 import dev.vitorsilverio.armjitter.advsimd.AdvSimdModifiedImmediateOp;
 import dev.vitorsilverio.armjitter.arch64.Aarch64Architecture;
 import dev.vitorsilverio.armjitter.ir64.Aarch64SystemRegisterId;
+import dev.vitorsilverio.armjitter.ir64.AdvSimdMoveOp64;
+import dev.vitorsilverio.armjitter.ir64.FpOp64;
+import dev.vitorsilverio.armjitter.ir64.IntegerOp64;
 import dev.vitorsilverio.armjitter.ir64.Ir64Op;
 import dev.vitorsilverio.armjitter.ir64.Ir64SystemInstructionOp;
+import dev.vitorsilverio.armjitter.ir64.SystemOp64;
 import dev.vitorsilverio.armjitter.memory.AddressSpace64;
 import dev.vitorsilverio.armjitter.support.TestAddressSpace;
 import org.junit.jupiter.api.Test;
@@ -54,25 +58,25 @@ class Aarch64B196DiversosDecoderTest {
 
     @Test
     void sysOp0_1GenericIsNopNotException() {
-        Ir64Op.SystemInstruction op = (Ir64Op.SystemInstruction) decode(DEFAULT_DECODER, SYS_OP0_1_GENERIC);
+        SystemOp64.SystemInstruction op = (SystemOp64.SystemInstruction) decode(DEFAULT_DECODER, SYS_OP0_1_GENERIC);
         assertEquals(Ir64SystemInstructionOp.MAINTENANCE_UNMODELED_NOP, op.opcode());
     }
 
     @Test
     void sysOp0_2GenericWriteAndReadResolveToDebugUnmodeled() {
-        Ir64Op.SystemRegister write = (Ir64Op.SystemRegister) decode(DEFAULT_DECODER, SYS_OP0_2_GENERIC_WRITE);
+        SystemOp64.SystemRegister write = (SystemOp64.SystemRegister) decode(DEFAULT_DECODER, SYS_OP0_2_GENERIC_WRITE);
         assertEquals(Aarch64SystemRegisterId.DEBUG_UNMODELED, write.register());
         assertFalse(write.read());
-        Ir64Op.SystemRegister read = (Ir64Op.SystemRegister) decode(DEFAULT_DECODER, SYS_OP0_2_GENERIC_READ);
+        SystemOp64.SystemRegister read = (SystemOp64.SystemRegister) decode(DEFAULT_DECODER, SYS_OP0_2_GENERIC_READ);
         assertEquals(Aarch64SystemRegisterId.DEBUG_UNMODELED, read.register());
         assertTrue(read.read());
     }
 
     @Test
     void tlbiAndIcStillWorkUnchanged() {
-        Ir64Op.SystemInstruction tlbi = (Ir64Op.SystemInstruction) decode(DEFAULT_DECODER, TLBI_VMALLE1);
+        SystemOp64.SystemInstruction tlbi = (SystemOp64.SystemInstruction) decode(DEFAULT_DECODER, TLBI_VMALLE1);
         assertEquals(Ir64SystemInstructionOp.TLBI_ALL, tlbi.opcode());
-        Ir64Op.SystemInstruction ic = (Ir64Op.SystemInstruction) decode(DEFAULT_DECODER, IC_IALLUIS);
+        SystemOp64.SystemInstruction ic = (SystemOp64.SystemInstruction) decode(DEFAULT_DECODER, IC_IALLUIS);
         // `IC IALLUIS` deixou de ser NOP (F11): invalida os blocos compilados do JIT.
         assertEquals(Ir64SystemInstructionOp.INSTRUCTION_CACHE_INVALIDATE_ALL, ic.opcode());
     }
@@ -81,7 +85,7 @@ class Aarch64B196DiversosDecoderTest {
 
     @Test
     void prfmLiteralIsNopHint() {
-        Ir64Op.SystemInstruction op = (Ir64Op.SystemInstruction) decode(DEFAULT_DECODER, PRFM_LITERAL);
+        SystemOp64.SystemInstruction op = (SystemOp64.SystemInstruction) decode(DEFAULT_DECODER, PRFM_LITERAL);
         assertEquals(Ir64SystemInstructionOp.NOP_HINT, op.opcode());
     }
 
@@ -90,7 +94,7 @@ class Aarch64B196DiversosDecoderTest {
     @Test
     void pacgaGatedByPointerAuthentication() {
         assertThrows(UnsupportedOperationException.class, () -> decode(DEFAULT_DECODER, PACGA_X0_X1_X2));
-        Ir64Op.PointerAuthGeneric op = (Ir64Op.PointerAuthGeneric) decode(PAUTH_DECODER, PACGA_X0_X1_X2);
+        IntegerOp64.PointerAuthGeneric op = (IntegerOp64.PointerAuthGeneric) decode(PAUTH_DECODER, PACGA_X0_X1_X2);
         assertEquals(0, op.rd());
         assertEquals(1, op.rn());
         assertEquals(2, op.rm());
@@ -101,7 +105,7 @@ class Aarch64B196DiversosDecoderTest {
     @Test
     void absGatedByCssc() {
         assertThrows(UnsupportedOperationException.class, () -> decode(DEFAULT_DECODER, ABS_X0_X1));
-        Ir64Op.AbsGeneral op = (Ir64Op.AbsGeneral) decode(CSSC_DECODER, ABS_X0_X1);
+        IntegerOp64.AbsGeneral op = (IntegerOp64.AbsGeneral) decode(CSSC_DECODER, ABS_X0_X1);
         assertEquals(0, op.rd());
         assertEquals(1, op.rn());
         assertTrue(op.wide());
@@ -111,12 +115,12 @@ class Aarch64B196DiversosDecoderTest {
 
     @Test
     void dupScalarByteAndDoubleword() {
-        Ir64Op.VectorDuplicateElementScalar b = (Ir64Op.VectorDuplicateElementScalar) decode(DEFAULT_DECODER, DUP_B0_V1_B7);
+        AdvSimdMoveOp64.DuplicateElementScalar b = (AdvSimdMoveOp64.DuplicateElementScalar) decode(DEFAULT_DECODER, DUP_B0_V1_B7);
         assertEquals(0, b.esz());
         assertEquals(0, b.rd());
         assertEquals(1, b.rn());
         assertEquals(7, b.index());
-        Ir64Op.VectorDuplicateElementScalar d = (Ir64Op.VectorDuplicateElementScalar) decode(DEFAULT_DECODER, DUP_D0_V1_D1);
+        AdvSimdMoveOp64.DuplicateElementScalar d = (AdvSimdMoveOp64.DuplicateElementScalar) decode(DEFAULT_DECODER, DUP_D0_V1_D1);
         assertEquals(3, d.esz());
         assertEquals(1, d.index());
     }
@@ -124,18 +128,18 @@ class Aarch64B196DiversosDecoderTest {
     @Test
     void dupScalarNeverMisdecodedAsShaThreeRegister() {
         // opcode==1 (bit10=1) nunca deve cair no dispatch de SHA (todas as opcodes SHA são pares).
-        assertTrue(decode(DEFAULT_DECODER, DUP_B0_V1_B7) instanceof Ir64Op.VectorDuplicateElementScalar);
+        assertTrue(decode(DEFAULT_DECODER, DUP_B0_V1_B7) instanceof AdvSimdMoveOp64.DuplicateElementScalar);
     }
 
     // ── Bloco F: FMOV Vn.D[1] ───────────────────────────────────────────────────────────────────
 
     @Test
     void fmovHighHalfBothDirections() {
-        Ir64Op.Fp64HighHalfMove toGp = (Ir64Op.Fp64HighHalfMove) decode(DEFAULT_DECODER, FMOV_X0_V1_D1);
+        FpOp64.HighHalfMove toGp = (FpOp64.HighHalfMove) decode(DEFAULT_DECODER, FMOV_X0_V1_D1);
         assertFalse(toGp.toFloat());
         assertEquals(0, toGp.gpReg());
         assertEquals(1, toGp.fpReg());
-        Ir64Op.Fp64HighHalfMove toFp = (Ir64Op.Fp64HighHalfMove) decode(DEFAULT_DECODER, FMOV_V0_D1_X1);
+        FpOp64.HighHalfMove toFp = (FpOp64.HighHalfMove) decode(DEFAULT_DECODER, FMOV_V0_D1_X1);
         assertTrue(toFp.toFloat());
         assertEquals(0, toFp.fpReg());
         assertEquals(1, toFp.gpReg());
@@ -151,7 +155,7 @@ class Aarch64B196DiversosDecoderTest {
 
     @Test
     void movi2dSixtyFourBitPattern() {
-        Ir64Op.AdvSimdModifiedImmediate64 op = (Ir64Op.AdvSimdModifiedImmediate64) decode(DEFAULT_DECODER, MOVI_V0_2D);
+        AdvSimdMoveOp64.ModifiedImmediate64 op = (AdvSimdMoveOp64.ModifiedImmediate64) decode(DEFAULT_DECODER, MOVI_V0_2D);
         assertEquals(AdvSimdModifiedImmediateOp.MOV, op.op());
         assertTrue(op.q());
         assertEquals(0, op.rd());
@@ -160,7 +164,7 @@ class Aarch64B196DiversosDecoderTest {
 
     @Test
     void movi4hReplicatesHalfword() {
-        Ir64Op.AdvSimdModifiedImmediate64 op = (Ir64Op.AdvSimdModifiedImmediate64) decode(DEFAULT_DECODER, MOVI_V0_4H);
+        AdvSimdMoveOp64.ModifiedImmediate64 op = (AdvSimdMoveOp64.ModifiedImmediate64) decode(DEFAULT_DECODER, MOVI_V0_4H);
         assertEquals(AdvSimdModifiedImmediateOp.MOV, op.op());
         assertFalse(op.q());
         assertEquals(0x0012001200120012L, op.imm64());
@@ -168,23 +172,23 @@ class Aarch64B196DiversosDecoderTest {
 
     @Test
     void mvniShiftedByte() {
-        Ir64Op.AdvSimdModifiedImmediate64 op = (Ir64Op.AdvSimdModifiedImmediate64) decode(DEFAULT_DECODER, MVNI_V0_4S_SHIFT);
+        AdvSimdMoveOp64.ModifiedImmediate64 op = (AdvSimdMoveOp64.ModifiedImmediate64) decode(DEFAULT_DECODER, MVNI_V0_4S_SHIFT);
         assertEquals(AdvSimdModifiedImmediateOp.MVN, op.op());
         assertEquals(0x0000_0100_0000_0100L, op.imm64());
     }
 
     @Test
     void orrAndBicImmediate() {
-        Ir64Op.AdvSimdModifiedImmediate64 orr = (Ir64Op.AdvSimdModifiedImmediate64) decode(DEFAULT_DECODER, ORR_V0_4H);
+        AdvSimdMoveOp64.ModifiedImmediate64 orr = (AdvSimdMoveOp64.ModifiedImmediate64) decode(DEFAULT_DECODER, ORR_V0_4H);
         assertEquals(AdvSimdModifiedImmediateOp.ORR, orr.op());
-        Ir64Op.AdvSimdModifiedImmediate64 bic = (Ir64Op.AdvSimdModifiedImmediate64) decode(DEFAULT_DECODER, BIC_V0_4H);
+        AdvSimdMoveOp64.ModifiedImmediate64 bic = (AdvSimdMoveOp64.ModifiedImmediate64) decode(DEFAULT_DECODER, BIC_V0_4H);
         assertEquals(AdvSimdModifiedImmediateOp.BIC, bic.op());
         assertEquals(orr.imm64(), bic.imm64(), "MESMO imm64 expandido, operação diferente");
     }
 
     @Test
     void fmov64ImmediateIsMovWithDoublePrecisionValue() {
-        Ir64Op.AdvSimdModifiedImmediate64 op = (Ir64Op.AdvSimdModifiedImmediate64) decode(DEFAULT_DECODER, FMOV_V0_2D_IMM);
+        AdvSimdMoveOp64.ModifiedImmediate64 op = (AdvSimdMoveOp64.ModifiedImmediate64) decode(DEFAULT_DECODER, FMOV_V0_2D_IMM);
         assertEquals(AdvSimdModifiedImmediateOp.MOV, op.op());
         assertEquals(Double.doubleToLongBits(2.0), op.imm64());
     }
@@ -192,7 +196,7 @@ class Aarch64B196DiversosDecoderTest {
     @Test
     void fmoviHalfGatedByFp16() {
         assertThrows(UnsupportedOperationException.class, () -> decode(DEFAULT_DECODER, FMOVI_V0_4H));
-        Ir64Op.AdvSimdModifiedImmediate64 op = (Ir64Op.AdvSimdModifiedImmediate64) decode(FP16_DECODER, FMOVI_V0_4H);
+        AdvSimdMoveOp64.ModifiedImmediate64 op = (AdvSimdMoveOp64.ModifiedImmediate64) decode(FP16_DECODER, FMOVI_V0_4H);
         assertEquals(AdvSimdModifiedImmediateOp.MOV, op.op());
         long half1_0 = 0x3C00L; // binary16(1.0)
         assertEquals(half1_0 | (half1_0 << 16) | (half1_0 << 32) | (half1_0 << 48), op.imm64());

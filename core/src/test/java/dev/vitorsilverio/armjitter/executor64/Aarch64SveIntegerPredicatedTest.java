@@ -10,6 +10,7 @@ import dev.vitorsilverio.armjitter.ir64.Aarch64SystemRegisterId;
 import dev.vitorsilverio.armjitter.ir64.Ir64Block;
 import dev.vitorsilverio.armjitter.ir64.Ir64Op;
 import dev.vitorsilverio.armjitter.ir64.StandardIr64BlockLifter;
+import dev.vitorsilverio.armjitter.ir64.SveIntegerOp64;
 import dev.vitorsilverio.armjitter.memory.AddressSpace64;
 import dev.vitorsilverio.armjitter.support.TestAddressSpace;
 import org.junit.jupiter.api.Test;
@@ -84,7 +85,7 @@ class Aarch64SveIntegerPredicatedTest {
 
     private static boolean decodes(Aarch64Architecture architecture, int word) {
         try {
-            return decode(architecture, word) instanceof Ir64Op.SveIntegerPredicated;
+            return decode(architecture, word) instanceof SveIntegerOp64.IntegerPredicated;
         } catch (UnsupportedOperationException refused) {
             return false;
         }
@@ -233,65 +234,65 @@ class Aarch64SveIntegerPredicatedTest {
 
     static Stream<Arguments> decodeCases() {
         return Stream.of(
-                Arguments.of(0x04180861, Ir64Op.SveIntegerPredicated.Op.ORR), // orr z1.b, p2/m, z1.b, z3.b
-                Arguments.of(0x04190861, Ir64Op.SveIntegerPredicated.Op.EOR),
-                Arguments.of(0x041a0861, Ir64Op.SveIntegerPredicated.Op.AND),
-                Arguments.of(0x041b0861, Ir64Op.SveIntegerPredicated.Op.BIC),
-                Arguments.of(0x04000861, Ir64Op.SveIntegerPredicated.Op.ADD),
-                Arguments.of(0x04010861, Ir64Op.SveIntegerPredicated.Op.SUB),
-                Arguments.of(0x04030861, Ir64Op.SveIntegerPredicated.Op.SUB), // subr
-                Arguments.of(0x04080861, Ir64Op.SveIntegerPredicated.Op.SMAX),
-                Arguments.of(0x04090861, Ir64Op.SveIntegerPredicated.Op.UMAX),
-                Arguments.of(0x040a0861, Ir64Op.SveIntegerPredicated.Op.SMIN),
-                Arguments.of(0x040b0861, Ir64Op.SveIntegerPredicated.Op.UMIN),
-                Arguments.of(0x040c0861, Ir64Op.SveIntegerPredicated.Op.SABD),
-                Arguments.of(0x040d0861, Ir64Op.SveIntegerPredicated.Op.UABD),
-                Arguments.of(0x04100861, Ir64Op.SveIntegerPredicated.Op.MUL),
-                Arguments.of(0x04120861, Ir64Op.SveIntegerPredicated.Op.SMULH),
-                Arguments.of(0x04130861, Ir64Op.SveIntegerPredicated.Op.UMULH),
-                Arguments.of(0x04940861, Ir64Op.SveIntegerPredicated.Op.SDIV), // sdiv z1.s
-                Arguments.of(0x04950861, Ir64Op.SveIntegerPredicated.Op.UDIV),
-                Arguments.of(0x04960861, Ir64Op.SveIntegerPredicated.Op.SDIV), // sdivr
-                Arguments.of(0x04d70861, Ir64Op.SveIntegerPredicated.Op.UDIV), // udivr z1.d
-                Arguments.of(0x04108861, Ir64Op.SveIntegerPredicated.Op.ASR),
-                Arguments.of(0x04118861, Ir64Op.SveIntegerPredicated.Op.LSR),
-                Arguments.of(0x04138861, Ir64Op.SveIntegerPredicated.Op.LSL),
-                Arguments.of(0x04148861, Ir64Op.SveIntegerPredicated.Op.ASR), // asrr
-                Arguments.of(0x04158861, Ir64Op.SveIntegerPredicated.Op.LSR), // lsrr
-                Arguments.of(0x04178861, Ir64Op.SveIntegerPredicated.Op.LSL), // lslr
-                Arguments.of(0x04188861, Ir64Op.SveIntegerPredicated.Op.ASR_WIDE),
-                Arguments.of(0x04198861, Ir64Op.SveIntegerPredicated.Op.LSR_WIDE),
-                Arguments.of(0x041b8861, Ir64Op.SveIntegerPredicated.Op.LSL_WIDE),
-                Arguments.of(0x040089e1, Ir64Op.SveIntegerPredicated.Op.ASR_IMM), // asr z1.b, p2/m, z1.b, #1
-                Arguments.of(0x040189a1, Ir64Op.SveIntegerPredicated.Op.LSR_IMM),
-                Arguments.of(0x040389e1, Ir64Op.SveIntegerPredicated.Op.LSL_IMM),
-                Arguments.of(0x040489c1, Ir64Op.SveIntegerPredicated.Op.ASRD),
-                Arguments.of(0x04068961, Ir64Op.SveIntegerPredicated.Op.SQSHL_IMM),
-                Arguments.of(0x04078aa1, Ir64Op.SveIntegerPredicated.Op.UQSHL_IMM),
-                Arguments.of(0x044c8b21, Ir64Op.SveIntegerPredicated.Op.SRSHR),
-                Arguments.of(0x040d8901, Ir64Op.SveIntegerPredicated.Op.URSHR),
-                Arguments.of(0x044f8921, Ir64Op.SveIntegerPredicated.Op.SQSHLU),
-                Arguments.of(0x0418a861, Ir64Op.SveIntegerPredicated.Op.CLS),
-                Arguments.of(0x0459a861, Ir64Op.SveIntegerPredicated.Op.CLZ),
-                Arguments.of(0x049aa861, Ir64Op.SveIntegerPredicated.Op.CNT),
-                Arguments.of(0x04dba861, Ir64Op.SveIntegerPredicated.Op.CNOT),
-                Arguments.of(0x041ea861, Ir64Op.SveIntegerPredicated.Op.NOT),
-                Arguments.of(0x045ca861, Ir64Op.SveIntegerPredicated.Op.FABS),
-                Arguments.of(0x04dda861, Ir64Op.SveIntegerPredicated.Op.FNEG),
-                Arguments.of(0x0416a861, Ir64Op.SveIntegerPredicated.Op.ABS),
-                Arguments.of(0x04d7a861, Ir64Op.SveIntegerPredicated.Op.NEG),
-                Arguments.of(0x0450a861, Ir64Op.SveIntegerPredicated.Op.SXTB),
-                Arguments.of(0x0491a861, Ir64Op.SveIntegerPredicated.Op.UXTB),
-                Arguments.of(0x0492a861, Ir64Op.SveIntegerPredicated.Op.SXTH),
-                Arguments.of(0x04d3a861, Ir64Op.SveIntegerPredicated.Op.UXTH),
-                Arguments.of(0x04d4a861, Ir64Op.SveIntegerPredicated.Op.SXTW),
-                Arguments.of(0x04d5a861, Ir64Op.SveIntegerPredicated.Op.UXTW));
+                Arguments.of(0x04180861, SveIntegerOp64.IntegerPredicated.Op.ORR), // orr z1.b, p2/m, z1.b, z3.b
+                Arguments.of(0x04190861, SveIntegerOp64.IntegerPredicated.Op.EOR),
+                Arguments.of(0x041a0861, SveIntegerOp64.IntegerPredicated.Op.AND),
+                Arguments.of(0x041b0861, SveIntegerOp64.IntegerPredicated.Op.BIC),
+                Arguments.of(0x04000861, SveIntegerOp64.IntegerPredicated.Op.ADD),
+                Arguments.of(0x04010861, SveIntegerOp64.IntegerPredicated.Op.SUB),
+                Arguments.of(0x04030861, SveIntegerOp64.IntegerPredicated.Op.SUB), // subr
+                Arguments.of(0x04080861, SveIntegerOp64.IntegerPredicated.Op.SMAX),
+                Arguments.of(0x04090861, SveIntegerOp64.IntegerPredicated.Op.UMAX),
+                Arguments.of(0x040a0861, SveIntegerOp64.IntegerPredicated.Op.SMIN),
+                Arguments.of(0x040b0861, SveIntegerOp64.IntegerPredicated.Op.UMIN),
+                Arguments.of(0x040c0861, SveIntegerOp64.IntegerPredicated.Op.SABD),
+                Arguments.of(0x040d0861, SveIntegerOp64.IntegerPredicated.Op.UABD),
+                Arguments.of(0x04100861, SveIntegerOp64.IntegerPredicated.Op.MUL),
+                Arguments.of(0x04120861, SveIntegerOp64.IntegerPredicated.Op.SMULH),
+                Arguments.of(0x04130861, SveIntegerOp64.IntegerPredicated.Op.UMULH),
+                Arguments.of(0x04940861, SveIntegerOp64.IntegerPredicated.Op.SDIV), // sdiv z1.s
+                Arguments.of(0x04950861, SveIntegerOp64.IntegerPredicated.Op.UDIV),
+                Arguments.of(0x04960861, SveIntegerOp64.IntegerPredicated.Op.SDIV), // sdivr
+                Arguments.of(0x04d70861, SveIntegerOp64.IntegerPredicated.Op.UDIV), // udivr z1.d
+                Arguments.of(0x04108861, SveIntegerOp64.IntegerPredicated.Op.ASR),
+                Arguments.of(0x04118861, SveIntegerOp64.IntegerPredicated.Op.LSR),
+                Arguments.of(0x04138861, SveIntegerOp64.IntegerPredicated.Op.LSL),
+                Arguments.of(0x04148861, SveIntegerOp64.IntegerPredicated.Op.ASR), // asrr
+                Arguments.of(0x04158861, SveIntegerOp64.IntegerPredicated.Op.LSR), // lsrr
+                Arguments.of(0x04178861, SveIntegerOp64.IntegerPredicated.Op.LSL), // lslr
+                Arguments.of(0x04188861, SveIntegerOp64.IntegerPredicated.Op.ASR_WIDE),
+                Arguments.of(0x04198861, SveIntegerOp64.IntegerPredicated.Op.LSR_WIDE),
+                Arguments.of(0x041b8861, SveIntegerOp64.IntegerPredicated.Op.LSL_WIDE),
+                Arguments.of(0x040089e1, SveIntegerOp64.IntegerPredicated.Op.ASR_IMM), // asr z1.b, p2/m, z1.b, #1
+                Arguments.of(0x040189a1, SveIntegerOp64.IntegerPredicated.Op.LSR_IMM),
+                Arguments.of(0x040389e1, SveIntegerOp64.IntegerPredicated.Op.LSL_IMM),
+                Arguments.of(0x040489c1, SveIntegerOp64.IntegerPredicated.Op.ASRD),
+                Arguments.of(0x04068961, SveIntegerOp64.IntegerPredicated.Op.SQSHL_IMM),
+                Arguments.of(0x04078aa1, SveIntegerOp64.IntegerPredicated.Op.UQSHL_IMM),
+                Arguments.of(0x044c8b21, SveIntegerOp64.IntegerPredicated.Op.SRSHR),
+                Arguments.of(0x040d8901, SveIntegerOp64.IntegerPredicated.Op.URSHR),
+                Arguments.of(0x044f8921, SveIntegerOp64.IntegerPredicated.Op.SQSHLU),
+                Arguments.of(0x0418a861, SveIntegerOp64.IntegerPredicated.Op.CLS),
+                Arguments.of(0x0459a861, SveIntegerOp64.IntegerPredicated.Op.CLZ),
+                Arguments.of(0x049aa861, SveIntegerOp64.IntegerPredicated.Op.CNT),
+                Arguments.of(0x04dba861, SveIntegerOp64.IntegerPredicated.Op.CNOT),
+                Arguments.of(0x041ea861, SveIntegerOp64.IntegerPredicated.Op.NOT),
+                Arguments.of(0x045ca861, SveIntegerOp64.IntegerPredicated.Op.FABS),
+                Arguments.of(0x04dda861, SveIntegerOp64.IntegerPredicated.Op.FNEG),
+                Arguments.of(0x0416a861, SveIntegerOp64.IntegerPredicated.Op.ABS),
+                Arguments.of(0x04d7a861, SveIntegerOp64.IntegerPredicated.Op.NEG),
+                Arguments.of(0x0450a861, SveIntegerOp64.IntegerPredicated.Op.SXTB),
+                Arguments.of(0x0491a861, SveIntegerOp64.IntegerPredicated.Op.UXTB),
+                Arguments.of(0x0492a861, SveIntegerOp64.IntegerPredicated.Op.SXTH),
+                Arguments.of(0x04d3a861, SveIntegerOp64.IntegerPredicated.Op.UXTH),
+                Arguments.of(0x04d4a861, SveIntegerOp64.IntegerPredicated.Op.SXTW),
+                Arguments.of(0x04d5a861, SveIntegerOp64.IntegerPredicated.Op.UXTW));
     }
 
     @ParameterizedTest
     @MethodSource("decodeCases")
-    void assemblerWordsDecodeToTheExpectedOperation(int word, Ir64Op.SveIntegerPredicated.Op expected) {
-        Ir64Op.SveIntegerPredicated op = assertInstanceOf(Ir64Op.SveIntegerPredicated.class, decode(SVE2, word));
+    void assemblerWordsDecodeToTheExpectedOperation(int word, SveIntegerOp64.IntegerPredicated.Op expected) {
+        SveIntegerOp64.IntegerPredicated op = assertInstanceOf(SveIntegerOp64.IntegerPredicated.class, decode(SVE2, word));
         assertEquals(expected, op.op());
         assertEquals(P2, op.pg());
         assertEquals(Z1, op.rd());
@@ -300,10 +301,10 @@ class Aarch64SveIntegerPredicatedTest {
 
     @Test
     void reverseFormsSwapTheOperandsInsteadOfDecodingAsTheDirectForm() {
-        Ir64Op.SveIntegerPredicated direct = (Ir64Op.SveIntegerPredicated) decode(SVE, 0x04010861); // sub
-        Ir64Op.SveIntegerPredicated reverse = (Ir64Op.SveIntegerPredicated) decode(SVE, 0x04030861); // subr
-        assertEquals(Ir64Op.SveIntegerPredicated.Op.SUB, direct.op());
-        assertEquals(Ir64Op.SveIntegerPredicated.Op.SUB, reverse.op());
+        SveIntegerOp64.IntegerPredicated direct = (SveIntegerOp64.IntegerPredicated) decode(SVE, 0x04010861); // sub
+        SveIntegerOp64.IntegerPredicated reverse = (SveIntegerOp64.IntegerPredicated) decode(SVE, 0x04030861); // subr
+        assertEquals(SveIntegerOp64.IntegerPredicated.Op.SUB, direct.op());
+        assertEquals(SveIntegerOp64.IntegerPredicated.Op.SUB, reverse.op());
         assertEquals(Z1, direct.rn());
         assertEquals(Z3, direct.rm());
         assertEquals(Z3, reverse.rn(), "subr Zdn = Zm - Zdn: o campo 9:5 é o primeiro operando");
@@ -313,8 +314,8 @@ class Aarch64SveIntegerPredicatedTest {
     @Test
     void zeroingFormsDecodeOnlyWithSve2p2AndCarryTheFlag() {
         int absZ = 0x0406a861; // abs z1.b, p2/z, z3.b
-        Ir64Op.SveIntegerPredicated op = (Ir64Op.SveIntegerPredicated) decode(SVE2P2, absZ);
-        assertEquals(Ir64Op.SveIntegerPredicated.Op.ABS, op.op());
+        SveIntegerOp64.IntegerPredicated op = (SveIntegerOp64.IntegerPredicated) decode(SVE2P2, absZ);
+        assertEquals(SveIntegerOp64.IntegerPredicated.Op.ABS, op.op());
         assertTrue(op.zeroing());
         assertThrows(UnsupportedOperationException.class, () -> decode(SVE2, absZ));
         assertThrows(UnsupportedOperationException.class, () -> decode(SVE, absZ));
@@ -324,10 +325,10 @@ class Aarch64SveIntegerPredicatedTest {
     void theFiveSve2ImmediateShiftsAreGatedBySve2() {
         int[] sve2Only = {0x04068961, 0x04078aa1, 0x044c8b21, 0x040d8901, 0x044f8921};
         for (int word : sve2Only) {
-            assertInstanceOf(Ir64Op.SveIntegerPredicated.class, decode(SVE2, word));
+            assertInstanceOf(SveIntegerOp64.IntegerPredicated.class, decode(SVE2, word));
             assertThrows(UnsupportedOperationException.class, () -> decode(SVE, word), Integer.toHexString(word));
         }
-        assertInstanceOf(Ir64Op.SveIntegerPredicated.class, decode(SVE, 0x040089e1)); // asr é SVE puro
+        assertInstanceOf(SveIntegerOp64.IntegerPredicated.class, decode(SVE, 0x040089e1)); // asr é SVE puro
     }
 
     /// A escada do épico diz 68 encodings: 20 binárias + 18 de shift + 30 unárias (15 `_m` + 15 `_z`).

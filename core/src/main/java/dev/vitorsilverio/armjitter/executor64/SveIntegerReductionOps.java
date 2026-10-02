@@ -2,7 +2,7 @@ package dev.vitorsilverio.armjitter.executor64;
 
 import dev.vitorsilverio.armjitter.core64.Aarch64Core;
 import dev.vitorsilverio.armjitter.core64.Aarch64ScalableRegisters;
-import dev.vitorsilverio.armjitter.ir64.Ir64Op;
+import dev.vitorsilverio.armjitter.ir64.SveIntegerOp64;
 
 import java.util.Arrays;
 
@@ -29,7 +29,7 @@ final class SveIntegerReductionOps {
     }
 
     /// Executa uma redução. `true` = a instrução já entrou numa exceção (acesso negado).
-    static boolean execute(Aarch64Core core, Ir64Op.SveIntegerReduction op) {
+    static boolean execute(Aarch64Core core, SveIntegerOp64.IntegerReduction op) {
         if (!SvePredicateOps.accessAllowed(core, op.instructionAddress())) {
             return true;
         }
@@ -41,7 +41,7 @@ final class SveIntegerReductionOps {
         return false;
     }
 
-    private static boolean isSegment(Ir64Op.SveIntegerReduction.Op kind) {
+    private static boolean isSegment(SveIntegerOp64.IntegerReduction.Op kind) {
         return switch (kind) {
             case ORQV, EORQV, ANDQV, ADDQV, SMAXQV, UMAXQV, SMINQV, UMINQV -> true;
             default -> false;
@@ -53,11 +53,11 @@ final class SveIntegerReductionOps {
         return ((regs.pWord(pg, bit >>> WORD_INDEX_SHIFT) >>> (bit & WORD_BIT_MASK)) & 1L) != 0L;
     }
 
-    private static void scalar(Aarch64Core core, Ir64Op.SveIntegerReduction op) {
+    private static void scalar(Aarch64Core core, SveIntegerOp64.IntegerReduction op) {
         Aarch64ScalableRegisters regs = core.scalable();
         int esz = op.esz();
         int elements = core.vectorLengthBytes() >> esz;
-        boolean sum64 = op.op() == Ir64Op.SveIntegerReduction.Op.SADDV || op.op() == Ir64Op.SveIntegerReduction.Op.UADDV;
+        boolean sum64 = op.op() == SveIntegerOp64.IntegerReduction.Op.SADDV || op.op() == SveIntegerOp64.IntegerReduction.Op.UADDV;
         long accumulator = neutral(op.op(), esz);
         for (int e = 0; e < elements; e++) {
             if (active(regs, op.pg(), e, esz)) {
@@ -72,7 +72,7 @@ final class SveIntegerReductionOps {
         core.fp().setScalar(op.rd(), sum64 ? ESZ_DOUBLEWORD : esz, accumulator);
     }
 
-    private static void segment(Aarch64Core core, Ir64Op.SveIntegerReduction op) {
+    private static void segment(Aarch64Core core, SveIntegerOp64.IntegerReduction op) {
         Aarch64ScalableRegisters regs = core.scalable();
         int esz = op.esz();
         int perSegment = SEGMENT_BYTES >> esz;
@@ -98,7 +98,7 @@ final class SveIntegerReductionOps {
     }
 
     /// Valor neutro (predicado vazio) no tamanho do elemento, já mascarado.
-    private static long neutral(Ir64Op.SveIntegerReduction.Op kind, int esz) {
+    private static long neutral(SveIntegerOp64.IntegerReduction.Op kind, int esz) {
         long mask = SveIntegerOps.elementMask(esz);
         long signBit = 1L << (SveIntegerOps.elementBits(esz) - 1);
         return switch (kind) {
@@ -110,7 +110,7 @@ final class SveIntegerReductionOps {
     }
 
     /// Um passo da redução no tamanho do elemento (`accumulator` e `element` já mascarados).
-    private static long combine(Ir64Op.SveIntegerReduction.Op kind, long accumulator, long element, int esz) {
+    private static long combine(SveIntegerOp64.IntegerReduction.Op kind, long accumulator, long element, int esz) {
         long mask = SveIntegerOps.elementMask(esz);
         long signedAccumulator = SveIntegerOps.signExtend(accumulator, esz);
         long signedElement = SveIntegerOps.signExtend(element, esz);

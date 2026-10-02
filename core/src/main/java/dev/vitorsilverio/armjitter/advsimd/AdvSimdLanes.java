@@ -3012,7 +3012,7 @@ public final class AdvSimdLanes {
 
     /// As 5 direções de arredondamento usadas por {@link #convertFloatToFixed} — PÚBLICO desde a
     /// B14.5 (antes, enum LOCAL "para não criar dependência de `advsimd` sobre `ir64`"; permanece
-    /// sem relação com o `Ir64Op.Fp64RoundingDirection` do lado A64, que continua seu próprio tipo —
+    /// sem relação com o `FpOp64.Fp64RoundingDirection` do lado A64, que continua seu próprio tipo —
     /// só o núcleo de {@code advsimd}, já COMPARTILHADO entre A32 e A64, ficou visível para que
     /// `VRINT{A,N,P,M}`/`VCVT{A,N,P,M}` (VFP incondicional de 32 bits, espaço `1111 1110`) reusem
     /// {@link #roundForConversion} diretamente em vez de duplicar a tabela `rm`→direção e o

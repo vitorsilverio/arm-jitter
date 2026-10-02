@@ -2,7 +2,7 @@ package dev.vitorsilverio.armjitter.executor64;
 
 import dev.vitorsilverio.armjitter.core64.Aarch64Core;
 import dev.vitorsilverio.armjitter.core64.Aarch64ScalableRegisters;
-import dev.vitorsilverio.armjitter.ir64.Ir64Op;
+import dev.vitorsilverio.armjitter.ir64.SveFpOp64;
 
 /// Semântica do multiply-add de ponto flutuante SVE (B17.14): `FMLA`/`FMLS`/`FNMLA`/`FNMLS` predicados (as oito
 /// linhas, `FMAD`/`FMSB`/`FNMAD`/`FNMSB` inclusive), `FMLA`/`FMLS`/`FMUL` por elemento indexado, `FCADD` e `FCMLA`
@@ -33,7 +33,7 @@ final class SveFpMultiplyAddOps {
     }
 
     /// Executa uma operação do grupo. `true` = a instrução já entrou numa exceção (acesso negado).
-    static boolean execute(Aarch64Core core, Ir64Op.SveFpMultiplyAdd op) {
+    static boolean execute(Aarch64Core core, SveFpOp64.FpMultiplyAdd op) {
         if (!SvePredicateOps.accessAllowed(core, op.instructionAddress())) {
             return true;
         }
@@ -78,13 +78,13 @@ final class SveFpMultiplyAddOps {
 
     // ── FMLA/FMLS/FNMLA/FNMLS predicados ─────────────────────────────────────────────────────────
 
-    private static void multiplyAdd(Aarch64ScalableRegisters regs, Ir64Op.SveFpMultiplyAdd op, int elements,
+    private static void multiplyAdd(Aarch64ScalableRegisters regs, SveFpOp64.FpMultiplyAdd op, int elements,
             SveFloat.Env env) {
         int esz = storageEsz(op.esz());
-        boolean negateProduct = op.op() == Ir64Op.SveFpMultiplyAdd.Op.FMLS
-                || op.op() == Ir64Op.SveFpMultiplyAdd.Op.FNMLA;
-        boolean negateAddend = op.op() == Ir64Op.SveFpMultiplyAdd.Op.FNMLA
-                || op.op() == Ir64Op.SveFpMultiplyAdd.Op.FNMLS;
+        boolean negateProduct = op.op() == SveFpOp64.FpMultiplyAdd.Op.FMLS
+                || op.op() == SveFpOp64.FpMultiplyAdd.Op.FNMLA;
+        boolean negateAddend = op.op() == SveFpOp64.FpMultiplyAdd.Op.FNMLA
+                || op.op() == SveFpOp64.FpMultiplyAdd.Op.FNMLS;
         for (int e = 0; e < elements; e++) {
             if (!active(regs, op.pg(), e, esz)) {
                 continue;
@@ -99,11 +99,11 @@ final class SveFpMultiplyAddOps {
 
     // ── FMLA/FMLS/FMUL indexados ─────────────────────────────────────────────────────────────────
 
-    private static void multiplyAddIndexed(Aarch64ScalableRegisters regs, Ir64Op.SveFpMultiplyAdd op, int elements,
+    private static void multiplyAddIndexed(Aarch64ScalableRegisters regs, SveFpOp64.FpMultiplyAdd op, int elements,
             SveFloat.Env env) {
         int esz = storageEsz(op.esz());
         int perSegment = SEGMENT_BYTES >> esz;
-        boolean negateProduct = op.op() == Ir64Op.SveFpMultiplyAdd.Op.FMLS;
+        boolean negateProduct = op.op() == SveFpOp64.FpMultiplyAdd.Op.FMLS;
         for (int base = 0; base < elements; base += perSegment) {
             long m = SveIntegerOps.get(regs, op.rm(), base + op.index(), esz);
             for (int e = base; e < base + perSegment; e++) {
@@ -115,7 +115,7 @@ final class SveFpMultiplyAddOps {
         }
     }
 
-    private static void multiplyIndexed(Aarch64ScalableRegisters regs, Ir64Op.SveFpMultiplyAdd op, int elements,
+    private static void multiplyIndexed(Aarch64ScalableRegisters regs, SveFpOp64.FpMultiplyAdd op, int elements,
             SveFloat.Env env) {
         int esz = storageEsz(op.esz());
         int perSegment = SEGMENT_BYTES >> esz;
@@ -133,7 +133,7 @@ final class SveFpMultiplyAddOps {
     /// `FCADD`: `Zdn` (par real/imaginário) mais `Zm` rodado de 90° (`rot = 0`) ou 270° (`rot = 1`):
     /// `90°`: `re = n_re − m_im`, `im = n_im + m_re`; `270°`: `re = n_re + m_im`, `im = n_im − m_re`. O sinal é
     /// invertido no operando e a soma é uma soma (não uma subtração), como o QEMU.
-    private static void complexAdd(Aarch64ScalableRegisters regs, Ir64Op.SveFpMultiplyAdd op, int elements,
+    private static void complexAdd(Aarch64ScalableRegisters regs, SveFpOp64.FpMultiplyAdd op, int elements,
             SveFloat.Env env) {
         int esz = op.esz();
         boolean rotate270 = op.rot() == FCADD_ROTATE_270;
@@ -157,7 +157,7 @@ final class SveFpMultiplyAddOps {
     /// `FCMLA`: uma das quatro parcelas do produto complexo acumuladas em `Zda` (par real/imaginário). Com
     /// `flip = rot & 1`, `negImag = rot >> 1` e `negReal = flip ^ negImag`: `e2 = flip ? n_im : n_re`,
     /// `re += e2 × ±(flip ? m_im : m_re)`, `im += e2 × ±(flip ? m_re : m_im)`.
-    private static void complexMultiplyAdd(Aarch64ScalableRegisters regs, Ir64Op.SveFpMultiplyAdd op, int elements,
+    private static void complexMultiplyAdd(Aarch64ScalableRegisters regs, SveFpOp64.FpMultiplyAdd op, int elements,
             SveFloat.Env env) {
         int esz = op.esz();
         boolean flip = (op.rot() & ROT_FLIP_MASK) != 0;
@@ -187,7 +187,7 @@ final class SveFpMultiplyAddOps {
 
     /// `FCMLA` indexado: o índice escolhe um PAR (real, imaginário) de `Zm` dentro de cada segmento de 128 bits;
     /// não é predicado.
-    private static void complexMultiplyAddIndexed(Aarch64ScalableRegisters regs, Ir64Op.SveFpMultiplyAdd op,
+    private static void complexMultiplyAddIndexed(Aarch64ScalableRegisters regs, SveFpOp64.FpMultiplyAdd op,
             int elements, SveFloat.Env env) {
         int esz = op.esz();
         int perSegment = SEGMENT_BYTES >> esz;

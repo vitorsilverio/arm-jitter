@@ -10,6 +10,7 @@ import dev.vitorsilverio.armjitter.ir64.Aarch64SystemRegisterId;
 import dev.vitorsilverio.armjitter.ir64.Ir64Block;
 import dev.vitorsilverio.armjitter.ir64.Ir64Op;
 import dev.vitorsilverio.armjitter.ir64.StandardIr64BlockLifter;
+import dev.vitorsilverio.armjitter.ir64.SveIntegerOp64;
 import dev.vitorsilverio.armjitter.memory.AddressSpace64;
 import dev.vitorsilverio.armjitter.support.TestAddressSpace;
 import org.junit.jupiter.api.Test;
@@ -55,10 +56,10 @@ class Aarch64SveMultiplyIndexedTest {
     private static final Aarch64Architecture FULL = Aarch64Architecture.extending(SVE2P1, "teste-completa",
             Aarch64Feature.INT8_MATRIX_MULTIPLY);
 
-    private record Row(int word, String asm, Ir64Op.SveMultiplyIndexed.Op op, int esz, int rm, boolean indexed,
+    private record Row(int word, String asm, SveIntegerOp64.MultiplyIndexed.Op op, int esz, int rm, boolean indexed,
             int index, int rot, boolean top, int ways) {
-        Ir64Op.SveMultiplyIndexed expectedOp() {
-            return new Ir64Op.SveMultiplyIndexed(op, esz, RD, RN, rm, indexed, index, rot, top, ways, 0L);
+        SveIntegerOp64.MultiplyIndexed expectedOp() {
+            return new SveIntegerOp64.MultiplyIndexed(op, esz, RD, RN, rm, indexed, index, rot, top, ways, 0L);
         }
 
         /// Menor arquitetura de teste que aceita a linha.
@@ -82,7 +83,7 @@ class Aarch64SveMultiplyIndexedTest {
 
     private static Row row(int word, String asm, String op, int esz, int rm, boolean indexed, int index, int rot,
             boolean top, int ways) {
-        return new Row(word, asm, Ir64Op.SveMultiplyIndexed.Op.valueOf(op), esz, rm, indexed, index, rot, top, ways);
+        return new Row(word, asm, SveIntegerOp64.MultiplyIndexed.Op.valueOf(op), esz, rm, indexed, index, rot, top, ways);
     }
 
     private static Stream<Row> rows() {
@@ -363,10 +364,10 @@ class Aarch64SveMultiplyIndexedTest {
             int segment) {
         int ways = row.ways();
         int sourceBits = bits / ways;
-        boolean signedN = row.op() == Ir64Op.SveMultiplyIndexed.Op.SDOT
-                || row.op() == Ir64Op.SveMultiplyIndexed.Op.SUDOT;
-        boolean signedM = row.op() == Ir64Op.SveMultiplyIndexed.Op.SDOT
-                || row.op() == Ir64Op.SveMultiplyIndexed.Op.USDOT;
+        boolean signedN = row.op() == SveIntegerOp64.MultiplyIndexed.Op.SDOT
+                || row.op() == SveIntegerOp64.MultiplyIndexed.Op.SUDOT;
+        boolean signedM = row.op() == SveIntegerOp64.MultiplyIndexed.Op.SDOT
+                || row.op() == SveIntegerOp64.MultiplyIndexed.Op.USDOT;
         BigInteger sum = acc;
         for (int k = 0; k < ways; k++) {
             int mIndex = row.indexed() ? segment * perSegment * ways + row.index() * ways + k : i * ways + k;
@@ -435,7 +436,7 @@ class Aarch64SveMultiplyIndexedTest {
             }
         }
         BigInteger product = negative ? x.multiply(y).negate() : x.multiply(y);
-        if (row.op() == Ir64Op.SveMultiplyIndexed.Op.SQRDCMLAH) {
+        if (row.op() == SveIntegerOp64.MultiplyIndexed.Op.SQRDCMLAH) {
             return truncate(doublingHigh(signedElement(a, i, bits), product, true, bits), bits);
         }
         return truncate(unsignedElement(a, i, bits).add(product), bits);
@@ -444,8 +445,8 @@ class Aarch64SveMultiplyIndexedTest {
     private static long widening(Row row, int i, long[] n, long[] m, BigInteger acc, BigInteger signedAcc, int bits,
             int perSegment, int segment) {
         int narrow = bits / 2;
-        boolean unsigned = row.op() == Ir64Op.SveMultiplyIndexed.Op.UMLAL
-                || row.op() == Ir64Op.SveMultiplyIndexed.Op.UMLSL || row.op() == Ir64Op.SveMultiplyIndexed.Op.UMULL;
+        boolean unsigned = row.op() == SveIntegerOp64.MultiplyIndexed.Op.UMLAL
+                || row.op() == SveIntegerOp64.MultiplyIndexed.Op.UMLSL || row.op() == SveIntegerOp64.MultiplyIndexed.Op.UMULL;
         int nIndex = 2 * i + (row.top() ? 1 : 0);
         int mIndex = segment * perSegment * 2 + row.index();
         BigInteger nn = unsigned ? unsignedElement(n, nIndex, narrow) : signedElement(n, nIndex, narrow);
@@ -508,7 +509,7 @@ class Aarch64SveMultiplyIndexedTest {
 
     @Test
     void usdotAndSudotDoNotExistForDoubleDestinations() {
-        Row usdot = rows().filter(r -> r.op() == Ir64Op.SveMultiplyIndexed.Op.USDOT).findFirst().orElseThrow();
+        Row usdot = rows().filter(r -> r.op() == SveIntegerOp64.MultiplyIndexed.Op.USDOT).findFirst().orElseThrow();
         assertTrue(refused(FULL, usdot.word() | (1 << 22)));
     }
 
@@ -556,7 +557,7 @@ class Aarch64SveMultiplyIndexedTest {
     @Test
     void theIndexIsPerSegmentNotPerVector() {
         // mul z0.s, z3.s, z7.s[1] em VL = 256: o segmento 1 usa o elemento 5 de Zm (= 4 + 1), não o 1.
-        Row mul = rows().filter(r -> r.op() == Ir64Op.SveMultiplyIndexed.Op.MUL && r.esz() == 2).findFirst()
+        Row mul = rows().filter(r -> r.op() == SveIntegerOp64.MultiplyIndexed.Op.MUL && r.esz() == 2).findFirst()
                 .orElseThrow();
         Aarch64Core core = core(FULL, 256);
         for (int e = 0; e < 8; e++) {

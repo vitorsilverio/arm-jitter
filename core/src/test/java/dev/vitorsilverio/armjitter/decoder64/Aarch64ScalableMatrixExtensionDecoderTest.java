@@ -2,6 +2,7 @@ package dev.vitorsilverio.armjitter.decoder64;
 
 import dev.vitorsilverio.armjitter.arch64.Aarch64Architecture;
 import dev.vitorsilverio.armjitter.ir64.Ir64Op;
+import dev.vitorsilverio.armjitter.ir64.SystemOp64;
 import dev.vitorsilverio.armjitter.memory.AddressSpace64;
 import dev.vitorsilverio.armjitter.support.TestAddressSpace;
 import org.junit.jupiter.api.Test;
@@ -15,7 +16,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /// `MSR SVCR<mask>, #imm` (`FEAT_SME`, ARMv9.2-A) — os aliases `SMSTART`/`SMSTOP`. B19.28 só os decodificava
-/// e recusava; a B18.2 os transforma em {@link Ir64Op.StreamingModeControl}. Sem `FEAT_SME` nada muda (G3):
+/// e recusava; a B18.2 os transforma em {@link SystemOp64.StreamingModeControl}. Sem `FEAT_SME` nada muda (G3):
 /// o mesmo `unsupported` genérico de qualquer feature ausente. Todas as palavras foram conferidas contra
 /// `aarch64-none-elf-as -march=armv9.2-a+sme` (devkitA64), nunca calculadas à mão.
 class Aarch64ScalableMatrixExtensionDecoderTest {
@@ -61,8 +62,8 @@ class Aarch64ScalableMatrixExtensionDecoderTest {
     }
 
     private static void assertControl(int word, boolean enable, boolean streamingMode, boolean za) {
-        Ir64Op.StreamingModeControl op =
-                assertInstanceOf(Ir64Op.StreamingModeControl.class, decode(SME_DECODER, word));
+        SystemOp64.StreamingModeControl op =
+                assertInstanceOf(SystemOp64.StreamingModeControl.class, decode(SME_DECODER, word));
         assertEquals(enable, op.enable(), "enable de 0x" + Integer.toHexString(word));
         assertEquals(streamingMode, op.streamingMode(), "SM de 0x" + Integer.toHexString(word));
         assertEquals(za, op.za(), "ZA de 0x" + Integer.toHexString(word));

@@ -24,7 +24,7 @@ public interface Aarch64SystemRegisterBus {
     /// `MSR`: escreve um valor de 64 bits no registrador de sistema.
     void write(Aarch64SystemRegisterId register, long value);
 
-    /// `TLBI VMALLE1`/`TLBI VMALLE1IS` (B6.6.3, `Ir64Op.SystemInstruction`) — não é `MRS`/`MSR`
+    /// `TLBI VMALLE1`/`TLBI VMALLE1IS` (B6.6.3, `SystemOp64.SystemInstruction`) — não é `MRS`/`MSR`
     /// (achado real de B6.6.3, `SYS` é um subgrupo de encoding diferente), mas vive no MESMO
     /// barramento porque é o único gancho que o hospedeiro instala em {@link Aarch64Core} para
     /// ações de nível de sistema. Default NOP — barramentos sem MMU instalada (ex.
@@ -32,7 +32,7 @@ public interface Aarch64SystemRegisterBus {
     default void invalidateTlbAll() {
     }
 
-    /// `AT S1E1R`/`S1E1W`/`S1E0R`/`S1E0W` (B10.6, `Ir64Op.AddressTranslate`): traduz `va` pelo
+    /// `AT S1E1R`/`S1E1W`/`S1E0R`/`S1E0W` (B10.6, `SystemOp64.AddressTranslate`): traduz `va` pelo
     /// regime EL1&0 real e escreve o resultado em `PAR_EL1` — SEM devolver nada ao chamador (o
     /// contrato de `AT` é escrever `PAR_EL1`, nunca `Xt`) e SEM lançar em falha de tradução (a falha
     /// vira `PAR_EL1.F=1`, capturada pela implementação real). Diferente de

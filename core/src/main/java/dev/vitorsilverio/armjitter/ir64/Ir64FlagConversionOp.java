@@ -1,6 +1,6 @@
 package dev.vitorsilverio.armjitter.ir64;
 
-/// Sub-operação de {@link Ir64Op.ConvertFlags} (B8.2, `FEAT_FlagM2`) — as 3 instruções da classe
+/// Sub-operação de {@link IntegerOp64.ConvertFlags} (B8.2, `FEAT_FlagM2`) — as 3 instruções da classe
 /// "System" que manipulam `PSTATE.{N,Z,C,V}` diretamente, sem operando de registrador geral.
 public enum Ir64FlagConversionOp {
     /// `CFINV` (`ARM DDI 0487 C6.2.43`): inverte `PSTATE.C`, os outros 3 flags não mudam.

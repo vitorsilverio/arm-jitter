@@ -1,8 +1,8 @@
 package dev.vitorsilverio.armjitter.ir64;
 
-/// Operação de {@link Ir64Op.VectorArithmeticUnary} (AdvSIMD "two-register miscellaneous", B8.7)
+/// Operação de {@link AdvSimdIntegerOp64.ArithmeticUnary} (AdvSIMD "two-register miscellaneous", B8.7)
 /// — um único operando de origem (`Rn`), inteiro. Cobre também a forma ESCALAR (`ABS_s`/`NEG_s`/
-/// `CM**0_s`, sempre `esz=3`/`q=false`, mesmo truque de {@link Ir64Op.VectorArithmeticThreeSame}).
+/// `CM**0_s`, sempre `esz=3`/`q=false`, mesmo truque de {@link AdvSimdIntegerOp64.ArithmeticThreeSame}).
 public enum Ir64VectorUnaryOp {
     /// `|sext(Rn)|`.
     ABS,

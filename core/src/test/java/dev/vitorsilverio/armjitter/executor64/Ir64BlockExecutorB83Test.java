@@ -3,7 +3,7 @@ package dev.vitorsilverio.armjitter.executor64;
 import dev.vitorsilverio.armjitter.core.CpuSleepState;
 import dev.vitorsilverio.armjitter.core64.Aarch64Core;
 import dev.vitorsilverio.armjitter.ir64.Ir64SystemInstructionOp;
-import dev.vitorsilverio.armjitter.ir64.Ir64Op;
+import dev.vitorsilverio.armjitter.ir64.SystemOp64;
 import dev.vitorsilverio.armjitter.memory.AddressSpace64;
 import dev.vitorsilverio.armjitter.support.TestAddressSpace;
 import org.junit.jupiter.api.Test;
@@ -77,7 +77,7 @@ class Ir64BlockExecutorB83Test {
         core.markExclusiveMonitor(0x100, 8);
 
         boolean pcChanged = EXECUTOR.executeOp(core,
-                new Ir64Op.SystemInstruction(Ir64SystemInstructionOp.CLEAR_EXCLUSIVE));
+                new SystemOp64.SystemInstruction(Ir64SystemInstructionOp.CLEAR_EXCLUSIVE));
 
         assertFalse(pcChanged);
         assertEquals(-1L, core.exclusiveMonitorAddress());
@@ -89,8 +89,8 @@ class Ir64BlockExecutorB83Test {
         assertFalse(core.pstate().irqDisabled());
 
         // mask=0b0010: só o bit I (posição 1, ordem D:A:I:F) — D/A/F ignorados (sem consumidor
-        // modelado, ver javadoc de Ir64Op.InterruptMask).
-        EXECUTOR.executeOp(core, new Ir64Op.InterruptMask(true, 0b0010));
+        // modelado, ver javadoc de SystemOp64.InterruptMask).
+        EXECUTOR.executeOp(core, new SystemOp64.InterruptMask(true, 0b0010));
 
         assertTrue(core.pstate().irqDisabled());
     }
@@ -99,7 +99,7 @@ class Ir64BlockExecutorB83Test {
     void daifSetWithoutBitIDoesNotMaskIrq() {
         Aarch64Core core = newCore();
 
-        EXECUTOR.executeOp(core, new Ir64Op.InterruptMask(true, 0b1101)); // D,A,F, sem I
+        EXECUTOR.executeOp(core, new SystemOp64.InterruptMask(true, 0b1101)); // D,A,F, sem I
 
         assertFalse(core.pstate().irqDisabled(), "D/A/F não têm consumidor modelado neste emulador");
     }
@@ -109,7 +109,7 @@ class Ir64BlockExecutorB83Test {
         Aarch64Core core = newCore();
         core.pstate().setIrqDisabled(true);
 
-        EXECUTOR.executeOp(core, new Ir64Op.InterruptMask(false, 0b0010));
+        EXECUTOR.executeOp(core, new SystemOp64.InterruptMask(false, 0b0010));
 
         assertFalse(core.pstate().irqDisabled());
     }
@@ -118,7 +118,7 @@ class Ir64BlockExecutorB83Test {
     void wfetIsANopLikeWfeNoTimeoutModeled() {
         Aarch64Core core = newCore();
 
-        EXECUTOR.executeOp(core, new Ir64Op.SystemInstruction(Ir64SystemInstructionOp.NOP_HINT));
+        EXECUTOR.executeOp(core, new SystemOp64.SystemInstruction(Ir64SystemInstructionOp.NOP_HINT));
 
         assertEquals(CpuSleepState.RUNNING, core.sleepState());
     }
@@ -127,7 +127,7 @@ class Ir64BlockExecutorB83Test {
     void wfitSleepsUntilIrqLikeWfi() {
         Aarch64Core core = newCore();
 
-        EXECUTOR.executeOp(core, new Ir64Op.SystemInstruction(Ir64SystemInstructionOp.WFI));
+        EXECUTOR.executeOp(core, new SystemOp64.SystemInstruction(Ir64SystemInstructionOp.WFI));
 
         assertEquals(CpuSleepState.HALTED, core.sleepState());
     }
@@ -137,7 +137,7 @@ class Ir64BlockExecutorB83Test {
         Aarch64Core core = newCore();
 
         boolean pcChanged = EXECUTOR.executeOp(core,
-                new Ir64Op.SystemInstruction(Ir64SystemInstructionOp.PSTATE_FIELD_NOP));
+                new SystemOp64.SystemInstruction(Ir64SystemInstructionOp.PSTATE_FIELD_NOP));
 
         assertFalse(pcChanged);
     }

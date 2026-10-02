@@ -7,6 +7,7 @@ import dev.vitorsilverio.armjitter.codegen.equivalence.EquivalenceMismatchExcept
 import dev.vitorsilverio.armjitter.decoder64.Aarch64Decoder;
 import dev.vitorsilverio.armjitter.ir64.Aarch64SystemRegisterId;
 import dev.vitorsilverio.armjitter.ir64.Ir64Op;
+import dev.vitorsilverio.armjitter.ir64.SystemOp64;
 import dev.vitorsilverio.armjitter.memory.AddressSpace64;
 import dev.vitorsilverio.armjitter.support.TestAddressSpace;
 import org.junit.jupiter.api.Test;
@@ -232,13 +233,13 @@ class Aarch64MatrixStateTest {
         };
         for (Object[] row : table) {
             int word = (Integer) row[0];
-            Ir64Op.SystemRegister op = (Ir64Op.SystemRegister) decodeWord(sme, word);
+            SystemOp64.SystemRegister op = (SystemOp64.SystemRegister) decodeWord(sme, word);
             assertEquals(row[1], op.read(), Integer.toHexString(word));
             assertEquals(row[2], op.register(), Integer.toHexString(word));
             if (row[2] == Aarch64SystemRegisterId.ID_AA64SMFR0_EL1) {
                 // espaço de ID: sem SME é RAZ, não UNDEFINED
                 for (Aarch64Decoder withoutSme : new Aarch64Decoder[] {noSme, plain}) {
-                    Ir64Op.SystemRegister raz = (Ir64Op.SystemRegister) decodeWord(withoutSme, word);
+                    SystemOp64.SystemRegister raz = (SystemOp64.SystemRegister) decodeWord(withoutSme, word);
                     assertEquals(Aarch64SystemRegisterId.ID_RESERVED_RAZ, raz.register());
                     assertEquals(true, raz.read());
                 }

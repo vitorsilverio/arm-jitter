@@ -7,6 +7,7 @@ import dev.vitorsilverio.armjitter.core64.Aarch64SystemRegisterBus;
 import dev.vitorsilverio.armjitter.decoder64.Aarch64Decoder;
 import dev.vitorsilverio.armjitter.ir64.Aarch64SystemRegisterId;
 import dev.vitorsilverio.armjitter.ir64.Ir64Op;
+import dev.vitorsilverio.armjitter.ir64.SveIntegerOp64;
 import dev.vitorsilverio.armjitter.memory.AddressSpace64;
 import dev.vitorsilverio.armjitter.support.TestAddressSpace;
 import org.junit.jupiter.api.Test;
@@ -35,34 +36,34 @@ class Aarch64SveImmediateTest {
     private static final long ESR_EC_SVE = 0x19L;
     private static final Aarch64Architecture SVE = Aarch64Architecture.ARMV9_0_A;
 
-    private record Row(int word, String asm, Ir64Op.SveImmediate.Op op, int esz, int rd, int pg, long imm) {
+    private record Row(int word, String asm, SveIntegerOp64.Immediate.Op op, int esz, int rd, int pg, long imm) {
     }
 
-    private static Row row(int word, String asm, Ir64Op.SveImmediate.Op op, int esz, int rd, int pg, long imm) {
+    private static Row row(int word, String asm, SveIntegerOp64.Immediate.Op op, int esz, int rd, int pg, long imm) {
         return new Row(word, asm, op, esz, rd, pg, imm);
     }
 
-    private static final Ir64Op.SveImmediate.Op ORR = Ir64Op.SveImmediate.Op.ORR;
-    private static final Ir64Op.SveImmediate.Op EOR = Ir64Op.SveImmediate.Op.EOR;
-    private static final Ir64Op.SveImmediate.Op AND = Ir64Op.SveImmediate.Op.AND;
-    private static final Ir64Op.SveImmediate.Op DUPM = Ir64Op.SveImmediate.Op.DUPM;
-    private static final Ir64Op.SveImmediate.Op CPY_M = Ir64Op.SveImmediate.Op.CPY_MERGING;
-    private static final Ir64Op.SveImmediate.Op CPY_Z = Ir64Op.SveImmediate.Op.CPY_ZEROING;
-    private static final Ir64Op.SveImmediate.Op FCPY = Ir64Op.SveImmediate.Op.FCPY;
-    private static final Ir64Op.SveImmediate.Op DUP = Ir64Op.SveImmediate.Op.DUP;
-    private static final Ir64Op.SveImmediate.Op FDUP = Ir64Op.SveImmediate.Op.FDUP;
-    private static final Ir64Op.SveImmediate.Op ADD = Ir64Op.SveImmediate.Op.ADD;
-    private static final Ir64Op.SveImmediate.Op SUB = Ir64Op.SveImmediate.Op.SUB;
-    private static final Ir64Op.SveImmediate.Op SUBR = Ir64Op.SveImmediate.Op.SUBR;
-    private static final Ir64Op.SveImmediate.Op SQADD = Ir64Op.SveImmediate.Op.SQADD;
-    private static final Ir64Op.SveImmediate.Op UQADD = Ir64Op.SveImmediate.Op.UQADD;
-    private static final Ir64Op.SveImmediate.Op SQSUB = Ir64Op.SveImmediate.Op.SQSUB;
-    private static final Ir64Op.SveImmediate.Op UQSUB = Ir64Op.SveImmediate.Op.UQSUB;
-    private static final Ir64Op.SveImmediate.Op SMAX = Ir64Op.SveImmediate.Op.SMAX;
-    private static final Ir64Op.SveImmediate.Op UMAX = Ir64Op.SveImmediate.Op.UMAX;
-    private static final Ir64Op.SveImmediate.Op SMIN = Ir64Op.SveImmediate.Op.SMIN;
-    private static final Ir64Op.SveImmediate.Op UMIN = Ir64Op.SveImmediate.Op.UMIN;
-    private static final Ir64Op.SveImmediate.Op MUL = Ir64Op.SveImmediate.Op.MUL;
+    private static final SveIntegerOp64.Immediate.Op ORR = SveIntegerOp64.Immediate.Op.ORR;
+    private static final SveIntegerOp64.Immediate.Op EOR = SveIntegerOp64.Immediate.Op.EOR;
+    private static final SveIntegerOp64.Immediate.Op AND = SveIntegerOp64.Immediate.Op.AND;
+    private static final SveIntegerOp64.Immediate.Op DUPM = SveIntegerOp64.Immediate.Op.DUPM;
+    private static final SveIntegerOp64.Immediate.Op CPY_M = SveIntegerOp64.Immediate.Op.CPY_MERGING;
+    private static final SveIntegerOp64.Immediate.Op CPY_Z = SveIntegerOp64.Immediate.Op.CPY_ZEROING;
+    private static final SveIntegerOp64.Immediate.Op FCPY = SveIntegerOp64.Immediate.Op.FCPY;
+    private static final SveIntegerOp64.Immediate.Op DUP = SveIntegerOp64.Immediate.Op.DUP;
+    private static final SveIntegerOp64.Immediate.Op FDUP = SveIntegerOp64.Immediate.Op.FDUP;
+    private static final SveIntegerOp64.Immediate.Op ADD = SveIntegerOp64.Immediate.Op.ADD;
+    private static final SveIntegerOp64.Immediate.Op SUB = SveIntegerOp64.Immediate.Op.SUB;
+    private static final SveIntegerOp64.Immediate.Op SUBR = SveIntegerOp64.Immediate.Op.SUBR;
+    private static final SveIntegerOp64.Immediate.Op SQADD = SveIntegerOp64.Immediate.Op.SQADD;
+    private static final SveIntegerOp64.Immediate.Op UQADD = SveIntegerOp64.Immediate.Op.UQADD;
+    private static final SveIntegerOp64.Immediate.Op SQSUB = SveIntegerOp64.Immediate.Op.SQSUB;
+    private static final SveIntegerOp64.Immediate.Op UQSUB = SveIntegerOp64.Immediate.Op.UQSUB;
+    private static final SveIntegerOp64.Immediate.Op SMAX = SveIntegerOp64.Immediate.Op.SMAX;
+    private static final SveIntegerOp64.Immediate.Op UMAX = SveIntegerOp64.Immediate.Op.UMAX;
+    private static final SveIntegerOp64.Immediate.Op SMIN = SveIntegerOp64.Immediate.Op.SMIN;
+    private static final SveIntegerOp64.Immediate.Op UMIN = SveIntegerOp64.Immediate.Op.UMIN;
+    private static final SveIntegerOp64.Immediate.Op MUL = SveIntegerOp64.Immediate.Op.MUL;
 
     private static Stream<Row> rows() {
         return Stream.of(
@@ -262,7 +263,7 @@ class Aarch64SveImmediateTest {
     @ParameterizedTest(name = "{0}")
     @MethodSource("rows")
     void decodesEveryAssembledWordToItsExpandedImmediate(Row row) {
-        assertEquals(new Ir64Op.SveImmediate(row.op(), row.esz(), row.rd(), row.pg(), row.imm(), 0L),
+        assertEquals(new SveIntegerOp64.Immediate(row.op(), row.esz(), row.rd(), row.pg(), row.imm(), 0L),
                 decode(SVE, row.word()), row.asm());
     }
 

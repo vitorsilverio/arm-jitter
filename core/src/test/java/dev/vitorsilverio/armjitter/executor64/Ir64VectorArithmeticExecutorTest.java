@@ -2,7 +2,7 @@ package dev.vitorsilverio.armjitter.executor64;
 
 import dev.vitorsilverio.armjitter.core64.Aarch64Core;
 import dev.vitorsilverio.armjitter.core64.Aarch64FpRegisters;
-import dev.vitorsilverio.armjitter.ir64.Ir64Op;
+import dev.vitorsilverio.armjitter.ir64.AdvSimdIntegerOp64;
 import dev.vitorsilverio.armjitter.ir64.Ir64VectorAcrossLanesOp;
 import dev.vitorsilverio.armjitter.ir64.Ir64VectorNarrowOp;
 import dev.vitorsilverio.armjitter.ir64.Ir64VectorNarrowUnaryOp;
@@ -37,7 +37,7 @@ class Ir64VectorArithmeticExecutorTest {
         fp.setElement(1, 0, 0, 0xFF); // byte v1[0] = 0xFF
         fp.setElement(2, 0, 0, 0x02); // byte v2[0] = 0x02
 
-        EXECUTOR.executeOp(core, new Ir64Op.VectorArithmeticThreeSame(
+        EXECUTOR.executeOp(core, new AdvSimdIntegerOp64.ArithmeticThreeSame(
                 Ir64VectorThreeSameOp.ADD, false, false, 0, 0, 1, 2));
 
         assertEquals(0x01, fp.element(0, 0, 0), "0xFF + 0x02 trunca para byte = 0x01");
@@ -49,7 +49,7 @@ class Ir64VectorArithmeticExecutorTest {
         Aarch64FpRegisters fp = core.fp();
         fp.setQ(0, 0L, 0xFFFF_FFFF_FFFF_FFFFL); // "sujeira" pré-existente
 
-        EXECUTOR.executeOp(core, new Ir64Op.VectorArithmeticThreeSame(
+        EXECUTOR.executeOp(core, new AdvSimdIntegerOp64.ArithmeticThreeSame(
                 Ir64VectorThreeSameOp.ADD, false, false, 2, 0, 1, 2));
 
         assertEquals(0L, fp.high64(0), "forma não-quad zera os 64 bits altos (destructive write)");
@@ -64,7 +64,7 @@ class Ir64VectorArithmeticExecutorTest {
         fp.setElement(1, 1, 2, 1); // word v1[1] = 1
         fp.setElement(2, 1, 2, 9); // word v2[1] = 9
 
-        EXECUTOR.executeOp(core, new Ir64Op.VectorArithmeticThreeSame(
+        EXECUTOR.executeOp(core, new AdvSimdIntegerOp64.ArithmeticThreeSame(
                 Ir64VectorThreeSameOp.CMGT, false, true, 2, 0, 1, 2));
 
         assertEquals(0xFFFF_FFFFL, fp.element(0, 0, 2), "5 > 3: todos-1");
@@ -78,11 +78,11 @@ class Ir64VectorArithmeticExecutorTest {
         fp.setElement(1, 0, 0, 0xFF); // byte 0xFF: negativo se assinado, maior se não assinado
         fp.setElement(2, 0, 0, 0x01);
 
-        EXECUTOR.executeOp(core, new Ir64Op.VectorArithmeticThreeSame(
+        EXECUTOR.executeOp(core, new AdvSimdIntegerOp64.ArithmeticThreeSame(
                 Ir64VectorThreeSameOp.CMHI, false, false, 0, 0, 1, 2));
         assertEquals(0xFFL, fp.element(0, 0, 0), "0xFF >u 0x01: todos-1 (CMHI não assinado)");
 
-        EXECUTOR.executeOp(core, new Ir64Op.VectorArithmeticThreeSame(
+        EXECUTOR.executeOp(core, new AdvSimdIntegerOp64.ArithmeticThreeSame(
                 Ir64VectorThreeSameOp.CMGT, false, false, 0, 0, 1, 2));
         assertEquals(0L, fp.element(0, 0, 0), "0xFF (=-1) >s 0x01 é falso: 0 (CMGT assinado)");
     }
@@ -94,7 +94,7 @@ class Ir64VectorArithmeticExecutorTest {
         fp.setElement(1, 0, 0, (byte) -3 & 0xFF);
         fp.setElement(2, 0, 0, (byte) -2 & 0xFF);
 
-        EXECUTOR.executeOp(core, new Ir64Op.VectorArithmeticThreeSame(
+        EXECUTOR.executeOp(core, new AdvSimdIntegerOp64.ArithmeticThreeSame(
                 Ir64VectorThreeSameOp.SHADD, false, false, 0, 0, 1, 2));
 
         byte result = (byte) fp.element(0, 0, 0);
@@ -108,7 +108,7 @@ class Ir64VectorArithmeticExecutorTest {
         fp.setElement(1, 0, 0, 1);
         fp.setElement(2, 0, 0, 2);
 
-        EXECUTOR.executeOp(core, new Ir64Op.VectorArithmeticThreeSame(
+        EXECUTOR.executeOp(core, new AdvSimdIntegerOp64.ArithmeticThreeSame(
                 Ir64VectorThreeSameOp.SRHADD, false, false, 0, 0, 1, 2));
 
         assertEquals(2, fp.element(0, 0, 0), "(1+2+1)>>1 = 2, sem arredondamento seria 1");
@@ -122,7 +122,7 @@ class Ir64VectorArithmeticExecutorTest {
         fp.setElement(1, 0, 0, 3);
         fp.setElement(2, 0, 0, 7);
 
-        EXECUTOR.executeOp(core, new Ir64Op.VectorArithmeticThreeSame(
+        EXECUTOR.executeOp(core, new AdvSimdIntegerOp64.ArithmeticThreeSame(
                 Ir64VectorThreeSameOp.SABA, false, false, 0, 0, 1, 2));
 
         assertEquals(14, fp.element(0, 0, 0), "10 + |3-7| = 14");
@@ -136,12 +136,12 @@ class Ir64VectorArithmeticExecutorTest {
         fp.setElement(1, 0, 0, 3);
         fp.setElement(2, 0, 0, 4);
 
-        EXECUTOR.executeOp(core, new Ir64Op.VectorArithmeticThreeSame(
+        EXECUTOR.executeOp(core, new AdvSimdIntegerOp64.ArithmeticThreeSame(
                 Ir64VectorThreeSameOp.MLA, false, false, 0, 0, 1, 2));
         assertEquals(112, fp.element(0, 0, 0), "100 + 3*4 = 112");
 
         fp.setElement(0, 0, 0, 100);
-        EXECUTOR.executeOp(core, new Ir64Op.VectorArithmeticThreeSame(
+        EXECUTOR.executeOp(core, new AdvSimdIntegerOp64.ArithmeticThreeSame(
                 Ir64VectorThreeSameOp.MLS, false, false, 0, 0, 1, 2));
         assertEquals(88, fp.element(0, 0, 0), "100 - 3*4 = 88");
     }
@@ -153,7 +153,7 @@ class Ir64VectorArithmeticExecutorTest {
         fp.setElement(1, 0, 0, 0b011);
         fp.setElement(2, 0, 0, 0b101);
 
-        EXECUTOR.executeOp(core, new Ir64Op.VectorArithmeticThreeSame(
+        EXECUTOR.executeOp(core, new AdvSimdIntegerOp64.ArithmeticThreeSame(
                 Ir64VectorThreeSameOp.PMUL, false, false, 0, 0, 1, 2));
 
         // GF(2): 0b011 * 0b101 = (101) XOR (101<<1) = 0b101 ^ 0b1010 = 0b1111
@@ -170,7 +170,7 @@ class Ir64VectorArithmeticExecutorTest {
             fp.setElement(2, i, 1, i + 5);
         }
 
-        EXECUTOR.executeOp(core, new Ir64Op.VectorArithmeticPairwise(
+        EXECUTOR.executeOp(core, new AdvSimdIntegerOp64.ArithmeticPairwise(
                 Ir64VectorPairwiseOp.ADD, false, 1, 0, 1, 2));
 
         assertEquals(3, fp.element(0, 0, 1), "1+2");
@@ -188,13 +188,13 @@ class Ir64VectorArithmeticExecutorTest {
             fp.setElement(2, i, 0, 1);
         }
 
-        EXECUTOR.executeOp(core, new Ir64Op.VectorArithmeticWidening(
+        EXECUTOR.executeOp(core, new AdvSimdIntegerOp64.ArithmeticWidening(
                 Ir64VectorWideningOp.SADDL, false, false, 0, 0, 1, 2)); // baixa: lanes 0-7
         for (int i = 0; i < 8; i++) {
             assertEquals(i + 1, fp.element(0, i, 1));
         }
 
-        EXECUTOR.executeOp(core, new Ir64Op.VectorArithmeticWidening(
+        EXECUTOR.executeOp(core, new AdvSimdIntegerOp64.ArithmeticWidening(
                 Ir64VectorWideningOp.SADDL, false, true, 0, 0, 1, 2)); // alta ("2"): lanes 8-15
         for (int i = 0; i < 8; i++) {
             assertEquals(i + 8 + 1, fp.element(0, i, 1));
@@ -208,11 +208,11 @@ class Ir64VectorArithmeticExecutorTest {
         fp.setElement(1, 0, 0, (byte) -1 & 0xFF); // byte 0xFF
         fp.setElement(2, 0, 0, 2);
 
-        EXECUTOR.executeOp(core, new Ir64Op.VectorArithmeticWidening(
+        EXECUTOR.executeOp(core, new AdvSimdIntegerOp64.ArithmeticWidening(
                 Ir64VectorWideningOp.SMULL, false, false, 0, 0, 1, 2));
         assertEquals((short) -2 & 0xFFFF, fp.element(0, 0, 1), "sext(-1)*2 = -2");
 
-        EXECUTOR.executeOp(core, new Ir64Op.VectorArithmeticWidening(
+        EXECUTOR.executeOp(core, new AdvSimdIntegerOp64.ArithmeticWidening(
                 Ir64VectorWideningOp.UMULL, false, false, 0, 0, 1, 2));
         assertEquals(0xFF * 2, fp.element(0, 0, 1), "0xFF (não assinado) * 2 = 0x1FE");
     }
@@ -225,7 +225,7 @@ class Ir64VectorArithmeticExecutorTest {
         fp.setElement(1, 0, 0, 3);
         fp.setElement(2, 0, 0, 4);
 
-        EXECUTOR.executeOp(core, new Ir64Op.VectorArithmeticWidening(
+        EXECUTOR.executeOp(core, new AdvSimdIntegerOp64.ArithmeticWidening(
                 Ir64VectorWideningOp.SMLAL, false, false, 0, 0, 1, 2));
 
         assertEquals(1012, fp.element(0, 0, 1), "1000 + 3*4 = 1012");
@@ -238,11 +238,11 @@ class Ir64VectorArithmeticExecutorTest {
         fp.setElement(1, 0, 1, 1000); // rn largo (halfword) v1[0] = 1000
         fp.setElement(2, 0, 0, (byte) -1 & 0xFF); // rm estreito (byte) v2[0] = 0xFF
 
-        EXECUTOR.executeOp(core, new Ir64Op.VectorArithmeticWide(
+        EXECUTOR.executeOp(core, new AdvSimdIntegerOp64.ArithmeticWide(
                 Ir64VectorWideOp.SADDW, false, 0, 0, 1, 2));
         assertEquals(999, fp.element(0, 0, 1), "1000 + sext(0xFF=-1) = 999");
 
-        EXECUTOR.executeOp(core, new Ir64Op.VectorArithmeticWide(
+        EXECUTOR.executeOp(core, new AdvSimdIntegerOp64.ArithmeticWide(
                 Ir64VectorWideOp.UADDW, false, 0, 0, 1, 2));
         assertEquals(1000 + 0xFF, fp.element(0, 0, 1), "1000 + zext(0xFF) = 1255");
     }
@@ -258,14 +258,14 @@ class Ir64VectorArithmeticExecutorTest {
         }
         fp.setQ(0, 0x1111_1111_1111_1111L, 0x2222_2222_2222_2222L); // "sujeira" pré-existente
 
-        EXECUTOR.executeOp(core, new Ir64Op.VectorArithmeticNarrow(
+        EXECUTOR.executeOp(core, new AdvSimdIntegerOp64.ArithmeticNarrow(
                 Ir64VectorNarrowOp.ADDHN, false, 0, 0, 1, 2)); // q=false: metade baixa, zera alta
         for (int i = 0; i < 8; i++) {
             assertEquals(0x02, fp.element(0, i, 0));
         }
         assertEquals(0L, fp.high64(0), "q=false zera a metade alta (destructive write)");
 
-        EXECUTOR.executeOp(core, new Ir64Op.VectorArithmeticNarrow(
+        EXECUTOR.executeOp(core, new AdvSimdIntegerOp64.ArithmeticNarrow(
                 Ir64VectorNarrowOp.ADDHN, true, 0, 0, 1, 2)); // q=true (ADDHN2): metade alta
         for (int i = 0; i < 8; i++) {
             assertEquals(0x02, fp.element(0, i, 0), "metade baixa já escrita continua lá");
@@ -280,7 +280,7 @@ class Ir64VectorArithmeticExecutorTest {
         fp.setElement(1, 0, 1, 0x1FF); // soma = 0x3FE -> ADDHN puro = 0x03, RADDHN arredonda p/ 0x04
         fp.setElement(2, 0, 1, 0x1FF);
 
-        EXECUTOR.executeOp(core, new Ir64Op.VectorArithmeticNarrow(
+        EXECUTOR.executeOp(core, new AdvSimdIntegerOp64.ArithmeticNarrow(
                 Ir64VectorNarrowOp.RADDHN, false, 0, 0, 1, 2));
 
         assertEquals(0x04, fp.element(0, 0, 0));
@@ -294,15 +294,15 @@ class Ir64VectorArithmeticExecutorTest {
             fp.setElement(1, i, 0, i + 1); // 1..8
         }
 
-        EXECUTOR.executeOp(core, new Ir64Op.VectorAcrossLanes(
+        EXECUTOR.executeOp(core, new AdvSimdIntegerOp64.AcrossLanes(
                 Ir64VectorAcrossLanesOp.ADDV, false, 0, 0, 1));
         assertEquals(36, fp.element(0, 0, 0), "soma de 1..8 = 36");
 
-        EXECUTOR.executeOp(core, new Ir64Op.VectorAcrossLanes(
+        EXECUTOR.executeOp(core, new AdvSimdIntegerOp64.AcrossLanes(
                 Ir64VectorAcrossLanesOp.SMAXV, false, 0, 0, 1));
         assertEquals(8, fp.element(0, 0, 0));
 
-        EXECUTOR.executeOp(core, new Ir64Op.VectorAcrossLanes(
+        EXECUTOR.executeOp(core, new AdvSimdIntegerOp64.AcrossLanes(
                 Ir64VectorAcrossLanesOp.UMINV, false, 0, 0, 1));
         assertEquals(1, fp.element(0, 0, 0));
     }
@@ -315,7 +315,7 @@ class Ir64VectorArithmeticExecutorTest {
         fp.setElement(1, 1, 0, 2);
         fp.setQ(0, 0L, 0xFFFF_FFFF_FFFF_FFFFL);
 
-        EXECUTOR.executeOp(core, new Ir64Op.VectorAcrossLanes(
+        EXECUTOR.executeOp(core, new AdvSimdIntegerOp64.AcrossLanes(
                 Ir64VectorAcrossLanesOp.SADDLV, false, 0, 0, 1));
 
         assertEquals((short) 1 & 0xFFFF, fp.element(0, 0, 1), "sext(-1)+2 = 1, resultado em halfword");
@@ -328,12 +328,12 @@ class Ir64VectorArithmeticExecutorTest {
         Aarch64FpRegisters fp = core.fp();
         fp.setElement(1, 0, 0, (byte) -5 & 0xFF);
 
-        EXECUTOR.executeOp(core, new Ir64Op.VectorArithmeticUnary(
+        EXECUTOR.executeOp(core, new AdvSimdIntegerOp64.ArithmeticUnary(
                 Ir64VectorUnaryOp.ABS, false, false, 0, 0, 1));
         assertEquals(5, fp.element(0, 0, 0));
 
         fp.setElement(1, 0, 0, 5);
-        EXECUTOR.executeOp(core, new Ir64Op.VectorArithmeticUnary(
+        EXECUTOR.executeOp(core, new AdvSimdIntegerOp64.ArithmeticUnary(
                 Ir64VectorUnaryOp.NEG, false, false, 0, 0, 1));
         assertEquals((byte) -5 & 0xFF, fp.element(0, 0, 0));
     }
@@ -345,12 +345,12 @@ class Ir64VectorArithmeticExecutorTest {
         fp.setElement(1, 0, 2, 0);
         fp.setElement(1, 1, 2, (int) -1);
 
-        EXECUTOR.executeOp(core, new Ir64Op.VectorArithmeticUnary(
+        EXECUTOR.executeOp(core, new AdvSimdIntegerOp64.ArithmeticUnary(
                 Ir64VectorUnaryOp.CMEQ0, false, true, 2, 0, 1));
         assertEquals(0xFFFF_FFFFL, fp.element(0, 0, 2));
         assertEquals(0L, fp.element(0, 1, 2));
 
-        EXECUTOR.executeOp(core, new Ir64Op.VectorArithmeticUnary(
+        EXECUTOR.executeOp(core, new AdvSimdIntegerOp64.ArithmeticUnary(
                 Ir64VectorUnaryOp.CMLT0, false, true, 2, 0, 1));
         assertEquals(0L, fp.element(0, 0, 2), "0 < 0 é falso");
         assertEquals(0xFFFF_FFFFL, fp.element(0, 1, 2), "-1 < 0 é verdadeiro");
@@ -365,7 +365,7 @@ class Ir64VectorArithmeticExecutorTest {
             fp.setElement(1, i, 0, i + 1);
         }
 
-        EXECUTOR.executeOp(core, new Ir64Op.VectorArithmeticUnary(
+        EXECUTOR.executeOp(core, new AdvSimdIntegerOp64.ArithmeticUnary(
                 Ir64VectorUnaryOp.SADDLP, false, false, 0, 0, 1));
 
         assertEquals(3, fp.element(0, 0, 1), "1+2");
@@ -382,7 +382,7 @@ class Ir64VectorArithmeticExecutorTest {
         fp.setElement(1, 0, 0, 1);
         fp.setElement(1, 1, 0, 2);
 
-        EXECUTOR.executeOp(core, new Ir64Op.VectorArithmeticUnary(
+        EXECUTOR.executeOp(core, new AdvSimdIntegerOp64.ArithmeticUnary(
                 Ir64VectorUnaryOp.SADALP, false, false, 0, 0, 1));
 
         assertEquals(103, fp.element(0, 0, 1), "100 + (1+2) = 103");
@@ -395,7 +395,7 @@ class Ir64VectorArithmeticExecutorTest {
         fp.setElement(1, 0, 3, 100L);
         fp.setElement(1, 1, 3, 23L);
 
-        EXECUTOR.executeOp(core, new Ir64Op.VectorScalarPairwiseAdd(0, 1));
+        EXECUTOR.executeOp(core, new AdvSimdIntegerOp64.ScalarPairwiseAdd(0, 1));
 
         assertEquals(123L, fp.d(0));
         assertEquals(0L, fp.high64(0), "escrita escalar zera os bits altos");
@@ -410,7 +410,7 @@ class Ir64VectorArithmeticExecutorTest {
         fp.setElement(1, 0, 0, 100);
         fp.setElement(2, 0, 0, 100);
 
-        EXECUTOR.executeOp(core, new Ir64Op.VectorArithmeticThreeSame(
+        EXECUTOR.executeOp(core, new AdvSimdIntegerOp64.ArithmeticThreeSame(
                 Ir64VectorThreeSameOp.SQADD, false, false, 0, 0, 1, 2));
 
         assertEquals(127, fp.element(0, 0, 0), "100+100=200 satura em 127 (byte assinado)");
@@ -423,7 +423,7 @@ class Ir64VectorArithmeticExecutorTest {
         fp.setElement(1, 0, 0, 200);
         fp.setElement(2, 0, 0, 100);
 
-        EXECUTOR.executeOp(core, new Ir64Op.VectorArithmeticThreeSame(
+        EXECUTOR.executeOp(core, new AdvSimdIntegerOp64.ArithmeticThreeSame(
                 Ir64VectorThreeSameOp.UQADD, false, false, 0, 0, 1, 2));
 
         assertEquals(255, fp.element(0, 0, 0), "200+100=300 satura em 255 (byte não assinado)");
@@ -436,7 +436,7 @@ class Ir64VectorArithmeticExecutorTest {
         fp.setElement(1, 0, 0, (byte) -100 & 0xFF);
         fp.setElement(2, 0, 0, 100);
 
-        EXECUTOR.executeOp(core, new Ir64Op.VectorArithmeticThreeSame(
+        EXECUTOR.executeOp(core, new AdvSimdIntegerOp64.ArithmeticThreeSame(
                 Ir64VectorThreeSameOp.SQSUB, false, false, 0, 0, 1, 2));
 
         assertEquals(0x80, fp.element(0, 0, 0), "-100-100=-200 satura em -128 (0x80)");
@@ -449,7 +449,7 @@ class Ir64VectorArithmeticExecutorTest {
         fp.setElement(1, 0, 0, 1);
         fp.setElement(2, 0, 0, 5);
 
-        EXECUTOR.executeOp(core, new Ir64Op.VectorArithmeticThreeSame(
+        EXECUTOR.executeOp(core, new AdvSimdIntegerOp64.ArithmeticThreeSame(
                 Ir64VectorThreeSameOp.UQSUB, false, false, 0, 0, 1, 2));
 
         assertEquals(0, fp.element(0, 0, 0), "1-5 satura em 0 (não assinado)");
@@ -464,7 +464,7 @@ class Ir64VectorArithmeticExecutorTest {
         fp.setElement(1, 1, 0, (byte) -8 & 0xFF);
         fp.setElement(2, 1, 0, (byte) -1 & 0xFF); // <0: desloca à direita pela MAGNITUDE
 
-        EXECUTOR.executeOp(core, new Ir64Op.VectorArithmeticThreeSame(
+        EXECUTOR.executeOp(core, new AdvSimdIntegerOp64.ArithmeticThreeSame(
                 Ir64VectorThreeSameOp.SSHL, false, false, 0, 0, 1, 2));
 
         assertEquals(12, fp.element(0, 0, 0), "3<<2 = 12");
@@ -480,7 +480,7 @@ class Ir64VectorArithmeticExecutorTest {
         fp.setElement(1, 1, 0, 100);
         fp.setElement(2, 1, 0, (byte) -1 & 0xFF); // direita: NÃO satura, truncamento comum
 
-        EXECUTOR.executeOp(core, new Ir64Op.VectorArithmeticThreeSame(
+        EXECUTOR.executeOp(core, new AdvSimdIntegerOp64.ArithmeticThreeSame(
                 Ir64VectorThreeSameOp.SQSHL, false, false, 0, 0, 1, 2));
 
         assertEquals(127, fp.element(0, 0, 0), "100<<2=400 satura em 127");
@@ -494,7 +494,7 @@ class Ir64VectorArithmeticExecutorTest {
         fp.setElement(1, 0, 0, 5);
         fp.setElement(2, 0, 0, (byte) -1 & 0xFF); // desloca 1 à direita, arredondando
 
-        EXECUTOR.executeOp(core, new Ir64Op.VectorArithmeticThreeSame(
+        EXECUTOR.executeOp(core, new AdvSimdIntegerOp64.ArithmeticThreeSame(
                 Ir64VectorThreeSameOp.SQRSHL, false, false, 0, 0, 1, 2));
 
         assertEquals(3, fp.element(0, 0, 0), "(5+1)>>1 = 3 (SQSHL sem arredondar daria 2)");
@@ -507,7 +507,7 @@ class Ir64VectorArithmeticExecutorTest {
         fp.setElement(1, 0, 1, 0x8000);
         fp.setElement(2, 0, 1, 0x8000);
 
-        EXECUTOR.executeOp(core, new Ir64Op.VectorArithmeticThreeSame(
+        EXECUTOR.executeOp(core, new AdvSimdIntegerOp64.ArithmeticThreeSame(
                 Ir64VectorThreeSameOp.SQDMULH, false, false, 1, 0, 1, 2));
 
         assertEquals(0x7FFF, fp.element(0, 0, 1), "2*(-32768)^2 >> 16 = 32768, satura em 32767");
@@ -520,11 +520,11 @@ class Ir64VectorArithmeticExecutorTest {
         fp.setElement(1, 0, 1, 16384);
         fp.setElement(2, 0, 1, 3);
 
-        EXECUTOR.executeOp(core, new Ir64Op.VectorArithmeticThreeSame(
+        EXECUTOR.executeOp(core, new AdvSimdIntegerOp64.ArithmeticThreeSame(
                 Ir64VectorThreeSameOp.SQDMULH, false, false, 1, 0, 1, 2));
         long withoutRounding = fp.element(0, 0, 1);
 
-        EXECUTOR.executeOp(core, new Ir64Op.VectorArithmeticThreeSame(
+        EXECUTOR.executeOp(core, new AdvSimdIntegerOp64.ArithmeticThreeSame(
                 Ir64VectorThreeSameOp.SQRDMULH, false, false, 1, 0, 1, 2));
         long withRounding = fp.element(0, 0, 1);
 
@@ -542,7 +542,7 @@ class Ir64VectorArithmeticExecutorTest {
         fp.setElement(1, 0, 1, 16384);
         fp.setElement(2, 0, 1, 3);
 
-        EXECUTOR.executeOp(core, new Ir64Op.VectorArithmeticThreeSame(
+        EXECUTOR.executeOp(core, new AdvSimdIntegerOp64.ArithmeticThreeSame(
                 Ir64VectorThreeSameOp.SQRDMLAH, false, false, 1, 0, 1, 2));
 
         assertEquals(7, fp.element(0, 0, 1), "5 + round(2*16384*3 >> 16) = 5 + 2 = 7");
@@ -556,7 +556,7 @@ class Ir64VectorArithmeticExecutorTest {
         fp.setElement(1, 0, 1, 16384);
         fp.setElement(2, 0, 1, 3);
 
-        EXECUTOR.executeOp(core, new Ir64Op.VectorArithmeticThreeSame(
+        EXECUTOR.executeOp(core, new AdvSimdIntegerOp64.ArithmeticThreeSame(
                 Ir64VectorThreeSameOp.SQRDMLSH, false, false, 1, 0, 1, 2));
 
         assertEquals(3, fp.element(0, 0, 1), "5 - round(2*16384*3 >> 16) = 5 - 2 = 3");
@@ -572,7 +572,7 @@ class Ir64VectorArithmeticExecutorTest {
         fp.setElement(1, 0, 1, 16384);
         fp.setElement(2, 0, 1, 3); // produto arredondado = 2 (ver sqrdmulhRoundsBeforeShifting)
 
-        EXECUTOR.executeOp(core, new Ir64Op.VectorArithmeticThreeSame(
+        EXECUTOR.executeOp(core, new AdvSimdIntegerOp64.ArithmeticThreeSame(
                 Ir64VectorThreeSameOp.SQRDMLAH, false, false, 1, 0, 1, 2));
 
         assertEquals(0x7FFF, fp.element(0, 0, 1), "32767 + 2 satura em 32767 (INT16_MAX)");
@@ -586,7 +586,7 @@ class Ir64VectorArithmeticExecutorTest {
         fp.setElement(1, 0, 1, 16384);
         fp.setElement(2, 0, 1, 3);
 
-        EXECUTOR.executeOp(core, new Ir64Op.VectorArithmeticThreeSame(
+        EXECUTOR.executeOp(core, new AdvSimdIntegerOp64.ArithmeticThreeSame(
                 Ir64VectorThreeSameOp.SQRDMLSH, false, false, 1, 0, 1, 2));
 
         assertEquals(0x8000, fp.element(0, 0, 1), "-32768 - 2 satura em -32768 (INT16_MIN)");
@@ -599,7 +599,7 @@ class Ir64VectorArithmeticExecutorTest {
         fp.setElement(1, 0, 1, 0x8000);
         fp.setElement(2, 0, 1, 0x8000);
 
-        EXECUTOR.executeOp(core, new Ir64Op.VectorArithmeticWidening(
+        EXECUTOR.executeOp(core, new AdvSimdIntegerOp64.ArithmeticWidening(
                 Ir64VectorWideningOp.SQDMULL, false, false, 1, 0, 1, 2));
 
         assertEquals(0x7FFF_FFFFL, fp.element(0, 0, 2), "2*(-32768)^2 = 2^31, satura em 2^31-1");
@@ -613,7 +613,7 @@ class Ir64VectorArithmeticExecutorTest {
         fp.setElement(1, 0, 1, 100);
         fp.setElement(2, 0, 1, 100);
 
-        EXECUTOR.executeOp(core, new Ir64Op.VectorArithmeticWidening(
+        EXECUTOR.executeOp(core, new AdvSimdIntegerOp64.ArithmeticWidening(
                 Ir64VectorWideningOp.SQDMLAL, false, false, 1, 0, 1, 2));
 
         assertEquals(20010L, fp.element(0, 0, 2), "10 + 2*100*100 = 20010");
@@ -626,7 +626,7 @@ class Ir64VectorArithmeticExecutorTest {
         fp.setElement(0, 0, 0, 100); // Rd (assinado) = 100
         fp.setElement(1, 0, 0, 50);  // Rn (não assinado) = 50
 
-        EXECUTOR.executeOp(core, new Ir64Op.VectorArithmeticUnary(
+        EXECUTOR.executeOp(core, new AdvSimdIntegerOp64.ArithmeticUnary(
                 Ir64VectorUnaryOp.SUQADD, false, false, 0, 0, 1));
 
         assertEquals(127, fp.element(0, 0, 0), "100+50=150 satura em 127 (Rd assinado)");
@@ -639,7 +639,7 @@ class Ir64VectorArithmeticExecutorTest {
         fp.setElement(0, 0, 0, 10); // Rd (não assinado) = 10
         fp.setElement(1, 0, 0, (byte) -20 & 0xFF); // Rn (assinado) = -20
 
-        EXECUTOR.executeOp(core, new Ir64Op.VectorArithmeticUnary(
+        EXECUTOR.executeOp(core, new AdvSimdIntegerOp64.ArithmeticUnary(
                 Ir64VectorUnaryOp.USQADD, false, false, 0, 0, 1));
 
         assertEquals(0, fp.element(0, 0, 0), "10-20=-10 satura em 0 (Rd não assinado)");
@@ -651,7 +651,7 @@ class Ir64VectorArithmeticExecutorTest {
         Aarch64FpRegisters fp = core.fp();
         fp.setElement(1, 0, 1, 200); // halfword 200 excede byte assinado
 
-        EXECUTOR.executeOp(core, new Ir64Op.VectorArithmeticNarrowUnary(
+        EXECUTOR.executeOp(core, new AdvSimdIntegerOp64.ArithmeticNarrowUnary(
                 Ir64VectorNarrowUnaryOp.SQXTN, false, false, 0, 0, 1));
 
         assertEquals(127, fp.element(0, 0, 0));
@@ -664,7 +664,7 @@ class Ir64VectorArithmeticExecutorTest {
         Aarch64FpRegisters fp = core.fp();
         fp.setElement(1, 0, 1, 0xFFFB); // halfword -5 (assinado)
 
-        EXECUTOR.executeOp(core, new Ir64Op.VectorArithmeticNarrowUnary(
+        EXECUTOR.executeOp(core, new AdvSimdIntegerOp64.ArithmeticNarrowUnary(
                 Ir64VectorNarrowUnaryOp.SQXTUN, false, false, 0, 0, 1));
 
         assertEquals(0, fp.element(0, 0, 0), "fonte assinada negativa satura em 0 (destino não assinado)");
@@ -676,7 +676,7 @@ class Ir64VectorArithmeticExecutorTest {
         Aarch64FpRegisters fp = core.fp();
         fp.setElement(1, 0, 1, 300);
 
-        EXECUTOR.executeOp(core, new Ir64Op.VectorArithmeticNarrowUnary(
+        EXECUTOR.executeOp(core, new AdvSimdIntegerOp64.ArithmeticNarrowUnary(
                 Ir64VectorNarrowUnaryOp.UQXTN, false, false, 0, 0, 1));
 
         assertEquals(255, fp.element(0, 0, 0));
@@ -689,7 +689,7 @@ class Ir64VectorArithmeticExecutorTest {
         fp.setQ(0, 0xFFFF_FFFF_FFFF_FFFFL, 0xFFFF_FFFF_FFFF_FFFFL); // sujeira pré-existente
         fp.setElement(1, 0, 1, 50);
 
-        EXECUTOR.executeOp(core, new Ir64Op.VectorArithmeticNarrowUnary(
+        EXECUTOR.executeOp(core, new AdvSimdIntegerOp64.ArithmeticNarrowUnary(
                 Ir64VectorNarrowUnaryOp.SQXTN, true, false, 0, 0, 1));
 
         assertEquals(50, fp.element(0, 0, 0));
@@ -703,7 +703,7 @@ class Ir64VectorArithmeticExecutorTest {
         Aarch64FpRegisters fp = core.fp();
         fp.setElement(1, 0, 2, 0xFFFF_FFE0L); // word -32
 
-        EXECUTOR.executeOp(core, new Ir64Op.VectorShiftImmediate(
+        EXECUTOR.executeOp(core, new AdvSimdIntegerOp64.ShiftImmediate(
                 Ir64VectorShiftOp.SSHR, false, false, 2, 4, 0, 1));
 
         assertEquals(0xFFFF_FFFEL, fp.element(0, 0, 2), "-32>>4 = -2");
@@ -716,7 +716,7 @@ class Ir64VectorArithmeticExecutorTest {
         fp.setElement(0, 0, 0, 10);
         fp.setElement(1, 0, 0, 6);
 
-        EXECUTOR.executeOp(core, new Ir64Op.VectorShiftImmediate(
+        EXECUTOR.executeOp(core, new AdvSimdIntegerOp64.ShiftImmediate(
                 Ir64VectorShiftOp.USRA, false, false, 0, 1, 0, 1));
 
         assertEquals(13, fp.element(0, 0, 0), "10 + (6>>>1) = 13");
@@ -729,7 +729,7 @@ class Ir64VectorArithmeticExecutorTest {
         fp.setElement(0, 0, 0, 0xAB);
         fp.setElement(1, 0, 0, 0x01);
 
-        EXECUTOR.executeOp(core, new Ir64Op.VectorShiftImmediate(
+        EXECUTOR.executeOp(core, new AdvSimdIntegerOp64.ShiftImmediate(
                 Ir64VectorShiftOp.SLI, false, false, 0, 4, 0, 1));
 
         assertEquals(0x1B, fp.element(0, 0, 0), "baixo(0xB) preservado de current, alto(0x1) do shift");
@@ -742,7 +742,7 @@ class Ir64VectorArithmeticExecutorTest {
         fp.setElement(0, 0, 0, 0xAB);
         fp.setElement(1, 0, 0, 0xFF);
 
-        EXECUTOR.executeOp(core, new Ir64Op.VectorShiftImmediate(
+        EXECUTOR.executeOp(core, new AdvSimdIntegerOp64.ShiftImmediate(
                 Ir64VectorShiftOp.SRI, false, false, 0, 4, 0, 1));
 
         assertEquals(0xAF, fp.element(0, 0, 0), "alto(0xA) preservado de current, baixo(0xF) do shift");
@@ -754,7 +754,7 @@ class Ir64VectorArithmeticExecutorTest {
         Aarch64FpRegisters fp = core.fp();
         fp.setElement(1, 0, 0, 100);
 
-        EXECUTOR.executeOp(core, new Ir64Op.VectorShiftImmediate(
+        EXECUTOR.executeOp(core, new AdvSimdIntegerOp64.ShiftImmediate(
                 Ir64VectorShiftOp.SQSHL, false, false, 0, 2, 0, 1));
 
         assertEquals(127, fp.element(0, 0, 0), "100<<2=400 satura em 127");
@@ -766,7 +766,7 @@ class Ir64VectorArithmeticExecutorTest {
         Aarch64FpRegisters fp = core.fp();
         fp.setElement(1, 0, 0, (byte) -1 & 0xFF);
 
-        EXECUTOR.executeOp(core, new Ir64Op.VectorShiftImmediate(
+        EXECUTOR.executeOp(core, new AdvSimdIntegerOp64.ShiftImmediate(
                 Ir64VectorShiftOp.SQSHLU, false, false, 0, 1, 0, 1));
 
         assertEquals(0, fp.element(0, 0, 0), "fonte assinada negativa satura em 0 (saída não assinada)");
@@ -779,7 +779,7 @@ class Ir64VectorArithmeticExecutorTest {
         fp.setQ(0, 0xFFFF_FFFF_FFFF_FFFFL, 0xFFFF_FFFF_FFFF_FFFFL);
         fp.setElement(1, 0, 0, 50);
 
-        EXECUTOR.executeOp(core, new Ir64Op.VectorShiftImmediate(
+        EXECUTOR.executeOp(core, new AdvSimdIntegerOp64.ShiftImmediate(
                 Ir64VectorShiftOp.SQSHL, true, false, 0, 1, 0, 1));
 
         assertEquals(100, fp.element(0, 0, 0), "50<<1=100, dentro do intervalo, sem saturar");
@@ -793,7 +793,7 @@ class Ir64VectorArithmeticExecutorTest {
         Aarch64FpRegisters fp = core.fp();
         fp.setElement(1, 0, 1, 496); // halfword
 
-        EXECUTOR.executeOp(core, new Ir64Op.VectorShiftNarrowImmediate(
+        EXECUTOR.executeOp(core, new AdvSimdIntegerOp64.ShiftNarrowImmediate(
                 Ir64VectorShiftNarrowOp.SHRN, false, false, 0, 4, 0, 1));
 
         assertEquals(31, fp.element(0, 0, 0), "496>>>4 = 31");
@@ -805,7 +805,7 @@ class Ir64VectorArithmeticExecutorTest {
         Aarch64FpRegisters fp = core.fp();
         fp.setElement(1, 0, 1, 5);
 
-        EXECUTOR.executeOp(core, new Ir64Op.VectorShiftNarrowImmediate(
+        EXECUTOR.executeOp(core, new AdvSimdIntegerOp64.ShiftNarrowImmediate(
                 Ir64VectorShiftNarrowOp.RSHRN, false, false, 0, 1, 0, 1));
 
         assertEquals(3, fp.element(0, 0, 0), "(5+1)>>1 = 3 (SHRN sem arredondar daria 2)");
@@ -817,7 +817,7 @@ class Ir64VectorArithmeticExecutorTest {
         Aarch64FpRegisters fp = core.fp();
         fp.setElement(1, 0, 1, 300);
 
-        EXECUTOR.executeOp(core, new Ir64Op.VectorShiftNarrowImmediate(
+        EXECUTOR.executeOp(core, new AdvSimdIntegerOp64.ShiftNarrowImmediate(
                 Ir64VectorShiftNarrowOp.SQSHRN, false, false, 0, 1, 0, 1));
 
         assertEquals(127, fp.element(0, 0, 0), "300>>1=150 satura em 127 (byte assinado)");
@@ -829,7 +829,7 @@ class Ir64VectorArithmeticExecutorTest {
         Aarch64FpRegisters fp = core.fp();
         fp.setElement(1, 0, 1, 1000);
 
-        EXECUTOR.executeOp(core, new Ir64Op.VectorShiftNarrowImmediate(
+        EXECUTOR.executeOp(core, new AdvSimdIntegerOp64.ShiftNarrowImmediate(
                 Ir64VectorShiftNarrowOp.UQSHRN, false, false, 0, 1, 0, 1));
 
         assertEquals(255, fp.element(0, 0, 0), "1000>>1=500 satura em 255");
@@ -841,7 +841,7 @@ class Ir64VectorArithmeticExecutorTest {
         Aarch64FpRegisters fp = core.fp();
         fp.setElement(1, 0, 1, (short) -100 & 0xFFFF);
 
-        EXECUTOR.executeOp(core, new Ir64Op.VectorShiftNarrowImmediate(
+        EXECUTOR.executeOp(core, new AdvSimdIntegerOp64.ShiftNarrowImmediate(
                 Ir64VectorShiftNarrowOp.SQSHRUN, false, false, 0, 1, 0, 1));
 
         assertEquals(0, fp.element(0, 0, 0), "-100>>1=-50 satura em 0 (saída não assinada)");
@@ -853,7 +853,7 @@ class Ir64VectorArithmeticExecutorTest {
         Aarch64FpRegisters fp = core.fp();
         fp.setElement(1, 0, 0, (byte) -1 & 0xFF);
 
-        EXECUTOR.executeOp(core, new Ir64Op.VectorShiftWidenImmediate(
+        EXECUTOR.executeOp(core, new AdvSimdIntegerOp64.ShiftWidenImmediate(
                 Ir64VectorShiftWidenOp.SSHLL, false, 0, 2, 0, 1));
 
         assertEquals(0xFFFCL, fp.element(0, 0, 1), "sext(-1)<<2 = -4, halfword 0xFFFC");
@@ -865,7 +865,7 @@ class Ir64VectorArithmeticExecutorTest {
         Aarch64FpRegisters fp = core.fp();
         fp.setElement(1, 0, 0, 0xFF);
 
-        EXECUTOR.executeOp(core, new Ir64Op.VectorShiftWidenImmediate(
+        EXECUTOR.executeOp(core, new AdvSimdIntegerOp64.ShiftWidenImmediate(
                 Ir64VectorShiftWidenOp.USHLL, false, 0, 0, 0, 1));
 
         assertEquals(0x00FFL, fp.element(0, 0, 1), "zext(0xFF)<<0 = 0x00FF, NÃO 0xFFFF (sem sinal)");
@@ -880,15 +880,15 @@ class Ir64VectorArithmeticExecutorTest {
         fp.setElement(1, 0, 0, 0b1100);
         fp.setElement(2, 0, 0, 0b1010);
 
-        EXECUTOR.executeOp(core, new Ir64Op.VectorArithmeticThreeSame(
+        EXECUTOR.executeOp(core, new AdvSimdIntegerOp64.ArithmeticThreeSame(
                 Ir64VectorThreeSameOp.AND, false, false, 0, 0, 1, 2));
         assertEquals(0b1000, fp.element(0, 0, 0));
 
-        EXECUTOR.executeOp(core, new Ir64Op.VectorArithmeticThreeSame(
+        EXECUTOR.executeOp(core, new AdvSimdIntegerOp64.ArithmeticThreeSame(
                 Ir64VectorThreeSameOp.ORR, false, false, 0, 0, 1, 2));
         assertEquals(0b1110, fp.element(0, 0, 0));
 
-        EXECUTOR.executeOp(core, new Ir64Op.VectorArithmeticThreeSame(
+        EXECUTOR.executeOp(core, new AdvSimdIntegerOp64.ArithmeticThreeSame(
                 Ir64VectorThreeSameOp.EOR, false, false, 0, 0, 1, 2));
         assertEquals(0b0110, fp.element(0, 0, 0));
     }
@@ -900,11 +900,11 @@ class Ir64VectorArithmeticExecutorTest {
         fp.setElement(1, 0, 0, 0xFF);
         fp.setElement(2, 0, 0, 0x0F);
 
-        EXECUTOR.executeOp(core, new Ir64Op.VectorArithmeticThreeSame(
+        EXECUTOR.executeOp(core, new AdvSimdIntegerOp64.ArithmeticThreeSame(
                 Ir64VectorThreeSameOp.BIC, false, false, 0, 0, 1, 2));
         assertEquals(0xF0, fp.element(0, 0, 0), "0xFF & ~0x0F = 0xF0");
 
-        EXECUTOR.executeOp(core, new Ir64Op.VectorArithmeticThreeSame(
+        EXECUTOR.executeOp(core, new AdvSimdIntegerOp64.ArithmeticThreeSame(
                 Ir64VectorThreeSameOp.ORN, false, false, 0, 0, 1, 2));
         assertEquals(0xFF, fp.element(0, 0, 0), "0xFF | ~0x0F trunca para 0xFF");
     }
@@ -917,7 +917,7 @@ class Ir64VectorArithmeticExecutorTest {
         fp.setElement(1, 0, 0, 0b1111_0000); // Rn
         fp.setElement(2, 0, 0, 0b0000_1111); // Rm
 
-        EXECUTOR.executeOp(core, new Ir64Op.VectorArithmeticThreeSame(
+        EXECUTOR.executeOp(core, new AdvSimdIntegerOp64.ArithmeticThreeSame(
                 Ir64VectorThreeSameOp.BSL, false, false, 0, 0, 1, 2));
 
         // bit=1 na máscara -> vem de Rn; bit=0 -> vem de Rm: 1100_0011 -> Rn(1111_0000) nos bits
@@ -933,7 +933,7 @@ class Ir64VectorArithmeticExecutorTest {
         fp.setElement(1, 0, 0, 0b0000_0000); // Rn
         fp.setElement(2, 0, 0, 0b1111_0000); // Rm = máscara
 
-        EXECUTOR.executeOp(core, new Ir64Op.VectorArithmeticThreeSame(
+        EXECUTOR.executeOp(core, new AdvSimdIntegerOp64.ArithmeticThreeSame(
                 Ir64VectorThreeSameOp.BIT, false, false, 0, 0, 1, 2));
 
         // onde Rm=1: vem de Rn (0); onde Rm=0: preserva Rd (1) -> 0000_1111
@@ -948,7 +948,7 @@ class Ir64VectorArithmeticExecutorTest {
         fp.setElement(1, 0, 0, 0b0000_0000); // Rn
         fp.setElement(2, 0, 0, 0b1111_0000); // Rm = máscara
 
-        EXECUTOR.executeOp(core, new Ir64Op.VectorArithmeticThreeSame(
+        EXECUTOR.executeOp(core, new AdvSimdIntegerOp64.ArithmeticThreeSame(
                 Ir64VectorThreeSameOp.BIF, false, false, 0, 0, 1, 2));
 
         // onde Rm=0: vem de Rn (0); onde Rm=1: preserva Rd (1) -> 1111_0000
@@ -963,7 +963,7 @@ class Ir64VectorArithmeticExecutorTest {
         Aarch64FpRegisters fp = core.fp();
         fp.setElement(1, 0, 0, 0x80); // byte -128 (Byte.MIN_VALUE)
 
-        EXECUTOR.executeOp(core, new Ir64Op.VectorArithmeticUnary(
+        EXECUTOR.executeOp(core, new AdvSimdIntegerOp64.ArithmeticUnary(
                 Ir64VectorUnaryOp.SQABS, false, false, 0, 0, 1));
 
         assertEquals(0x7F, fp.element(0, 0, 0), "|(-128)| satura em 127, não vira -128 de novo");
@@ -975,7 +975,7 @@ class Ir64VectorArithmeticExecutorTest {
         Aarch64FpRegisters fp = core.fp();
         fp.setElement(1, 0, 0, 0x80); // byte -128
 
-        EXECUTOR.executeOp(core, new Ir64Op.VectorArithmeticUnary(
+        EXECUTOR.executeOp(core, new AdvSimdIntegerOp64.ArithmeticUnary(
                 Ir64VectorUnaryOp.SQNEG, false, false, 0, 0, 1));
 
         assertEquals(0x7F, fp.element(0, 0, 0), "-(-128) satura em 127");
@@ -987,7 +987,7 @@ class Ir64VectorArithmeticExecutorTest {
         Aarch64FpRegisters fp = core.fp();
         fp.setElement(1, 0, 2, 0x0000_0001); // word, só bit0 setado
 
-        EXECUTOR.executeOp(core, new Ir64Op.VectorArithmeticUnary(
+        EXECUTOR.executeOp(core, new AdvSimdIntegerOp64.ArithmeticUnary(
                 Ir64VectorUnaryOp.CLZ, false, false, 2, 0, 1));
 
         assertEquals(31, fp.element(0, 0, 2));
@@ -999,7 +999,7 @@ class Ir64VectorArithmeticExecutorTest {
         Aarch64FpRegisters fp = core.fp();
         fp.setElement(1, 0, 1, 0); // halfword zero
 
-        EXECUTOR.executeOp(core, new Ir64Op.VectorArithmeticUnary(
+        EXECUTOR.executeOp(core, new AdvSimdIntegerOp64.ArithmeticUnary(
                 Ir64VectorUnaryOp.CLZ, false, false, 1, 0, 1));
 
         assertEquals(16, fp.element(0, 0, 1));
@@ -1011,7 +1011,7 @@ class Ir64VectorArithmeticExecutorTest {
         Aarch64FpRegisters fp = core.fp();
         fp.setElement(1, 0, 1, 0b0111_1111_1111_1110); // halfword positivo, 1 bit não-sinal difere
 
-        EXECUTOR.executeOp(core, new Ir64Op.VectorArithmeticUnary(
+        EXECUTOR.executeOp(core, new AdvSimdIntegerOp64.ArithmeticUnary(
                 Ir64VectorUnaryOp.CLS, false, false, 1, 0, 1));
 
         assertEquals(0, fp.element(0, 0, 1), "bit logo após o sinal já difere: 0 bits repetidos");
@@ -1023,7 +1023,7 @@ class Ir64VectorArithmeticExecutorTest {
         Aarch64FpRegisters fp = core.fp();
         fp.setElement(1, 0, 0, 0); // byte zero
 
-        EXECUTOR.executeOp(core, new Ir64Op.VectorArithmeticUnary(
+        EXECUTOR.executeOp(core, new AdvSimdIntegerOp64.ArithmeticUnary(
                 Ir64VectorUnaryOp.CLS, false, false, 0, 0, 1));
 
         assertEquals(7, fp.element(0, 0, 0), "todos os 7 bits não-sinal repetem o sinal (0)");
@@ -1035,7 +1035,7 @@ class Ir64VectorArithmeticExecutorTest {
         Aarch64FpRegisters fp = core.fp();
         fp.setElement(1, 0, 0, 0b1011_0110);
 
-        EXECUTOR.executeOp(core, new Ir64Op.VectorArithmeticUnary(
+        EXECUTOR.executeOp(core, new AdvSimdIntegerOp64.ArithmeticUnary(
                 Ir64VectorUnaryOp.CNT, false, false, 0, 0, 1));
 
         assertEquals(5, fp.element(0, 0, 0));
@@ -1047,7 +1047,7 @@ class Ir64VectorArithmeticExecutorTest {
         Aarch64FpRegisters fp = core.fp();
         fp.setElement(1, 0, 0, 0b1111_0000);
 
-        EXECUTOR.executeOp(core, new Ir64Op.VectorArithmeticUnary(
+        EXECUTOR.executeOp(core, new AdvSimdIntegerOp64.ArithmeticUnary(
                 Ir64VectorUnaryOp.NOT, false, false, 0, 0, 1));
 
         assertEquals(0b0000_1111, fp.element(0, 0, 0));
@@ -1059,7 +1059,7 @@ class Ir64VectorArithmeticExecutorTest {
         Aarch64FpRegisters fp = core.fp();
         fp.setElement(1, 0, 0, 0b1000_0001);
 
-        EXECUTOR.executeOp(core, new Ir64Op.VectorArithmeticUnary(
+        EXECUTOR.executeOp(core, new AdvSimdIntegerOp64.ArithmeticUnary(
                 Ir64VectorUnaryOp.RBIT, false, false, 0, 0, 1));
 
         assertEquals(0b1000_0001, fp.element(0, 0, 0), "palíndromo, reversão não muda");
@@ -1071,7 +1071,7 @@ class Ir64VectorArithmeticExecutorTest {
         Aarch64FpRegisters fp = core.fp();
         fp.setElement(1, 0, 0, 0b0000_0001);
 
-        EXECUTOR.executeOp(core, new Ir64Op.VectorArithmeticUnary(
+        EXECUTOR.executeOp(core, new AdvSimdIntegerOp64.ArithmeticUnary(
                 Ir64VectorUnaryOp.RBIT, false, false, 0, 0, 1));
 
         assertEquals(0b1000_0000, fp.element(0, 0, 0));
@@ -1088,7 +1088,7 @@ class Ir64VectorArithmeticExecutorTest {
             fp.setElement(1, i, 1, i + 1);
         }
 
-        EXECUTOR.executeOp(core, new Ir64Op.VectorArithmeticUnary(
+        EXECUTOR.executeOp(core, new AdvSimdIntegerOp64.ArithmeticUnary(
                 Ir64VectorUnaryOp.REV64, false, true, 1, 0, 1));
 
         assertEquals(4, fp.element(0, 0, 1));
@@ -1110,7 +1110,7 @@ class Ir64VectorArithmeticExecutorTest {
             fp.setElement(1, i, 0, i + 1);
         }
 
-        EXECUTOR.executeOp(core, new Ir64Op.VectorArithmeticUnary(
+        EXECUTOR.executeOp(core, new AdvSimdIntegerOp64.ArithmeticUnary(
                 Ir64VectorUnaryOp.REV32, false, true, 0, 0, 1));
 
         assertEquals(4, fp.element(0, 0, 0));
@@ -1130,7 +1130,7 @@ class Ir64VectorArithmeticExecutorTest {
         fp.setElement(1, 0, 0, 0xAA);
         fp.setElement(1, 1, 0, 0xBB);
 
-        EXECUTOR.executeOp(core, new Ir64Op.VectorArithmeticUnary(
+        EXECUTOR.executeOp(core, new AdvSimdIntegerOp64.ArithmeticUnary(
                 Ir64VectorUnaryOp.REV16, false, false, 0, 0, 1));
 
         assertEquals(0xBB, fp.element(0, 0, 0));
@@ -1145,7 +1145,7 @@ class Ir64VectorArithmeticExecutorTest {
         // trunca os 16 bits baixos.
         fp.setElement(1, 0, 2, 0x1_2345L);
 
-        EXECUTOR.executeOp(core, new Ir64Op.VectorArithmeticNarrowUnary(
+        EXECUTOR.executeOp(core, new AdvSimdIntegerOp64.ArithmeticNarrowUnary(
                 Ir64VectorNarrowUnaryOp.XTN, false, false, 1, 0, 1));
 
         assertEquals(0x2345, fp.element(0, 0, 1), "trunca para 16 bits, sem saturar (diferente de SQXTN/UQXTN)");
@@ -1157,7 +1157,7 @@ class Ir64VectorArithmeticExecutorTest {
         Aarch64FpRegisters fp = core.fp();
         fp.setElement(1, 0, 0, 0xFF); // byte v1[0] = 0xFF (zero-extend, SHLL é sempre não assinado)
 
-        EXECUTOR.executeOp(core, new Ir64Op.VectorShiftWidenImmediate(
+        EXECUTOR.executeOp(core, new AdvSimdIntegerOp64.ShiftWidenImmediate(
                 Ir64VectorShiftWidenOp.USHLL, false, 0, 8, 0, 1));
 
         assertEquals(0xFF00, fp.element(0, 0, 1), "0xFF << 8 (largura inteira do elemento estreito)");
@@ -1169,7 +1169,7 @@ class Ir64VectorArithmeticExecutorTest {
         Aarch64FpRegisters fp = core.fp();
         fp.setElement(1, 0, 2, 0x7FFF_FFFFL); // bit31=0 → operando < 0.5
 
-        EXECUTOR.executeOp(core, new Ir64Op.VectorArithmeticUnary(
+        EXECUTOR.executeOp(core, new AdvSimdIntegerOp64.ArithmeticUnary(
                 Ir64VectorUnaryOp.URECPE, false, false, 2, 0, 1));
 
         assertEquals(0xFFFF_FFFFL, fp.element(0, 0, 2));
@@ -1181,13 +1181,13 @@ class Ir64VectorArithmeticExecutorTest {
         Aarch64FpRegisters fp = core.fp();
         fp.setElement(1, 0, 2, 0x8000_0000L); // exatamente 0.5
 
-        EXECUTOR.executeOp(core, new Ir64Op.VectorArithmeticUnary(
+        EXECUTOR.executeOp(core, new AdvSimdIntegerOp64.ArithmeticUnary(
                 Ir64VectorUnaryOp.URECPE, false, false, 2, 0, 1));
 
         assertEquals(0xFF80_0000L, fp.element(0, 0, 2), "RecipEstimate(256)=511 -> 511<<23");
 
         fp.setElement(1, 1, 2, 0xFFFF_FFFFL); // próximo de 1.0
-        EXECUTOR.executeOp(core, new Ir64Op.VectorArithmeticUnary(
+        EXECUTOR.executeOp(core, new AdvSimdIntegerOp64.ArithmeticUnary(
                 Ir64VectorUnaryOp.URECPE, false, true, 2, 0, 1));
         assertEquals(0x8000_0000L, fp.element(0, 1, 2), "RecipEstimate(511)=256 -> 256<<23");
     }
@@ -1198,7 +1198,7 @@ class Ir64VectorArithmeticExecutorTest {
         Aarch64FpRegisters fp = core.fp();
         fp.setElement(1, 0, 2, 0x3FFF_FFFFL); // bits31:30 == 0 → operando < 0.25
 
-        EXECUTOR.executeOp(core, new Ir64Op.VectorArithmeticUnary(
+        EXECUTOR.executeOp(core, new AdvSimdIntegerOp64.ArithmeticUnary(
                 Ir64VectorUnaryOp.URSQRTE, false, false, 2, 0, 1));
 
         assertEquals(0xFFFF_FFFFL, fp.element(0, 0, 2));
@@ -1211,7 +1211,7 @@ class Ir64VectorArithmeticExecutorTest {
         fp.setElement(1, 0, 2, 0x8000_0000L);
         fp.setElement(1, 1, 2, 0x4000_0000L);
 
-        EXECUTOR.executeOp(core, new Ir64Op.VectorArithmeticUnary(
+        EXECUTOR.executeOp(core, new AdvSimdIntegerOp64.ArithmeticUnary(
                 Ir64VectorUnaryOp.URSQRTE, false, true, 2, 0, 1));
 
         assertEquals(0xB480_0000L, fp.element(0, 0, 2), "RecipSqrtEstimate(256)=361 -> 361<<23");
@@ -1226,7 +1226,7 @@ class Ir64VectorArithmeticExecutorTest {
         fp.setElement(1, 0, 1, 0x8000);
         fp.setElement(2, 0, 1, 0x8000);
 
-        EXECUTOR.executeOp(core, new Ir64Op.VectorArithmeticWidening(
+        EXECUTOR.executeOp(core, new AdvSimdIntegerOp64.ArithmeticWidening(
                 Ir64VectorWideningOp.SQDMULL, true, false, 1, 0, 1, 2));
 
         assertEquals(0x7FFF_FFFFL, fp.element(0, 0, 2), "2*(-32768)^2 satura em INT32_MAX, mesma saturação da forma vetorial");
@@ -1241,7 +1241,7 @@ class Ir64VectorArithmeticExecutorTest {
         fp.setElement(1, 0, 1, 100);
         fp.setElement(2, 0, 1, 100);
 
-        EXECUTOR.executeOp(core, new Ir64Op.VectorArithmeticWidening(
+        EXECUTOR.executeOp(core, new AdvSimdIntegerOp64.ArithmeticWidening(
                 Ir64VectorWideningOp.SQDMLAL, true, false, 1, 0, 1, 2));
 
         assertEquals(20010L, fp.element(0, 0, 2), "10 + 2*100*100 = 20010, MESMA lógica da forma vetorial");
@@ -1266,7 +1266,7 @@ class Ir64VectorArithmeticExecutorTest {
         fillLanes(fp, 0, 0, 8, 0, 1); // v0.8b = {1..8}
 
         // USHLL v0.8h, v0.8b, #0 — `Rd` == `Rn`: escrever a halfword 0 cobre os bytes 0 E 1.
-        EXECUTOR.executeOp(core, new Ir64Op.VectorShiftWidenImmediate(
+        EXECUTOR.executeOp(core, new AdvSimdIntegerOp64.ShiftWidenImmediate(
                 Ir64VectorShiftWidenOp.USHLL, false, 0, 0, 0, 0));
 
         for (int i = 0; i < 8; i++) {
@@ -1281,7 +1281,7 @@ class Ir64VectorArithmeticExecutorTest {
         fillLanes(fp, 0, 8, 8, 0, 1); // metade ALTA de v0.16b = {1..8}
 
         // USHLL2 v0.8h, v0.16b, #1 — lê a metade alta, escreve os 128 bits inteiros.
-        EXECUTOR.executeOp(core, new Ir64Op.VectorShiftWidenImmediate(
+        EXECUTOR.executeOp(core, new AdvSimdIntegerOp64.ShiftWidenImmediate(
                 Ir64VectorShiftWidenOp.USHLL, true, 0, 1, 0, 0));
 
         for (int i = 0; i < 8; i++) {
@@ -1297,7 +1297,7 @@ class Ir64VectorArithmeticExecutorTest {
         fillLanes(fp, 1, 0, 8, 0, 0); // v1.8b = {0,...}: a soma preserva o valor de v0
 
         // UADDL v0.8h, v0.8b, v1.8b — `Rd` == `Rn`.
-        EXECUTOR.executeOp(core, new Ir64Op.VectorArithmeticWidening(
+        EXECUTOR.executeOp(core, new AdvSimdIntegerOp64.ArithmeticWidening(
                 Ir64VectorWideningOp.UADDL, false, false, 0, 0, 0, 1));
         for (int i = 0; i < 8; i++) {
             assertEquals(i + 1, fp.element(0, i, 1), "Rd==Rn: lane larga " + i);
@@ -1305,7 +1305,7 @@ class Ir64VectorArithmeticExecutorTest {
 
         fillLanes(fp, 0, 0, 8, 0, 1);
         // UADDL v0.8h, v1.8b, v0.8b — `Rd` == `Rm` (mesmo defeito pelo outro operando).
-        EXECUTOR.executeOp(core, new Ir64Op.VectorArithmeticWidening(
+        EXECUTOR.executeOp(core, new AdvSimdIntegerOp64.ArithmeticWidening(
                 Ir64VectorWideningOp.UADDL, false, false, 0, 0, 1, 0));
         for (int i = 0; i < 8; i++) {
             assertEquals(i + 1, fp.element(0, i, 1), "Rd==Rm: lane larga " + i);
@@ -1320,7 +1320,7 @@ class Ir64VectorArithmeticExecutorTest {
         fp.setElement(1, 0, 0, 2); // v1.b[0] = 2
 
         // UMULL v0.8h, v0.8b, v1.b[0] — `Rd` == `Rn` (o elemento de `Rm` já é lido fora do laço).
-        EXECUTOR.executeOp(core, new Ir64Op.VectorArithmeticWideningByElement(
+        EXECUTOR.executeOp(core, new AdvSimdIntegerOp64.ArithmeticWideningByElement(
                 Ir64VectorWideningOp.UMULL, false, false, 0, 0, 0, 1, 0));
 
         for (int i = 0; i < 8; i++) {
@@ -1338,7 +1338,7 @@ class Ir64VectorArithmeticExecutorTest {
         }
 
         // UADDW v0.8h, v1.8h, v0.8b — `Rd` == `Rm`, o operando estreito.
-        EXECUTOR.executeOp(core, new Ir64Op.VectorArithmeticWide(
+        EXECUTOR.executeOp(core, new AdvSimdIntegerOp64.ArithmeticWide(
                 Ir64VectorWideOp.UADDW, false, 0, 0, 1, 0));
 
         for (int i = 0; i < 8; i++) {
@@ -1358,7 +1358,7 @@ class Ir64VectorArithmeticExecutorTest {
 
         // ADDHN2 v0.16b, v0.8h, v1.8h — `Rd` == `Rn` com `q=1`: a escrita da lane estreita
         // `8+i` cobre a lane LARGA `(8+i)/2`, sempre maior que `i` (ainda não lida).
-        EXECUTOR.executeOp(core, new Ir64Op.VectorArithmeticNarrow(
+        EXECUTOR.executeOp(core, new AdvSimdIntegerOp64.ArithmeticNarrow(
                 Ir64VectorNarrowOp.ADDHN, true, 0, 0, 0, 1));
 
         for (int i = 0; i < 8; i++) {
@@ -1376,7 +1376,7 @@ class Ir64VectorArithmeticExecutorTest {
         }
 
         // XTN2 v0.16b, v0.8h — `Rd` == `Rn` com `q=1`.
-        EXECUTOR.executeOp(core, new Ir64Op.VectorArithmeticNarrowUnary(
+        EXECUTOR.executeOp(core, new AdvSimdIntegerOp64.ArithmeticNarrowUnary(
                 Ir64VectorNarrowUnaryOp.XTN, false, true, 0, 0, 0));
 
         for (int i = 0; i < 8; i++) {
@@ -1393,7 +1393,7 @@ class Ir64VectorArithmeticExecutorTest {
         }
 
         // SHRN2 v0.16b, v0.8h, #4 — `Rd` == `Rn` com `q=1`.
-        EXECUTOR.executeOp(core, new Ir64Op.VectorShiftNarrowImmediate(
+        EXECUTOR.executeOp(core, new AdvSimdIntegerOp64.ShiftNarrowImmediate(
                 Ir64VectorShiftNarrowOp.SHRN, false, true, 0, 4, 0, 0));
 
         for (int i = 0; i < 8; i++) {

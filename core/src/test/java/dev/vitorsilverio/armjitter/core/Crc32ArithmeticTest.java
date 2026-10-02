@@ -15,7 +15,7 @@ import dev.vitorsilverio.armjitter.decoder.InstructionKind;
 import dev.vitorsilverio.armjitter.decoder.ThumbDecoder;
 import dev.vitorsilverio.armjitter.executor64.Ir64BlockExecutor;
 import dev.vitorsilverio.armjitter.ir.IrOp;
-import dev.vitorsilverio.armjitter.ir64.Ir64Op;
+import dev.vitorsilverio.armjitter.ir64.IntegerOp64;
 import dev.vitorsilverio.armjitter.memory.AddressSpace64;
 import dev.vitorsilverio.armjitter.support.TestAddressSpace;
 import dev.vitorsilverio.armjitter.swi.SwiDispatcher;
@@ -181,7 +181,7 @@ class Crc32ArithmeticTest {
             Aarch64Core core64 = new Aarch64Core(AddressSpace64.wrapping(new TestAddressSpace(16)));
             core64.setX(0, Integer.toUnsignedLong(acc));
             core64.setX(1, Integer.toUnsignedLong(data));
-            executor64.executeOp(core64, new Ir64Op.Crc32(2, 0, 1, dataWidthBits, castagnoli));
+            executor64.executeOp(core64, new IntegerOp64.Crc32(2, 0, 1, dataWidthBits, castagnoli));
 
             assertEquals((int) core64.x(2), core32.register(2),
                     "trial=" + trial + " width=" + dataWidthBits + " castagnoli=" + castagnoli);

@@ -4,7 +4,7 @@ import dev.vitorsilverio.armjitter.core64.Aarch64Core;
 import dev.vitorsilverio.armjitter.core64.Aarch64MatrixRegisters;
 import dev.vitorsilverio.armjitter.core64.Aarch64MatrixTileAddressing;
 import dev.vitorsilverio.armjitter.core64.Aarch64ScalableRegisters;
-import dev.vitorsilverio.armjitter.ir64.Ir64Op;
+import dev.vitorsilverio.armjitter.ir64.SmeOp64;
 
 /// `ZERO` multi-vetor de `ZA`, `MOVT` e `LUTI2`/`LUTI4` (SME2, B18.6). Transcrito de `trans_ZERO_za`/`do_movt`/
 /// `trans_MOVT_ztz`/`do_lut` (`translate-sme.c`) e de `helper_sme2_luti*`/`do_lut_*` (`vec_helper.c`) do QEMU.
@@ -39,7 +39,7 @@ final class SmeZt0Ops {
     /// `r × (SVL_B / ngrp)` linhas dela (`get_zarray`).
     ///
     /// @return `true` = a instrução já entrou numa exceção (acesso negado)
-    static boolean execute(Aarch64Core core, Ir64Op.SmeZeroArray op) {
+    static boolean execute(Aarch64Core core, SmeOp64.ZeroArray op) {
         if (!core.smeStreamingAndZaEnabledCheck(op.instructionAddress())) {
             return true;
         }
@@ -61,15 +61,15 @@ final class SmeZt0Ops {
 
     // ── `MOVT` ───────────────────────────────────────────────────────────────────────────────────
 
-    static boolean execute(Aarch64Core core, Ir64Op.SmeMovt op) {
-        if (op.form() == Ir64Op.SmeMovt.Form.VECTOR_TO_ZT) {
+    static boolean execute(Aarch64Core core, SmeOp64.Movt op) {
+        if (op.form() == SmeOp64.Movt.Form.VECTOR_TO_ZT) {
             return executeVectorToZt0(core, op);
         }
         if (!core.smeZt0EnabledCheck(op.instructionAddress())) {
             return true;
         }
         Aarch64MatrixRegisters matrix = core.matrix();
-        if (op.form() == Ir64Op.SmeMovt.Form.ZT_TO_X) {
+        if (op.form() == SmeOp64.Movt.Form.ZT_TO_X) {
             core.setX(op.rt(), matrix.zt0Word(op.off()));
         } else {
             matrix.setZt0Word(op.off(), core.x(op.rt()));
@@ -79,7 +79,7 @@ final class SmeZt0Ops {
 
     /// `MOVT ZT0, Zt` (`FEAT_SME_LUTv2`): copia `MIN(SVL_B, 64)` bytes de `Z<rt>` para o segmento `off MOD (64 / tsize)`
     /// de `ZT0`; com `off` zerando o segmento, o RESTO de `ZT0` é zerado (`maxsz = offset ? tsize : 64` no QEMU).
-    private static boolean executeVectorToZt0(Aarch64Core core, Ir64Op.SmeMovt op) {
+    private static boolean executeVectorToZt0(Aarch64Core core, SmeOp64.Movt op) {
         if (!core.smeStreamingEnabledCheck(op.instructionAddress())
                 || !core.smeZt0EnabledCheck(op.instructionAddress())) {
             return true;
@@ -107,7 +107,7 @@ final class SmeZt0Ops {
 
     // ── `LUTI2` / `LUTI4` ────────────────────────────────────────────────────────────────────────
 
-    static boolean execute(Aarch64Core core, Ir64Op.SmeLut op) {
+    static boolean execute(Aarch64Core core, SmeOp64.Lut op) {
         if (!core.smeStreamingEnabledCheck(op.instructionAddress())
                 || !core.smeZt0EnabledCheck(op.instructionAddress())) {
             return true;

@@ -9,9 +9,10 @@ import dev.vitorsilverio.armjitter.decoder64.Aarch64Decoder;
 import dev.vitorsilverio.armjitter.ir64.Aarch64SystemRegisterId;
 import dev.vitorsilverio.armjitter.ir64.Ir64Block;
 import dev.vitorsilverio.armjitter.ir64.Ir64Op;
-import dev.vitorsilverio.armjitter.ir64.Ir64Op.SveCompare.Cond;
-import dev.vitorsilverio.armjitter.ir64.Ir64Op.SveScalarCompare.Op;
+import dev.vitorsilverio.armjitter.ir64.SvePredicateOp64.Compare.Cond;
+import dev.vitorsilverio.armjitter.ir64.SvePredicateOp64.ScalarCompare.Op;
 import dev.vitorsilverio.armjitter.ir64.StandardIr64BlockLifter;
+import dev.vitorsilverio.armjitter.ir64.SvePredicateOp64;
 import dev.vitorsilverio.armjitter.memory.AddressSpace64;
 import dev.vitorsilverio.armjitter.support.TestAddressSpace;
 import org.junit.jupiter.api.Test;
@@ -63,20 +64,20 @@ class Aarch64SveCompareTest {
     private static final int NEEDS_SVE2 = 1;
     private static final int NEEDS_SVE2P1 = 2;
 
-    private static Row cmp(int word, String asm, Ir64Op.SveCompare.Cond cond, Ir64Op.SveCompare.Form form, int esz,
+    private static Row cmp(int word, String asm, SvePredicateOp64.Compare.Cond cond, SvePredicateOp64.Compare.Form form, int esz,
             int pd, int pg, int rn, int rm, int imm) {
-        return new Row(word, asm, new Ir64Op.SveCompare(cond, form, esz, pd, pg, rn, rm, imm, 0L), BASE);
+        return new Row(word, asm, new SvePredicateOp64.Compare(cond, form, esz, pd, pg, rn, rm, imm, 0L), BASE);
     }
 
-    private static Row scalar(int word, String asm, Ir64Op.SveScalarCompare.Op op, int esz, int rd, int rn, int rm,
+    private static Row scalar(int word, String asm, SvePredicateOp64.ScalarCompare.Op op, int esz, int rd, int rn, int rm,
             boolean sf, boolean unsigned, boolean flag, int tier) {
-        return new Row(word, asm, new Ir64Op.SveScalarCompare(op, esz, rd, rn, rm, sf, unsigned, flag, 0L), tier);
+        return new Row(word, asm, new SvePredicateOp64.ScalarCompare(op, esz, rd, rn, rm, sf, unsigned, flag, 0L), tier);
     }
 
     private static Stream<Row> rows() {
-        var v = Ir64Op.SveCompare.Form.VECTOR;
-        var w = Ir64Op.SveCompare.Form.WIDE;
-        var i = Ir64Op.SveCompare.Form.IMMEDIATE;
+        var v = SvePredicateOp64.Compare.Form.VECTOR;
+        var w = SvePredicateOp64.Compare.Form.WIDE;
+        var i = SvePredicateOp64.Compare.Form.IMMEDIATE;
         return Stream.of(
                 cmp(0x24030440, "cmphs p0.b, p1/z, z2.b, z3.b", Cond.HS, v, 0, 0, 1, 2, 3, 0),
                 cmp(0x24431c53, "cmphi p3.h, p7/z, z2.h, z3.h", Cond.HI, v, 1, 3, 7, 2, 3, 0),
@@ -167,7 +168,7 @@ class Aarch64SveCompareTest {
     private static boolean decodesToCompare(Aarch64Architecture architecture, int word) {
         try {
             Ir64Op op = decode(architecture, word);
-            return op instanceof Ir64Op.SveCompare || op instanceof Ir64Op.SveScalarCompare;
+            return op instanceof SvePredicateOp64.Compare || op instanceof SvePredicateOp64.ScalarCompare;
         } catch (UnsupportedOperationException refused) {
             return false;
         }
@@ -224,10 +225,10 @@ class Aarch64SveCompareTest {
     void theTableCoversEveryOperationAndEveryComparisonKind() {
         assertEquals(46, rows().count());
         // As quatro formas com contador (`WHILE_*_CNT2`/`CNT4`, B17.28) têm a tabela própria em `Aarch64SveCounterTest`.
-        assertEquals(Ir64Op.SveScalarCompare.Op.values().length - 4, rows().map(Row::expected)
-                .filter(Ir64Op.SveScalarCompare.class::isInstance).map(o -> ((Ir64Op.SveScalarCompare) o).op())
+        assertEquals(SvePredicateOp64.ScalarCompare.Op.values().length - 4, rows().map(Row::expected)
+                .filter(SvePredicateOp64.ScalarCompare.class::isInstance).map(o -> ((SvePredicateOp64.ScalarCompare) o).op())
                 .distinct().count());
-        assertEquals(26, rows().map(Row::expected).filter(Ir64Op.SveCompare.class::isInstance).count());
+        assertEquals(26, rows().map(Row::expected).filter(SvePredicateOp64.Compare.class::isInstance).count());
     }
 
     @ParameterizedTest
@@ -248,7 +249,7 @@ class Aarch64SveCompareTest {
 
     @Test
     void theWideFormsWithDoublewordElementsAreRefused() {
-        rows().filter(r -> r.expected() instanceof Ir64Op.SveCompare c && c.form() == Ir64Op.SveCompare.Form.WIDE)
+        rows().filter(r -> r.expected() instanceof SvePredicateOp64.Compare c && c.form() == SvePredicateOp64.Compare.Form.WIDE)
                 .forEach(r -> assertThrows(UnsupportedOperationException.class,
                         () -> decode(SVE2P1, r.word() | (3 << 22)), r.asm()));
     }
@@ -270,7 +271,7 @@ class Aarch64SveCompareTest {
 
     // ── Comparação que produz predicado ─────────────────────────────────────────────────────────
 
-    private static int compareWord(Ir64Op.SveCompare.Form form, Ir64Op.SveCompare.Cond cond, int esz, int pd, int pg,
+    private static int compareWord(SvePredicateOp64.Compare.Form form, SvePredicateOp64.Compare.Cond cond, int esz, int pd, int pg,
             int rn, int rm, int imm) {
         int common = (esz << 22) | (pg << 10) | (rn << 5) | pd;
         return switch (form) {
@@ -303,8 +304,8 @@ class Aarch64SveCompareTest {
             }
             case IMMEDIATE -> switch (cond) {
                 case HS, HI, LO, LS -> {
-                    int low = cond == Ir64Op.SveCompare.Cond.LO || cond == Ir64Op.SveCompare.Cond.LS ? 1 : 0;
-                    int second = cond == Ir64Op.SveCompare.Cond.HI || cond == Ir64Op.SveCompare.Cond.LS ? 1 : 0;
+                    int low = cond == SvePredicateOp64.Compare.Cond.LO || cond == SvePredicateOp64.Compare.Cond.LS ? 1 : 0;
+                    int second = cond == SvePredicateOp64.Compare.Cond.HI || cond == SvePredicateOp64.Compare.Cond.LS ? 1 : 0;
                     yield 0x24200000 | common | (imm << 14) | (low << 13) | (second << 4);
                 }
                 default -> {
@@ -323,23 +324,23 @@ class Aarch64SveCompareTest {
         };
     }
 
-    private record CompareCase(Ir64Op.SveCompare.Form form, Ir64Op.SveCompare.Cond cond) {
+    private record CompareCase(SvePredicateOp64.Compare.Form form, SvePredicateOp64.Compare.Cond cond) {
     }
 
     private static Stream<CompareCase> compareCases() {
         List<CompareCase> cases = new ArrayList<>();
-        for (var cond : Ir64Op.SveCompare.Cond.values()) {
+        for (var cond : SvePredicateOp64.Compare.Cond.values()) {
             switch (cond) {
-                case HS, HI, GE, GT, EQ, NE -> cases.add(new CompareCase(Ir64Op.SveCompare.Form.VECTOR, cond));
+                case HS, HI, GE, GT, EQ, NE -> cases.add(new CompareCase(SvePredicateOp64.Compare.Form.VECTOR, cond));
                 default -> { }
             }
-            cases.add(new CompareCase(Ir64Op.SveCompare.Form.WIDE, cond));
-            cases.add(new CompareCase(Ir64Op.SveCompare.Form.IMMEDIATE, cond));
+            cases.add(new CompareCase(SvePredicateOp64.Compare.Form.WIDE, cond));
+            cases.add(new CompareCase(SvePredicateOp64.Compare.Form.IMMEDIATE, cond));
         }
         return cases.stream();
     }
 
-    private static boolean isSigned(Ir64Op.SveCompare.Cond cond) {
+    private static boolean isSigned(SvePredicateOp64.Compare.Cond cond) {
         return switch (cond) {
             case HS, HI, LO, LS -> false;
             default -> true;
@@ -356,7 +357,7 @@ class Aarch64SveCompareTest {
         return unsigned.testBit(bits - 1) ? unsigned.subtract(BigInteger.ONE.shiftLeft(bits)) : unsigned;
     }
 
-    private static boolean order(Ir64Op.SveCompare.Cond cond, BigInteger left, BigInteger right) {
+    private static boolean order(SvePredicateOp64.Compare.Cond cond, BigInteger left, BigInteger right) {
         int c = left.compareTo(right);
         return switch (cond) {
             case EQ -> c == 0;
@@ -369,7 +370,7 @@ class Aarch64SveCompareTest {
     }
 
     /// O oráculo de um elemento: a interpretação do operando muda com a forma e com a condição (ver o helper do QEMU).
-    private static boolean oracle(Ir64Op.SveCompare.Form form, Ir64Op.SveCompare.Cond cond, int esz, long nn, long mm,
+    private static boolean oracle(SvePredicateOp64.Compare.Form form, SvePredicateOp64.Compare.Cond cond, int esz, long nn, long mm,
             int imm) {
         int bits = 8 << esz;
         boolean signed = isSigned(cond);
@@ -378,7 +379,7 @@ class Aarch64SveCompareTest {
         switch (form) {
             case VECTOR -> right = signed ? signedOf(mm, bits) : unsignedOf(mm, bits);
             case WIDE -> {
-                if (cond == Ir64Op.SveCompare.Cond.EQ || cond == Ir64Op.SveCompare.Cond.NE) {
+                if (cond == SvePredicateOp64.Compare.Cond.EQ || cond == SvePredicateOp64.Compare.Cond.NE) {
                     // O helper compara `int8_t` (promovido) com `uint64_t`: iguais só se os 64 bits coincidem.
                     left = left.mod(BigInteger.ONE.shiftLeft(64));
                     right = unsignedOf(mm, 64);
@@ -417,7 +418,7 @@ class Aarch64SveCompareTest {
         return out;
     }
 
-    private static int[] immediatesOf(Ir64Op.SveCompare.Cond cond) {
+    private static int[] immediatesOf(SvePredicateOp64.Compare.Cond cond) {
         return isSigned(cond) ? new int[] {-16, -1, 0, 1, 15} : new int[] {0, 1, 64, 127};
     }
 
@@ -426,8 +427,8 @@ class Aarch64SveCompareTest {
     void theComparisonMatchesTheBigIntegerOracleForEveryElementSizeAndVectorLength(CompareCase compareCase) {
         var form = compareCase.form();
         var cond = compareCase.cond();
-        int maxEsz = form == Ir64Op.SveCompare.Form.WIDE ? 2 : 3;
-        int[] immediates = form == Ir64Op.SveCompare.Form.IMMEDIATE ? immediatesOf(cond) : new int[] {0};
+        int maxEsz = form == SvePredicateOp64.Compare.Form.WIDE ? 2 : 3;
+        int[] immediates = form == SvePredicateOp64.Compare.Form.IMMEDIATE ? immediatesOf(cond) : new int[] {0};
         Random random = new Random(0x17_09L + cond.ordinal());
         for (int vl : VECTOR_LENGTHS) {
             for (int esz = 0; esz <= maxEsz; esz++) {
@@ -436,13 +437,13 @@ class Aarch64SveCompareTest {
                         Aarch64Core core = core(SVE, vl);
                         int elements = core.vectorLengthBytes() >> esz;
                         long[] nn = pool(esz, imm, random, elements);
-                        long[] mm = form == Ir64Op.SveCompare.Form.WIDE
+                        long[] mm = form == SvePredicateOp64.Compare.Form.WIDE
                                 ? widePool(random, core.vectorLengthBytes() / 8)
                                 : pool(esz, imm, random, elements);
                         setElements(core, Z2, esz, nn);
-                        if (form == Ir64Op.SveCompare.Form.WIDE) {
+                        if (form == SvePredicateOp64.Compare.Form.WIDE) {
                             setElements(core, Z3, 3, mm);
-                        } else if (form == Ir64Op.SveCompare.Form.VECTOR) {
+                        } else if (form == SvePredicateOp64.Compare.Form.VECTOR) {
                             setElements(core, Z3, esz, mm);
                         }
                         // `Pg` com lixo nos bytes que não são o mais baixo do elemento: o executor tem que ignorá-los.
@@ -453,7 +454,7 @@ class Aarch64SveCompareTest {
                         setPredicate(core, P1, pg);
                         setFlags(core, true, true, true, true);
                         int word = compareWord(form, cond, esz, P0, P1, Z2, Z3, imm);
-                        assertEquals(Ir64Op.SveCompare.class, decode(SVE, word).getClass());
+                        assertEquals(SvePredicateOp64.Compare.class, decode(SVE, word).getClass());
                         run(SVE, core, word);
 
                         boolean[] expected = new boolean[pg.length];
@@ -466,8 +467,8 @@ class Aarch64SveCompareTest {
                             if (!pg[index]) {
                                 continue;
                             }
-                            long right = form == Ir64Op.SveCompare.Form.WIDE ? mm[index / 8] : form
-                                    == Ir64Op.SveCompare.Form.VECTOR ? mm[e] : 0L;
+                            long right = form == SvePredicateOp64.Compare.Form.WIDE ? mm[index / 8] : form
+                                    == SvePredicateOp64.Compare.Form.VECTOR ? mm[e] : 0L;
                             boolean value = oracle(form, cond, esz, nn[e], right, imm);
                             expected[index] = value;
                             if (!anyActive) {
@@ -502,7 +503,7 @@ class Aarch64SveCompareTest {
                     pg[i] = random.nextInt(4) != 0;
                 }
                 setPredicate(core, P1, pg);
-                run(SVE, core, compareWord(Ir64Op.SveCompare.Form.VECTOR, Ir64Op.SveCompare.Cond.EQ, 0, P0, P1, Z2, Z3, 0));
+                run(SVE, core, compareWord(SvePredicateOp64.Compare.Form.VECTOR, SvePredicateOp64.Compare.Cond.EQ, 0, P0, P1, Z2, Z3, 0));
                 boolean[] afterCompare = flags(core);
                 setFlags(core, false, false, false, true);
                 run(SVE, core, PTEST_BASE | (P1 << 10) | (P0 << 5));
@@ -519,7 +520,7 @@ class Aarch64SveCompareTest {
         boolean[] pg = new boolean[32];
         java.util.Arrays.fill(pg, true);
         setPredicate(core, P1, pg);
-        run(SVE, core, compareWord(Ir64Op.SveCompare.Form.VECTOR, Ir64Op.SveCompare.Cond.EQ, 0, P1, P1, Z2, Z3, 0));
+        run(SVE, core, compareWord(SvePredicateOp64.Compare.Form.VECTOR, SvePredicateOp64.Compare.Cond.EQ, 0, P1, P1, Z2, Z3, 0));
         boolean[] expected = new boolean[32];
         for (int i = 0; i < 32; i++) {
             expected[i] = i >= 8 || i % 2 == 0; // dos bytes 8 em diante os dois vetores valem 0: iguais
@@ -531,7 +532,7 @@ class Aarch64SveCompareTest {
     void anEmptyGoverningPredicateGivesAnEmptyResultWithZAndCSet() {
         Aarch64Core core = core(SVE, 256);
         setFlags(core, true, false, false, true);
-        run(SVE, core, compareWord(Ir64Op.SveCompare.Form.VECTOR, Ir64Op.SveCompare.Cond.EQ, 2, P0, P1, Z2, Z3, 0));
+        run(SVE, core, compareWord(SvePredicateOp64.Compare.Form.VECTOR, SvePredicateOp64.Compare.Cond.EQ, 2, P0, P1, Z2, Z3, 0));
         assertArrayEquals(new boolean[] {false, true, true, false}, flags(core));
     }
 
@@ -545,9 +546,9 @@ class Aarch64SveCompareTest {
         boolean[] pg = new boolean[32];
         java.util.Arrays.fill(pg, true);
         setPredicate(core, P1, pg);
-        run(SVE, core, compareWord(Ir64Op.SveCompare.Form.WIDE, Ir64Op.SveCompare.Cond.LT, 0, P0, P1, Z2, Z3, 0));
+        run(SVE, core, compareWord(SvePredicateOp64.Compare.Form.WIDE, SvePredicateOp64.Compare.Cond.LT, 0, P0, P1, Z2, Z3, 0));
         assertFalse(predicate(core, P0)[0], "5 < 5 é falso");
-        run(SVE, core, compareWord(Ir64Op.SveCompare.Form.WIDE, Ir64Op.SveCompare.Cond.LE, 0, P0, P1, Z2, Z3, 0));
+        run(SVE, core, compareWord(SvePredicateOp64.Compare.Form.WIDE, SvePredicateOp64.Compare.Cond.LE, 0, P0, P1, Z2, Z3, 0));
         assertTrue(predicate(core, P0)[0], "5 <= 5 é verdadeiro");
     }
 
@@ -559,15 +560,15 @@ class Aarch64SveCompareTest {
         java.util.Arrays.fill(pg, true);
         setPredicate(core, P1, pg);
         // cmpeq z.b, #-16: -16 é 0xF0 no elemento
-        run(SVE, core, compareWord(Ir64Op.SveCompare.Form.IMMEDIATE, Ir64Op.SveCompare.Cond.EQ, 0, P0, P1, Z2, 0, -16));
+        run(SVE, core, compareWord(SvePredicateOp64.Compare.Form.IMMEDIATE, SvePredicateOp64.Compare.Cond.EQ, 0, P0, P1, Z2, 0, -16));
         assertTrue(predicate(core, P0)[0]);
         assertFalse(predicate(core, P0)[1]);
         // cmphs z.b, #127 (sem sinal): 0x7F e 0x80 passam, 0xF0 também, 0x0F não
-        run(SVE, core, compareWord(Ir64Op.SveCompare.Form.IMMEDIATE, Ir64Op.SveCompare.Cond.HS, 0, P0, P1, Z2, 0, 127));
+        run(SVE, core, compareWord(SvePredicateOp64.Compare.Form.IMMEDIATE, SvePredicateOp64.Compare.Cond.HS, 0, P0, P1, Z2, 0, 127));
         boolean[] p = predicate(core, P0);
         assertTrue(p[0] && !p[1] && p[2] && p[3]);
         // cmpge z.b, #15 (com sinal): 0xF0 = -16 falha
-        run(SVE, core, compareWord(Ir64Op.SveCompare.Form.IMMEDIATE, Ir64Op.SveCompare.Cond.GE, 0, P0, P1, Z2, 0, 15));
+        run(SVE, core, compareWord(SvePredicateOp64.Compare.Form.IMMEDIATE, SvePredicateOp64.Compare.Cond.GE, 0, P0, P1, Z2, 0, 15));
         p = predicate(core, P0);
         assertTrue(!p[0] && p[1] && p[2] && !p[3], "0xF0=-16 e 0x80=-128 falham; 0x0F=15 (igual) e 0x7F passam");
     }

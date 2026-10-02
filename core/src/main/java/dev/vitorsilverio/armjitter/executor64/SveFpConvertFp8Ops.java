@@ -4,10 +4,10 @@ import dev.vitorsilverio.armjitter.advsimd.AdvSimdLanes;
 import dev.vitorsilverio.armjitter.core64.Aarch64Core;
 import dev.vitorsilverio.armjitter.core64.Aarch64Fp8Format;
 import dev.vitorsilverio.armjitter.core64.Aarch64ScalableRegisters;
-import dev.vitorsilverio.armjitter.ir64.Ir64Op;
+import dev.vitorsilverio.armjitter.ir64.SveFpOp64;
 
-/// Semântica das conversões `fp8` sem predicado da B17.23: alargar ({@link Ir64Op.SveFpConvertFp8}) e
-/// estreitar ({@link Ir64Op.SveFpConvertToFp8}). Reusa os núcleos escalares de {@link AdvSimdLanes}
+/// Semântica das conversões `fp8` sem predicado da B17.23: alargar ({@link SveFpOp64.FpConvertFp8}) e
+/// estreitar ({@link SveFpOp64.FpConvertToFp8}). Reusa os núcleos escalares de {@link AdvSimdLanes}
 /// (`fp8ToFloat`/`floatToFp8`) já validados pelo AdvSIMD (B19.11a) — só o laço por elemento é novo.
 final class SveFpConvertFp8Ops {
     private static final int ESZ_BYTE = 0;
@@ -20,7 +20,7 @@ final class SveFpConvertFp8Ops {
 
     /// `F1CVT`/`F2CVT`/`F1CVTLT`/`F2CVTLT`/`BF1CVT`/`BF2CVT`/`BF1CVTLT`/`BF2CVTLT`. `true` = a instrução já
     /// entrou numa exceção (acesso negado).
-    static boolean executeWiden(Aarch64Core core, Ir64Op.SveFpConvertFp8 op) {
+    static boolean executeWiden(Aarch64Core core, SveFpOp64.FpConvertFp8 op) {
         if (!SvePredicateOps.accessAllowed(core, op.instructionAddress())) {
             return true;
         }
@@ -40,7 +40,7 @@ final class SveFpConvertFp8Ops {
     }
 
     /// `FCVTN`/`BFCVTN`/`FCVTNB`/`FCVTNT`. `true` = a instrução já entrou numa exceção (acesso negado).
-    static boolean executeNarrow(Aarch64Core core, Ir64Op.SveFpConvertToFp8 op) {
+    static boolean executeNarrow(Aarch64Core core, SveFpOp64.FpConvertToFp8 op) {
         if (!SvePredicateOps.accessAllowed(core, op.instructionAddress())) {
             return true;
         }
@@ -56,7 +56,7 @@ final class SveFpConvertFp8Ops {
         return false;
     }
 
-    private static void executeNarrowFromHalfOrBFloat16(Aarch64Core core, Ir64Op.SveFpConvertToFp8 op,
+    private static void executeNarrowFromHalfOrBFloat16(Aarch64Core core, SveFpOp64.FpConvertToFp8 op,
             Aarch64ScalableRegisters regs, boolean e4m3, int scale, boolean osc) {
         // largura do registrador-fonte é sempre H (esz=1), independentemente de `bfloat16Source`.
         int count = core.vectorLengthBytes() >> ESZ_HALF;
@@ -72,7 +72,7 @@ final class SveFpConvertFp8Ops {
         }
     }
 
-    private static void executeNarrowFromSingle(Aarch64Core core, Ir64Op.SveFpConvertToFp8 op,
+    private static void executeNarrowFromSingle(Aarch64Core core, SveFpOp64.FpConvertToFp8 op,
             Aarch64ScalableRegisters regs, boolean e4m3, int scale, boolean osc) {
         int count = core.vectorLengthBytes() >> ESZ_WORD;
         for (int i = 0; i < count; i++) {

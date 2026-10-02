@@ -3,8 +3,8 @@ package dev.vitorsilverio.armjitter.ir64;
 /// Tamanho de transferência de uma instrução de load/store **SIMD&FP** escalar A64 (`ARM DDI 0487
 /// C4.1.5`, campo `size`+`opc` combinado) — irmão de {@link Ir64MemSize} (registrador geral), mas
 /// com um quinto tamanho (`QUAD`, 128 bits) que não existe para `X`/`W` (B8.13). Usado por
-/// {@link Ir64Op.FpLoad64}/{@link Ir64Op.FpStore64}/{@link Ir64Op.FpLoadStorePair}/
-/// {@link Ir64Op.FpLoadLiteral64}.
+/// {@link FpOp64.Load64}/{@link FpOp64.Store64}/{@link FpOp64.LoadStorePair}/
+/// {@link FpOp64.LoadLiteral64}.
 public enum Ir64FpMemSize {
     /// 1 byte (`B<t>`).
     BYTE(1, 0),

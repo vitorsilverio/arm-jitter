@@ -4,7 +4,7 @@ import dev.vitorsilverio.armjitter.advsimd.AdvSimdLanes;
 import dev.vitorsilverio.armjitter.core64.Aarch64Core;
 import dev.vitorsilverio.armjitter.core64.Aarch64Fp8Format;
 import dev.vitorsilverio.armjitter.core64.Aarch64ScalableRegisters;
-import dev.vitorsilverio.armjitter.ir64.Ir64Op;
+import dev.vitorsilverio.armjitter.ir64.SveFpOp64;
 
 /// Semântica de `FMLAL_hb`/`FMLALL_sb` (multiply-accumulate `fp8` fundido) e `FDOT_hb`/`FDOT_sb` (produto
 /// escalar `fp8`), vetorial e indexado (B17.23) — reusa {@code AdvSimdLanes#fp8FusedMultiplyAdd}/
@@ -19,7 +19,7 @@ final class SveFp8MultiplyOps {
     }
 
     /// `FMLAL_hb`/`FMLALL_sb`. `true` = a instrução já entrou numa exceção (acesso negado).
-    static boolean executeFusedMultiplyAdd(Aarch64Core core, Ir64Op.SveFp8FusedMultiplyAddLong op) {
+    static boolean executeFusedMultiplyAdd(Aarch64Core core, SveFpOp64.Fp8FusedMultiplyAddLong op) {
         if (!SvePredicateOps.accessAllowed(core, op.instructionAddress())) {
             return true;
         }
@@ -54,7 +54,7 @@ final class SveFp8MultiplyOps {
     }
 
     /// `FDOT_hb`/`FDOT_sb`. `true` = a instrução já entrou numa exceção (acesso negado).
-    static boolean executeDotProduct(Aarch64Core core, Ir64Op.SveFp8DotProduct op) {
+    static boolean executeDotProduct(Aarch64Core core, SveFpOp64.Fp8DotProduct op) {
         if (!SvePredicateOps.accessAllowed(core, op.instructionAddress())) {
             return true;
         }

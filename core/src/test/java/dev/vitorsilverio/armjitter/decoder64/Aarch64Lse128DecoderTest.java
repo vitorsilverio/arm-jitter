@@ -3,6 +3,7 @@ package dev.vitorsilverio.armjitter.decoder64;
 import dev.vitorsilverio.armjitter.arch64.Aarch64Architecture;
 import dev.vitorsilverio.armjitter.ir64.Ir64AtomicOp;
 import dev.vitorsilverio.armjitter.ir64.Ir64Op;
+import dev.vitorsilverio.armjitter.ir64.MemoryOp64;
 import dev.vitorsilverio.armjitter.memory.AddressSpace64;
 import dev.vitorsilverio.armjitter.support.TestAddressSpace;
 import org.junit.jupiter.api.Test;
@@ -47,7 +48,7 @@ class Aarch64Lse128DecoderTest {
 
     @Test
     void decodesLdclrpWithCorrectRegisters() {
-        Ir64Op.AtomicMemoryOpPair op = (Ir64Op.AtomicMemoryOpPair) decode(LSE128_DECODER, LDCLRP);
+        MemoryOp64.AtomicMemoryOpPair op = (MemoryOp64.AtomicMemoryOpPair) decode(LSE128_DECODER, LDCLRP);
         assertEquals(2, op.rt());
         assertEquals(3, op.rt2());
         assertEquals(5, op.rn());
@@ -58,7 +59,7 @@ class Aarch64Lse128DecoderTest {
 
     @Test
     void decodesLdclrpWithStackPointerBase() {
-        Ir64Op.AtomicMemoryOpPair op = (Ir64Op.AtomicMemoryOpPair) decode(LSE128_DECODER, LDCLRP_SP);
+        MemoryOp64.AtomicMemoryOpPair op = (MemoryOp64.AtomicMemoryOpPair) decode(LSE128_DECODER, LDCLRP_SP);
         assertEquals(0, op.rt());
         assertEquals(1, op.rt2());
         assertEquals(31, op.rn()); // 31 = SP neste encoding (base de endereço)
@@ -66,12 +67,12 @@ class Aarch64Lse128DecoderTest {
 
     @Test
     void decodesLdsetpAndSwpp() {
-        Ir64Op.AtomicMemoryOpPair set = (Ir64Op.AtomicMemoryOpPair) decode(LSE128_DECODER, LDSETP);
+        MemoryOp64.AtomicMemoryOpPair set = (MemoryOp64.AtomicMemoryOpPair) decode(LSE128_DECODER, LDSETP);
         assertEquals(Ir64AtomicOp.SET, set.operation());
         assertEquals(2, set.rt());
         assertEquals(3, set.rt2());
 
-        Ir64Op.AtomicMemoryOpPair swp = (Ir64Op.AtomicMemoryOpPair) decode(LSE128_DECODER, SWPP);
+        MemoryOp64.AtomicMemoryOpPair swp = (MemoryOp64.AtomicMemoryOpPair) decode(LSE128_DECODER, SWPP);
         assertEquals(Ir64AtomicOp.SWP, swp.operation());
         assertEquals(2, swp.rt());
         assertEquals(3, swp.rt2());
@@ -79,15 +80,15 @@ class Aarch64Lse128DecoderTest {
 
     @Test
     void decodesAcquireReleaseBitsIndependently() {
-        Ir64Op.AtomicMemoryOpPair a = (Ir64Op.AtomicMemoryOpPair) decode(LSE128_DECODER, LDCLRPA);
+        MemoryOp64.AtomicMemoryOpPair a = (MemoryOp64.AtomicMemoryOpPair) decode(LSE128_DECODER, LDCLRPA);
         assertTrue(a.acquire());
         assertFalse(a.release());
 
-        Ir64Op.AtomicMemoryOpPair l = (Ir64Op.AtomicMemoryOpPair) decode(LSE128_DECODER, LDCLRPL);
+        MemoryOp64.AtomicMemoryOpPair l = (MemoryOp64.AtomicMemoryOpPair) decode(LSE128_DECODER, LDCLRPL);
         assertFalse(l.acquire());
         assertTrue(l.release());
 
-        Ir64Op.AtomicMemoryOpPair al = (Ir64Op.AtomicMemoryOpPair) decode(LSE128_DECODER, LDCLRPAL);
+        MemoryOp64.AtomicMemoryOpPair al = (MemoryOp64.AtomicMemoryOpPair) decode(LSE128_DECODER, LDCLRPAL);
         assertTrue(al.acquire());
         assertTrue(al.release());
     }

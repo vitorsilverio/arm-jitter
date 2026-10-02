@@ -6,7 +6,7 @@ import dev.vitorsilverio.armjitter.advsimd.AdvSimdRegisterWords;
 import dev.vitorsilverio.armjitter.core64.Aarch64Core;
 import dev.vitorsilverio.armjitter.core64.Aarch64ScalableRegisters;
 import dev.vitorsilverio.armjitter.ir64.Ir64CryptoAesOp;
-import dev.vitorsilverio.armjitter.ir64.Ir64Op;
+import dev.vitorsilverio.armjitter.ir64.SveIntegerOp64;
 
 /// Semântica das 7 instruções "SVE2 Crypto Extensions" (B17.24): `AESE`/`AESD`/`AESMC`/`AESIMC` e `SM4E`/
 /// `SM4EKEY` operam POR SEGMENTO de 128 bits (`VL/128` blocos independentes); `RAX1` opera elemento a elemento de
@@ -50,7 +50,7 @@ final class SveCryptoOps {
         };
     }
 
-    static boolean executeAes(Aarch64Core core, Ir64Op.SveCryptoAes op) {
+    static boolean executeAes(Aarch64Core core, SveIntegerOp64.CryptoAes op) {
         SvePredicateOps.requireNonStreaming(core);
         if (!SvePredicateOps.accessAllowed(core, op.instructionAddress())) {
             return true;
@@ -65,7 +65,7 @@ final class SveCryptoOps {
         return false;
     }
 
-    static boolean executeSm4Encrypt(Aarch64Core core, Ir64Op.SveCryptoSm4Encrypt op) {
+    static boolean executeSm4Encrypt(Aarch64Core core, SveIntegerOp64.CryptoSm4Encrypt op) {
         SvePredicateOps.requireNonStreaming(core);
         if (!SvePredicateOps.accessAllowed(core, op.instructionAddress())) {
             return true;
@@ -94,7 +94,7 @@ final class SveCryptoOps {
         return false;
     }
 
-    static boolean executeSm4KeyUpdate(Aarch64Core core, Ir64Op.SveCryptoSm4KeyUpdate op) {
+    static boolean executeSm4KeyUpdate(Aarch64Core core, SveIntegerOp64.CryptoSm4KeyUpdate op) {
         SvePredicateOps.requireNonStreaming(core);
         if (!SvePredicateOps.accessAllowed(core, op.instructionAddress())) {
             return true;
@@ -125,7 +125,7 @@ final class SveCryptoOps {
     /// `RAX1`: `Zd = Zn XOR rotateLeft(Zm, 1)`, elemento a elemento de 64 bits por TODA a largura de `VL` — sem
     /// segmentação (Achado 4 da task: `esz` do formato é `0`, a operação real é doubleword, e não há interação
     /// entre elementos vizinhos, ao contrário de `AES`/`SM4`).
-    static boolean executeRax1(Aarch64Core core, Ir64Op.SveCryptoRax1 op) {
+    static boolean executeRax1(Aarch64Core core, SveIntegerOp64.CryptoRax1 op) {
         SvePredicateOps.requireNonStreaming(core);
         if (!SvePredicateOps.accessAllowed(core, op.instructionAddress())) {
             return true;

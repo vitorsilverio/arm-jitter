@@ -6,6 +6,7 @@ import dev.vitorsilverio.armjitter.core64.Aarch64Core;
 import dev.vitorsilverio.armjitter.core64.Aarch64ExceptionLevel;
 import dev.vitorsilverio.armjitter.decoder64.Aarch64Decoder;
 import dev.vitorsilverio.armjitter.ir64.Ir64Op;
+import dev.vitorsilverio.armjitter.ir64.SveFpOp64;
 import dev.vitorsilverio.armjitter.memory.AddressSpace64;
 import dev.vitorsilverio.armjitter.support.TestAddressSpace;
 import org.junit.jupiter.api.Test;
@@ -103,9 +104,9 @@ class Aarch64SveFpBFloat16Test {
             WORD_BFMUL_PRED, WORD_BFMAXNM_PRED, WORD_BFMINNM_PRED, WORD_BFMAX_PRED, WORD_BFMIN_PRED,
             WORD_BFSCALE_PRED};
         for (int word : accepted) {
-            assertFalse(decodeOrNull(BASE, word) instanceof Ir64Op.SveFpArithmetic,
+            assertFalse(decodeOrNull(BASE, word) instanceof SveFpOp64.FpArithmetic,
                     "sem FEAT_SVE_B16B16: " + Integer.toHexString(word));
-            assertTrue(decodeOrNull(B16B16, word) instanceof Ir64Op.SveFpArithmetic,
+            assertTrue(decodeOrNull(B16B16, word) instanceof SveFpOp64.FpArithmetic,
                     "com FEAT_SVE_B16B16: " + Integer.toHexString(word));
         }
     }
@@ -115,7 +116,7 @@ class Aarch64SveFpBFloat16Test {
         // `FSUBR`/`FABD` em BFloat16: UNDEFINED mesmo com a feature (achado, ver javadoc da classe).
         int[] undefinedEvenWithFeature = {WORD_BFSUBR_PRED_UNDEFINED, WORD_BFABD_PRED_UNDEFINED};
         for (int word : undefinedEvenWithFeature) {
-            assertFalse(decodeOrNull(B16B16, word) instanceof Ir64Op.SveFpArithmetic, Integer.toHexString(word));
+            assertFalse(decodeOrNull(B16B16, word) instanceof SveFpOp64.FpArithmetic, Integer.toHexString(word));
         }
     }
 
@@ -124,9 +125,9 @@ class Aarch64SveFpBFloat16Test {
         int[] accepted = {WORD_BFMLA_PRED, WORD_BFMLS_PRED, WORD_BFMLA_INDEXED, WORD_BFMLS_INDEXED,
             WORD_BFMUL_INDEXED};
         for (int word : accepted) {
-            assertFalse(decodeOrNull(BASE, word) instanceof Ir64Op.SveFpMultiplyAdd,
+            assertFalse(decodeOrNull(BASE, word) instanceof SveFpOp64.FpMultiplyAdd,
                     "sem FEAT_SVE_B16B16: " + Integer.toHexString(word));
-            assertTrue(decodeOrNull(B16B16, word) instanceof Ir64Op.SveFpMultiplyAdd,
+            assertTrue(decodeOrNull(B16B16, word) instanceof SveFpOp64.FpMultiplyAdd,
                     "com FEAT_SVE_B16B16: " + Integer.toHexString(word));
         }
         // `FNMLA`/`FNMLS`/`FMAD`/`FMSB`/`FNMAD`/`FNMSB`: UNDEFINED mesmo com a feature (achado, ver javadoc).
@@ -134,22 +135,22 @@ class Aarch64SveFpBFloat16Test {
             WORD_BFMAD_PRED_UNDEFINED, WORD_BFMSB_PRED_UNDEFINED, WORD_BFNMAD_PRED_UNDEFINED,
             WORD_BFNMSB_PRED_UNDEFINED};
         for (int word : undefinedEvenWithFeature) {
-            assertFalse(decodeOrNull(B16B16, word) instanceof Ir64Op.SveFpMultiplyAdd, Integer.toHexString(word));
+            assertFalse(decodeOrNull(B16B16, word) instanceof SveFpOp64.FpMultiplyAdd, Integer.toHexString(word));
         }
     }
 
     @Test
     void decodedFieldsMatchTheRealWords() {
-        var arithmetic = (Ir64Op.SveFpArithmetic) decodeOrNull(B16B16, WORD_BFADD_PRED);
+        var arithmetic = (SveFpOp64.FpArithmetic) decodeOrNull(B16B16, WORD_BFADD_PRED);
         assertEquals(0, arithmetic.esz());
-        assertEquals(Ir64Op.SveFpArithmetic.Op.ADD, arithmetic.op());
+        assertEquals(SveFpOp64.FpArithmetic.Op.ADD, arithmetic.op());
         assertEquals(Z1, arithmetic.rd());
         assertTrue(arithmetic.predicated());
         assertEquals(P3, arithmetic.pg());
 
-        var mulAdd = (Ir64Op.SveFpMultiplyAdd) decodeOrNull(B16B16, WORD_BFMLA_PRED);
+        var mulAdd = (SveFpOp64.FpMultiplyAdd) decodeOrNull(B16B16, WORD_BFMLA_PRED);
         assertEquals(0, mulAdd.esz());
-        assertEquals(Ir64Op.SveFpMultiplyAdd.Op.FMLA, mulAdd.op());
+        assertEquals(SveFpOp64.FpMultiplyAdd.Op.FMLA, mulAdd.op());
         assertEquals(Z1, mulAdd.rd());
         assertEquals(Z2, mulAdd.rn());
         assertEquals(Z3, mulAdd.rm());
@@ -542,11 +543,11 @@ class Aarch64SveFpBFloat16Test {
         int accepted = 0;
         for (int opcode = 0; opcode < 16; opcode++) {
             int word = (WORD_BFADD_PRED & ~(0b1111 << 16)) | (opcode << 16);
-            accepted += decodeOrNull(B16B16, word) instanceof Ir64Op.SveFpArithmetic ? 1 : 0;
+            accepted += decodeOrNull(B16B16, word) instanceof SveFpOp64.FpArithmetic ? 1 : 0;
         }
         for (int opcode = 0; opcode < 8; opcode++) {
             int word = (WORD_BFADD_UNPRED & ~(0b111 << 10)) | (opcode << 10);
-            accepted += decodeOrNull(B16B16, word) instanceof Ir64Op.SveFpArithmetic ? 1 : 0;
+            accepted += decodeOrNull(B16B16, word) instanceof SveFpOp64.FpArithmetic ? 1 : 0;
         }
         // 8 predicadas (ADD/SUB/MUL/MAXNM/MINNM/MAX/MIN/SCALE) + 3 não predicadas (ADD/SUB/MUL) = 11.
         assertEquals(11, accepted);
@@ -554,7 +555,7 @@ class Aarch64SveFpBFloat16Test {
         int mulAdd = IntStream.of(WORD_BFMLA_PRED, WORD_BFMLS_PRED, WORD_BFNMLA_PRED_UNDEFINED,
                 WORD_BFNMLS_PRED_UNDEFINED, WORD_BFMAD_PRED_UNDEFINED, WORD_BFMSB_PRED_UNDEFINED,
                 WORD_BFNMAD_PRED_UNDEFINED, WORD_BFNMSB_PRED_UNDEFINED)
-                .map(word -> decodeOrNull(B16B16, word) instanceof Ir64Op.SveFpMultiplyAdd ? 1 : 0)
+                .map(word -> decodeOrNull(B16B16, word) instanceof SveFpOp64.FpMultiplyAdd ? 1 : 0)
                 .sum();
         assertEquals(2, mulAdd); // só FMLA/FMLS predicados das 8 formas do grupo (ver javadoc da classe)
     }

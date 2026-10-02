@@ -6,6 +6,8 @@ import dev.vitorsilverio.armjitter.core64.Aarch64Core;
 import dev.vitorsilverio.armjitter.core64.Aarch64ExceptionLevel;
 import dev.vitorsilverio.armjitter.decoder64.Aarch64Decoder;
 import dev.vitorsilverio.armjitter.ir64.Ir64Op;
+import dev.vitorsilverio.armjitter.ir64.SveIntegerOp64;
+import dev.vitorsilverio.armjitter.ir64.SvePredicateOp64;
 import dev.vitorsilverio.armjitter.memory.AddressSpace64;
 import dev.vitorsilverio.armjitter.support.TestAddressSpace;
 import org.junit.jupiter.api.Test;
@@ -136,7 +138,7 @@ class Aarch64Sve2MiscTest {
     @Test
     void matchDecodesUnderSve2AndRefusesWideElements() {
         int word = matchWord(0, false, P0, Z2, Z3, 0);
-        assertTrue(decodeOrNull(SVE2, word) instanceof Ir64Op.SveMatch);
+        assertTrue(decodeOrNull(SVE2, word) instanceof SvePredicateOp64.Match);
         assertNull(decodeOrNull(SVE, word), "sem SVE2 recusa");
         assertNull(decodeOrNull(SVE2, matchWord(2, false, P0, Z2, Z3, 0)), "esz = 2 (.S) não existe");
         assertNull(decodeOrNull(SVE2, matchWord(3, false, P0, Z2, Z3, 0)), "esz = 3 (.D) não existe");
@@ -184,8 +186,8 @@ class Aarch64Sve2MiscTest {
 
     @Test
     void histcntDecodesUnderSve2WithEszSAndD() {
-        assertTrue(decodeOrNull(SVE2, histcntWord(2, P0, Z2, Z3, Z1)) instanceof Ir64Op.SveHistogram);
-        assertTrue(decodeOrNull(SVE2, histcntWord(3, P0, Z2, Z3, Z1)) instanceof Ir64Op.SveHistogram);
+        assertTrue(decodeOrNull(SVE2, histcntWord(2, P0, Z2, Z3, Z1)) instanceof SveIntegerOp64.Histogram);
+        assertTrue(decodeOrNull(SVE2, histcntWord(3, P0, Z2, Z3, Z1)) instanceof SveIntegerOp64.Histogram);
         assertNull(decodeOrNull(SVE2, histcntWord(0, P0, Z2, Z3, Z1)), "esz = 0 (.B) não existe em HISTCNT");
         assertNull(decodeOrNull(SVE2, histcntWord(1, P0, Z2, Z3, Z1)), "esz = 1 (.H) não existe em HISTCNT");
     }
@@ -280,7 +282,7 @@ class Aarch64Sve2MiscTest {
     @Test
     void lutiRequiresLookupTableFeature() {
         int word = luti2_1b(0, Z3, Z2, Z1);
-        assertTrue(decodeOrNull(LUT, word) instanceof Ir64Op.SveLookupTable);
+        assertTrue(decodeOrNull(LUT, word) instanceof SveIntegerOp64.LookupTable);
         assertNull(decodeOrNull(SVE2, word), "sem FEAT_LUT recusa");
     }
 
@@ -308,8 +310,8 @@ class Aarch64Sve2MiscTest {
     void luti2_1hIndexComesFromTwoDisjointFields() {
         int word = luti2_1h(0b10, 1, Z3, Z2, Z1);
         Ir64Op decoded = decodeOrNull(LUT, word);
-        assertTrue(decoded instanceof Ir64Op.SveLookupTable);
-        assertEquals(0b101, ((Ir64Op.SveLookupTable) decoded).index(), "alto (bits 22:2) << 1 | baixo (bit 12)");
+        assertTrue(decoded instanceof SveIntegerOp64.LookupTable);
+        assertEquals(0b101, ((SveIntegerOp64.LookupTable) decoded).index(), "alto (bits 22:2) << 1 | baixo (bit 12)");
 
         Aarch64Core core = core(LUT, 128);
         clearVector(core, Z2);
@@ -389,7 +391,7 @@ class Aarch64Sve2MiscTest {
 
     @Test
     void smlalbDecodesUnderSve2AndRejectsByte() {
-        assertTrue(decodeOrNull(SVE2, nonIndexedWord(1, OPC_SMLALB, Z3, Z2, Z1)) instanceof Ir64Op.SveMultiplyIndexed);
+        assertTrue(decodeOrNull(SVE2, nonIndexedWord(1, OPC_SMLALB, Z3, Z2, Z1)) instanceof SveIntegerOp64.MultiplyIndexed);
         assertNull(decodeOrNull(SVE2, nonIndexedWord(0, OPC_SMLALB, Z3, Z2, Z1)), "esz = 0 não existe (fns[0] = NULL)");
         assertNull(decodeOrNull(SVE, nonIndexedWord(1, OPC_SMLALB, Z3, Z2, Z1)), "sem SVE2 recusa");
     }
@@ -460,7 +462,7 @@ class Aarch64Sve2MiscTest {
 
     @Test
     void cmlaZzzzAllowsByteElement() {
-        assertTrue(decodeOrNull(SVE2, nonIndexedWord(0, OPC_CMLA_ROT0, Z3, Z2, Z1)) instanceof Ir64Op.SveMultiplyIndexed,
+        assertTrue(decodeOrNull(SVE2, nonIndexedWord(0, OPC_CMLA_ROT0, Z3, Z2, Z1)) instanceof SveIntegerOp64.MultiplyIndexed,
                 "CMLA_zzzz não-indexado permite esz = 0 (diferente da forma indexada)");
         assertNull(decodeOrNull(SVE, nonIndexedWord(0, OPC_CMLA_ROT0, Z3, Z2, Z1)), "sem SVE2 recusa");
     }
@@ -485,14 +487,14 @@ class Aarch64Sve2MiscTest {
     @Test
     void sqrdcmlahZzzzDecodesUnderSve2() {
         int word = nonIndexedWord(1, 0b0011_00, Z3, Z2, Z1); // family 0011, rot = 0
-        assertTrue(decodeOrNull(SVE2, word) instanceof Ir64Op.SveMultiplyIndexed);
+        assertTrue(decodeOrNull(SVE2, word) instanceof SveIntegerOp64.MultiplyIndexed);
         assertNull(decodeOrNull(SVE, word), "sem SVE2 recusa");
     }
 
     @Test
     void sqrdmlshZzzzDecodesUnderSve2() {
         int word = nonIndexedWord(1, 0b011101, Z3, Z2, Z1);
-        assertTrue(decodeOrNull(SVE2, word) instanceof Ir64Op.SveMultiplyIndexed);
+        assertTrue(decodeOrNull(SVE2, word) instanceof SveIntegerOp64.MultiplyIndexed);
     }
 
     @Test
@@ -517,7 +519,7 @@ class Aarch64Sve2MiscTest {
                 0b010100, 0b010101, 0b010110, 0b010111, // SMLSLB, SMLSLT, UMLSLB, UMLSLT
         };
         for (int opcode : opcodes) {
-            assertTrue(decodeOrNull(SVE2, nonIndexedWord(1, opcode, Z3, Z2, Z1)) instanceof Ir64Op.SveMultiplyIndexed,
+            assertTrue(decodeOrNull(SVE2, nonIndexedWord(1, opcode, Z3, Z2, Z1)) instanceof SveIntegerOp64.MultiplyIndexed,
                     "opcode6 = " + Integer.toBinaryString(opcode));
         }
     }
@@ -528,7 +530,7 @@ class Aarch64Sve2MiscTest {
     void sqdmlalAndSqdmlslBottomAndTopBothDecode() {
         int[] opcodes = {0b011000, 0b011001, 0b011010, 0b011011};
         for (int opcode : opcodes) {
-            assertTrue(decodeOrNull(SVE2, nonIndexedWord(1, opcode, Z3, Z2, Z1)) instanceof Ir64Op.SveMultiplyIndexed,
+            assertTrue(decodeOrNull(SVE2, nonIndexedWord(1, opcode, Z3, Z2, Z1)) instanceof SveIntegerOp64.MultiplyIndexed,
                     "opcode6 = " + Integer.toBinaryString(opcode));
         }
     }
@@ -546,13 +548,13 @@ class Aarch64Sve2MiscTest {
     @Test
     void udotZzzz2sAlsoDecodes() {
         int word = nonIndexedWord(0, 0b110011, Z3, Z2, Z1);
-        assertTrue(decodeOrNull(SVE2_1, word) instanceof Ir64Op.SveMultiplyIndexed);
+        assertTrue(decodeOrNull(SVE2_1, word) instanceof SveIntegerOp64.MultiplyIndexed);
     }
 
     @Test
     void sclampAlsoDecodesUnderSmeAlone() {
         int word = 0x44000000 | (Z3 << 16) | (OPC_SCLAMP << 10) | (Z2 << 5) | Z1;
-        assertTrue(decodeOrNull(SME_ONLY, word) instanceof Ir64Op.SveClamp);
+        assertTrue(decodeOrNull(SME_ONLY, word) instanceof SveIntegerOp64.Clamp);
     }
 
     // ── PSEL ────────────────────────────────────────────────────────────────────────────────────
@@ -568,8 +570,8 @@ class Aarch64Sve2MiscTest {
     void pselDecodesAndUsesW12ToW15() {
         int word = pselB(0, P0, P1, P0, 0); // rv encoding 0 -> W12
         Ir64Op decoded = decodeOrNull(SVE2_1, word);
-        assertTrue(decoded instanceof Ir64Op.SvePredicateSelect);
-        assertEquals(12, ((Ir64Op.SvePredicateSelect) decoded).rv(), "%psel_rv restringe a W12-W15");
+        assertTrue(decoded instanceof SvePredicateOp64.PredicateSelect);
+        assertEquals(12, ((SvePredicateOp64.PredicateSelect) decoded).rv(), "%psel_rv restringe a W12-W15");
         assertNull(decodeOrNull(SVE2, word), "sem SVE2.1/SME recusa");
     }
 
@@ -645,20 +647,20 @@ class Aarch64Sve2MiscTest {
     @ParameterizedTest
     @ValueSource(ints = {0, 1})
     void matchAndNmatchBothDecode(int invert) {
-        assertTrue(decodeOrNull(SVE2, matchWord(0, invert == 1, P0, Z2, Z3, 0)) instanceof Ir64Op.SveMatch);
+        assertTrue(decodeOrNull(SVE2, matchWord(0, invert == 1, P0, Z2, Z3, 0)) instanceof SvePredicateOp64.Match);
     }
 
     @Test
     void usdotZzzz4sRequiresI8mm() {
         int word = nonIndexedWord(2, 0b011110, Z3, Z2, Z1);
-        assertTrue(decodeOrNull(I8MM, word) instanceof Ir64Op.SveMultiplyIndexed);
+        assertTrue(decodeOrNull(I8MM, word) instanceof SveIntegerOp64.MultiplyIndexed);
         assertNull(decodeOrNull(SVE2, word), "sem I8MM recusa (SVE2 sozinho não basta)");
     }
 
     @Test
     void sdotZzzz2sRequiresSve2p1() {
         int word = nonIndexedWord(0, 0b110010, Z3, Z2, Z1);
-        assertTrue(decodeOrNull(SVE2_1, word) instanceof Ir64Op.SveMultiplyIndexed);
+        assertTrue(decodeOrNull(SVE2_1, word) instanceof SveIntegerOp64.MultiplyIndexed);
         assertNull(decodeOrNull(SVE2, word), "sem SVE2.1 recusa");
     }
 
@@ -672,7 +674,7 @@ class Aarch64Sve2MiscTest {
     /// já basta.
     @Test
     void pselAlsoDecodesUnderSmeAlone() {
-        assertTrue(decodeOrNull(SME_ONLY, pselB(0, P0, P1, P0, 0)) instanceof Ir64Op.SvePredicateSelect);
+        assertTrue(decodeOrNull(SME_ONLY, pselB(0, P0, P1, P0, 0)) instanceof SvePredicateOp64.PredicateSelect);
     }
 
     /// As formas `.H`/`.S`/`.D` de `PSEL` decodificam, e `bits[20:18] = 000` sem `bit 22 = 1` NÃO é `.D`
@@ -681,16 +683,16 @@ class Aarch64Sve2MiscTest {
     void pselHSAndDFormsDecodeAndInvalidDIsRefused() {
         int hForm = 0x25000000 | (1 << 21) | (1 << 19) | (P0 << 16) | (0b01 << 14) | (P0 << 10) | (P1 << 5) | P0;
         Ir64Op h = decodeOrNull(SVE2_1, hForm);
-        assertTrue(h instanceof Ir64Op.SvePredicateSelect);
-        assertEquals(1, ((Ir64Op.SvePredicateSelect) h).esz());
+        assertTrue(h instanceof SvePredicateOp64.PredicateSelect);
+        assertEquals(1, ((SvePredicateOp64.PredicateSelect) h).esz());
         int sForm = 0x25000000 | (1 << 21) | (0b100 << 18) | (P0 << 16) | (0b01 << 14) | (P0 << 10) | (P1 << 5) | P0;
         Ir64Op s = decodeOrNull(SVE2_1, sForm);
-        assertTrue(s instanceof Ir64Op.SvePredicateSelect);
-        assertEquals(2, ((Ir64Op.SvePredicateSelect) s).esz());
+        assertTrue(s instanceof SvePredicateOp64.PredicateSelect);
+        assertEquals(2, ((SvePredicateOp64.PredicateSelect) s).esz());
         int dForm = 0x25000000 | (1 << 21) | (1 << 22) | (P0 << 16) | (0b01 << 14) | (P0 << 10) | (P1 << 5) | P0;
         Ir64Op d = decodeOrNull(SVE2_1, dForm);
-        assertTrue(d instanceof Ir64Op.SvePredicateSelect);
-        assertEquals(3, ((Ir64Op.SvePredicateSelect) d).esz());
+        assertTrue(d instanceof SvePredicateOp64.PredicateSelect);
+        assertEquals(3, ((SvePredicateOp64.PredicateSelect) d).esz());
         int invalidD = dForm & ~(1 << 22); // bits[20:18] = 000 mas SEM bit 22 = 1: não é nenhuma das 4 formas.
         assertNull(decodeOrNull(SVE2_1, invalidD));
     }
@@ -698,7 +700,7 @@ class Aarch64Sve2MiscTest {
     @Test
     void fclampAlsoDecodesUnderSme2Alone() {
         int word = 0x64000000 | (2 << 22) | (1 << 21) | (Z3 << 16) | (0b001001 << 10) | (Z2 << 5) | Z1;
-        assertTrue(decodeOrNull(SME2_ONLY, word) instanceof Ir64Op.SveClamp);
+        assertTrue(decodeOrNull(SME2_ONLY, word) instanceof SveIntegerOp64.Clamp);
         assertNull(decodeOrNull(SVE2, word), "sem SVE2.1 nem SME2 recusa (os dois negados ao mesmo tempo)");
     }
 

@@ -1,6 +1,7 @@
 package dev.vitorsilverio.armjitter.decoder64;
 
 import dev.vitorsilverio.armjitter.arch64.Aarch64Architecture;
+import dev.vitorsilverio.armjitter.ir64.AdvSimdFpOp64;
 import dev.vitorsilverio.armjitter.ir64.Ir64Op;
 import dev.vitorsilverio.armjitter.memory.AddressSpace64;
 import dev.vitorsilverio.armjitter.support.TestAddressSpace;
@@ -40,7 +41,7 @@ class Aarch64AdvSimdFp8DotProductDecoderTest {
     @Test
     void fdotHbVNotQuad() {
         // `fdot v0.4h, v1.8b, v2.8b` (objdump real, WSL binutils 2.46).
-        Ir64Op.VectorFp8DotProduct op = (Ir64Op.VectorFp8DotProduct) decodeWord(0x0e42fc20);
+        AdvSimdFpOp64.Fp8DotProduct op = (AdvSimdFpOp64.Fp8DotProduct) decodeWord(0x0e42fc20);
         assertFalse(op.wideDestination());
         assertFalse(op.q());
         assertEquals(0, op.rd());
@@ -52,7 +53,7 @@ class Aarch64AdvSimdFp8DotProductDecoderTest {
     void fdotHbVQuad() {
         // `fdot v3.8h, v4.16b, v5.16b` (objdump real) — prova que `Q` é lido NORMALMENTE, ao
         // contrário de `FMLAL_hb_v` (que ignora `Q`).
-        Ir64Op.VectorFp8DotProduct op = (Ir64Op.VectorFp8DotProduct) decodeWord(0x4e45fc83);
+        AdvSimdFpOp64.Fp8DotProduct op = (AdvSimdFpOp64.Fp8DotProduct) decodeWord(0x4e45fc83);
         assertFalse(op.wideDestination());
         assertTrue(op.q());
         assertEquals(3, op.rd());
@@ -65,7 +66,7 @@ class Aarch64AdvSimdFp8DotProductDecoderTest {
     @Test
     void fdotHbViIndexZero() {
         // `fdot v12.4h, v13.8b, v14.2b[0]` (objdump real).
-        Ir64Op.VectorFp8DotProductByElement op = (Ir64Op.VectorFp8DotProductByElement) decodeWord(0x0f4e01ac);
+        AdvSimdFpOp64.Fp8DotProductByElement op = (AdvSimdFpOp64.Fp8DotProductByElement) decodeWord(0x0f4e01ac);
         assertFalse(op.wideDestination());
         assertFalse(op.q());
         assertEquals(12, op.rd());
@@ -77,7 +78,7 @@ class Aarch64AdvSimdFp8DotProductDecoderTest {
     @Test
     void fdotHbViIndexThree() {
         // `fdot v15.8h, v16.16b, v14.2b[3]` (objdump real) — prova `L:M`(bits[21:20]) sem `H`.
-        Ir64Op.VectorFp8DotProductByElement op = (Ir64Op.VectorFp8DotProductByElement) decodeWord(0x4f7e020f);
+        AdvSimdFpOp64.Fp8DotProductByElement op = (AdvSimdFpOp64.Fp8DotProductByElement) decodeWord(0x4f7e020f);
         assertTrue(op.q());
         assertEquals(15, op.rd());
         assertEquals(16, op.rn());
@@ -88,7 +89,7 @@ class Aarch64AdvSimdFp8DotProductDecoderTest {
     @Test
     void fdotHbViIndexSeven() {
         // `fdot v15.8h, v16.16b, v14.2b[7]` (objdump real) — prova `H`(bit11) somado a `L:M`.
-        Ir64Op.VectorFp8DotProductByElement op = (Ir64Op.VectorFp8DotProductByElement) decodeWord(0x4f7e0a0f);
+        AdvSimdFpOp64.Fp8DotProductByElement op = (AdvSimdFpOp64.Fp8DotProductByElement) decodeWord(0x4f7e0a0f);
         assertEquals(7, op.index());
         assertEquals(14, op.rm());
     }
@@ -104,9 +105,9 @@ class Aarch64AdvSimdFp8DotProductDecoderTest {
                 dev.vitorsilverio.armjitter.arch64.Aarch64Feature.FP8_FUSED_MULTIPLY_ADD,
                 dev.vitorsilverio.armjitter.arch64.Aarch64Feature.FP8_DOT_PRODUCT_2WAY));
         Ir64Op fmlal = decodeWord(decoder, 0x0ec2fc20);
-        assertEquals(Ir64Op.VectorFp8FusedMultiplyAddLong.class, fmlal.getClass());
+        assertEquals(AdvSimdFpOp64.Fp8FusedMultiplyAddLong.class, fmlal.getClass());
         Ir64Op fdot = decodeWord(decoder, 0x0e42fc20);
-        assertEquals(Ir64Op.VectorFp8DotProduct.class, fdot.getClass());
+        assertEquals(AdvSimdFpOp64.Fp8DotProduct.class, fdot.getClass());
     }
 
     // ── FDOT_sb_v (B19.11d) ──────────────────────────────────────────────────────────────────────
@@ -115,7 +116,7 @@ class Aarch64AdvSimdFp8DotProductDecoderTest {
     void fdotSbVDecodes() {
         // `fdot v6.2s, v7.8b, v8.8b` (`FDOT_sb_v`, objdump real) — `bit22=0`, discriminado de
         // `FDOT_hb_v` (bit22=1, mesmo opcode).
-        Ir64Op.VectorFp8DotProduct op = (Ir64Op.VectorFp8DotProduct) decodeWord(0x0e08fce6);
+        AdvSimdFpOp64.Fp8DotProduct op = (AdvSimdFpOp64.Fp8DotProduct) decodeWord(0x0e08fce6);
         assertTrue(op.wideDestination());
         assertFalse(op.q());
         assertEquals(6, op.rd());
@@ -130,7 +131,7 @@ class Aarch64AdvSimdFp8DotProductDecoderTest {
         // `fdot v18.2s, v19.8b, v20.4b[0]` (`FDOT_sb_vi`, objdump real) —
         // `sizeField=HALF_PRECISION`, layout de `Rm`(5 bits)/`H:L` do ramo `WORD`, não o `H:L:M` de
         // 4 bits que `FDOT_hb_vi` usa.
-        Ir64Op.VectorFp8DotProductByElement op = (Ir64Op.VectorFp8DotProductByElement) decodeWord(0x0f140272);
+        AdvSimdFpOp64.Fp8DotProductByElement op = (AdvSimdFpOp64.Fp8DotProductByElement) decodeWord(0x0f140272);
         assertTrue(op.wideDestination());
         assertFalse(op.q());
         assertEquals(18, op.rd());
@@ -144,9 +145,9 @@ class Aarch64AdvSimdFp8DotProductDecoderTest {
         // As duas famílias (B19.11c/B19.11d) reusam o MESMO opcode/espaço, discriminadas só por
         // `bit22` — prova que nenhuma das duas rouba a outra mesmo com as duas features presentes.
         Ir64Op hb = decodeWord(0x0e42fc20); // `fdot v0.4h, v1.8b, v2.8b`
-        assertFalse(((Ir64Op.VectorFp8DotProduct) hb).wideDestination());
+        assertFalse(((AdvSimdFpOp64.Fp8DotProduct) hb).wideDestination());
         Ir64Op sb = decodeWord(0x0e08fce6); // `fdot v6.2s, v7.8b, v8.8b`
-        assertTrue(((Ir64Op.VectorFp8DotProduct) sb).wideDestination());
+        assertTrue(((AdvSimdFpOp64.Fp8DotProduct) sb).wideDestination());
     }
 
     @Test

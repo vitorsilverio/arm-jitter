@@ -13,7 +13,8 @@ import dev.vitorsilverio.armjitter.advsimd.AdvSimdWideOp;
 import dev.vitorsilverio.armjitter.advsimd.AdvSimdWideningOp;
 import dev.vitorsilverio.armjitter.core64.Aarch64Core;
 import dev.vitorsilverio.armjitter.core64.Aarch64FpRegisters;
-import dev.vitorsilverio.armjitter.ir64.Ir64Op;
+import dev.vitorsilverio.armjitter.ir64.AdvSimdIntegerOp64;
+import dev.vitorsilverio.armjitter.ir64.AdvSimdMoveOp64;
 import dev.vitorsilverio.armjitter.ir64.Ir64VectorAcrossLanesOp;
 import dev.vitorsilverio.armjitter.ir64.Ir64VectorNarrowOp;
 import dev.vitorsilverio.armjitter.ir64.Ir64VectorNarrowUnaryOp;
@@ -31,7 +32,7 @@ import java.math.BigInteger;
 /// Executa a IR de AdvSIMD inteiro — aritmética/comparação (B8.7): "three same"/"three same
 /// pairwise"/"three different" (alargando/largo+estreito/estreitando)/"across lanes"/
 /// "two-register miscellaneous", e as formas ESCALARES que reaproveitam os mesmos records (ver
-/// {@link Ir64Op.VectorArithmeticThreeSame}/{@link Ir64Op.VectorArithmeticUnary}). Sibling de
+/// {@link AdvSimdIntegerOp64.ArithmeticThreeSame}/{@link AdvSimdIntegerOp64.ArithmeticUnary}). Sibling de
 /// {@link Ir64FpExecutor}: sem estado próprio (nenhuma operação toca memória), métodos estáticos.
 /// É o oráculo semântico (G1) — nenhum `Kind` desta task entra em `Ir64NativePolicy`, mesma
 /// decisão de todo `Kind` novo desde B8.4/B8.6.
@@ -209,7 +210,7 @@ final class Ir64VectorArithmeticExecutor {
     /// extendido a `esz` bits); usá-lo como o `low64` inteiro zera o resto automaticamente. Sem
     /// isto, `sqadd b0,...` deixaria lixo de uma escrita anterior mais larga nos bits `[63:8]` de
     /// `V0` — bug real que {@link #finishDestructiveWrite} (só zera `[127:64]`) não cobre quando
-    /// `esz<3` (ver javadoc de {@link Ir64Op.VectorArithmeticThreeSame#scalar}).
+    /// `esz<3` (ver javadoc de {@link AdvSimdIntegerOp64.ArithmeticThreeSame#scalar}).
     private static void finishScalarAwareWrite(Aarch64FpRegisters fp, int rd, boolean scalar, boolean q, int esz) {
         if (scalar) {
             fp.setQ(rd, fp.element(rd, 0, esz), 0L);
@@ -280,7 +281,7 @@ final class Ir64VectorArithmeticExecutor {
         };
     }
 
-    static boolean executeThreeSame(Aarch64Core core, Ir64Op.VectorArithmeticThreeSame op) {
+    static boolean executeThreeSame(Aarch64Core core, AdvSimdIntegerOp64.ArithmeticThreeSame op) {
         Aarch64FpRegisters fp = core.fp();
         int esz = op.esz();
         int elements = op.scalar() ? 1 : elementsPerRegister(op.q(), esz);
@@ -294,7 +295,7 @@ final class Ir64VectorArithmeticExecutor {
         return false;
     }
 
-    static boolean executePairwise(Aarch64Core core, Ir64Op.VectorArithmeticPairwise op) {
+    static boolean executePairwise(Aarch64Core core, AdvSimdIntegerOp64.ArithmeticPairwise op) {
         Aarch64FpRegisters fp = core.fp();
         int esz = op.esz();
         int elements = elementsPerRegister(op.q(), esz);
@@ -349,7 +350,7 @@ final class Ir64VectorArithmeticExecutor {
     /// alargando). Desde B13.10 só delega ao núcleo COMPARTILHADO ({@link AdvSimdLanes#widening}) —
     /// a MESMA função que o NEON de 32 bits chama para `VADDL`/`VMULL`/`VMLAL`/...; a escrita
     /// destrutiva de `[127:64]`/escalar continua sendo do lado A64.
-    static boolean executeWidening(Aarch64Core core, Ir64Op.VectorArithmeticWidening op) {
+    static boolean executeWidening(Aarch64Core core, AdvSimdIntegerOp64.ArithmeticWidening op) {
         Aarch64FpRegisters fp = core.fp();
         int esz = op.esz();
         int wideEsz = esz + 1;
@@ -371,7 +372,7 @@ final class Ir64VectorArithmeticExecutor {
     /// delega ao núcleo COMPARTILHADO ({@link AdvSimdLanes#threeSameByElement}) — a MESMA função que
     /// o NEON de 32 bits chama para `VMLA_2sc`/`VQDMULH_2sc`/... A escrita destrutiva de
     /// `[127:64]`/escalar continua sendo do lado A64.
-    static boolean executeThreeSameByElement(Aarch64Core core, Ir64Op.VectorArithmeticThreeSameByElement op) {
+    static boolean executeThreeSameByElement(Aarch64Core core, AdvSimdIntegerOp64.ArithmeticThreeSameByElement op) {
         Aarch64FpRegisters fp = core.fp();
         int esz = op.esz();
         int elements = op.scalar() ? 1 : elementsPerRegister(op.q(), esz);
@@ -390,7 +391,7 @@ final class Ir64VectorArithmeticExecutor {
     /// um ÚNICO elemento largo, com escrita destrutiva ciente de tamanho
     /// ({@link #finishScalarAwareWrite}) — diferente de {@link #executeWidening}, que sempre
     /// preenche os 128 bits inteiros.
-    static boolean executeWideningByElement(Aarch64Core core, Ir64Op.VectorArithmeticWideningByElement op) {
+    static boolean executeWideningByElement(Aarch64Core core, AdvSimdIntegerOp64.ArithmeticWideningByElement op) {
         Aarch64FpRegisters fp = core.fp();
         int esz = op.esz();
         int wideEsz = esz + 1;
@@ -420,7 +421,7 @@ final class Ir64VectorArithmeticExecutor {
     /// `SADDW`/`UADDW`/`SSUBW`/`USUBW` (B8.7, "three different" larga). Desde B13.10 só delega ao
     /// núcleo COMPARTILHADO ({@link AdvSimdLanes#wide}) — a MESMA função que o NEON de 32 bits chama
     /// para `VADDW`/`VSUBW`.
-    static boolean executeWide(Aarch64Core core, Ir64Op.VectorArithmeticWide op) {
+    static boolean executeWide(Aarch64Core core, AdvSimdIntegerOp64.ArithmeticWide op) {
         Aarch64FpRegisters fp = core.fp();
         int esz = op.esz();
         int wideEsz = esz + 1;
@@ -448,7 +449,7 @@ final class Ir64VectorArithmeticExecutor {
     /// Desde B13.10 só delega ao núcleo COMPARTILHADO ({@link AdvSimdLanes#narrow}) — a MESMA
     /// função que o NEON de 32 bits chama para `VADDHN`/`VSUBHN`; a escrita destrutiva de
     /// `[127:64]` continua sendo do lado A64.
-    static boolean executeNarrow(Aarch64Core core, Ir64Op.VectorArithmeticNarrow op) {
+    static boolean executeNarrow(Aarch64Core core, AdvSimdIntegerOp64.ArithmeticNarrow op) {
         Aarch64FpRegisters fp = core.fp();
         int esz = op.esz();
         int wideEsz = esz + 1;
@@ -462,7 +463,7 @@ final class Ir64VectorArithmeticExecutor {
         return false;
     }
 
-    static boolean executeAcrossLanes(Aarch64Core core, Ir64Op.VectorAcrossLanes op) {
+    static boolean executeAcrossLanes(Aarch64Core core, AdvSimdIntegerOp64.AcrossLanes op) {
         Aarch64FpRegisters fp = core.fp();
         int esz = op.esz();
         int elements = elementsPerRegister(op.q(), esz);
@@ -534,7 +535,7 @@ final class Ir64VectorArithmeticExecutor {
         };
     }
 
-    static boolean executeUnary(Aarch64Core core, Ir64Op.VectorArithmeticUnary op) {
+    static boolean executeUnary(Aarch64Core core, AdvSimdIntegerOp64.ArithmeticUnary op) {
         Aarch64FpRegisters fp = core.fp();
         int esz = op.esz();
         AdvSimdUnaryOp shared = sharedUnaryOp(op.op());
@@ -572,7 +573,7 @@ final class Ir64VectorArithmeticExecutor {
         return false;
     }
 
-    static boolean executeScalarPairwiseAdd(Aarch64Core core, Ir64Op.VectorScalarPairwiseAdd op) {
+    static boolean executeScalarPairwiseAdd(Aarch64Core core, AdvSimdIntegerOp64.ScalarPairwiseAdd op) {
         Aarch64FpRegisters fp = core.fp();
         long result = fp.element(op.rn(), 0, 3) + fp.element(op.rn(), 1, 3);
         fp.setD(op.rd(), result);
@@ -580,7 +581,7 @@ final class Ir64VectorArithmeticExecutor {
     }
 
     /// `SQXTN`/`SQXTUN`/`UQXTN` (B8.8) — narrow unário saturante, vetorial e escalar (a forma
-    /// escalar processa só o elemento `0`, ver {@link Ir64Op.VectorArithmeticNarrowUnary#scalar}).
+    /// escalar processa só o elemento `0`, ver {@link AdvSimdIntegerOp64.ArithmeticNarrowUnary#scalar}).
     /// RFC B13.2 (D1): mapeia `Ir64VectorNarrowUnaryOp` → {@link AdvSimdNarrowUnaryOp} do núcleo
     /// COMPARTILHADO 1:1 (os 4 valores são os MESMOS nos dois lados, migrados na B13.12).
     private static AdvSimdNarrowUnaryOp sharedNarrowUnaryOp(Ir64VectorNarrowUnaryOp op) {
@@ -595,7 +596,7 @@ final class Ir64VectorArithmeticExecutor {
     /// `SQXTN`/`SQXTUN`/`UQXTN`/`XTN` (B8.8/B8.20) — narrow unário, vetorial e escalar (a forma
     /// escalar processa só o elemento `0`). Desde B13.12 só delega ao núcleo COMPARTILHADO
     /// ({@link AdvSimdLanes#narrowUnary}) — a MESMA função que o NEON de 32 bits chama.
-    static boolean executeNarrowUnary(Aarch64Core core, Ir64Op.VectorArithmeticNarrowUnary op) {
+    static boolean executeNarrowUnary(Aarch64Core core, AdvSimdIntegerOp64.ArithmeticNarrowUnary op) {
         Aarch64FpRegisters fp = core.fp();
         int esz = op.esz();
         int wideEsz = esz + 1;
@@ -636,7 +637,7 @@ final class Ir64VectorArithmeticExecutor {
     /// Desde B13.7 só delega ao núcleo COMPARTILHADO ({@link AdvSimdLanes#shiftImmediate}) — a
     /// MESMA função que o NEON de 32 bits chama; a escrita destrutiva de `[127:64]`/escalar
     /// continua sendo do lado A64.
-    static boolean executeShiftImmediate(Aarch64Core core, Ir64Op.VectorShiftImmediate op) {
+    static boolean executeShiftImmediate(Aarch64Core core, AdvSimdIntegerOp64.ShiftImmediate op) {
         Aarch64FpRegisters fp = core.fp();
         int esz = op.esz();
         int elements = op.scalar() ? 1 : elementsPerRegister(op.q(), esz);
@@ -674,7 +675,7 @@ final class Ir64VectorArithmeticExecutor {
     /// immediate" estreitando). Desde B13.8 só delega ao núcleo COMPARTILHADO
     /// ({@link AdvSimdLanes#shiftNarrowImmediate}) — a MESMA função que o NEON de 32 bits chama; a
     /// escrita destrutiva de `[127:64]`/escalar continua sendo do lado A64.
-    static boolean executeShiftNarrowImmediate(Aarch64Core core, Ir64Op.VectorShiftNarrowImmediate op) {
+    static boolean executeShiftNarrowImmediate(Aarch64Core core, AdvSimdIntegerOp64.ShiftNarrowImmediate op) {
         Aarch64FpRegisters fp = core.fp();
         int esz = op.esz();
         int elements = op.scalar() ? 1 : elementsPerRegister(true, esz + 1);
@@ -689,7 +690,7 @@ final class Ir64VectorArithmeticExecutor {
     /// `SSHLL`/`USHLL` (B8.8, "shift by immediate" alargando) — sempre preenche os 128 bits
     /// inteiros de `Rd`, sem saturar. Desde B13.8 só delega ao núcleo COMPARTILHADO
     /// ({@link AdvSimdLanes#shiftWidenImmediate}).
-    static boolean executeShiftWidenImmediate(Aarch64Core core, Ir64Op.VectorShiftWidenImmediate op) {
+    static boolean executeShiftWidenImmediate(Aarch64Core core, AdvSimdIntegerOp64.ShiftWidenImmediate op) {
         Aarch64FpRegisters fp = core.fp();
         int esz = op.esz();
         int outputElements = elementsPerRegister(true, esz + 1);
@@ -701,9 +702,9 @@ final class Ir64VectorArithmeticExecutor {
     }
 
     /// `EXT` (B8.10) — concatena `Rm:Rn` (`Rn` nos bytes BAIXOS) e extrai a janela de
-    /// {@code datasize} bytes começando em {@link Ir64Op.VectorExtract#imm}, byte a byte (sempre
+    /// {@code datasize} bytes começando em {@link AdvSimdMoveOp64.Extract#imm}, byte a byte (sempre
     /// `esz=0`, sem aritmética).
-    static boolean executeExtract(Aarch64Core core, Ir64Op.VectorExtract op) {
+    static boolean executeExtract(Aarch64Core core, AdvSimdMoveOp64.Extract op) {
         Aarch64FpRegisters fp = core.fp();
         int datasize = op.q() ? Aarch64FpRegisters.QUADWORD_BYTES : Aarch64FpRegisters.DOUBLEWORD_BYTES;
         long resultLo = 0L;
@@ -727,7 +728,7 @@ final class Ir64VectorArithmeticExecutor {
     /// sem aritmética. `pairIndex`/`secondOfPair` decompõem o índice de saída `i` no par
     /// `(par, metade)` que `TRN*`/`ZIP*` precisam; `UZP*` usa `i` diretamente (metade do registro
     /// inteira vem de `Rn`, a outra de `Rm`).
-    static boolean executePermute(Aarch64Core core, Ir64Op.VectorPermute op) {
+    static boolean executePermute(Aarch64Core core, AdvSimdMoveOp64.Permute op) {
         Aarch64FpRegisters fp = core.fp();
         int esz = op.esz();
         int elements = elementsPerRegister(op.q(), esz);
@@ -757,7 +758,7 @@ final class Ir64VectorArithmeticExecutor {
     /// `Rm` é um índice nessa tabela. Índice fora da tabela: `0` (`TBL`) ou o byte ATUAL de `Rd`
     /// (`TBX`) — lido ANTES da escrita final, já que {@link Aarch64FpRegisters#setQ} substitui os
     /// 128 bits de uma vez.
-    static boolean executeTableLookup(Aarch64Core core, Ir64Op.VectorTableLookup op) {
+    static boolean executeTableLookup(Aarch64Core core, AdvSimdMoveOp64.TableLookup op) {
         Aarch64FpRegisters fp = core.fp();
         int tableBytes = (op.len() + 1) * Aarch64FpRegisters.QUADWORD_BYTES;
         int indexCount = op.q() ? Aarch64FpRegisters.QUADWORD_BYTES : Aarch64FpRegisters.DOUBLEWORD_BYTES;
@@ -785,16 +786,16 @@ final class Ir64VectorArithmeticExecutor {
         return false;
     }
 
-    /// `LUTI2`/`LUTI4` (B19.8) — ver {@link Ir64Op.VectorLookupTable}. `Rn` (mais `(Rn+1)%32`
+    /// `LUTI2`/`LUTI4` (B19.8) — ver {@link AdvSimdMoveOp64.LookupTable}. `Rn` (mais `(Rn+1)%32`
     /// quando `index` ultrapassa o tamanho de um registrador, único caso real `LUTI4_2h`) é a
     /// tabela; `Rm`
     /// guarda os índices EMPACOTADOS, `indexBits` (`2`=`LUTI2`/`4`=`LUTI4`) por elemento.
     /// Confirmado bit a bit contra o fonte real do QEMU (`target/arm/tcg/vec_helper.c`,
     /// `do_lut_b`/`do_lut_h`, commit `5fbdd62ee22f929400a623b4a1725dea83b6da70`): o elemento `e` do
-    /// grupo {@link Ir64Op.VectorLookupTable#idx} lê seu índice em `Rm` no deslocamento de bits
+    /// grupo {@link AdvSimdMoveOp64.LookupTable#idx} lê seu índice em `Rm` no deslocamento de bits
     /// `(idx*elements + e) * indexBits` (nunca cruza a fronteira de 64 bits — `indexBits` sempre
     /// divide `64`), e o valor correspondente vem do elemento `index` de `Rn`.
-    static boolean executeLookupTable(Aarch64Core core, Ir64Op.VectorLookupTable op) {
+    static boolean executeLookupTable(Aarch64Core core, AdvSimdMoveOp64.LookupTable op) {
         Aarch64FpRegisters fp = core.fp();
         int elementBits = 8 << op.esz();
         int elements = (Aarch64FpRegisters.QUADWORD_BYTES * 8) / elementBits;
@@ -825,7 +826,7 @@ final class Ir64VectorArithmeticExecutor {
 
     /// `DUP` elemento vetorial (B8.12) — {@link Aarch64FpRegisters#replicateElement} já zera os
     /// bits altos quando `!q` (mesma disciplina de {@link #finishDestructiveWrite}).
-    static boolean executeDuplicateElement(Aarch64Core core, Ir64Op.VectorDuplicateElement op) {
+    static boolean executeDuplicateElement(Aarch64Core core, AdvSimdMoveOp64.DuplicateElement op) {
         Aarch64FpRegisters fp = core.fp();
         long value = fp.element(op.rn(), op.index(), op.esz());
         fp.replicateElement(op.rd(), value, op.esz(), op.q());
@@ -835,7 +836,7 @@ final class Ir64VectorArithmeticExecutor {
     /// `DUP` registrador geral (B8.12) — `esz==3` lê `Xn` (64 bits), senão `Wn` (32, zero-
     /// estendido — {@link Aarch64Core#xForWidth} já zero-estende, e
     /// {@link Aarch64FpRegisters#replicateElement} só usa os `esz` bytes baixos do valor).
-    static boolean executeDuplicateGeneral(Aarch64Core core, Ir64Op.VectorDuplicateGeneral op) {
+    static boolean executeDuplicateGeneral(Aarch64Core core, AdvSimdMoveOp64.DuplicateGeneral op) {
         Aarch64FpRegisters fp = core.fp();
         long value = core.xForWidth(op.rn(), op.esz() == DOUBLEWORD_ESZ);
         fp.replicateElement(op.rd(), value, op.esz(), op.q());
@@ -844,7 +845,7 @@ final class Ir64VectorArithmeticExecutor {
 
     /// `INS` registrador geral (B8.12) — {@link Aarch64FpRegisters#setElement} já é não-
     /// destrutivo (só o elemento indicado muda, resto de `Rd` preservado).
-    static boolean executeInsertGeneral(Aarch64Core core, Ir64Op.VectorInsertGeneral op) {
+    static boolean executeInsertGeneral(Aarch64Core core, AdvSimdMoveOp64.InsertGeneral op) {
         Aarch64FpRegisters fp = core.fp();
         long value = core.xForWidth(op.rn(), op.esz() == DOUBLEWORD_ESZ);
         fp.setElement(op.rd(), op.index(), op.esz(), value);
@@ -853,7 +854,7 @@ final class Ir64VectorArithmeticExecutor {
 
     /// `INS` elemento vetorial (B8.12) — copia `Rn[srcIndex]` para `Rd[destIndex]`, sem afetar o
     /// resto de `Rd`.
-    static boolean executeInsertElement(Aarch64Core core, Ir64Op.VectorInsertElement op) {
+    static boolean executeInsertElement(Aarch64Core core, AdvSimdMoveOp64.InsertElement op) {
         Aarch64FpRegisters fp = core.fp();
         long value = fp.element(op.rn(), op.srcIndex(), op.esz());
         fp.setElement(op.rd(), op.destIndex(), op.esz(), value);
@@ -862,10 +863,10 @@ final class Ir64VectorArithmeticExecutor {
 
     /// `SMOV`/`UMOV` (B8.12) — {@link Aarch64FpRegisters#element} já devolve o elemento zero-
     /// estendido (`UMOV`); {@link #signExtend} estende o sinal a partir de `esz` bytes quando
-    /// {@link Ir64Op.VectorMoveElement#signed} (`SMOV`) — a mesma extensão serve para `Wd`/`Xd`
+    /// {@link AdvSimdMoveOp64.MoveElement#signed} (`SMOV`) — a mesma extensão serve para `Wd`/`Xd`
     /// porque {@link Aarch64Core#setXForWidth} trunca o resultado de 64 bits para os 32 baixos
     /// quando `!wide`, preservando o sinal correto dentro dessa largura.
-    static boolean executeMoveElement(Aarch64Core core, Ir64Op.VectorMoveElement op) {
+    static boolean executeMoveElement(Aarch64Core core, AdvSimdMoveOp64.MoveElement op) {
         Aarch64FpRegisters fp = core.fp();
         long raw = fp.element(op.rn(), op.index(), op.esz());
         long value = op.signed() ? signExtend(raw, op.esz()) : raw;
@@ -878,7 +879,7 @@ final class Ir64VectorArithmeticExecutor {
     /// 8 lanes de byte→halfword, reaproveita {@link AdvSimdLanes#polynomialMultiply8} sem truncar o
     /// resultado de 15 bits. `p64`: um único elemento de 64 bits→128 bits,
     /// {@link #polynomialMultiply64}.
-    static boolean executePolynomialMultiplyLong(Aarch64Core core, Ir64Op.VectorPolynomialMultiplyLong op) {
+    static boolean executePolynomialMultiplyLong(Aarch64Core core, AdvSimdIntegerOp64.PolynomialMultiplyLong op) {
         Aarch64FpRegisters fp = core.fp();
         if (op.p64()) {
             int index = op.q() ? 1 : 0;
@@ -925,7 +926,7 @@ final class Ir64VectorArithmeticExecutor {
 
     /// `USDOT` vetorial (B19.12) — sempre `esz=2`/word (o resultado é sempre uma lane `int32`, mesma
     /// convenção do produto escalar `bf16`, {@link Ir64VectorFpArithmeticExecutor} irmão).
-    static boolean executeIntegerDotProduct(Aarch64Core core, Ir64Op.VectorIntegerDotProduct op) {
+    static boolean executeIntegerDotProduct(Aarch64Core core, AdvSimdIntegerOp64.IntegerDotProduct op) {
         Aarch64FpRegisters fp = core.fp();
         int elements = elementsPerRegister(op.q(), DOT_PRODUCT_ESZ);
         AdvSimdLanes.dotProduct(fp, op.signedN(), op.signedM(), elements,
@@ -937,7 +938,7 @@ final class Ir64VectorArithmeticExecutor {
     }
 
     /// `USDOT`/`SUDOT` indexados (B19.12).
-    static boolean executeIntegerDotProductByElement(Aarch64Core core, Ir64Op.VectorIntegerDotProductByElement op) {
+    static boolean executeIntegerDotProductByElement(Aarch64Core core, AdvSimdIntegerOp64.IntegerDotProductByElement op) {
         Aarch64FpRegisters fp = core.fp();
         int elements = elementsPerRegister(op.q(), DOT_PRODUCT_ESZ);
         AdvSimdLanes.dotProductByElement(fp, op.signedN(), op.signedM(), elements,
@@ -951,7 +952,7 @@ final class Ir64VectorArithmeticExecutor {
     /// `SMMLA`/`UMMLA`/`USMMLA` (B19.12) — `Q` fixo em `1` no encoding (sem forma de 64 bits), mesma
     /// disciplina de `BFMMLA`.
     static boolean executeIntegerMatrixMultiplyAccumulate(
-            Aarch64Core core, Ir64Op.VectorIntegerMatrixMultiplyAccumulate op) {
+            Aarch64Core core, AdvSimdIntegerOp64.IntegerMatrixMultiplyAccumulate op) {
         Aarch64FpRegisters fp = core.fp();
         AdvSimdLanes.matrixMultiplyAccumulate(fp, op.signedN(), op.signedM(),
                 op.rd() * Aarch64FpRegisters.WORDS_PER_REGISTER,

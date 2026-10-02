@@ -1,8 +1,14 @@
 package dev.vitorsilverio.armjitter.codegen64.jvm64;
 
 import dev.vitorsilverio.armjitter.executor64.Ir64BlockExecutor;
+import dev.vitorsilverio.armjitter.ir64.AdvSimdMoveOp64;
+import dev.vitorsilverio.armjitter.ir64.BranchOp64;
+import dev.vitorsilverio.armjitter.ir64.FpOp64;
+import dev.vitorsilverio.armjitter.ir64.IntegerOp64;
 import dev.vitorsilverio.armjitter.ir64.Ir64Block;
 import dev.vitorsilverio.armjitter.ir64.Ir64Op;
+import dev.vitorsilverio.armjitter.ir64.MemoryOp64;
+import dev.vitorsilverio.armjitter.ir64.SystemOp64;
 import dev.vitorsilverio.armjitter.jit64.CompiledBlock64;
 import org.objectweb.asm.ClassWriter;
 import org.objectweb.asm.Label;
@@ -39,7 +45,10 @@ public final class Ir64BlockCompiler {
     private static final String COMPILED_BLOCK_64 = "dev/vitorsilverio/armjitter/jit64/CompiledBlock64";
     private static final String AARCH64_CORE = Aarch64GuestToHostMapper.AARCH64_CORE;
     private static final String AARCH64_CORE_REF = "L" + AARCH64_CORE + ";";
-    private static final String IR64_OP = "dev/vitorsilverio/armjitter/ir64/Ir64Op";
+    /// Prefixo do nome interno das classes do pacote `ir64` — os records vivem aninhados na
+    /// sub-interface selada da sua família (`IntegerOp64$Alu64`, `FpOp64$Alu`, ...; task E15.2).
+    private static final String IR64_PACKAGE = "dev/vitorsilverio/armjitter/ir64/";
+    private static final String IR64_OP = IR64_PACKAGE + "Ir64Op";
     private static final String IR64_OP_REF = "L" + IR64_OP + ";";
     private static final String IR64_RUNTIME_HELPERS =
             "dev/vitorsilverio/armjitter/codegen64/jvm64/Ir64AsmRuntimeHelpers";
@@ -333,65 +342,65 @@ public final class Ir64BlockCompiler {
     /// compilação — cobre exatamente o conjunto suportado por {@link Ir64NativePolicy} no PR1.
     private void constructOp(MethodVisitor mv, Ir64Op op) {
         switch (op) {
-            case Ir64Op.Alu64 alu -> constructAlu64(mv, alu);
-            case Ir64Op.MoveWide moveWide -> constructMoveWide(mv, moveWide);
-            case Ir64Op.PcRelative pcRelative -> constructPcRelative(mv, pcRelative);
-            case Ir64Op.Branch64 branch -> constructBranch64(mv, branch);
-            case Ir64Op.CompareBranch64 compareBranch -> constructCompareBranch64(mv, compareBranch);
-            case Ir64Op.Load64 load -> constructLoad64(mv, load);
-            case Ir64Op.Store64 store -> constructStore64(mv, store);
-            case Ir64Op.LoadStorePair pair -> constructLoadStorePair(mv, pair);
-            case Ir64Op.LoadLiteral64 loadLiteral -> constructLoadLiteral64(mv, loadLiteral);
-            case Ir64Op.Svc svc -> constructSvc(mv, svc);
-            case Ir64Op.AluShiftedRegister aluShifted -> constructAluShiftedRegister(mv, aluShifted);
-            case Ir64Op.AluExtendedRegister aluExtended -> constructAluExtendedRegister(mv, aluExtended);
-            case Ir64Op.ConditionalSelect conditionalSelect -> constructConditionalSelect(mv, conditionalSelect);
-            case Ir64Op.Bitfield bitfield -> constructBitfield(mv, bitfield);
-            case Ir64Op.MultiplyAccumulate multiplyAccumulate -> constructMultiplyAccumulate(mv, multiplyAccumulate);
-            case Ir64Op.Divide divide -> constructDivide(mv, divide);
-            case Ir64Op.LoadExclusive loadExclusive -> constructLoadExclusive(mv, loadExclusive);
-            case Ir64Op.StoreExclusive storeExclusive -> constructStoreExclusive(mv, storeExclusive);
-            case Ir64Op.Fp64Alu fp64Alu -> constructFp64Alu(mv, fp64Alu);
-            case Ir64Op.Fp64MoveImmediate fp64MoveImmediate -> constructFp64MoveImmediate(mv, fp64MoveImmediate);
-            case Ir64Op.Fp64Compare fp64Compare -> constructFp64Compare(mv, fp64Compare);
-            case Ir64Op.Fp64Convert fp64Convert -> constructFp64Convert(mv, fp64Convert);
-            case Ir64Op.ConditionalCompare conditionalCompare -> constructConditionalCompare(mv, conditionalCompare);
-            case Ir64Op.LogicalShiftedRegister logicalShiftedRegister ->
+            case IntegerOp64.Alu64 alu -> constructAlu64(mv, alu);
+            case IntegerOp64.MoveWide moveWide -> constructMoveWide(mv, moveWide);
+            case IntegerOp64.PcRelative pcRelative -> constructPcRelative(mv, pcRelative);
+            case BranchOp64.Branch64 branch -> constructBranch64(mv, branch);
+            case BranchOp64.CompareBranch64 compareBranch -> constructCompareBranch64(mv, compareBranch);
+            case MemoryOp64.Load64 load -> constructLoad64(mv, load);
+            case MemoryOp64.Store64 store -> constructStore64(mv, store);
+            case MemoryOp64.LoadStorePair pair -> constructLoadStorePair(mv, pair);
+            case MemoryOp64.LoadLiteral64 loadLiteral -> constructLoadLiteral64(mv, loadLiteral);
+            case SystemOp64.Svc svc -> constructSvc(mv, svc);
+            case IntegerOp64.AluShiftedRegister aluShifted -> constructAluShiftedRegister(mv, aluShifted);
+            case IntegerOp64.AluExtendedRegister aluExtended -> constructAluExtendedRegister(mv, aluExtended);
+            case IntegerOp64.ConditionalSelect conditionalSelect -> constructConditionalSelect(mv, conditionalSelect);
+            case IntegerOp64.Bitfield bitfield -> constructBitfield(mv, bitfield);
+            case IntegerOp64.MultiplyAccumulate multiplyAccumulate -> constructMultiplyAccumulate(mv, multiplyAccumulate);
+            case IntegerOp64.Divide divide -> constructDivide(mv, divide);
+            case MemoryOp64.LoadExclusive loadExclusive -> constructLoadExclusive(mv, loadExclusive);
+            case MemoryOp64.StoreExclusive storeExclusive -> constructStoreExclusive(mv, storeExclusive);
+            case FpOp64.Alu fp64Alu -> constructFp64Alu(mv, fp64Alu);
+            case FpOp64.MoveImmediate fp64MoveImmediate -> constructFp64MoveImmediate(mv, fp64MoveImmediate);
+            case FpOp64.Compare fp64Compare -> constructFp64Compare(mv, fp64Compare);
+            case FpOp64.Convert fp64Convert -> constructFp64Convert(mv, fp64Convert);
+            case IntegerOp64.ConditionalCompare conditionalCompare -> constructConditionalCompare(mv, conditionalCompare);
+            case IntegerOp64.LogicalShiftedRegister logicalShiftedRegister ->
                     constructLogicalShiftedRegister(mv, logicalShiftedRegister);
-            case Ir64Op.ShiftVariable shiftVariable -> constructShiftVariable(mv, shiftVariable);
-            case Ir64Op.AluWithCarry aluWithCarry -> constructAluWithCarry(mv, aluWithCarry);
-            case Ir64Op.Extract extract -> constructExtract(mv, extract);
-            case Ir64Op.DataProcessing1Source dataProcessing1Source ->
+            case IntegerOp64.ShiftVariable shiftVariable -> constructShiftVariable(mv, shiftVariable);
+            case IntegerOp64.AluWithCarry aluWithCarry -> constructAluWithCarry(mv, aluWithCarry);
+            case IntegerOp64.Extract extract -> constructExtract(mv, extract);
+            case IntegerOp64.DataProcessing1Source dataProcessing1Source ->
                     constructDataProcessing1Source(mv, dataProcessing1Source);
-            case Ir64Op.MultiplyAccumulateLong multiplyAccumulateLong ->
+            case IntegerOp64.MultiplyAccumulateLong multiplyAccumulateLong ->
                     constructMultiplyAccumulateLong(mv, multiplyAccumulateLong);
-            case Ir64Op.MultiplyHigh multiplyHigh -> constructMultiplyHigh(mv, multiplyHigh);
-            case Ir64Op.CompareAndSwap compareAndSwap -> constructCompareAndSwap(mv, compareAndSwap);
-            case Ir64Op.CompareAndSwapPair compareAndSwapPair -> constructCompareAndSwapPair(mv, compareAndSwapPair);
-            case Ir64Op.LoadExclusivePair loadExclusivePair -> constructLoadExclusivePair(mv, loadExclusivePair);
-            case Ir64Op.StoreExclusivePair storeExclusivePair -> constructStoreExclusivePair(mv, storeExclusivePair);
-            case Ir64Op.AtomicMemoryOp atomicMemoryOp -> constructAtomicMemoryOp(mv, atomicMemoryOp);
-            case Ir64Op.EvaluateIntoFlags evaluateIntoFlags -> constructEvaluateIntoFlags(mv, evaluateIntoFlags);
-            case Ir64Op.RotateIntoFlags rotateIntoFlags -> constructRotateIntoFlags(mv, rotateIntoFlags);
-            case Ir64Op.ConvertFlags convertFlags -> constructConvertFlags(mv, convertFlags);
-            case Ir64Op.Fp64MultiplyAdd fp64MultiplyAdd -> constructFp64MultiplyAdd(mv, fp64MultiplyAdd);
-            case Ir64Op.Fp64ConditionalSelect fp64ConditionalSelect ->
+            case IntegerOp64.MultiplyHigh multiplyHigh -> constructMultiplyHigh(mv, multiplyHigh);
+            case MemoryOp64.CompareAndSwap compareAndSwap -> constructCompareAndSwap(mv, compareAndSwap);
+            case MemoryOp64.CompareAndSwapPair compareAndSwapPair -> constructCompareAndSwapPair(mv, compareAndSwapPair);
+            case MemoryOp64.LoadExclusivePair loadExclusivePair -> constructLoadExclusivePair(mv, loadExclusivePair);
+            case MemoryOp64.StoreExclusivePair storeExclusivePair -> constructStoreExclusivePair(mv, storeExclusivePair);
+            case MemoryOp64.AtomicMemoryOp atomicMemoryOp -> constructAtomicMemoryOp(mv, atomicMemoryOp);
+            case IntegerOp64.EvaluateIntoFlags evaluateIntoFlags -> constructEvaluateIntoFlags(mv, evaluateIntoFlags);
+            case IntegerOp64.RotateIntoFlags rotateIntoFlags -> constructRotateIntoFlags(mv, rotateIntoFlags);
+            case IntegerOp64.ConvertFlags convertFlags -> constructConvertFlags(mv, convertFlags);
+            case FpOp64.MultiplyAdd fp64MultiplyAdd -> constructFp64MultiplyAdd(mv, fp64MultiplyAdd);
+            case FpOp64.ConditionalSelect fp64ConditionalSelect ->
                     constructFp64ConditionalSelect(mv, fp64ConditionalSelect);
-            case Ir64Op.Fp64ConditionalCompare fp64ConditionalCompare ->
+            case FpOp64.ConditionalCompare fp64ConditionalCompare ->
                     constructFp64ConditionalCompare(mv, fp64ConditionalCompare);
-            case Ir64Op.Fp64Round fp64Round -> constructFp64Round(mv, fp64Round);
-            case Ir64Op.Fp64IntegerConvert fp64IntegerConvert -> constructFp64IntegerConvert(mv, fp64IntegerConvert);
-            case Ir64Op.Fp64GeneralRegisterMove fp64GeneralRegisterMove ->
+            case FpOp64.Round fp64Round -> constructFp64Round(mv, fp64Round);
+            case FpOp64.IntegerConvert fp64IntegerConvert -> constructFp64IntegerConvert(mv, fp64IntegerConvert);
+            case FpOp64.GeneralRegisterMove fp64GeneralRegisterMove ->
                     constructFp64GeneralRegisterMove(mv, fp64GeneralRegisterMove);
-            case Ir64Op.FpLoad64 fpLoad64 -> constructFpLoad64(mv, fpLoad64);
-            case Ir64Op.FpStore64 fpStore64 -> constructFpStore64(mv, fpStore64);
-            case Ir64Op.FpLoadStorePair fpLoadStorePair -> constructFpLoadStorePair(mv, fpLoadStorePair);
-            case Ir64Op.FpLoadLiteral64 fpLoadLiteral64 -> constructFpLoadLiteral64(mv, fpLoadLiteral64);
-            case Ir64Op.VectorLoadStoreMultiple vectorLoadStoreMultiple ->
+            case FpOp64.Load64 fpLoad64 -> constructFpLoad64(mv, fpLoad64);
+            case FpOp64.Store64 fpStore64 -> constructFpStore64(mv, fpStore64);
+            case FpOp64.LoadStorePair fpLoadStorePair -> constructFpLoadStorePair(mv, fpLoadStorePair);
+            case FpOp64.LoadLiteral64 fpLoadLiteral64 -> constructFpLoadLiteral64(mv, fpLoadLiteral64);
+            case AdvSimdMoveOp64.LoadStoreMultiple vectorLoadStoreMultiple ->
                     constructVectorLoadStoreMultiple(mv, vectorLoadStoreMultiple);
-            case Ir64Op.VectorLoadStoreSingle vectorLoadStoreSingle ->
+            case AdvSimdMoveOp64.LoadStoreSingle vectorLoadStoreSingle ->
                     constructVectorLoadStoreSingle(mv, vectorLoadStoreSingle);
-            case Ir64Op.VectorLoadSingleReplicate vectorLoadSingleReplicate ->
+            case AdvSimdMoveOp64.LoadSingleReplicate vectorLoadSingleReplicate ->
                     constructVectorLoadSingleReplicate(mv, vectorLoadSingleReplicate);
             default -> throw new IllegalStateException(
                     "Ir64BlockCompiler não suporta " + op.getClass().getSimpleName()
@@ -415,16 +424,16 @@ public final class Ir64BlockCompiler {
     private static final String IR64_CONDITIONAL_SELECT_OP =
             "dev/vitorsilverio/armjitter/ir64/Ir64ConditionalSelectOp";
     private static final String IR64_BITFIELD_OP = "dev/vitorsilverio/armjitter/ir64/Ir64BitfieldOp";
-    private static final String IR64_FP64_OPERATION = IR64_OP + "$Fp64Operation";
-    private static final String IR64_FP64_CONVERSION = IR64_OP + "$Fp64Conversion";
-    private static final String IR64_FP64_ROUNDING_DIRECTION = IR64_OP + "$Fp64RoundingDirection";
+    private static final String IR64_FP64_OPERATION = IR64_PACKAGE + "FpOp64$Fp64Operation";
+    private static final String IR64_FP64_CONVERSION = IR64_PACKAGE + "FpOp64$Fp64Conversion";
+    private static final String IR64_FP64_ROUNDING_DIRECTION = IR64_PACKAGE + "FpOp64$Fp64RoundingDirection";
     private static final String IR64_LOGICAL_SHIFT_TYPE = "dev/vitorsilverio/armjitter/ir64/Ir64LogicalShiftType";
     private static final String IR64_ONE_SOURCE_OP = "dev/vitorsilverio/armjitter/ir64/Ir64OneSourceOp";
     private static final String IR64_ATOMIC_OP = "dev/vitorsilverio/armjitter/ir64/Ir64AtomicOp";
     private static final String IR64_FLAG_CONVERSION_OP = "dev/vitorsilverio/armjitter/ir64/Ir64FlagConversionOp";
 
-    private void constructAlu64(MethodVisitor mv, Ir64Op.Alu64 op) {
-        String type = IR64_OP + "$Alu64";
+    private void constructAlu64(MethodVisitor mv, IntegerOp64.Alu64 op) {
+        String type = IR64_PACKAGE + "IntegerOp64$Alu64";
         mv.visitTypeInsn(Opcodes.NEW, type);
         mv.visitInsn(Opcodes.DUP);
         emitEnumConstant(mv, IR64_ALU_OP, op.opcode().name());
@@ -439,8 +448,8 @@ public final class Ir64BlockCompiler {
                 "(L" + IR64_ALU_OP + ";IIJZZZZ)V", false);
     }
 
-    private void constructMoveWide(MethodVisitor mv, Ir64Op.MoveWide op) {
-        String type = IR64_OP + "$MoveWide";
+    private void constructMoveWide(MethodVisitor mv, IntegerOp64.MoveWide op) {
+        String type = IR64_PACKAGE + "IntegerOp64$MoveWide";
         mv.visitTypeInsn(Opcodes.NEW, type);
         mv.visitInsn(Opcodes.DUP);
         emitEnumConstant(mv, IR64_MOVE_WIDE_OP, op.opcode().name());
@@ -452,8 +461,8 @@ public final class Ir64BlockCompiler {
                 "(L" + IR64_MOVE_WIDE_OP + ";IIIZ)V", false);
     }
 
-    private void constructPcRelative(MethodVisitor mv, Ir64Op.PcRelative op) {
-        String type = IR64_OP + "$PcRelative";
+    private void constructPcRelative(MethodVisitor mv, IntegerOp64.PcRelative op) {
+        String type = IR64_PACKAGE + "IntegerOp64$PcRelative";
         mv.visitTypeInsn(Opcodes.NEW, type);
         mv.visitInsn(Opcodes.DUP);
         mv.visitLdcInsn(op.dst());
@@ -463,8 +472,8 @@ public final class Ir64BlockCompiler {
         mv.visitMethodInsn(Opcodes.INVOKESPECIAL, type, "<init>", "(IJJZ)V", false);
     }
 
-    private void constructBranch64(MethodVisitor mv, Ir64Op.Branch64 op) {
-        String type = IR64_OP + "$Branch64";
+    private void constructBranch64(MethodVisitor mv, BranchOp64.Branch64 op) {
+        String type = IR64_PACKAGE + "BranchOp64$Branch64";
         mv.visitTypeInsn(Opcodes.NEW, type);
         mv.visitInsn(Opcodes.DUP);
         emitEnumConstant(mv, IR64_BRANCH_FORM, op.form().name());
@@ -477,8 +486,8 @@ public final class Ir64BlockCompiler {
                 "(L" + IR64_BRANCH_FORM + ";JJIZL" + IR64_CONDITION + ";)V", false);
     }
 
-    private void constructCompareBranch64(MethodVisitor mv, Ir64Op.CompareBranch64 op) {
-        String type = IR64_OP + "$CompareBranch64";
+    private void constructCompareBranch64(MethodVisitor mv, BranchOp64.CompareBranch64 op) {
+        String type = IR64_PACKAGE + "BranchOp64$CompareBranch64";
         mv.visitTypeInsn(Opcodes.NEW, type);
         mv.visitInsn(Opcodes.DUP);
         emitEnumConstant(mv, IR64_COMPARE_BRANCH_FORM, op.form().name());
@@ -493,10 +502,10 @@ public final class Ir64BlockCompiler {
 
     /// `Load64`/`Store64` (`Ir64AddressingMode#REGISTER_OFFSET`) — `rn` é `SP`, `rm`/`extendType`
     /// só têm sentido quando o modo é `REGISTER_OFFSET`; nos demais modos {@link Ir64ExtendType}
-    /// é `null` (ver o javadoc de {@link Ir64Op.Load64#extendType}), tratado por
+    /// é `null` (ver o javadoc de {@link MemoryOp64.Load64#extendType}), tratado por
     /// {@link #emitEnumConstantOrNull}.
-    private void constructLoad64(MethodVisitor mv, Ir64Op.Load64 op) {
-        String type = IR64_OP + "$Load64";
+    private void constructLoad64(MethodVisitor mv, MemoryOp64.Load64 op) {
+        String type = IR64_PACKAGE + "MemoryOp64$Load64";
         mv.visitTypeInsn(Opcodes.NEW, type);
         mv.visitInsn(Opcodes.DUP);
         mv.visitLdcInsn(op.rt());
@@ -514,8 +523,8 @@ public final class Ir64BlockCompiler {
                 false);
     }
 
-    private void constructStore64(MethodVisitor mv, Ir64Op.Store64 op) {
-        String type = IR64_OP + "$Store64";
+    private void constructStore64(MethodVisitor mv, MemoryOp64.Store64 op) {
+        String type = IR64_PACKAGE + "MemoryOp64$Store64";
         mv.visitTypeInsn(Opcodes.NEW, type);
         mv.visitInsn(Opcodes.DUP);
         mv.visitLdcInsn(op.rt());
@@ -533,9 +542,9 @@ public final class Ir64BlockCompiler {
     }
 
     /// `LDP`/`STP` — nunca tem forma `REGISTER_OFFSET` (ver javadoc de
-    /// {@link Ir64Op.LoadStorePair}), então não carrega `rm`/`extendType`/`shiftAmount`.
-    private void constructLoadStorePair(MethodVisitor mv, Ir64Op.LoadStorePair op) {
-        String type = IR64_OP + "$LoadStorePair";
+    /// {@link MemoryOp64.LoadStorePair}), então não carrega `rm`/`extendType`/`shiftAmount`.
+    private void constructLoadStorePair(MethodVisitor mv, MemoryOp64.LoadStorePair op) {
+        String type = IR64_PACKAGE + "MemoryOp64$LoadStorePair";
         mv.visitTypeInsn(Opcodes.NEW, type);
         mv.visitInsn(Opcodes.DUP);
         emitBoolean(mv, op.load());
@@ -550,8 +559,8 @@ public final class Ir64BlockCompiler {
                 "(ZIIIZL" + IR64_ADDRESSING_MODE + ";JZ)V", false);
     }
 
-    private void constructLoadLiteral64(MethodVisitor mv, Ir64Op.LoadLiteral64 op) {
-        String type = IR64_OP + "$LoadLiteral64";
+    private void constructLoadLiteral64(MethodVisitor mv, MemoryOp64.LoadLiteral64 op) {
+        String type = IR64_PACKAGE + "MemoryOp64$LoadLiteral64";
         mv.visitTypeInsn(Opcodes.NEW, type);
         mv.visitInsn(Opcodes.DUP);
         mv.visitLdcInsn(op.rt());
@@ -561,16 +570,16 @@ public final class Ir64BlockCompiler {
         mv.visitMethodInsn(Opcodes.INVOKESPECIAL, type, "<init>", "(IJZZ)V", false);
     }
 
-    private void constructSvc(MethodVisitor mv, Ir64Op.Svc op) {
-        String type = IR64_OP + "$Svc";
+    private void constructSvc(MethodVisitor mv, SystemOp64.Svc op) {
+        String type = IR64_PACKAGE + "SystemOp64$Svc";
         mv.visitTypeInsn(Opcodes.NEW, type);
         mv.visitInsn(Opcodes.DUP);
         mv.visitLdcInsn(op.immediate());
         mv.visitMethodInsn(Opcodes.INVOKESPECIAL, type, "<init>", "(I)V", false);
     }
 
-    private void constructAluShiftedRegister(MethodVisitor mv, Ir64Op.AluShiftedRegister op) {
-        String type = IR64_OP + "$AluShiftedRegister";
+    private void constructAluShiftedRegister(MethodVisitor mv, IntegerOp64.AluShiftedRegister op) {
+        String type = IR64_PACKAGE + "IntegerOp64$AluShiftedRegister";
         mv.visitTypeInsn(Opcodes.NEW, type);
         mv.visitInsn(Opcodes.DUP);
         emitEnumConstant(mv, IR64_ALU_OP, op.opcode().name());
@@ -585,8 +594,8 @@ public final class Ir64BlockCompiler {
                 "(L" + IR64_ALU_OP + ";IIIL" + IR64_SHIFT_TYPE + ";IZZ)V", false);
     }
 
-    private void constructAluExtendedRegister(MethodVisitor mv, Ir64Op.AluExtendedRegister op) {
-        String type = IR64_OP + "$AluExtendedRegister";
+    private void constructAluExtendedRegister(MethodVisitor mv, IntegerOp64.AluExtendedRegister op) {
+        String type = IR64_PACKAGE + "IntegerOp64$AluExtendedRegister";
         mv.visitTypeInsn(Opcodes.NEW, type);
         mv.visitInsn(Opcodes.DUP);
         emitEnumConstant(mv, IR64_ALU_OP, op.opcode().name());
@@ -602,8 +611,8 @@ public final class Ir64BlockCompiler {
                 "(L" + IR64_ALU_OP + ";IIIL" + IR64_ALU_EXTEND_TYPE + ";IZZZ)V", false);
     }
 
-    private void constructConditionalSelect(MethodVisitor mv, Ir64Op.ConditionalSelect op) {
-        String type = IR64_OP + "$ConditionalSelect";
+    private void constructConditionalSelect(MethodVisitor mv, IntegerOp64.ConditionalSelect op) {
+        String type = IR64_PACKAGE + "IntegerOp64$ConditionalSelect";
         mv.visitTypeInsn(Opcodes.NEW, type);
         mv.visitInsn(Opcodes.DUP);
         emitEnumConstant(mv, IR64_CONDITIONAL_SELECT_OP, op.opcode().name());
@@ -616,8 +625,8 @@ public final class Ir64BlockCompiler {
                 "(L" + IR64_CONDITIONAL_SELECT_OP + ";IIIZL" + IR64_CONDITION + ";)V", false);
     }
 
-    private void constructBitfield(MethodVisitor mv, Ir64Op.Bitfield op) {
-        String type = IR64_OP + "$Bitfield";
+    private void constructBitfield(MethodVisitor mv, IntegerOp64.Bitfield op) {
+        String type = IR64_PACKAGE + "IntegerOp64$Bitfield";
         mv.visitTypeInsn(Opcodes.NEW, type);
         mv.visitInsn(Opcodes.DUP);
         emitEnumConstant(mv, IR64_BITFIELD_OP, op.opcode().name());
@@ -630,8 +639,8 @@ public final class Ir64BlockCompiler {
                 "(L" + IR64_BITFIELD_OP + ";IIIIZ)V", false);
     }
 
-    private void constructMultiplyAccumulate(MethodVisitor mv, Ir64Op.MultiplyAccumulate op) {
-        String type = IR64_OP + "$MultiplyAccumulate";
+    private void constructMultiplyAccumulate(MethodVisitor mv, IntegerOp64.MultiplyAccumulate op) {
+        String type = IR64_PACKAGE + "IntegerOp64$MultiplyAccumulate";
         mv.visitTypeInsn(Opcodes.NEW, type);
         mv.visitInsn(Opcodes.DUP);
         emitBoolean(mv, op.subtract());
@@ -643,8 +652,8 @@ public final class Ir64BlockCompiler {
         mv.visitMethodInsn(Opcodes.INVOKESPECIAL, type, "<init>", "(ZIIIIZ)V", false);
     }
 
-    private void constructDivide(MethodVisitor mv, Ir64Op.Divide op) {
-        String type = IR64_OP + "$Divide";
+    private void constructDivide(MethodVisitor mv, IntegerOp64.Divide op) {
+        String type = IR64_PACKAGE + "IntegerOp64$Divide";
         mv.visitTypeInsn(Opcodes.NEW, type);
         mv.visitInsn(Opcodes.DUP);
         emitBoolean(mv, op.signed());
@@ -655,8 +664,8 @@ public final class Ir64BlockCompiler {
         mv.visitMethodInsn(Opcodes.INVOKESPECIAL, type, "<init>", "(ZIIIZ)V", false);
     }
 
-    private void constructLoadExclusive(MethodVisitor mv, Ir64Op.LoadExclusive op) {
-        String type = IR64_OP + "$LoadExclusive";
+    private void constructLoadExclusive(MethodVisitor mv, MemoryOp64.LoadExclusive op) {
+        String type = IR64_PACKAGE + "MemoryOp64$LoadExclusive";
         mv.visitTypeInsn(Opcodes.NEW, type);
         mv.visitInsn(Opcodes.DUP);
         mv.visitLdcInsn(op.rt());
@@ -667,8 +676,8 @@ public final class Ir64BlockCompiler {
                 "(IIL" + IR64_MEM_SIZE + ";Z)V", false);
     }
 
-    private void constructStoreExclusive(MethodVisitor mv, Ir64Op.StoreExclusive op) {
-        String type = IR64_OP + "$StoreExclusive";
+    private void constructStoreExclusive(MethodVisitor mv, MemoryOp64.StoreExclusive op) {
+        String type = IR64_PACKAGE + "MemoryOp64$StoreExclusive";
         mv.visitTypeInsn(Opcodes.NEW, type);
         mv.visitInsn(Opcodes.DUP);
         mv.visitLdcInsn(op.rs());
@@ -680,8 +689,8 @@ public final class Ir64BlockCompiler {
                 "(IIIL" + IR64_MEM_SIZE + ";Z)V", false);
     }
 
-    private void constructFp64Alu(MethodVisitor mv, Ir64Op.Fp64Alu op) {
-        String type = IR64_OP + "$Fp64Alu";
+    private void constructFp64Alu(MethodVisitor mv, FpOp64.Alu op) {
+        String type = IR64_PACKAGE + "FpOp64$Alu";
         mv.visitTypeInsn(Opcodes.NEW, type);
         mv.visitInsn(Opcodes.DUP);
         emitEnumConstant(mv, IR64_FP64_OPERATION, op.op().name());
@@ -693,8 +702,8 @@ public final class Ir64BlockCompiler {
                 "(L" + IR64_FP64_OPERATION + ";ZIII)V", false);
     }
 
-    private void constructFp64MoveImmediate(MethodVisitor mv, Ir64Op.Fp64MoveImmediate op) {
-        String type = IR64_OP + "$Fp64MoveImmediate";
+    private void constructFp64MoveImmediate(MethodVisitor mv, FpOp64.MoveImmediate op) {
+        String type = IR64_PACKAGE + "FpOp64$MoveImmediate";
         mv.visitTypeInsn(Opcodes.NEW, type);
         mv.visitInsn(Opcodes.DUP);
         emitBoolean(mv, op.doublePrecision());
@@ -703,8 +712,8 @@ public final class Ir64BlockCompiler {
         mv.visitMethodInsn(Opcodes.INVOKESPECIAL, type, "<init>", "(ZIJ)V", false);
     }
 
-    private void constructFp64Compare(MethodVisitor mv, Ir64Op.Fp64Compare op) {
-        String type = IR64_OP + "$Fp64Compare";
+    private void constructFp64Compare(MethodVisitor mv, FpOp64.Compare op) {
+        String type = IR64_PACKAGE + "FpOp64$Compare";
         mv.visitTypeInsn(Opcodes.NEW, type);
         mv.visitInsn(Opcodes.DUP);
         emitBoolean(mv, op.doublePrecision());
@@ -715,8 +724,8 @@ public final class Ir64BlockCompiler {
         mv.visitMethodInsn(Opcodes.INVOKESPECIAL, type, "<init>", "(ZZZII)V", false);
     }
 
-    private void constructFp64Convert(MethodVisitor mv, Ir64Op.Fp64Convert op) {
-        String type = IR64_OP + "$Fp64Convert";
+    private void constructFp64Convert(MethodVisitor mv, FpOp64.Convert op) {
+        String type = IR64_PACKAGE + "FpOp64$Convert";
         mv.visitTypeInsn(Opcodes.NEW, type);
         mv.visitInsn(Opcodes.DUP);
         emitEnumConstant(mv, IR64_FP64_CONVERSION, op.conversion().name());
@@ -726,8 +735,8 @@ public final class Ir64BlockCompiler {
                 "(L" + IR64_FP64_CONVERSION + ";II)V", false);
     }
 
-    private void constructConditionalCompare(MethodVisitor mv, Ir64Op.ConditionalCompare op) {
-        String type = IR64_OP + "$ConditionalCompare";
+    private void constructConditionalCompare(MethodVisitor mv, IntegerOp64.ConditionalCompare op) {
+        String type = IR64_PACKAGE + "IntegerOp64$ConditionalCompare";
         mv.visitTypeInsn(Opcodes.NEW, type);
         mv.visitInsn(Opcodes.DUP);
         emitEnumConstant(mv, IR64_ALU_OP, op.opcode().name());
@@ -742,8 +751,8 @@ public final class Ir64BlockCompiler {
                 "(L" + IR64_ALU_OP + ";IZIIZL" + IR64_CONDITION + ";I)V", false);
     }
 
-    private void constructLogicalShiftedRegister(MethodVisitor mv, Ir64Op.LogicalShiftedRegister op) {
-        String type = IR64_OP + "$LogicalShiftedRegister";
+    private void constructLogicalShiftedRegister(MethodVisitor mv, IntegerOp64.LogicalShiftedRegister op) {
+        String type = IR64_PACKAGE + "IntegerOp64$LogicalShiftedRegister";
         mv.visitTypeInsn(Opcodes.NEW, type);
         mv.visitInsn(Opcodes.DUP);
         emitEnumConstant(mv, IR64_ALU_OP, op.opcode().name());
@@ -759,8 +768,8 @@ public final class Ir64BlockCompiler {
                 "(L" + IR64_ALU_OP + ";IIIL" + IR64_LOGICAL_SHIFT_TYPE + ";IZZZ)V", false);
     }
 
-    private void constructShiftVariable(MethodVisitor mv, Ir64Op.ShiftVariable op) {
-        String type = IR64_OP + "$ShiftVariable";
+    private void constructShiftVariable(MethodVisitor mv, IntegerOp64.ShiftVariable op) {
+        String type = IR64_PACKAGE + "IntegerOp64$ShiftVariable";
         mv.visitTypeInsn(Opcodes.NEW, type);
         mv.visitInsn(Opcodes.DUP);
         mv.visitLdcInsn(op.dst());
@@ -772,8 +781,8 @@ public final class Ir64BlockCompiler {
                 "(III" + "L" + IR64_LOGICAL_SHIFT_TYPE + ";Z)V", false);
     }
 
-    private void constructAluWithCarry(MethodVisitor mv, Ir64Op.AluWithCarry op) {
-        String type = IR64_OP + "$AluWithCarry";
+    private void constructAluWithCarry(MethodVisitor mv, IntegerOp64.AluWithCarry op) {
+        String type = IR64_PACKAGE + "IntegerOp64$AluWithCarry";
         mv.visitTypeInsn(Opcodes.NEW, type);
         mv.visitInsn(Opcodes.DUP);
         emitBoolean(mv, op.subtract());
@@ -785,8 +794,8 @@ public final class Ir64BlockCompiler {
         mv.visitMethodInsn(Opcodes.INVOKESPECIAL, type, "<init>", "(ZIIIZZ)V", false);
     }
 
-    private void constructExtract(MethodVisitor mv, Ir64Op.Extract op) {
-        String type = IR64_OP + "$Extract";
+    private void constructExtract(MethodVisitor mv, IntegerOp64.Extract op) {
+        String type = IR64_PACKAGE + "IntegerOp64$Extract";
         mv.visitTypeInsn(Opcodes.NEW, type);
         mv.visitInsn(Opcodes.DUP);
         mv.visitLdcInsn(op.dst());
@@ -797,8 +806,8 @@ public final class Ir64BlockCompiler {
         mv.visitMethodInsn(Opcodes.INVOKESPECIAL, type, "<init>", "(IIIIZ)V", false);
     }
 
-    private void constructDataProcessing1Source(MethodVisitor mv, Ir64Op.DataProcessing1Source op) {
-        String type = IR64_OP + "$DataProcessing1Source";
+    private void constructDataProcessing1Source(MethodVisitor mv, IntegerOp64.DataProcessing1Source op) {
+        String type = IR64_PACKAGE + "IntegerOp64$DataProcessing1Source";
         mv.visitTypeInsn(Opcodes.NEW, type);
         mv.visitInsn(Opcodes.DUP);
         emitEnumConstant(mv, IR64_ONE_SOURCE_OP, op.opcode().name());
@@ -809,8 +818,8 @@ public final class Ir64BlockCompiler {
                 "(L" + IR64_ONE_SOURCE_OP + ";IIZ)V", false);
     }
 
-    private void constructMultiplyAccumulateLong(MethodVisitor mv, Ir64Op.MultiplyAccumulateLong op) {
-        String type = IR64_OP + "$MultiplyAccumulateLong";
+    private void constructMultiplyAccumulateLong(MethodVisitor mv, IntegerOp64.MultiplyAccumulateLong op) {
+        String type = IR64_PACKAGE + "IntegerOp64$MultiplyAccumulateLong";
         mv.visitTypeInsn(Opcodes.NEW, type);
         mv.visitInsn(Opcodes.DUP);
         emitBoolean(mv, op.subtract());
@@ -822,8 +831,8 @@ public final class Ir64BlockCompiler {
         mv.visitMethodInsn(Opcodes.INVOKESPECIAL, type, "<init>", "(ZZIIII)V", false);
     }
 
-    private void constructMultiplyHigh(MethodVisitor mv, Ir64Op.MultiplyHigh op) {
-        String type = IR64_OP + "$MultiplyHigh";
+    private void constructMultiplyHigh(MethodVisitor mv, IntegerOp64.MultiplyHigh op) {
+        String type = IR64_PACKAGE + "IntegerOp64$MultiplyHigh";
         mv.visitTypeInsn(Opcodes.NEW, type);
         mv.visitInsn(Opcodes.DUP);
         emitBoolean(mv, op.signed());
@@ -833,8 +842,8 @@ public final class Ir64BlockCompiler {
         mv.visitMethodInsn(Opcodes.INVOKESPECIAL, type, "<init>", "(ZIII)V", false);
     }
 
-    private void constructCompareAndSwap(MethodVisitor mv, Ir64Op.CompareAndSwap op) {
-        String type = IR64_OP + "$CompareAndSwap";
+    private void constructCompareAndSwap(MethodVisitor mv, MemoryOp64.CompareAndSwap op) {
+        String type = IR64_PACKAGE + "MemoryOp64$CompareAndSwap";
         mv.visitTypeInsn(Opcodes.NEW, type);
         mv.visitInsn(Opcodes.DUP);
         mv.visitLdcInsn(op.rs());
@@ -845,8 +854,8 @@ public final class Ir64BlockCompiler {
                 "(III" + "L" + IR64_MEM_SIZE + ";)V", false);
     }
 
-    private void constructCompareAndSwapPair(MethodVisitor mv, Ir64Op.CompareAndSwapPair op) {
-        String type = IR64_OP + "$CompareAndSwapPair";
+    private void constructCompareAndSwapPair(MethodVisitor mv, MemoryOp64.CompareAndSwapPair op) {
+        String type = IR64_PACKAGE + "MemoryOp64$CompareAndSwapPair";
         mv.visitTypeInsn(Opcodes.NEW, type);
         mv.visitInsn(Opcodes.DUP);
         mv.visitLdcInsn(op.rs());
@@ -856,8 +865,8 @@ public final class Ir64BlockCompiler {
         mv.visitMethodInsn(Opcodes.INVOKESPECIAL, type, "<init>", "(IIIZ)V", false);
     }
 
-    private void constructLoadExclusivePair(MethodVisitor mv, Ir64Op.LoadExclusivePair op) {
-        String type = IR64_OP + "$LoadExclusivePair";
+    private void constructLoadExclusivePair(MethodVisitor mv, MemoryOp64.LoadExclusivePair op) {
+        String type = IR64_PACKAGE + "MemoryOp64$LoadExclusivePair";
         mv.visitTypeInsn(Opcodes.NEW, type);
         mv.visitInsn(Opcodes.DUP);
         mv.visitLdcInsn(op.rt());
@@ -868,8 +877,8 @@ public final class Ir64BlockCompiler {
         mv.visitMethodInsn(Opcodes.INVOKESPECIAL, type, "<init>", "(IIIZZ)V", false);
     }
 
-    private void constructStoreExclusivePair(MethodVisitor mv, Ir64Op.StoreExclusivePair op) {
-        String type = IR64_OP + "$StoreExclusivePair";
+    private void constructStoreExclusivePair(MethodVisitor mv, MemoryOp64.StoreExclusivePair op) {
+        String type = IR64_PACKAGE + "MemoryOp64$StoreExclusivePair";
         mv.visitTypeInsn(Opcodes.NEW, type);
         mv.visitInsn(Opcodes.DUP);
         mv.visitLdcInsn(op.rs());
@@ -881,8 +890,8 @@ public final class Ir64BlockCompiler {
         mv.visitMethodInsn(Opcodes.INVOKESPECIAL, type, "<init>", "(IIIIZZ)V", false);
     }
 
-    private void constructAtomicMemoryOp(MethodVisitor mv, Ir64Op.AtomicMemoryOp op) {
-        String type = IR64_OP + "$AtomicMemoryOp";
+    private void constructAtomicMemoryOp(MethodVisitor mv, MemoryOp64.AtomicMemoryOp op) {
+        String type = IR64_PACKAGE + "MemoryOp64$AtomicMemoryOp";
         mv.visitTypeInsn(Opcodes.NEW, type);
         mv.visitInsn(Opcodes.DUP);
         mv.visitLdcInsn(op.rs());
@@ -896,8 +905,8 @@ public final class Ir64BlockCompiler {
                 "(III" + "L" + IR64_MEM_SIZE + ";L" + IR64_ATOMIC_OP + ";ZZ)V", false);
     }
 
-    private void constructEvaluateIntoFlags(MethodVisitor mv, Ir64Op.EvaluateIntoFlags op) {
-        String type = IR64_OP + "$EvaluateIntoFlags";
+    private void constructEvaluateIntoFlags(MethodVisitor mv, IntegerOp64.EvaluateIntoFlags op) {
+        String type = IR64_PACKAGE + "IntegerOp64$EvaluateIntoFlags";
         mv.visitTypeInsn(Opcodes.NEW, type);
         mv.visitInsn(Opcodes.DUP);
         mv.visitLdcInsn(op.rn());
@@ -905,8 +914,8 @@ public final class Ir64BlockCompiler {
         mv.visitMethodInsn(Opcodes.INVOKESPECIAL, type, "<init>", "(II)V", false);
     }
 
-    private void constructRotateIntoFlags(MethodVisitor mv, Ir64Op.RotateIntoFlags op) {
-        String type = IR64_OP + "$RotateIntoFlags";
+    private void constructRotateIntoFlags(MethodVisitor mv, IntegerOp64.RotateIntoFlags op) {
+        String type = IR64_PACKAGE + "IntegerOp64$RotateIntoFlags";
         mv.visitTypeInsn(Opcodes.NEW, type);
         mv.visitInsn(Opcodes.DUP);
         mv.visitLdcInsn(op.rn());
@@ -915,8 +924,8 @@ public final class Ir64BlockCompiler {
         mv.visitMethodInsn(Opcodes.INVOKESPECIAL, type, "<init>", "(III)V", false);
     }
 
-    private void constructConvertFlags(MethodVisitor mv, Ir64Op.ConvertFlags op) {
-        String type = IR64_OP + "$ConvertFlags";
+    private void constructConvertFlags(MethodVisitor mv, IntegerOp64.ConvertFlags op) {
+        String type = IR64_PACKAGE + "IntegerOp64$ConvertFlags";
         mv.visitTypeInsn(Opcodes.NEW, type);
         mv.visitInsn(Opcodes.DUP);
         emitEnumConstant(mv, IR64_FLAG_CONVERSION_OP, op.opcode().name());
@@ -924,8 +933,8 @@ public final class Ir64BlockCompiler {
                 "(L" + IR64_FLAG_CONVERSION_OP + ";)V", false);
     }
 
-    private void constructFp64MultiplyAdd(MethodVisitor mv, Ir64Op.Fp64MultiplyAdd op) {
-        String type = IR64_OP + "$Fp64MultiplyAdd";
+    private void constructFp64MultiplyAdd(MethodVisitor mv, FpOp64.MultiplyAdd op) {
+        String type = IR64_PACKAGE + "FpOp64$MultiplyAdd";
         mv.visitTypeInsn(Opcodes.NEW, type);
         mv.visitInsn(Opcodes.DUP);
         emitBoolean(mv, op.doublePrecision());
@@ -938,8 +947,8 @@ public final class Ir64BlockCompiler {
         mv.visitMethodInsn(Opcodes.INVOKESPECIAL, type, "<init>", "(ZZZIIII)V", false);
     }
 
-    private void constructFp64ConditionalSelect(MethodVisitor mv, Ir64Op.Fp64ConditionalSelect op) {
-        String type = IR64_OP + "$Fp64ConditionalSelect";
+    private void constructFp64ConditionalSelect(MethodVisitor mv, FpOp64.ConditionalSelect op) {
+        String type = IR64_PACKAGE + "FpOp64$ConditionalSelect";
         mv.visitTypeInsn(Opcodes.NEW, type);
         mv.visitInsn(Opcodes.DUP);
         emitBoolean(mv, op.doublePrecision());
@@ -951,8 +960,8 @@ public final class Ir64BlockCompiler {
                 "(ZIIIL" + IR64_CONDITION + ";)V", false);
     }
 
-    private void constructFp64ConditionalCompare(MethodVisitor mv, Ir64Op.Fp64ConditionalCompare op) {
-        String type = IR64_OP + "$Fp64ConditionalCompare";
+    private void constructFp64ConditionalCompare(MethodVisitor mv, FpOp64.ConditionalCompare op) {
+        String type = IR64_PACKAGE + "FpOp64$ConditionalCompare";
         mv.visitTypeInsn(Opcodes.NEW, type);
         mv.visitInsn(Opcodes.DUP);
         emitBoolean(mv, op.doublePrecision());
@@ -965,8 +974,8 @@ public final class Ir64BlockCompiler {
                 "(ZZIIL" + IR64_CONDITION + ";I)V", false);
     }
 
-    private void constructFp64Round(MethodVisitor mv, Ir64Op.Fp64Round op) {
-        String type = IR64_OP + "$Fp64Round";
+    private void constructFp64Round(MethodVisitor mv, FpOp64.Round op) {
+        String type = IR64_PACKAGE + "FpOp64$Round";
         mv.visitTypeInsn(Opcodes.NEW, type);
         mv.visitInsn(Opcodes.DUP);
         emitEnumConstant(mv, IR64_FP64_ROUNDING_DIRECTION, op.direction().name());
@@ -977,8 +986,8 @@ public final class Ir64BlockCompiler {
                 "(L" + IR64_FP64_ROUNDING_DIRECTION + ";ZII)V", false);
     }
 
-    private void constructFp64IntegerConvert(MethodVisitor mv, Ir64Op.Fp64IntegerConvert op) {
-        String type = IR64_OP + "$Fp64IntegerConvert";
+    private void constructFp64IntegerConvert(MethodVisitor mv, FpOp64.IntegerConvert op) {
+        String type = IR64_PACKAGE + "FpOp64$IntegerConvert";
         mv.visitTypeInsn(Opcodes.NEW, type);
         mv.visitInsn(Opcodes.DUP);
         emitBoolean(mv, op.toFloat());
@@ -993,8 +1002,8 @@ public final class Ir64BlockCompiler {
                 "(ZZL" + IR64_FP64_ROUNDING_DIRECTION + ";ZZIII)V", false);
     }
 
-    private void constructFp64GeneralRegisterMove(MethodVisitor mv, Ir64Op.Fp64GeneralRegisterMove op) {
-        String type = IR64_OP + "$Fp64GeneralRegisterMove";
+    private void constructFp64GeneralRegisterMove(MethodVisitor mv, FpOp64.GeneralRegisterMove op) {
+        String type = IR64_PACKAGE + "FpOp64$GeneralRegisterMove";
         mv.visitTypeInsn(Opcodes.NEW, type);
         mv.visitInsn(Opcodes.DUP);
         emitBoolean(mv, op.toFloat());
@@ -1004,13 +1013,13 @@ public final class Ir64BlockCompiler {
         mv.visitMethodInsn(Opcodes.INVOKESPECIAL, type, "<init>", "(ZZII)V", false);
     }
 
-    /// `FpLoad64`/`FpStore64` (C12.5, B8.13) — mesmo layout de campos de {@link #constructLoad64},
+    /// `FpOp64.Load64`/`FpOp64.Store64` (C12.5, B8.13) — mesmo layout de campos de {@link #constructLoad64},
     /// trocando {@link #IR64_MEM_SIZE} por {@link #IR64_FP_MEM_SIZE} (tamanho `QUAD` extra) e sem
     /// `signExtend`/`wide` (SIMD&FP não tem forma com sinal nem eixo `W`/`X` — Armadilha 2 da spec:
     /// a disciplina de escrita destrutiva/zeragem vive inteira em
     /// {@code Ir64BlockExecutor#executeFpLoad}, intocada aqui).
-    private void constructFpLoad64(MethodVisitor mv, Ir64Op.FpLoad64 op) {
-        String type = IR64_OP + "$FpLoad64";
+    private void constructFpLoad64(MethodVisitor mv, FpOp64.Load64 op) {
+        String type = IR64_PACKAGE + "FpOp64$Load64";
         mv.visitTypeInsn(Opcodes.NEW, type);
         mv.visitInsn(Opcodes.DUP);
         mv.visitLdcInsn(op.vt());
@@ -1026,8 +1035,8 @@ public final class Ir64BlockCompiler {
                 false);
     }
 
-    private void constructFpStore64(MethodVisitor mv, Ir64Op.FpStore64 op) {
-        String type = IR64_OP + "$FpStore64";
+    private void constructFpStore64(MethodVisitor mv, FpOp64.Store64 op) {
+        String type = IR64_PACKAGE + "FpOp64$Store64";
         mv.visitTypeInsn(Opcodes.NEW, type);
         mv.visitInsn(Opcodes.DUP);
         mv.visitLdcInsn(op.vt());
@@ -1045,8 +1054,8 @@ public final class Ir64BlockCompiler {
 
     /// `LDP`/`STP` SIMD&FP (C12.5, B8.13) — nunca tem forma `REGISTER_OFFSET` (mesma restrição de
     /// {@link #constructLoadStorePair}) e sem `signExtend` (não existe `LDPSW` SIMD&FP).
-    private void constructFpLoadStorePair(MethodVisitor mv, Ir64Op.FpLoadStorePair op) {
-        String type = IR64_OP + "$FpLoadStorePair";
+    private void constructFpLoadStorePair(MethodVisitor mv, FpOp64.LoadStorePair op) {
+        String type = IR64_PACKAGE + "FpOp64$LoadStorePair";
         mv.visitTypeInsn(Opcodes.NEW, type);
         mv.visitInsn(Opcodes.DUP);
         emitBoolean(mv, op.load());
@@ -1060,12 +1069,12 @@ public final class Ir64BlockCompiler {
                 "(ZIIIL" + IR64_FP_MEM_SIZE + ";L" + IR64_ADDRESSING_MODE + ";J)V", false);
     }
 
-    /// `LDR (literal)` SIMD&FP (C12.5, B8.13) — Armadilha 6 da spec: {@link Ir64Op.FpLoadLiteral64#address}
+    /// `LDR (literal)` SIMD&FP (C12.5, B8.13) — Armadilha 6 da spec: {@link FpOp64.LoadLiteral64#address}
     /// já é o endereço ABSOLUTO resolvido pelo decoder a partir do PC da PRÓPRIA instrução (nunca o
     /// PC do bloco) — mesma convenção de {@link #constructLoadLiteral64}, campo constante de
     /// compilação, nenhum cálculo de PC acontece aqui.
-    private void constructFpLoadLiteral64(MethodVisitor mv, Ir64Op.FpLoadLiteral64 op) {
-        String type = IR64_OP + "$FpLoadLiteral64";
+    private void constructFpLoadLiteral64(MethodVisitor mv, FpOp64.LoadLiteral64 op) {
+        String type = IR64_PACKAGE + "FpOp64$LoadLiteral64";
         mv.visitTypeInsn(Opcodes.NEW, type);
         mv.visitInsn(Opcodes.DUP);
         mv.visitLdcInsn(op.vt());
@@ -1080,8 +1089,8 @@ public final class Ir64BlockCompiler {
     /// — os laços de `rpt`/`selem`/elementos (com a passada separada de zeragem dos bits altos,
     /// Armadilha 2) NÃO são reimplementados em bytecode, mesmo padrão de "chamar helper" que a
     /// C12.3 usou para atomicidade.
-    private void constructVectorLoadStoreMultiple(MethodVisitor mv, Ir64Op.VectorLoadStoreMultiple op) {
-        String type = IR64_OP + "$VectorLoadStoreMultiple";
+    private void constructVectorLoadStoreMultiple(MethodVisitor mv, AdvSimdMoveOp64.LoadStoreMultiple op) {
+        String type = IR64_PACKAGE + "AdvSimdMoveOp64$LoadStoreMultiple";
         mv.visitTypeInsn(Opcodes.NEW, type);
         mv.visitInsn(Opcodes.DUP);
         emitBoolean(mv, op.load());
@@ -1100,8 +1109,8 @@ public final class Ir64BlockCompiler {
     /// mesma rota "helper" de {@link #constructVectorLoadStoreMultiple} (Armadilha 4): o laço de
     /// `selem` registradores e a escrita de UMA lane sem tocar o resto do registro (Armadilha 2,
     /// disciplina "preserva") vivem só em {@code Ir64BlockExecutor#executeVectorLoadStoreSingle}.
-    private void constructVectorLoadStoreSingle(MethodVisitor mv, Ir64Op.VectorLoadStoreSingle op) {
-        String type = IR64_OP + "$VectorLoadStoreSingle";
+    private void constructVectorLoadStoreSingle(MethodVisitor mv, AdvSimdMoveOp64.LoadStoreSingle op) {
+        String type = IR64_PACKAGE + "AdvSimdMoveOp64$LoadStoreSingle";
         mv.visitTypeInsn(Opcodes.NEW, type);
         mv.visitInsn(Opcodes.DUP);
         emitBoolean(mv, op.load());
@@ -1116,9 +1125,9 @@ public final class Ir64BlockCompiler {
     }
 
     /// `LD1R`-`LD4R` (C12.5, B8.6) — mesma rota "helper" (Armadilha 4); sem `load` (só existe forma
-    /// `LD`, nunca `ST`, ver javadoc de {@link Ir64Op.VectorLoadSingleReplicate}).
-    private void constructVectorLoadSingleReplicate(MethodVisitor mv, Ir64Op.VectorLoadSingleReplicate op) {
-        String type = IR64_OP + "$VectorLoadSingleReplicate";
+    /// `LD`, nunca `ST`, ver javadoc de {@link AdvSimdMoveOp64.LoadSingleReplicate}).
+    private void constructVectorLoadSingleReplicate(MethodVisitor mv, AdvSimdMoveOp64.LoadSingleReplicate op) {
+        String type = IR64_PACKAGE + "AdvSimdMoveOp64$LoadSingleReplicate";
         mv.visitTypeInsn(Opcodes.NEW, type);
         mv.visitInsn(Opcodes.DUP);
         mv.visitLdcInsn(op.rt());
@@ -1136,7 +1145,7 @@ public final class Ir64BlockCompiler {
     }
 
     /// Igual a {@link #emitEnumConstant}, mas aceita `enumConstant == null` (caso de
-    /// {@link Ir64Op.Load64#extendType()}/{@link Ir64Op.Store64#extendType()} fora do modo de
+    /// {@link MemoryOp64.Load64#extendType()}/{@link MemoryOp64.Store64#extendType()} fora do modo de
     /// endereçamento {@code REGISTER_OFFSET}) — empilha `ACONST_NULL` nesse caso.
     private void emitEnumConstantOrNull(MethodVisitor mv, String enumInternalName, Enum<?> enumConstant) {
         if (enumConstant == null) {

@@ -1,6 +1,6 @@
 package dev.vitorsilverio.armjitter.ir64;
 
-/// Operação de {@link Ir64Op.CryptoSha3FourRegister}/{@link Ir64Op.CryptoSha3TwoSourceRotate}
+/// Operação de {@link CryptoOp64.Sha3FourRegister}/{@link CryptoOp64.Sha3TwoSourceRotate}
 /// (`FEAT_SHA3`, ARMv8.2-A — mesma ARMv8-A Cryptographic Extension opcional de
 /// {@link Ir64CryptoShaThreeRegisterOp}, mas versão POSTERIOR: presente só a partir de ARMv8.2-A,
 /// não confirmada no Cortex-A53 do raspi3 como a base `AES`/`SHA1`/`SHA256` de B8.11/B8.11b —

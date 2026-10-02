@@ -8,6 +8,7 @@ import dev.vitorsilverio.armjitter.decoder64.Aarch64Decoder;
 import dev.vitorsilverio.armjitter.ir64.Ir64Block;
 import dev.vitorsilverio.armjitter.ir64.Ir64Op;
 import dev.vitorsilverio.armjitter.ir64.StandardIr64BlockLifter;
+import dev.vitorsilverio.armjitter.ir64.SveMemoryOp64;
 import dev.vitorsilverio.armjitter.memory.AddressSpace64;
 import dev.vitorsilverio.armjitter.memory.MemoryAccessType;
 import dev.vitorsilverio.armjitter.memory.mmu.FaultStatus64;
@@ -841,7 +842,7 @@ class Aarch64SveLoadTest {
     }
 
     private static boolean decodes(Aarch64Architecture architecture, int word) {
-        return decodeOrNull(architecture, word) instanceof Ir64Op.SveLoad;
+        return decodeOrNull(architecture, word) instanceof SveMemoryOp64.Load;
     }
 
     /// `CPACR_EL1.ZEN` negando SVE: a exceção é tomada e NENHUM estado (nem `FFR`, nem memória) é tocado.

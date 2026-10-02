@@ -6,6 +6,8 @@ import dev.vitorsilverio.armjitter.core64.Aarch64Core;
 import dev.vitorsilverio.armjitter.core64.Aarch64ExceptionLevel;
 import dev.vitorsilverio.armjitter.decoder64.Aarch64Decoder;
 import dev.vitorsilverio.armjitter.ir64.Ir64Op;
+import dev.vitorsilverio.armjitter.ir64.SveMemoryOp64;
+import dev.vitorsilverio.armjitter.ir64.SvePredicateOp64;
 import dev.vitorsilverio.armjitter.memory.AddressSpace64;
 import dev.vitorsilverio.armjitter.memory.MemoryAccessType;
 import dev.vitorsilverio.armjitter.memory.mmu.FaultStatus64;
@@ -262,19 +264,19 @@ class Aarch64SveCounterTest {
 
     @Test
     void ptrueAndCntpAndPextCarryTheirCounterRegisterAndFields() {
-        assertEquals(new Ir64Op.SveCounterPredicate(Ir64Op.SveCounterPredicate.Op.PTRUE, 0, 8, 0, 0, 0, false, 0),
+        assertEquals(new SvePredicateOp64.CounterPredicate(SvePredicateOp64.CounterPredicate.Op.PTRUE, 0, 8, 0, 0, 0, false, 0),
                 decode(SVE2P1, PTRUE_PN8_B));
-        assertEquals(new Ir64Op.SveCounterPredicate(Ir64Op.SveCounterPredicate.Op.PTRUE, 3, 15, 0, 0, 0, false, 0),
+        assertEquals(new SvePredicateOp64.CounterPredicate(SvePredicateOp64.CounterPredicate.Op.PTRUE, 3, 15, 0, 0, 0, false, 0),
                 decode(SVE2P1, PTRUE_PN15_D));
-        assertEquals(new Ir64Op.SveCounterPredicate(Ir64Op.SveCounterPredicate.Op.CNTP, 3, 0, 15, 1, 2, false, 0),
+        assertEquals(new SvePredicateOp64.CounterPredicate(SvePredicateOp64.CounterPredicate.Op.CNTP, 3, 0, 15, 1, 2, false, 0),
                 decode(SVE2P1, CNTP_PN15_D_VLX4));
-        assertEquals(new Ir64Op.SveCounterPredicate(Ir64Op.SveCounterPredicate.Op.CNTP, 1, 0, 9, 2, 1, false, 0),
+        assertEquals(new SvePredicateOp64.CounterPredicate(SvePredicateOp64.CounterPredicate.Op.CNTP, 1, 0, 9, 2, 1, false, 0),
                 decode(SVE2P1, CNTP_PN9_H_VLX2));
-        assertEquals(new Ir64Op.SveCounterPredicate(Ir64Op.SveCounterPredicate.Op.PEXT_1, 1, 1, 9, 0, 3, false, 0),
+        assertEquals(new SvePredicateOp64.CounterPredicate(SvePredicateOp64.CounterPredicate.Op.PEXT_1, 1, 1, 9, 0, 3, false, 0),
                 decode(SVE2P1, PEXT_P1_H_PN9_3));
-        assertEquals(new Ir64Op.SveCounterPredicate(Ir64Op.SveCounterPredicate.Op.PEXT_2, 2, 2, 10, 0, 1, false, 0),
+        assertEquals(new SvePredicateOp64.CounterPredicate(SvePredicateOp64.CounterPredicate.Op.PEXT_2, 2, 2, 10, 0, 1, false, 0),
                 decode(SVE2P1, PEXT_P2P3_S_PN10_1));
-        assertEquals(new Ir64Op.SveCounterPredicate(Ir64Op.SveCounterPredicate.Op.PEXT_2, 3, 14, 15, 0, 0, false, 0),
+        assertEquals(new SvePredicateOp64.CounterPredicate(SvePredicateOp64.CounterPredicate.Op.PEXT_2, 3, 14, 15, 0, 0, false, 0),
                 decode(SVE2P1, PEXT_P14P15_D_PN15_0));
     }
 
@@ -286,41 +288,41 @@ class Aarch64SveCounterTest {
 
     @Test
     void whileWithACounterDecodesTheFourOperationsWithTheEqAndUnsignedBits() {
-        assertEquals(new Ir64Op.SveScalarCompare(Ir64Op.SveScalarCompare.Op.WHILE_LT_CNT2, 0, 8, 0, 1, true, false, false, 0),
+        assertEquals(new SvePredicateOp64.ScalarCompare(SvePredicateOp64.ScalarCompare.Op.WHILE_LT_CNT2, 0, 8, 0, 1, true, false, false, 0),
                 decode(SVE2P1, WHILELT_PN8_B_VLX2));
-        assertEquals(new Ir64Op.SveScalarCompare(Ir64Op.SveScalarCompare.Op.WHILE_LT_CNT4, 1, 9, 2, 3, true, false, false, 0),
+        assertEquals(new SvePredicateOp64.ScalarCompare(SvePredicateOp64.ScalarCompare.Op.WHILE_LT_CNT4, 1, 9, 2, 3, true, false, false, 0),
                 decode(SVE2P1, WHILELT_PN9_H_VLX4));
-        assertEquals(new Ir64Op.SveScalarCompare(Ir64Op.SveScalarCompare.Op.WHILE_LT_CNT2, 2, 10, 4, 5, true, true, false, 0),
+        assertEquals(new SvePredicateOp64.ScalarCompare(SvePredicateOp64.ScalarCompare.Op.WHILE_LT_CNT2, 2, 10, 4, 5, true, true, false, 0),
                 decode(SVE2P1, WHILELO_PN10_S_VLX2));
-        assertEquals(new Ir64Op.SveScalarCompare(Ir64Op.SveScalarCompare.Op.WHILE_LT_CNT4, 3, 15, 4, 5, true, true, true, 0),
+        assertEquals(new SvePredicateOp64.ScalarCompare(SvePredicateOp64.ScalarCompare.Op.WHILE_LT_CNT4, 3, 15, 4, 5, true, true, true, 0),
                 decode(SVE2P1, WHILELS_PN15_D_VLX4));
-        assertEquals(new Ir64Op.SveScalarCompare(Ir64Op.SveScalarCompare.Op.WHILE_GT_CNT2, 0, 8, 0, 1, true, false, false, 0),
+        assertEquals(new SvePredicateOp64.ScalarCompare(SvePredicateOp64.ScalarCompare.Op.WHILE_GT_CNT2, 0, 8, 0, 1, true, false, false, 0),
                 decode(SVE2P1, WHILEGE_PN8_B_VLX2));
-        assertEquals(new Ir64Op.SveScalarCompare(Ir64Op.SveScalarCompare.Op.WHILE_GT_CNT4, 0, 9, 0, 1, true, false, true, 0),
+        assertEquals(new SvePredicateOp64.ScalarCompare(SvePredicateOp64.ScalarCompare.Op.WHILE_GT_CNT4, 0, 9, 0, 1, true, false, true, 0),
                 decode(SVE2P1, WHILEGT_PN9_B_VLX4));
-        assertEquals(new Ir64Op.SveScalarCompare(Ir64Op.SveScalarCompare.Op.WHILE_GT_CNT2, 2, 10, 4, 5, true, true, true, 0),
+        assertEquals(new SvePredicateOp64.ScalarCompare(SvePredicateOp64.ScalarCompare.Op.WHILE_GT_CNT2, 2, 10, 4, 5, true, true, true, 0),
                 decode(SVE2P1, WHILEHI_PN10_S_VLX2));
-        assertEquals(new Ir64Op.SveScalarCompare(Ir64Op.SveScalarCompare.Op.WHILE_GT_CNT4, 2, 11, 4, 5, true, true, false, 0),
+        assertEquals(new SvePredicateOp64.ScalarCompare(SvePredicateOp64.ScalarCompare.Op.WHILE_GT_CNT4, 2, 11, 4, 5, true, true, false, 0),
                 decode(SVE2P1, WHILEHS_PN11_S_VLX4));
     }
 
-    private static Ir64Op.SveMultiVectorMemory multi(Aarch64Architecture architecture, int word) {
-        return assertInstanceOf(Ir64Op.SveMultiVectorMemory.class, decode(architecture, word), Integer.toHexString(word));
+    private static SveMemoryOp64.MultiVectorMemory multi(Aarch64Architecture architecture, int word) {
+        return assertInstanceOf(SveMemoryOp64.MultiVectorMemory.class, decode(architecture, word), Integer.toHexString(word));
     }
 
     @Test
     void contiguousMultiVectorFormsCarryConsecutiveRegistersAndTheCounterGovernor() {
-        assertEquals(new Ir64Op.SveMultiVectorMemory(false, 0, 2, 0, 1, 8, 0, 1, true, 0, false, 0),
+        assertEquals(new SveMemoryOp64.MultiVectorMemory(false, 0, 2, 0, 1, 8, 0, 1, true, 0, false, 0),
                 multi(SVE2P1, LD1B_Z0Z1_PN8_X0_X1));
-        assertEquals(new Ir64Op.SveMultiVectorMemory(false, 2, 4, 4, 1, 9, 2, 3, true, 0, false, 0),
+        assertEquals(new SveMemoryOp64.MultiVectorMemory(false, 2, 4, 4, 1, 9, 2, 3, true, 0, false, 0),
                 multi(SVE2P1, LD1W_Z4Z7_PN9_X2_X3));
-        assertEquals(new Ir64Op.SveMultiVectorMemory(false, 1, 2, 2, 1, 10, 0, 0, false, 1, false, 0),
+        assertEquals(new SveMemoryOp64.MultiVectorMemory(false, 1, 2, 2, 1, 10, 0, 0, false, 1, false, 0),
                 multi(SVE2P1, LD1H_Z2Z3_PN10_X0_IMM2));
-        assertEquals(new Ir64Op.SveMultiVectorMemory(false, 3, 4, 8, 1, 15, 31, 0, false, -2, false, 0),
+        assertEquals(new SveMemoryOp64.MultiVectorMemory(false, 3, 4, 8, 1, 15, 31, 0, false, -2, false, 0),
                 multi(SVE2P1, LD1D_Z8Z11_PN15_SP_IMMM8));
-        assertEquals(new Ir64Op.SveMultiVectorMemory(true, 3, 4, 8, 1, 15, 31, 0, false, -2, false, 0),
+        assertEquals(new SveMemoryOp64.MultiVectorMemory(true, 3, 4, 8, 1, 15, 31, 0, false, -2, false, 0),
                 multi(SVE2P1, ST1D_Z8Z11_PN15_SP_IMMM8));
-        assertEquals(new Ir64Op.SveMultiVectorMemory(true, 1, 2, 2, 1, 10, 0, 0, false, 1, false, 0),
+        assertEquals(new SveMemoryOp64.MultiVectorMemory(true, 1, 2, 2, 1, 10, 0, 0, false, 1, false, 0),
                 multi(SVE2P1, ST1H_Z2Z3_PN10_X0_IMM2));
     }
 
@@ -328,21 +330,21 @@ class Aarch64SveCounterTest {
     /// `_stride` usa `rd:5` com o bit 3 como hint não temporal — e o registrador seguinte está a 8, não a 1.
     @Test
     void stridedFormsUnscrambleTheRegisterFieldAndReadTheStrideFromTheRegisterCount() {
-        assertEquals(new Ir64Op.SveMultiVectorMemory(false, 0, 2, 0, 8, 8, 0, 1, true, 0, true, 0),
+        assertEquals(new SveMemoryOp64.MultiVectorMemory(false, 0, 2, 0, 8, 8, 0, 1, true, 0, true, 0),
                 multi(SVE2P1_SME2, LD1B_Z0Z8_PN8_X0_X1));
-        assertEquals(new Ir64Op.SveMultiVectorMemory(false, 0, 2, 16, 8, 9, 0, 1, true, 0, true, 0),
+        assertEquals(new SveMemoryOp64.MultiVectorMemory(false, 0, 2, 16, 8, 9, 0, 1, true, 0, true, 0),
                 multi(SVE2P1_SME2, LD1B_Z16Z24_PN9_X0_X1));
-        assertEquals(new Ir64Op.SveMultiVectorMemory(false, 2, 2, 1, 8, 8, 0, 1, true, 0, true, 0),
+        assertEquals(new SveMemoryOp64.MultiVectorMemory(false, 2, 2, 1, 8, 8, 0, 1, true, 0, true, 0),
                 multi(SVE2P1_SME2, LD1W_Z1Z9_PN8_X0_X1));
-        assertEquals(new Ir64Op.SveMultiVectorMemory(false, 2, 4, 0, 4, 8, 0, 1, true, 0, true, 0),
+        assertEquals(new SveMemoryOp64.MultiVectorMemory(false, 2, 4, 0, 4, 8, 0, 1, true, 0, true, 0),
                 multi(SVE2P1_SME2, LD1W_Z0Z4Z8Z12_PN8_X0_X1));
-        assertEquals(new Ir64Op.SveMultiVectorMemory(false, 2, 4, 17, 4, 8, 0, 1, true, 0, true, 0),
+        assertEquals(new SveMemoryOp64.MultiVectorMemory(false, 2, 4, 17, 4, 8, 0, 1, true, 0, true, 0),
                 multi(SVE2P1_SME2, LD1W_Z17Z21Z25Z29_PN8_X0_X1));
-        assertEquals(new Ir64Op.SveMultiVectorMemory(false, 0, 2, 0, 8, 8, 0, 1, true, 0, true, 0),
+        assertEquals(new SveMemoryOp64.MultiVectorMemory(false, 0, 2, 0, 8, 8, 0, 1, true, 0, true, 0),
                 multi(SVE2P1_SME2, LDNT1B_Z0Z8_PN8_X0_X1)); // o bit 3 (não temporal) não escolhe o registrador
-        assertEquals(new Ir64Op.SveMultiVectorMemory(false, 1, 2, 0, 8, 8, 0, 0, false, -1, true, 0),
+        assertEquals(new SveMemoryOp64.MultiVectorMemory(false, 1, 2, 0, 8, 8, 0, 0, false, -1, true, 0),
                 multi(SVE2P1_SME2, LD1H_Z0Z8_PN8_X0_IMMM2));
-        assertEquals(new Ir64Op.SveMultiVectorMemory(true, 2, 4, 0, 4, 8, 0, 1, true, 0, true, 0),
+        assertEquals(new SveMemoryOp64.MultiVectorMemory(true, 2, 4, 0, 4, 8, 0, 1, true, 0, true, 0),
                 multi(SVE2P1_SME2, STNT1W_Z0Z4Z8Z12_PN8_X0_X1));
     }
 
@@ -450,8 +452,8 @@ class Aarch64SveCounterTest {
             new Line("101000010110 .... 1 .. ... ..... .....", Group.STRIDED));
 
     private static boolean isCounterOp(Ir64Op op) {
-        return op instanceof Ir64Op.SveCounterPredicate || op instanceof Ir64Op.SveMultiVectorMemory
-                || op instanceof Ir64Op.SveScalarCompare compare && switch (compare.op()) {
+        return op instanceof SvePredicateOp64.CounterPredicate || op instanceof SveMemoryOp64.MultiVectorMemory
+                || op instanceof SvePredicateOp64.ScalarCompare compare && switch (compare.op()) {
                     case WHILE_LT_CNT2, WHILE_LT_CNT4, WHILE_GT_CNT2, WHILE_GT_CNT4 -> true;
                     default -> false;
                 };

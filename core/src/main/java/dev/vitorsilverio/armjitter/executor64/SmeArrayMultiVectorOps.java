@@ -6,7 +6,7 @@ import dev.vitorsilverio.armjitter.core64.Aarch64Fp8Format;
 import dev.vitorsilverio.armjitter.core64.Aarch64MatrixRegisters;
 import dev.vitorsilverio.armjitter.core64.Aarch64MatrixTileAddressing;
 import dev.vitorsilverio.armjitter.core64.Aarch64ScalableRegisters;
-import dev.vitorsilverio.armjitter.ir64.Ir64Op;
+import dev.vitorsilverio.armjitter.ir64.SmeOp64;
 
 /// SME2 multi-vetor "multiple and single, array vectors" (B18.9) e "multiple, array vectors" (B18.10, o `Zm` também é
 /// um grupo e o membro `r` usa `Z(zm + r)`; `FADD`/`FSUB`/`BFADD`/`BFSUB` fazem `ZA ±= Zm`, sem `Zn`): `ZA[W<rv> + off, VGx<n>] (+)= f(Zn…, Zm)` — o laço
@@ -46,7 +46,7 @@ final class SmeArrayMultiVectorOps {
     private static final class Context {
         SveFloat.Env fma;
         SmeOuterProductOps.Context dot;
-        Ir64Op.SmeOuterProduct.Op dotKind;
+        SmeOp64.OuterProduct.Op dotKind;
         boolean flushHalfInputs;
         boolean nE4m3;
         boolean mE4m3;
@@ -55,13 +55,13 @@ final class SmeArrayMultiVectorOps {
     }
 
     /// @return `true` = a instrução já entrou numa exceção (acesso negado)
-    static boolean execute(Aarch64Core core, Ir64Op.SmeArrayMultiVector op) {
+    static boolean execute(Aarch64Core core, SmeOp64.ArrayMultiVector op) {
         if (!core.smeStreamingAndZaEnabledCheck(op.instructionAddress())) {
             return true;
         }
         Aarch64MatrixRegisters matrix = core.matrix();
         Aarch64ScalableRegisters regs = core.scalable();
-        Ir64Op.SmeArrayMultiVector.Op kind = op.op();
+        SmeOp64.ArrayMultiVector.Op kind = op.op();
         int esz = kind.accumulatorEsz();
         int elements = core.streamingVectorLengthBytes() >>> esz;
         int rowsPerMember = core.streamingVectorLengthBytes() / op.count();
@@ -88,7 +88,7 @@ final class SmeArrayMultiVectorOps {
         return false;
     }
 
-    private static Context contextFor(Aarch64Core core, Ir64Op.SmeArrayMultiVector.Op kind) {
+    private static Context contextFor(Aarch64Core core, SmeOp64.ArrayMultiVector.Op kind) {
         Context context = new Context();
         switch (kind) {
             case FMLAL, FMLSL -> {
@@ -107,8 +107,8 @@ final class SmeArrayMultiVectorOps {
                 context.nE4m3 = core.fp8SourceFormat1() == Aarch64Fp8Format.E4M3;
                 context.mE4m3 = core.fp8SourceFormat2() == Aarch64Fp8Format.E4M3;
                 context.osm = core.fp8OverflowSaturatesToMaxNormalOnMultiply();
-                boolean singleDestination = kind == Ir64Op.SmeArrayMultiVector.Op.FMLALL_B
-                        || kind == Ir64Op.SmeArrayMultiVector.Op.FVDOTB || kind == Ir64Op.SmeArrayMultiVector.Op.FVDOTT;
+                boolean singleDestination = kind == SmeOp64.ArrayMultiVector.Op.FMLALL_B
+                        || kind == SmeOp64.ArrayMultiVector.Op.FVDOTB || kind == SmeOp64.ArrayMultiVector.Op.FVDOTT;
                 context.lscale = singleDestination ? core.fp8MultiplyDownscale() : core.fp8WidenScale();
             }
             default -> {
@@ -123,27 +123,27 @@ final class SmeArrayMultiVectorOps {
 
     /// A forma de outer product que tem a MESMA aritmética por lane do produto escalar `kind` (`null` = não é um
     /// produto escalar).
-    private static Ir64Op.SmeOuterProduct.Op dotKind(Ir64Op.SmeArrayMultiVector.Op kind) {
+    private static SmeOp64.OuterProduct.Op dotKind(SmeOp64.ArrayMultiVector.Op kind) {
         return switch (kind) {
-            case FDOT, FVDOT_SH -> Ir64Op.SmeOuterProduct.Op.FMOPA_W_H;
-            case BFDOT, BFVDOT -> Ir64Op.SmeOuterProduct.Op.BFMOPA_W;
-            case USDOT -> Ir64Op.SmeOuterProduct.Op.USMOPA_S;
-            case SUDOT -> Ir64Op.SmeOuterProduct.Op.SUMOPA_S;
-            case SDOT_4B -> Ir64Op.SmeOuterProduct.Op.SMOPA_S;
-            case UDOT_4B -> Ir64Op.SmeOuterProduct.Op.UMOPA_S;
-            case SDOT_4H -> Ir64Op.SmeOuterProduct.Op.SMOPA_D;
-            case UDOT_4H -> Ir64Op.SmeOuterProduct.Op.UMOPA_D;
-            case SDOT_2H -> Ir64Op.SmeOuterProduct.Op.SMOPA2_S;
-            case UDOT_2H -> Ir64Op.SmeOuterProduct.Op.UMOPA2_S;
-            case FDOT_SB -> Ir64Op.SmeOuterProduct.Op.FMOPA_SB;
-            case FDOT_HB -> Ir64Op.SmeOuterProduct.Op.FMOPA_HB;
+            case FDOT, FVDOT_SH -> SmeOp64.OuterProduct.Op.FMOPA_W_H;
+            case BFDOT, BFVDOT -> SmeOp64.OuterProduct.Op.BFMOPA_W;
+            case USDOT -> SmeOp64.OuterProduct.Op.USMOPA_S;
+            case SUDOT -> SmeOp64.OuterProduct.Op.SUMOPA_S;
+            case SDOT_4B -> SmeOp64.OuterProduct.Op.SMOPA_S;
+            case UDOT_4B -> SmeOp64.OuterProduct.Op.UMOPA_S;
+            case SDOT_4H -> SmeOp64.OuterProduct.Op.SMOPA_D;
+            case UDOT_4H -> SmeOp64.OuterProduct.Op.UMOPA_D;
+            case SDOT_2H -> SmeOp64.OuterProduct.Op.SMOPA2_S;
+            case UDOT_2H -> SmeOp64.OuterProduct.Op.UMOPA2_S;
+            case FDOT_SB -> SmeOp64.OuterProduct.Op.FMOPA_SB;
+            case FDOT_HB -> SmeOp64.OuterProduct.Op.FMOPA_HB;
             default -> null;
         };
     }
 
     /// Novo valor do elemento `e` do vetor de `ZA`. `select` é o índice do vetor DENTRO do membro (a metade/o byte
     /// da lane de origem nas formas widening).
-    private static long lane(Ir64Op.SmeArrayMultiVector.Op kind, Context context, Aarch64ScalableRegisters regs,
+    private static long lane(SmeOp64.ArrayMultiVector.Op kind, Context context, Aarch64ScalableRegisters regs,
             int zn, int zm, int e, int select, int index, long accumulator) {
         int esz = kind.accumulatorEsz();
         long mask = SveIntegerOps.elementMask(esz);
@@ -152,45 +152,45 @@ final class SmeArrayMultiVectorOps {
             case SUB_S, SUB_D -> (SveIntegerOps.get(regs, zn, e, esz) - SveIntegerOps.get(regs, zm, e, esz)) & mask;
             case FMLAL, FMLSL -> SveFloat.fusedMultiplyAdd(accumulator,
                     halfToSingle(SveIntegerOps.get(regs, zn, HALVES_PER_WORD * e + select, ESZ_HALF),
-                            kind == Ir64Op.SmeArrayMultiVector.Op.FMLSL, context.flushHalfInputs),
+                            kind == SmeOp64.ArrayMultiVector.Op.FMLSL, context.flushHalfInputs),
                     halfToSingle(SveIntegerOps.get(regs, zm, zmPosition(e, select, HALVES_PER_WORD, esz, index),
                             ESZ_HALF), false, context.flushHalfInputs),
                     0, context.fma);
             case BFMLAL, BFMLSL -> SveFloat.fusedMultiplyAdd(accumulator,
                     ((SveIntegerOps.get(regs, zn, HALVES_PER_WORD * e + select, ESZ_HALF)
-                            ^ (kind == Ir64Op.SmeArrayMultiVector.Op.BFMLSL ? HALF_SIGN : 0)) << BFLOAT16_SHIFT)
+                            ^ (kind == SmeOp64.ArrayMultiVector.Op.BFMLSL ? HALF_SIGN : 0)) << BFLOAT16_SHIFT)
                             & UINT32_MASK,
                     SveIntegerOps.get(regs, zm, zmPosition(e, select, HALVES_PER_WORD, esz, index), ESZ_HALF)
                             << BFLOAT16_SHIFT, 0, context.fma);
             case SMLAL, SMLSL, UMLAL, UMLSL -> {
-                boolean signed = kind == Ir64Op.SmeArrayMultiVector.Op.SMLAL
-                        || kind == Ir64Op.SmeArrayMultiVector.Op.SMLSL;
+                boolean signed = kind == SmeOp64.ArrayMultiVector.Op.SMLAL
+                        || kind == SmeOp64.ArrayMultiVector.Op.SMLSL;
                 long product = widenedHalf(regs, zn, HALVES_PER_WORD * e + select, signed)
                         * widenedHalf(regs, zm, zmPosition(e, select, HALVES_PER_WORD, esz, index), signed);
-                boolean subtract = kind == Ir64Op.SmeArrayMultiVector.Op.SMLSL
-                        || kind == Ir64Op.SmeArrayMultiVector.Op.UMLSL;
+                boolean subtract = kind == SmeOp64.ArrayMultiVector.Op.SMLSL
+                        || kind == SmeOp64.ArrayMultiVector.Op.UMLSL;
                 yield (subtract ? accumulator - product : accumulator + product) & mask;
             }
             case SMLALL_S, SMLSLL_S, UMLALL_S, UMLSLL_S, USMLALL, SUMLALL -> {
-                boolean nSigned = kind == Ir64Op.SmeArrayMultiVector.Op.SMLALL_S
-                        || kind == Ir64Op.SmeArrayMultiVector.Op.SMLSLL_S
-                        || kind == Ir64Op.SmeArrayMultiVector.Op.SUMLALL;
-                boolean mSigned = kind == Ir64Op.SmeArrayMultiVector.Op.SMLALL_S
-                        || kind == Ir64Op.SmeArrayMultiVector.Op.SMLSLL_S
-                        || kind == Ir64Op.SmeArrayMultiVector.Op.USMLALL;
+                boolean nSigned = kind == SmeOp64.ArrayMultiVector.Op.SMLALL_S
+                        || kind == SmeOp64.ArrayMultiVector.Op.SMLSLL_S
+                        || kind == SmeOp64.ArrayMultiVector.Op.SUMLALL;
+                boolean mSigned = kind == SmeOp64.ArrayMultiVector.Op.SMLALL_S
+                        || kind == SmeOp64.ArrayMultiVector.Op.SMLSLL_S
+                        || kind == SmeOp64.ArrayMultiVector.Op.USMLALL;
                 long product = quarter(regs, zn, LANES_PER_FP8_WORD * e + select, ESZ_BYTE, nSigned)
                         * quarter(regs, zm, zmPosition(e, select, LANES_PER_FP8_WORD, esz, index), ESZ_BYTE, mSigned);
-                boolean subtract = kind == Ir64Op.SmeArrayMultiVector.Op.SMLSLL_S
-                        || kind == Ir64Op.SmeArrayMultiVector.Op.UMLSLL_S;
+                boolean subtract = kind == SmeOp64.ArrayMultiVector.Op.SMLSLL_S
+                        || kind == SmeOp64.ArrayMultiVector.Op.UMLSLL_S;
                 yield (subtract ? accumulator - product : accumulator + product) & mask;
             }
             case SMLALL_D, SMLSLL_D, UMLALL_D, UMLSLL_D -> {
-                boolean signed = kind == Ir64Op.SmeArrayMultiVector.Op.SMLALL_D
-                        || kind == Ir64Op.SmeArrayMultiVector.Op.SMLSLL_D;
+                boolean signed = kind == SmeOp64.ArrayMultiVector.Op.SMLALL_D
+                        || kind == SmeOp64.ArrayMultiVector.Op.SMLSLL_D;
                 long product = quarter(regs, zn, LANES_PER_FP8_WORD * e + select, ESZ_HALF, signed)
                         * quarter(regs, zm, zmPosition(e, select, LANES_PER_FP8_WORD, esz, index), ESZ_HALF, signed);
-                boolean subtract = kind == Ir64Op.SmeArrayMultiVector.Op.SMLSLL_D
-                        || kind == Ir64Op.SmeArrayMultiVector.Op.UMLSLL_D;
+                boolean subtract = kind == SmeOp64.ArrayMultiVector.Op.SMLSLL_D
+                        || kind == SmeOp64.ArrayMultiVector.Op.UMLSLL_D;
                 yield subtract ? accumulator - product : accumulator + product;
             }
             case BFMLA, FMLA_H, FMLA_S, FMLA_D -> SveFloat.fusedMultiplyAdd(accumulator,
@@ -246,7 +246,7 @@ final class SmeArrayMultiVectorOps {
     /// segmento tem `16 >> accumulatorEsz` lanes de acumulador. Cada segmento usa o SEU elemento: com `SVL = 128` só há
     /// um segmento, e usar o elemento `index` do vetor inteiro passaria despercebido.
     private static int zmPosition(int e, int select, int ratio, int accumulatorEsz, int index) {
-        if (index == Ir64Op.SmeArrayMultiVector.NOT_INDEXED) {
+        if (index == SmeOp64.ArrayMultiVector.NOT_INDEXED) {
             return ratio * e + select;
         }
         int lanesPerSegment = BYTES_PER_SEGMENT >> accumulatorEsz;
@@ -257,11 +257,11 @@ final class SmeArrayMultiVectorOps {
     /// PSEUDOCÓDIGO do manual — o QEMU diverge neles): `count` vetores de `ZA` espaçados `SVL/count`; o vetor `member`
     /// consome o elemento `k*e + member` de CADA registrador do grupo `Zn..Zn+k-1` (`k` = nº de registradores de
     /// origem) contra o grupo de `k` elementos adjacentes de `Zm` no índice `segmento + index`.
-    private static void executeVertical(Aarch64Core core, Ir64Op.SmeArrayMultiVector op, Context context, int base,
+    private static void executeVertical(Aarch64Core core, SmeOp64.ArrayMultiVector op, Context context, int base,
             int rowsPerMember) {
         Aarch64MatrixRegisters matrix = core.matrix();
         Aarch64ScalableRegisters regs = core.scalable();
-        Ir64Op.SmeArrayMultiVector.Op kind = op.op();
+        SmeOp64.ArrayMultiVector.Op kind = op.op();
         int esz = kind.accumulatorEsz();
         int elements = core.streamingVectorLengthBytes() >>> esz;
         int lanesPerSegment = BYTES_PER_SEGMENT >> esz;
@@ -276,8 +276,8 @@ final class SmeArrayMultiVectorOps {
         }
     }
 
-    private static long verticalLane(Ir64Op.SmeArrayMultiVector.Op kind, Context context,
-            Aarch64ScalableRegisters regs, Ir64Op.SmeArrayMultiVector op, int member, int e, int indexedGroup,
+    private static long verticalLane(SmeOp64.ArrayMultiVector.Op kind, Context context,
+            Aarch64ScalableRegisters regs, SmeOp64.ArrayMultiVector op, int member, int e, int indexedGroup,
             long accumulator) {
         int zn = op.zn();
         return switch (kind) {
@@ -292,7 +292,7 @@ final class SmeArrayMultiVectorOps {
                     SveIntegerOps.get(regs, zn, LANES_PER_FP8_WORD * e + member, ESZ_BYTE)
                             | SveIntegerOps.get(regs, zn + 1, LANES_PER_FP8_WORD * e + member, ESZ_BYTE) << Byte.SIZE,
                     SveIntegerOps.get(regs, op.zm(),
-                            HALVES_PER_WORD * indexedGroup + (kind == Ir64Op.SmeArrayMultiVector.Op.FVDOTT ? 1 : 0),
+                            HALVES_PER_WORD * indexedGroup + (kind == SmeOp64.ArrayMultiVector.Op.FVDOTT ? 1 : 0),
                             ESZ_HALF),
                     context.nE4m3, context.mE4m3, FP8_PAIR, context.lscale, context.osm, accumulator, true);
             default -> AdvSimdLanes.fp8DotProduct(
@@ -305,16 +305,16 @@ final class SmeArrayMultiVectorOps {
 
     /// `SVDOT`/`UVDOT`/`SUVDOT`/`USVDOT` (`DO_VDOT_IDX`): `acc + Σ_i Zn+i[k*e + member] × Zm[k*indexedGroup + i]`, com `k`
     /// = nº de vetores do grupo (= `count`) e o elemento estreito de byte (`4b`) ou halfword (`2h`/`4h`).
-    private static long integerVerticalDot(Aarch64ScalableRegisters regs, Ir64Op.SmeArrayMultiVector op, int member,
+    private static long integerVerticalDot(Aarch64ScalableRegisters regs, SmeOp64.ArrayMultiVector op, int member,
             int e, int indexedGroup, long accumulator) {
-        Ir64Op.SmeArrayMultiVector.Op kind = op.op();
-        int narrow = kind == Ir64Op.SmeArrayMultiVector.Op.SVDOT_4B || kind == Ir64Op.SmeArrayMultiVector.Op.UVDOT_4B
-                || kind == Ir64Op.SmeArrayMultiVector.Op.SUVDOT || kind == Ir64Op.SmeArrayMultiVector.Op.USVDOT
+        SmeOp64.ArrayMultiVector.Op kind = op.op();
+        int narrow = kind == SmeOp64.ArrayMultiVector.Op.SVDOT_4B || kind == SmeOp64.ArrayMultiVector.Op.UVDOT_4B
+                || kind == SmeOp64.ArrayMultiVector.Op.SUVDOT || kind == SmeOp64.ArrayMultiVector.Op.USVDOT
                 ? ESZ_BYTE : ESZ_HALF;
-        boolean nSigned = kind != Ir64Op.SmeArrayMultiVector.Op.UVDOT_2H && kind != Ir64Op.SmeArrayMultiVector.Op.UVDOT_4B
-                && kind != Ir64Op.SmeArrayMultiVector.Op.UVDOT_4H && kind != Ir64Op.SmeArrayMultiVector.Op.USVDOT;
-        boolean mSigned = kind != Ir64Op.SmeArrayMultiVector.Op.UVDOT_2H && kind != Ir64Op.SmeArrayMultiVector.Op.UVDOT_4B
-                && kind != Ir64Op.SmeArrayMultiVector.Op.UVDOT_4H && kind != Ir64Op.SmeArrayMultiVector.Op.SUVDOT;
+        boolean nSigned = kind != SmeOp64.ArrayMultiVector.Op.UVDOT_2H && kind != SmeOp64.ArrayMultiVector.Op.UVDOT_4B
+                && kind != SmeOp64.ArrayMultiVector.Op.UVDOT_4H && kind != SmeOp64.ArrayMultiVector.Op.USVDOT;
+        boolean mSigned = kind != SmeOp64.ArrayMultiVector.Op.UVDOT_2H && kind != SmeOp64.ArrayMultiVector.Op.UVDOT_4B
+                && kind != SmeOp64.ArrayMultiVector.Op.UVDOT_4H && kind != SmeOp64.ArrayMultiVector.Op.SUVDOT;
         int group = op.count();
         long sum = accumulator;
         for (int i = 0; i < group; i++) {

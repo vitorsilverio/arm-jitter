@@ -4,7 +4,7 @@ import dev.vitorsilverio.armjitter.core64.Aarch64Core;
 import dev.vitorsilverio.armjitter.core64.Aarch64MatrixRegisters;
 import dev.vitorsilverio.armjitter.core64.Aarch64MatrixTileAddressing;
 import dev.vitorsilverio.armjitter.core64.Aarch64ScalableRegisters;
-import dev.vitorsilverio.armjitter.ir64.Ir64Op;
+import dev.vitorsilverio.armjitter.ir64.SmeOp64;
 
 /// `MOP4` (produto externo de quarto de tile, sem predicado) e `TMOP` (produto externo esparso) — B18.5b. Transcrito de
 /// `sme_mop4`/`sme_tmop`/`sme_tmop_2way_sh`/`sme_tmop_4way_sb` (`sme_helper.c`) e `ftmopa_hb` (`fp8_helper.c`) do QEMU,
@@ -42,13 +42,13 @@ final class SmeMop4Ops {
     }
 
     /// @return `true` = a instrução já entrou numa exceção (acesso negado)
-    static boolean execute(Aarch64Core core, Ir64Op.SmeMop4 op) {
+    static boolean execute(Aarch64Core core, SmeOp64.Mop4 op) {
         if (!core.smeStreamingAndZaEnabledCheck(op.instructionAddress())) {
             return true;
         }
         Aarch64MatrixRegisters matrix = core.matrix();
         Aarch64ScalableRegisters regs = core.scalable();
-        Ir64Op.SmeOuterProduct.Op kind = outerProductOf(op.op());
+        SmeOp64.OuterProduct.Op kind = outerProductOf(op.op());
         int esz = op.op().accumulatorEsz();
         int halfElements = (core.streamingVectorLengthBytes() >>> 1) >>> esz;
         SmeOuterProductOps.Context context = SmeOuterProductOps.contextFor(core, kind);
@@ -77,13 +77,13 @@ final class SmeMop4Ops {
     }
 
     /// @return `true` = a instrução já entrou numa exceção (acesso negado)
-    static boolean execute(Aarch64Core core, Ir64Op.SmeTmop op) {
+    static boolean execute(Aarch64Core core, SmeOp64.Tmop op) {
         if (!core.smeStreamingAndZaEnabledCheck(op.instructionAddress())) {
             return true;
         }
         Aarch64MatrixRegisters matrix = core.matrix();
         Aarch64ScalableRegisters regs = core.scalable();
-        Ir64Op.SmeOuterProduct.Op kind = outerProductOf(op.op());
+        SmeOp64.OuterProduct.Op kind = outerProductOf(op.op());
         int esz = op.op().accumulatorEsz();
         int vectorBytes = core.streamingVectorLengthBytes();
         int elements = vectorBytes >>> esz;
@@ -173,7 +173,7 @@ final class SmeMop4Ops {
         return assembled;
     }
 
-    private static Selection selectionOf(Ir64Op.SmeTmop.Op op) {
+    private static Selection selectionOf(SmeOp64.Tmop.Op op) {
         return switch (op) {
             case BFTMOPA_HH, FTMOPA_HH, FTMOPA_SS -> Selection.NON_WIDENING;
             case BFTMOPA_SH, FTMOPA_SH, STMOPA_SH, UTMOPA_SH -> Selection.TWO_WAY_HALVES;
@@ -183,44 +183,44 @@ final class SmeMop4Ops {
     }
 
     /// A aritmética de cada `MOP4` é a do produto externo clássico de mesmo formato.
-    private static Ir64Op.SmeOuterProduct.Op outerProductOf(Ir64Op.SmeMop4.Op op) {
+    private static SmeOp64.OuterProduct.Op outerProductOf(SmeOp64.Mop4.Op op) {
         return switch (op) {
-            case FMOP4_HH -> Ir64Op.SmeOuterProduct.Op.FMOPA_H;
-            case BFMOP4_HH -> Ir64Op.SmeOuterProduct.Op.BFMOPA;
-            case FMOP4_SS -> Ir64Op.SmeOuterProduct.Op.FMOPA_S;
-            case FMOP4_DD -> Ir64Op.SmeOuterProduct.Op.FMOPA_D;
-            case BFMOP4_SH -> Ir64Op.SmeOuterProduct.Op.BFMOPA_W;
-            case FMOP4_SH -> Ir64Op.SmeOuterProduct.Op.FMOPA_W_H;
-            case FMOP4A_SB -> Ir64Op.SmeOuterProduct.Op.FMOPA_SB;
-            case FMOP4A_HB -> Ir64Op.SmeOuterProduct.Op.FMOPA_HB;
-            case SMOP4_SH -> Ir64Op.SmeOuterProduct.Op.SMOPA2_S;
-            case UMOP4_SH -> Ir64Op.SmeOuterProduct.Op.UMOPA2_S;
-            case SMOP4_SB -> Ir64Op.SmeOuterProduct.Op.SMOPA_S;
-            case SUMOP4_SB -> Ir64Op.SmeOuterProduct.Op.SUMOPA_S;
-            case UMOP4_SB -> Ir64Op.SmeOuterProduct.Op.UMOPA_S;
-            case USMOP4_SB -> Ir64Op.SmeOuterProduct.Op.USMOPA_S;
-            case SMOP4_DH -> Ir64Op.SmeOuterProduct.Op.SMOPA_D;
-            case SUMOP4_DH -> Ir64Op.SmeOuterProduct.Op.SUMOPA_D;
-            case UMOP4_DH -> Ir64Op.SmeOuterProduct.Op.UMOPA_D;
-            case USMOP4_DH -> Ir64Op.SmeOuterProduct.Op.USMOPA_D;
+            case FMOP4_HH -> SmeOp64.OuterProduct.Op.FMOPA_H;
+            case BFMOP4_HH -> SmeOp64.OuterProduct.Op.BFMOPA;
+            case FMOP4_SS -> SmeOp64.OuterProduct.Op.FMOPA_S;
+            case FMOP4_DD -> SmeOp64.OuterProduct.Op.FMOPA_D;
+            case BFMOP4_SH -> SmeOp64.OuterProduct.Op.BFMOPA_W;
+            case FMOP4_SH -> SmeOp64.OuterProduct.Op.FMOPA_W_H;
+            case FMOP4A_SB -> SmeOp64.OuterProduct.Op.FMOPA_SB;
+            case FMOP4A_HB -> SmeOp64.OuterProduct.Op.FMOPA_HB;
+            case SMOP4_SH -> SmeOp64.OuterProduct.Op.SMOPA2_S;
+            case UMOP4_SH -> SmeOp64.OuterProduct.Op.UMOPA2_S;
+            case SMOP4_SB -> SmeOp64.OuterProduct.Op.SMOPA_S;
+            case SUMOP4_SB -> SmeOp64.OuterProduct.Op.SUMOPA_S;
+            case UMOP4_SB -> SmeOp64.OuterProduct.Op.UMOPA_S;
+            case USMOP4_SB -> SmeOp64.OuterProduct.Op.USMOPA_S;
+            case SMOP4_DH -> SmeOp64.OuterProduct.Op.SMOPA_D;
+            case SUMOP4_DH -> SmeOp64.OuterProduct.Op.SUMOPA_D;
+            case UMOP4_DH -> SmeOp64.OuterProduct.Op.UMOPA_D;
+            case USMOP4_DH -> SmeOp64.OuterProduct.Op.USMOPA_D;
         };
     }
 
-    private static Ir64Op.SmeOuterProduct.Op outerProductOf(Ir64Op.SmeTmop.Op op) {
+    private static SmeOp64.OuterProduct.Op outerProductOf(SmeOp64.Tmop.Op op) {
         return switch (op) {
-            case BFTMOPA_HH -> Ir64Op.SmeOuterProduct.Op.BFMOPA;
-            case FTMOPA_HH -> Ir64Op.SmeOuterProduct.Op.FMOPA_H;
-            case FTMOPA_SS -> Ir64Op.SmeOuterProduct.Op.FMOPA_S;
-            case BFTMOPA_SH -> Ir64Op.SmeOuterProduct.Op.BFMOPA_W;
-            case FTMOPA_SH -> Ir64Op.SmeOuterProduct.Op.FMOPA_W_H;
-            case FTMOPA_HB -> Ir64Op.SmeOuterProduct.Op.FMOPA_HB;
-            case FTMOPA_SB -> Ir64Op.SmeOuterProduct.Op.FMOPA_SB;
-            case STMOPA_SH -> Ir64Op.SmeOuterProduct.Op.SMOPA2_S;
-            case UTMOPA_SH -> Ir64Op.SmeOuterProduct.Op.UMOPA2_S;
-            case STMOPA_SB -> Ir64Op.SmeOuterProduct.Op.SMOPA_S;
-            case SUTMOPA_SB -> Ir64Op.SmeOuterProduct.Op.SUMOPA_S;
-            case USTMOPA_SB -> Ir64Op.SmeOuterProduct.Op.USMOPA_S;
-            case UTMOPA_SB -> Ir64Op.SmeOuterProduct.Op.UMOPA_S;
+            case BFTMOPA_HH -> SmeOp64.OuterProduct.Op.BFMOPA;
+            case FTMOPA_HH -> SmeOp64.OuterProduct.Op.FMOPA_H;
+            case FTMOPA_SS -> SmeOp64.OuterProduct.Op.FMOPA_S;
+            case BFTMOPA_SH -> SmeOp64.OuterProduct.Op.BFMOPA_W;
+            case FTMOPA_SH -> SmeOp64.OuterProduct.Op.FMOPA_W_H;
+            case FTMOPA_HB -> SmeOp64.OuterProduct.Op.FMOPA_HB;
+            case FTMOPA_SB -> SmeOp64.OuterProduct.Op.FMOPA_SB;
+            case STMOPA_SH -> SmeOp64.OuterProduct.Op.SMOPA2_S;
+            case UTMOPA_SH -> SmeOp64.OuterProduct.Op.UMOPA2_S;
+            case STMOPA_SB -> SmeOp64.OuterProduct.Op.SMOPA_S;
+            case SUTMOPA_SB -> SmeOp64.OuterProduct.Op.SUMOPA_S;
+            case USTMOPA_SB -> SmeOp64.OuterProduct.Op.USMOPA_S;
+            case UTMOPA_SB -> SmeOp64.OuterProduct.Op.UMOPA_S;
         };
     }
 }

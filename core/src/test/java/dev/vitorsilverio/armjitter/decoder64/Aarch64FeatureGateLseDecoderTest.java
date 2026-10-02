@@ -3,6 +3,7 @@ package dev.vitorsilverio.armjitter.decoder64;
 import dev.vitorsilverio.armjitter.arch64.Aarch64Architecture;
 import dev.vitorsilverio.armjitter.ir64.Ir64MemSize;
 import dev.vitorsilverio.armjitter.ir64.Ir64Op;
+import dev.vitorsilverio.armjitter.ir64.MemoryOp64;
 import dev.vitorsilverio.armjitter.memory.AddressSpace64;
 import dev.vitorsilverio.armjitter.support.TestAddressSpace;
 import org.junit.jupiter.api.Test;
@@ -48,7 +49,7 @@ class Aarch64FeatureGateLseDecoderTest {
 
     @Test
     void casWordDecodesWithLse() {
-        Ir64Op.CompareAndSwap op = (Ir64Op.CompareAndSwap) decodeWord(LSE_DECODER, CAS_W0_W1);
+        MemoryOp64.CompareAndSwap op = (MemoryOp64.CompareAndSwap) decodeWord(LSE_DECODER, CAS_W0_W1);
         assertEquals(0, op.rs());
         assertEquals(1, op.rt());
         assertEquals(2, op.rn());
@@ -57,7 +58,7 @@ class Aarch64FeatureGateLseDecoderTest {
 
     @Test
     void casDoublewordDecodesWithLse() {
-        Ir64Op.CompareAndSwap op = (Ir64Op.CompareAndSwap) decodeWord(LSE_DECODER, CAS_X3_X4);
+        MemoryOp64.CompareAndSwap op = (MemoryOp64.CompareAndSwap) decodeWord(LSE_DECODER, CAS_X3_X4);
         assertEquals(3, op.rs());
         assertEquals(4, op.rt());
         assertEquals(5, op.rn());
@@ -66,19 +67,19 @@ class Aarch64FeatureGateLseDecoderTest {
 
     @Test
     void casbByteDecodesWithLse() {
-        Ir64Op.CompareAndSwap op = (Ir64Op.CompareAndSwap) decodeWord(LSE_DECODER, CASB_W6_W7);
+        MemoryOp64.CompareAndSwap op = (MemoryOp64.CompareAndSwap) decodeWord(LSE_DECODER, CASB_W6_W7);
         assertEquals(Ir64MemSize.BYTE, op.size());
     }
 
     @Test
     void cashHalfDecodesWithLse() {
-        Ir64Op.CompareAndSwap op = (Ir64Op.CompareAndSwap) decodeWord(LSE_DECODER, CASH_W9_W10);
+        MemoryOp64.CompareAndSwap op = (MemoryOp64.CompareAndSwap) decodeWord(LSE_DECODER, CASH_W9_W10);
         assertEquals(Ir64MemSize.HALF, op.size());
     }
 
     @Test
     void caspWordPairDecodesWithLse() {
-        Ir64Op.CompareAndSwapPair op = (Ir64Op.CompareAndSwapPair) decodeWord(LSE_DECODER, CASP_W12_W13);
+        MemoryOp64.CompareAndSwapPair op = (MemoryOp64.CompareAndSwapPair) decodeWord(LSE_DECODER, CASP_W12_W13);
         assertEquals(12, op.rs());
         assertEquals(14, op.rt());
         assertEquals(16, op.rn());
@@ -87,7 +88,7 @@ class Aarch64FeatureGateLseDecoderTest {
 
     @Test
     void caspaDoublewordPairDecodesWithLse() {
-        Ir64Op.CompareAndSwapPair op = (Ir64Op.CompareAndSwapPair) decodeWord(LSE_DECODER, CASPA_X18_X19);
+        MemoryOp64.CompareAndSwapPair op = (MemoryOp64.CompareAndSwapPair) decodeWord(LSE_DECODER, CASPA_X18_X19);
         assertEquals(18, op.rs());
         assertEquals(20, op.rt());
         assertEquals(22, op.rn());

@@ -1,20 +1,20 @@
 package dev.vitorsilverio.armjitter.ir64;
 
-/// Operação de {@link Ir64Op.VectorFpArithmeticUnary} (AdvSIMD "two-register miscellaneous" de
+/// Operação de {@link AdvSimdFpOp64.FpArithmeticUnary} (AdvSIMD "two-register miscellaneous" de
 /// ponto flutuante, B8.9) — um único operando de origem (`Rn`), precisão simples/dupla. Vive em
 /// DOIS slots de encoding diferentes do mesmo grupo "two-register misc" (`Rm=00000`, o mesmo slot
 /// do inteiro {@link Ir64VectorUnaryOp}, para {@link #ABS}/{@link #NEG}/as comparações-contra-zero;
 /// `Rm=00001`, o mesmo slot do inteiro {@link Ir64VectorNarrowUnaryOp}, para o resto) — achado real
 /// da triagem desta task, o decoder resolve isso, não o executor. Cobre a forma VETORIAL (B8.9) e
-/// — via {@link Ir64Op.VectorFpArithmeticUnary#scalar} — a forma AdvSIMD-ESCALAR genuína (B19.3):
+/// — via {@link AdvSimdFpOp64.FpArithmeticUnary#scalar} — a forma AdvSIMD-ESCALAR genuína (B19.3):
 /// as 5 comparações-contra-zero `FCMGT0_s`/`FCMGE0_s`/`FCMEQ0_s`/`FCMLE0_s`/`FCMLT0_s`, os
 /// recíprocos {@link #RECPE}/{@link #RSQRTE}/{@link #FRECPX}, o estreitamento {@link #FCVTXN} e as
 /// 12 conversões escalares int↔FP `@icvt` ({@link #SCVTF}/{@link #UCVTF}/`FCVT{N,P,M,Z,A}{S,U}`).
 /// `FABS_s`/`FSQRT_s`/`FRINTx_s` NÃO existem neste encoding (os escalares já são
-/// {@link Ir64Op.Fp64Alu}/{@link Ir64Op.Fp64Round} desde B8.4/B8.5).
+/// {@link FpOp64.Alu}/{@link FpOp64.Round} desde B8.4/B8.5).
 public enum Ir64VectorFpUnaryOp {
     /// `|Rn|` — manipula o bit de sinal direto (nunca `Math.abs` double/float, mesma armadilha de
-    /// `ABS` em {@link Ir64Op.Fp64Operation}).
+    /// `ABS` em {@link FpOp64.Fp64Operation}).
     ABS,
     /// `-Rn` — manipula o bit de sinal direto.
     NEG,
@@ -31,7 +31,7 @@ public enum Ir64VectorFpUnaryOp {
     /// Arredonda "mais próximo, afasta de zero em empate" (ties-away).
     RINTA,
     /// Idêntico a {@link #RINTN} neste emulador (sem modelo de exceção de inexatidão) — ver
-    /// javadoc de {@link Ir64Op.Fp64Round#direction()}.
+    /// javadoc de {@link FpOp64.Round#direction()}.
     RINTX,
     /// Idêntico a {@link #RINTN} neste emulador (arredondamento do "modo de arredondamento
     /// corrente" — sempre `RN` aqui, sem `FPCR.RMode` modelado).
@@ -92,7 +92,7 @@ public enum Ir64VectorFpUnaryOp {
     FCVTXN,
     /// `FRINT32Z` vetorial (B19.18, `FEAT_FRINTTS`) — arredonda para zero (truncamento) e satura
     /// para o alcance de um inteiro de 32 bits com sinal. Ver
-    /// {@link dev.vitorsilverio.armjitter.ir64.Ir64Op.Fp64RoundRangeLimited} para a semântica
+    /// {@link dev.vitorsilverio.armjitter.ir64.FpOp64.RoundRangeLimited} para a semântica
     /// completa (mesmo núcleo do escalar).
     RINT32Z,
     /// `FRINT32X` vetorial (B19.18) — idêntico a {@link #RINT32Z} exceto o modo de arredondamento,

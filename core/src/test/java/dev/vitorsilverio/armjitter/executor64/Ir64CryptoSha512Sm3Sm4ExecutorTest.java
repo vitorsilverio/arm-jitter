@@ -2,10 +2,10 @@ package dev.vitorsilverio.armjitter.executor64;
 
 import dev.vitorsilverio.armjitter.core64.Aarch64Core;
 import dev.vitorsilverio.armjitter.core64.Aarch64FpRegisters;
+import dev.vitorsilverio.armjitter.ir64.CryptoOp64;
 import dev.vitorsilverio.armjitter.ir64.Ir64CryptoSha512Op;
 import dev.vitorsilverio.armjitter.ir64.Ir64CryptoSm3Op;
 import dev.vitorsilverio.armjitter.ir64.Ir64CryptoSm3TtOp;
-import dev.vitorsilverio.armjitter.ir64.Ir64Op;
 import dev.vitorsilverio.armjitter.memory.AddressSpace64;
 import dev.vitorsilverio.armjitter.support.TestAddressSpace;
 import org.junit.jupiter.api.Test;
@@ -62,7 +62,7 @@ class Ir64CryptoSha512Sm3Sm4ExecutorTest {
     @Test
     void sha512h() {
         Aarch64Core core = coreWithSha512Operands();
-        EXECUTOR.executeOp(core, new Ir64Op.CryptoSha512ThreeRegister(Ir64CryptoSha512Op.SHA512H, 0, 1, 2));
+        EXECUTOR.executeOp(core, new CryptoOp64.Sha512ThreeRegister(Ir64CryptoSha512Op.SHA512H, 0, 1, 2));
         assertEquals(0x2a9b107bded8b1dfL, core.fp().low64(0));
         assertEquals(0x94d2306eafe92765L, core.fp().high64(0));
     }
@@ -70,7 +70,7 @@ class Ir64CryptoSha512Sm3Sm4ExecutorTest {
     @Test
     void sha512h2() {
         Aarch64Core core = coreWithSha512Operands();
-        EXECUTOR.executeOp(core, new Ir64Op.CryptoSha512ThreeRegister(Ir64CryptoSha512Op.SHA512H2, 0, 1, 2));
+        EXECUTOR.executeOp(core, new CryptoOp64.Sha512ThreeRegister(Ir64CryptoSha512Op.SHA512H2, 0, 1, 2));
         assertEquals(0xf18222aa79d532e2L, core.fp().low64(0));
         assertEquals(0x2013c030ef527e73L, core.fp().high64(0));
     }
@@ -78,7 +78,7 @@ class Ir64CryptoSha512Sm3Sm4ExecutorTest {
     @Test
     void sha512su1() {
         Aarch64Core core = coreWithSha512Operands();
-        EXECUTOR.executeOp(core, new Ir64Op.CryptoSha512ThreeRegister(Ir64CryptoSha512Op.SHA512SU1, 0, 1, 2));
+        EXECUTOR.executeOp(core, new CryptoOp64.Sha512ThreeRegister(Ir64CryptoSha512Op.SHA512SU1, 0, 1, 2));
         assertEquals(0x0fb4dbd2480d73c9L, core.fp().low64(0));
         assertEquals(0xb216bdb3a970562bL, core.fp().high64(0));
     }
@@ -86,7 +86,7 @@ class Ir64CryptoSha512Sm3Sm4ExecutorTest {
     @Test
     void sha512su0() {
         Aarch64Core core = coreWithSha512Operands();
-        EXECUTOR.executeOp(core, new Ir64Op.CryptoSha512TwoRegister(0, 1));
+        EXECUTOR.executeOp(core, new CryptoOp64.Sha512TwoRegister(0, 1));
         assertEquals(0x11bc42c33bba38bdL, core.fp().low64(0));
         assertEquals(0x4a048b0b94129115L, core.fp().high64(0));
     }
@@ -105,14 +105,14 @@ class Ir64CryptoSha512Sm3Sm4ExecutorTest {
     @Test
     void sm3partw1() {
         Aarch64Core core = coreWithSm3Operands();
-        EXECUTOR.executeOp(core, new Ir64Op.CryptoSm3ThreeRegister(Ir64CryptoSm3Op.PARTW1, 0, 1, 2));
+        EXECUTOR.executeOp(core, new CryptoOp64.Sm3ThreeRegister(Ir64CryptoSm3Op.PARTW1, 0, 1, 2));
         assertWords(core.fp(), 0, 0x22a2a223, 0x9898999b, 0x76f6f774, 0x7757f551);
     }
 
     @Test
     void sm3partw2() {
         Aarch64Core core = coreWithSm3Operands();
-        EXECUTOR.executeOp(core, new Ir64Op.CryptoSm3ThreeRegister(Ir64CryptoSm3Op.PARTW2, 0, 1, 2));
+        EXECUTOR.executeOp(core, new CryptoOp64.Sm3ThreeRegister(Ir64CryptoSm3Op.PARTW2, 0, 1, 2));
         assertWords(core.fp(), 0, 0xbbbbbbba, 0x11111113, 0x8888888b, 0xddddddd9);
     }
 
@@ -124,35 +124,35 @@ class Ir64CryptoSha512Sm3Sm4ExecutorTest {
         fp.setQ(1, pack(0, 0), pack(0, 0x11111111));
         fp.setQ(2, pack(0, 0), pack(0, 0x55555555));
         fp.setQ(3, pack(0, 0), pack(0, 1));
-        EXECUTOR.executeOp(core, new Ir64Op.CryptoSm3FourRegister(0, 1, 2, 3));
+        EXECUTOR.executeOp(core, new CryptoOp64.Sm3FourRegister(0, 1, 2, 3));
         assertWords(core.fp(), 0, 0, 0, 0, 0x333333b3);
     }
 
     @Test
     void sm3tt1a() {
         Aarch64Core core = coreWithSm3Operands();
-        EXECUTOR.executeOp(core, new Ir64Op.CryptoSm3ThreeRegisterImm2(Ir64CryptoSm3TtOp.TT1A, 0, 1, 2, 0));
+        EXECUTOR.executeOp(core, new CryptoOp64.Sm3ThreeRegisterImm2(Ir64CryptoSm3TtOp.TT1A, 0, 1, 2, 0));
         assertWords(core.fp(), 0, 0x00000002, 0x00000600, 0x00000004, 0x9999599f);
     }
 
     @Test
     void sm3tt1b() {
         Aarch64Core core = coreWithSm3Operands();
-        EXECUTOR.executeOp(core, new Ir64Op.CryptoSm3ThreeRegisterImm2(Ir64CryptoSm3TtOp.TT1B, 0, 1, 2, 1));
+        EXECUTOR.executeOp(core, new CryptoOp64.Sm3ThreeRegisterImm2(Ir64CryptoSm3TtOp.TT1B, 0, 1, 2, 1));
         assertWords(core.fp(), 0, 0x00000002, 0x00000600, 0x00000004, 0xaaaa6aad);
     }
 
     @Test
     void sm3tt2a() {
         Aarch64Core core = coreWithSm3Operands();
-        EXECUTOR.executeOp(core, new Ir64Op.CryptoSm3ThreeRegisterImm2(Ir64CryptoSm3TtOp.TT2A, 0, 1, 2, 2));
+        EXECUTOR.executeOp(core, new CryptoOp64.Sm3ThreeRegisterImm2(Ir64CryptoSm3TtOp.TT2A, 0, 1, 2, 2));
         assertWords(core.fp(), 0, 0x00000002, 0x00180000, 0x00000004, 0xbb4f4fc1);
     }
 
     @Test
     void sm3tt2b() {
         Aarch64Core core = coreWithSm3Operands();
-        EXECUTOR.executeOp(core, new Ir64Op.CryptoSm3ThreeRegisterImm2(Ir64CryptoSm3TtOp.TT2B, 0, 1, 2, 3));
+        EXECUTOR.executeOp(core, new CryptoOp64.Sm3ThreeRegisterImm2(Ir64CryptoSm3TtOp.TT2B, 0, 1, 2, 3));
         assertWords(core.fp(), 0, 0x00000002, 0x00180000, 0x00000004, 0xcccacacf);
     }
 
@@ -190,7 +190,7 @@ class Ir64CryptoSha512Sm3Sm4ExecutorTest {
         for (int round = 0; round < 8; round++) {
             fp.setQ(1, pack(keyState[0], keyState[1]), pack(keyState[2], keyState[3]));
             fp.setQ(2, pack(CK[round * 4], CK[round * 4 + 1]), pack(CK[round * 4 + 2], CK[round * 4 + 3]));
-            EXECUTOR.executeOp(core, new Ir64Op.CryptoSm4KeyUpdate(0, 1, 2));
+            EXECUTOR.executeOp(core, new CryptoOp64.Sm4KeyUpdate(0, 1, 2));
             keyState[0] = (int) fp.element(0, 0, 2);
             keyState[1] = (int) fp.element(0, 1, 2);
             keyState[2] = (int) fp.element(0, 2, 2);
@@ -207,7 +207,7 @@ class Ir64CryptoSha512Sm3Sm4ExecutorTest {
             fp.setQ(0, pack(block[0], block[1]), pack(block[2], block[3]));
             fp.setQ(1, pack(roundKeys[round * 4], roundKeys[round * 4 + 1]),
                     pack(roundKeys[round * 4 + 2], roundKeys[round * 4 + 3]));
-            EXECUTOR.executeOp(core, new Ir64Op.CryptoSm4Encrypt(0, 1));
+            EXECUTOR.executeOp(core, new CryptoOp64.Sm4Encrypt(0, 1));
             block[0] = (int) fp.element(0, 0, 2);
             block[1] = (int) fp.element(0, 1, 2);
             block[2] = (int) fp.element(0, 2, 2);

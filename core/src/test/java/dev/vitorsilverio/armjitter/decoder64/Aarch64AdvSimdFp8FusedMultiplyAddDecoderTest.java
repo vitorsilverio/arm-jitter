@@ -1,6 +1,7 @@
 package dev.vitorsilverio.armjitter.decoder64;
 
 import dev.vitorsilverio.armjitter.arch64.Aarch64Architecture;
+import dev.vitorsilverio.armjitter.ir64.AdvSimdFpOp64;
 import dev.vitorsilverio.armjitter.ir64.Ir64Op;
 import dev.vitorsilverio.armjitter.memory.AddressSpace64;
 import dev.vitorsilverio.armjitter.support.TestAddressSpace;
@@ -43,8 +44,8 @@ class Aarch64AdvSimdFp8FusedMultiplyAddDecoderTest {
     @Test
     void fmlalHbV() {
         // idxn=0, rm=2, rn=1, rd=0.
-        Ir64Op.VectorFp8FusedMultiplyAddLong op =
-                (Ir64Op.VectorFp8FusedMultiplyAddLong) decodeWord(0x0ec2fc20);
+        AdvSimdFpOp64.Fp8FusedMultiplyAddLong op =
+                (AdvSimdFpOp64.Fp8FusedMultiplyAddLong) decodeWord(0x0ec2fc20);
         assertEquals(false, op.wideDestination());
         assertEquals(0, op.sourceByteSelect());
         assertEquals(0, op.rd());
@@ -55,8 +56,8 @@ class Aarch64AdvSimdFp8FusedMultiplyAddDecoderTest {
     @Test
     void fmlalHbVIdxnOne() {
         // idxn=1 (bit30), resto igual — prova que o bit30 vira `sourceByteSelect`, não `Q`.
-        Ir64Op.VectorFp8FusedMultiplyAddLong op =
-                (Ir64Op.VectorFp8FusedMultiplyAddLong) decodeWord(0x4ec2fc20);
+        AdvSimdFpOp64.Fp8FusedMultiplyAddLong op =
+                (AdvSimdFpOp64.Fp8FusedMultiplyAddLong) decodeWord(0x4ec2fc20);
         assertEquals(false, op.wideDestination());
         assertEquals(1, op.sourceByteSelect());
     }
@@ -66,8 +67,8 @@ class Aarch64AdvSimdFp8FusedMultiplyAddDecoderTest {
     @Test
     void fmlallSbV() {
         // idxn=(0,0)=0, rm=5, rn=4, rd=3.
-        Ir64Op.VectorFp8FusedMultiplyAddLong op =
-                (Ir64Op.VectorFp8FusedMultiplyAddLong) decodeWord(0x0e05c483);
+        AdvSimdFpOp64.Fp8FusedMultiplyAddLong op =
+                (AdvSimdFpOp64.Fp8FusedMultiplyAddLong) decodeWord(0x0e05c483);
         assertEquals(true, op.wideDestination());
         assertEquals(0, op.sourceByteSelect());
         assertEquals(3, op.rd());
@@ -78,16 +79,16 @@ class Aarch64AdvSimdFp8FusedMultiplyAddDecoderTest {
     @Test
     void fmlallSbVIdxnCombinesBit30AndBit22() {
         // idxn=(1,1)=0b11=3 — prova que bit30(alto)/bit22(baixo) combinam em UM campo de 2 bits.
-        Ir64Op.VectorFp8FusedMultiplyAddLong op =
-                (Ir64Op.VectorFp8FusedMultiplyAddLong) decodeWord(0x4e45c483);
+        AdvSimdFpOp64.Fp8FusedMultiplyAddLong op =
+                (AdvSimdFpOp64.Fp8FusedMultiplyAddLong) decodeWord(0x4e45c483);
         assertEquals(3, op.sourceByteSelect());
     }
 
     @Test
     void fmlallSbVIdxnHighOnly() {
         // idxn=(1,0)=0b10=2 — a metade ALTA sozinha, prova que a ordem (alto:baixo) está certa.
-        Ir64Op.VectorFp8FusedMultiplyAddLong op =
-                (Ir64Op.VectorFp8FusedMultiplyAddLong) decodeWord(0x4e05c483);
+        AdvSimdFpOp64.Fp8FusedMultiplyAddLong op =
+                (AdvSimdFpOp64.Fp8FusedMultiplyAddLong) decodeWord(0x4e05c483);
         assertEquals(2, op.sourceByteSelect());
     }
 
@@ -96,8 +97,8 @@ class Aarch64AdvSimdFp8FusedMultiplyAddDecoderTest {
     @Test
     void fmlalHbVi() {
         // idxn=0, index=0(h=0,low3=0), rm=6, rn=7, rd=6.
-        Ir64Op.VectorFp8FusedMultiplyAddLongByElement op =
-                (Ir64Op.VectorFp8FusedMultiplyAddLongByElement) decodeWord(0x0fc600e6);
+        AdvSimdFpOp64.Fp8FusedMultiplyAddLongByElement op =
+                (AdvSimdFpOp64.Fp8FusedMultiplyAddLongByElement) decodeWord(0x0fc600e6);
         assertEquals(false, op.wideDestination());
         assertEquals(0, op.sourceByteSelect());
         assertEquals(0, op.index());
@@ -109,8 +110,8 @@ class Aarch64AdvSimdFp8FusedMultiplyAddDecoderTest {
     @Test
     void fmlalHbViMaxIndexAndSelect() {
         // idxn=1, index=15(h=1,low3=7) — prova que o índice de 4 bits (H:bits[21:19]) é lido certo.
-        Ir64Op.VectorFp8FusedMultiplyAddLongByElement op =
-                (Ir64Op.VectorFp8FusedMultiplyAddLongByElement) decodeWord(0x4ffe08e6);
+        AdvSimdFpOp64.Fp8FusedMultiplyAddLongByElement op =
+                (AdvSimdFpOp64.Fp8FusedMultiplyAddLongByElement) decodeWord(0x4ffe08e6);
         assertEquals(1, op.sourceByteSelect());
         assertEquals(15, op.index());
         assertEquals(6, op.rm());
@@ -121,8 +122,8 @@ class Aarch64AdvSimdFp8FusedMultiplyAddDecoderTest {
     @Test
     void fmlallSbVi() {
         // idxn=(0,0)=0, index=0, rm=2, rn=10, rd=9.
-        Ir64Op.VectorFp8FusedMultiplyAddLongByElement op =
-                (Ir64Op.VectorFp8FusedMultiplyAddLongByElement) decodeWord(0x2f028149);
+        AdvSimdFpOp64.Fp8FusedMultiplyAddLongByElement op =
+                (AdvSimdFpOp64.Fp8FusedMultiplyAddLongByElement) decodeWord(0x2f028149);
         assertEquals(true, op.wideDestination());
         assertEquals(0, op.sourceByteSelect());
         assertEquals(0, op.index());
@@ -134,8 +135,8 @@ class Aarch64AdvSimdFp8FusedMultiplyAddDecoderTest {
     @Test
     void fmlallSbViMaxIndexAndIdxn() {
         // idxn=(1,1)=3, index=15 — combina os dois campos de 2/4 bits no valor máximo de cada um.
-        Ir64Op.VectorFp8FusedMultiplyAddLongByElement op =
-                (Ir64Op.VectorFp8FusedMultiplyAddLongByElement) decodeWord(0x6f7a8949);
+        AdvSimdFpOp64.Fp8FusedMultiplyAddLongByElement op =
+                (AdvSimdFpOp64.Fp8FusedMultiplyAddLongByElement) decodeWord(0x6f7a8949);
         assertEquals(3, op.sourceByteSelect());
         assertEquals(15, op.index());
     }
@@ -150,7 +151,7 @@ class Aarch64AdvSimdFp8FusedMultiplyAddDecoderTest {
         int word = 0x0fc600e6 | (0b1111 << 12);
         Ir64Op op = decodeWord(new Aarch64Decoder(dev.vitorsilverio.armjitter.arch64.Aarch64Architecture.of(
                 "test", dev.vitorsilverio.armjitter.arch64.Aarch64Feature.BFLOAT16)), word);
-        assertEquals(Ir64Op.VectorFpMultiplyAddLongBFloat16ByElement.class, op.getClass());
+        assertEquals(AdvSimdFpOp64.FpMultiplyAddLongBFloat16ByElement.class, op.getClass());
     }
 
     // ── Feature gating ──────────────────────────────────────────────────────────────────────────

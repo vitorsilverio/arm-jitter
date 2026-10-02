@@ -1,6 +1,7 @@
 package dev.vitorsilverio.armjitter.decoder64;
 
 import dev.vitorsilverio.armjitter.arch64.Aarch64Architecture;
+import dev.vitorsilverio.armjitter.ir64.BranchOp64;
 import dev.vitorsilverio.armjitter.ir64.Ir64CompareBranchCondition;
 import dev.vitorsilverio.armjitter.ir64.Ir64MemSize;
 import dev.vitorsilverio.armjitter.ir64.Ir64Op;
@@ -93,8 +94,8 @@ class Aarch64CompareAndBranchConditionalDecoderTest {
                 new Case(CBNE_X1_X2, Ir64CompareBranchCondition.NOT_EQUAL, 0x8L),
         };
         for (Case c : cases) {
-            Ir64Op.CompareAndBranchRegister op =
-                    (Ir64Op.CompareAndBranchRegister) decode(CMPBR_DECODER, c.word());
+            BranchOp64.CompareAndBranchRegister op =
+                    (BranchOp64.CompareAndBranchRegister) decode(CMPBR_DECODER, c.word());
             String label = "word=0x" + Integer.toHexString(c.word());
             assertEquals(c.condition(), op.condition(), label);
             assertEquals(1, op.rt(), label);
@@ -106,7 +107,7 @@ class Aarch64CompareAndBranchConditionalDecoderTest {
 
     @Test
     void registerFormNarrowIsWord() {
-        Ir64Op.CompareAndBranchRegister op = (Ir64Op.CompareAndBranchRegister) decode(CMPBR_DECODER, CBGT_W3_W4);
+        BranchOp64.CompareAndBranchRegister op = (BranchOp64.CompareAndBranchRegister) decode(CMPBR_DECODER, CBGT_W3_W4);
         assertEquals(Ir64MemSize.WORD, op.size());
         assertEquals(3, op.rt());
         assertEquals(4, op.rm());
@@ -115,7 +116,7 @@ class Aarch64CompareAndBranchConditionalDecoderTest {
 
     @Test
     void registerFormCbbIsByte() {
-        Ir64Op.CompareAndBranchRegister gt = (Ir64Op.CompareAndBranchRegister) decode(CMPBR_DECODER, CBBGT_W1_W2);
+        BranchOp64.CompareAndBranchRegister gt = (BranchOp64.CompareAndBranchRegister) decode(CMPBR_DECODER, CBBGT_W1_W2);
         assertEquals(Ir64MemSize.BYTE, gt.size());
         assertEquals(Ir64CompareBranchCondition.GREATER_THAN, gt.condition());
         assertEquals(1, gt.rt());
@@ -123,25 +124,25 @@ class Aarch64CompareAndBranchConditionalDecoderTest {
         assertEquals(0x20L, gt.target());
 
         assertEquals(Ir64CompareBranchCondition.GREATER_OR_EQUAL,
-                ((Ir64Op.CompareAndBranchRegister) decode(CMPBR_DECODER, CBBGE_W1_W2)).condition());
+                ((BranchOp64.CompareAndBranchRegister) decode(CMPBR_DECODER, CBBGE_W1_W2)).condition());
         assertEquals(Ir64CompareBranchCondition.GREATER_THAN_UNSIGNED,
-                ((Ir64Op.CompareAndBranchRegister) decode(CMPBR_DECODER, CBBHI_W1_W2)).condition());
+                ((BranchOp64.CompareAndBranchRegister) decode(CMPBR_DECODER, CBBHI_W1_W2)).condition());
         assertEquals(Ir64CompareBranchCondition.GREATER_OR_EQUAL_UNSIGNED,
-                ((Ir64Op.CompareAndBranchRegister) decode(CMPBR_DECODER, CBBHS_W1_W2)).condition());
+                ((BranchOp64.CompareAndBranchRegister) decode(CMPBR_DECODER, CBBHS_W1_W2)).condition());
         assertEquals(Ir64CompareBranchCondition.EQUAL,
-                ((Ir64Op.CompareAndBranchRegister) decode(CMPBR_DECODER, CBBEQ_W1_W2)).condition());
+                ((BranchOp64.CompareAndBranchRegister) decode(CMPBR_DECODER, CBBEQ_W1_W2)).condition());
         assertEquals(Ir64CompareBranchCondition.NOT_EQUAL,
-                ((Ir64Op.CompareAndBranchRegister) decode(CMPBR_DECODER, CBBNE_W1_W2)).condition());
+                ((BranchOp64.CompareAndBranchRegister) decode(CMPBR_DECODER, CBBNE_W1_W2)).condition());
     }
 
     @Test
     void registerFormCbhIsHalfword() {
-        Ir64Op.CompareAndBranchRegister gt = (Ir64Op.CompareAndBranchRegister) decode(CMPBR_DECODER, CBHGT_W1_W2);
+        BranchOp64.CompareAndBranchRegister gt = (BranchOp64.CompareAndBranchRegister) decode(CMPBR_DECODER, CBHGT_W1_W2);
         assertEquals(Ir64MemSize.HALF, gt.size());
         assertEquals(Ir64CompareBranchCondition.GREATER_THAN, gt.condition());
 
         assertEquals(Ir64CompareBranchCondition.NOT_EQUAL,
-                ((Ir64Op.CompareAndBranchRegister) decode(CMPBR_DECODER, CBHNE_W1_W2)).condition());
+                ((BranchOp64.CompareAndBranchRegister) decode(CMPBR_DECODER, CBHNE_W1_W2)).condition());
     }
 
     @Test
@@ -172,8 +173,8 @@ class Aarch64CompareAndBranchConditionalDecoderTest {
                 new Case(CBNE_IMM_X1_5, Ir64CompareBranchCondition.NOT_EQUAL, 0x8L),
         };
         for (Case c : cases) {
-            Ir64Op.CompareAndBranchImmediate op =
-                    (Ir64Op.CompareAndBranchImmediate) decode(CMPBR_DECODER, c.word());
+            BranchOp64.CompareAndBranchImmediate op =
+                    (BranchOp64.CompareAndBranchImmediate) decode(CMPBR_DECODER, c.word());
             String label = "word=0x" + Integer.toHexString(c.word());
             assertEquals(c.condition(), op.condition(), label);
             assertEquals(1, op.rt(), label);
@@ -185,8 +186,8 @@ class Aarch64CompareAndBranchConditionalDecoderTest {
 
     @Test
     void immediateFormNarrowAndMaxImmediate() {
-        Ir64Op.CompareAndBranchImmediate op =
-                (Ir64Op.CompareAndBranchImmediate) decode(CMPBR_DECODER, CBGT_IMM_W3_63);
+        BranchOp64.CompareAndBranchImmediate op =
+                (BranchOp64.CompareAndBranchImmediate) decode(CMPBR_DECODER, CBGT_IMM_W3_63);
         assertEquals(3, op.rt());
         assertEquals(63, op.immediate(), "imm6 é UInt, nunca estendido com sinal");
         assertEquals(0x4L, op.target());

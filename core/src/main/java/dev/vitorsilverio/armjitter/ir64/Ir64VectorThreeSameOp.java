@@ -1,8 +1,8 @@
 package dev.vitorsilverio.armjitter.ir64;
 
-/// Operação de {@link Ir64Op.VectorArithmeticThreeSame} (AdvSIMD "three same", B8.7) — inteiro,
+/// Operação de {@link AdvSimdIntegerOp64.ArithmeticThreeSame} (AdvSIMD "three same", B8.7) — inteiro,
 /// mesmo tamanho de elemento nos 3 operandos (`Rd`/`Rn`/`Rm`). Cobre também a forma ESCALAR
-/// (`ADD_s`/`SUB_s`/`CM**_s`, sempre `esz=3`/`q=false` — ver {@link Ir64Op.VectorArithmeticThreeSame}),
+/// (`ADD_s`/`SUB_s`/`CM**_s`, sempre `esz=3`/`q=false` — ver {@link AdvSimdIntegerOp64.ArithmeticThreeSame}),
 /// que reaproveita este mesmo record/enum em vez de um tipo próprio.
 public enum Ir64VectorThreeSameOp {
     /// `a + b` truncado ao tamanho do elemento.
@@ -105,7 +105,7 @@ public enum Ir64VectorThreeSameOp {
     /// `a & b` (B8.18) — AdvSIMD "three same" LÓGICO: vive no MESMO slot `bit10=1` deste enum, mas
     /// discriminado pelo campo que para o resto da tabela é `esz` (aqui não é tamanho de elemento —
     /// lógico bit a bit não distingue lane, sempre executado a `esz=0`, ver
-    /// {@link Ir64Op.VectorArithmeticThreeSame#esz}). Sem forma escalar real.
+    /// {@link AdvSimdIntegerOp64.ArithmeticThreeSame#esz}). Sem forma escalar real.
     AND,
     /// `a & ~b` (B8.18).
     BIC,

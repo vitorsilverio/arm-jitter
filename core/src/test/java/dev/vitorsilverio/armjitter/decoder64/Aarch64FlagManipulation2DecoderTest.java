@@ -1,6 +1,7 @@
 package dev.vitorsilverio.armjitter.decoder64;
 
 import dev.vitorsilverio.armjitter.arch64.Aarch64Architecture;
+import dev.vitorsilverio.armjitter.ir64.IntegerOp64;
 import dev.vitorsilverio.armjitter.ir64.Ir64FlagConversionOp;
 import dev.vitorsilverio.armjitter.ir64.Ir64Op;
 import dev.vitorsilverio.armjitter.memory.AddressSpace64;
@@ -46,7 +47,7 @@ class Aarch64FlagManipulation2DecoderTest {
     void armv84AcceptsCfinvButRejectsFlagM2() {
         // ARMv8.4-A tem FEAT_FlagM (CFINV) mas NÃO FEAT_FlagM2 (XAFLAG/AXFLAG) — prova que as duas
         // features são distintas, não uma implicando a outra ao contrário.
-        Ir64Op.ConvertFlags op = (Ir64Op.ConvertFlags) decodeWord(FLAGM_DECODER, CFINV_WORD);
+        IntegerOp64.ConvertFlags op = (IntegerOp64.ConvertFlags) decodeWord(FLAGM_DECODER, CFINV_WORD);
         assertEquals(Ir64FlagConversionOp.INVERT_CARRY, op.opcode());
         assertThrows(UnsupportedOperationException.class, () -> decodeWord(FLAGM_DECODER, XAFLAG_WORD));
         assertThrows(UnsupportedOperationException.class, () -> decodeWord(FLAGM_DECODER, AXFLAG_WORD));
@@ -54,19 +55,19 @@ class Aarch64FlagManipulation2DecoderTest {
 
     @Test
     void cfinvDecodesWithFlagM2() {
-        Ir64Op.ConvertFlags op = (Ir64Op.ConvertFlags) decodeWord(FLAGM2_DECODER, CFINV_WORD);
+        IntegerOp64.ConvertFlags op = (IntegerOp64.ConvertFlags) decodeWord(FLAGM2_DECODER, CFINV_WORD);
         assertEquals(Ir64FlagConversionOp.INVERT_CARRY, op.opcode());
     }
 
     @Test
     void xaflagDecodesWithFlagM2() {
-        Ir64Op.ConvertFlags op = (Ir64Op.ConvertFlags) decodeWord(FLAGM2_DECODER, XAFLAG_WORD);
+        IntegerOp64.ConvertFlags op = (IntegerOp64.ConvertFlags) decodeWord(FLAGM2_DECODER, XAFLAG_WORD);
         assertEquals(Ir64FlagConversionOp.EXTERNAL_TO_ARM, op.opcode());
     }
 
     @Test
     void axflagDecodesWithFlagM2() {
-        Ir64Op.ConvertFlags op = (Ir64Op.ConvertFlags) decodeWord(FLAGM2_DECODER, AXFLAG_WORD);
+        IntegerOp64.ConvertFlags op = (IntegerOp64.ConvertFlags) decodeWord(FLAGM2_DECODER, AXFLAG_WORD);
         assertEquals(Ir64FlagConversionOp.ARM_TO_EXTERNAL, op.opcode());
     }
 }

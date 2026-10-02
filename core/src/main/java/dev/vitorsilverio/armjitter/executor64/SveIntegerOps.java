@@ -4,7 +4,7 @@ import dev.vitorsilverio.armjitter.advsimd.AdvSimdLanes;
 import dev.vitorsilverio.armjitter.arch64.Aarch64Feature;
 import dev.vitorsilverio.armjitter.core64.Aarch64Core;
 import dev.vitorsilverio.armjitter.core64.Aarch64ScalableRegisters;
-import dev.vitorsilverio.armjitter.ir64.Ir64Op;
+import dev.vitorsilverio.armjitter.ir64.SveIntegerOp64;
 
 /// Semântica das operações inteiras SVE sem predicado governante (B17.5): aritmética e lógica por
 /// elemento, shifts, lógica ternária SVE2, `MLA`/`MLS`/`MAD`/`MSB` (estas COM predicado), `MOVPRFX`,
@@ -95,8 +95,8 @@ final class SveIntegerOps {
     }
 
     /// Executa uma operação do grupo. `true` = a instrução já entrou numa exceção (acesso negado).
-    static boolean execute(Aarch64Core core, Ir64Op.SveIntegerUnpredicated op) {
-        if (op.op() == Ir64Op.SveIntegerUnpredicated.Op.FEXPA || op.op() == Ir64Op.SveIntegerUnpredicated.Op.FTSSEL
+    static boolean execute(Aarch64Core core, SveIntegerOp64.IntegerUnpredicated op) {
+        if (op.op() == SveIntegerOp64.IntegerUnpredicated.Op.FEXPA || op.op() == SveIntegerOp64.IntegerUnpredicated.Op.FTSSEL
                 || nonStreamingWidening(op)) {
             SvePredicateOps.requireNonStreaming(core); // sem FEAT_SSVE_FEXPA/BitPerm/AES: ilegais em streaming
         }
@@ -133,7 +133,7 @@ final class SveIntegerOps {
 
     /// `BEXT`/`BDEP`/`BGRP`, `PMULL` de 128 bits e `SMMLA`/`USMMLA`/`UMMLA` não existem em streaming sem `FEAT_SME_FA64`
     /// (`TRANS_FEAT_STREAMING_IF`/`TRANS_FEAT_NONSTREAMING` do QEMU; nenhuma das sub-features `SSVE_*` está modelada).
-    private static boolean nonStreamingWidening(Ir64Op.SveIntegerUnpredicated op) {
+    private static boolean nonStreamingWidening(SveIntegerOp64.IntegerUnpredicated op) {
         return switch (op.op()) {
             case SMMLA, USMMLA, UMMLA, BEXT, BDEP, BGRP -> true;
             case PMULL -> op.esz() == 0;
@@ -141,9 +141,9 @@ final class SveIntegerOps {
         };
     }
 
-    private static boolean isPairConvert(Ir64Op.SveIntegerUnpredicated.Op operation) {
-        return operation == Ir64Op.SveIntegerUnpredicated.Op.SQCVTN || operation == Ir64Op.SveIntegerUnpredicated.Op.UQCVTN
-                || operation == Ir64Op.SveIntegerUnpredicated.Op.SQCVTUN;
+    private static boolean isPairConvert(SveIntegerOp64.IntegerUnpredicated.Op operation) {
+        return operation == SveIntegerOp64.IntegerUnpredicated.Op.SQCVTN || operation == SveIntegerOp64.IntegerUnpredicated.Op.UQCVTN
+                || operation == SveIntegerOp64.IntegerUnpredicated.Op.SQCVTUN;
     }
 
     // ── Auxiliares de elemento ───────────────────────────────────────────────────────────────────
@@ -175,7 +175,7 @@ final class SveIntegerOps {
 
     // ── Aritmética ───────────────────────────────────────────────────────────────────────────────
 
-    private static void arithmetic(Aarch64ScalableRegisters regs, Ir64Op.SveIntegerUnpredicated op, int elements) {
+    private static void arithmetic(Aarch64ScalableRegisters regs, SveIntegerOp64.IntegerUnpredicated op, int elements) {
         int esz = op.esz();
         for (int e = 0; e < elements; e++) {
             long n = get(regs, op.rn(), e, esz);
@@ -220,7 +220,7 @@ final class SveIntegerOps {
     /// Multiply não-predicado SVE2 (B17.20). `SMULH`/`UMULH` vêm de {@link #multiplyHigh} (as mesmas do grupo predicado);
     /// `SQDMULH`/`SQRDMULH` reusam o `sqrdmlah` do multiply indexado (B17.8) com acumulador zero; `PMUL` é o produto
     /// polinomial de `PMULL` (`AdvSimdLanes`) truncado ao byte.
-    private static void multiply(Aarch64ScalableRegisters regs, Ir64Op.SveIntegerUnpredicated op, int elements) {
+    private static void multiply(Aarch64ScalableRegisters regs, SveIntegerOp64.IntegerUnpredicated op, int elements) {
         int esz = op.esz();
         for (int e = 0; e < elements; e++) {
             long n = get(regs, op.rn(), e, esz);
@@ -250,7 +250,7 @@ final class SveIntegerOps {
 
     /// Lógica de vetor inteiro (as 4 formas SVE e as 6 ternárias SVE2): bit a bit, `esz` não conta.
     /// As ternárias são destrutivas (`Zdn`), com `Zm` e `Zk` (`ra`) como as outras duas fontes.
-    private static void bitwise(Aarch64Core core, Aarch64ScalableRegisters regs, Ir64Op.SveIntegerUnpredicated op) {
+    private static void bitwise(Aarch64Core core, Aarch64ScalableRegisters regs, SveIntegerOp64.IntegerUnpredicated op) {
         int words = core.vectorLengthBytes() / Long.BYTES;
         for (int w = 0; w < words; w++) {
             long n = regs.zWord(op.rn(), w);
@@ -273,7 +273,7 @@ final class SveIntegerOps {
     }
 
     /// `XAR`: `(Zdn ^ Zm)` rotacionado à direita por `imm` dentro de cada elemento.
-    private static void exclusiveOrRotate(Aarch64ScalableRegisters regs, Ir64Op.SveIntegerUnpredicated op,
+    private static void exclusiveOrRotate(Aarch64ScalableRegisters regs, SveIntegerOp64.IntegerUnpredicated op,
             int elements) {
         int esz = op.esz();
         int bits = elementBits(esz);
@@ -290,7 +290,7 @@ final class SveIntegerOps {
 
     /// `amount` é sem sinal de até 64 bits; um valor com o bit 63 ligado aparece negativo e conta como
     /// "estoura o elemento" (`ASR` preenche com o sinal, `LSR`/`LSL` zeram).
-    private static long shift(Ir64Op.SveIntegerUnpredicated.Op kind, long value, long amount, int esz) {
+    private static long shift(SveIntegerOp64.IntegerUnpredicated.Op kind, long value, long amount, int esz) {
         int bits = elementBits(esz);
         boolean overflow = amount < 0 || amount >= bits;
         return switch (kind) {
@@ -300,14 +300,14 @@ final class SveIntegerOps {
         };
     }
 
-    private static void shiftImmediate(Aarch64ScalableRegisters regs, Ir64Op.SveIntegerUnpredicated op, int elements) {
+    private static void shiftImmediate(Aarch64ScalableRegisters regs, SveIntegerOp64.IntegerUnpredicated op, int elements) {
         for (int e = 0; e < elements; e++) {
             set(regs, op.rd(), e, op.esz(), shift(op.op(), get(regs, op.rn(), e, op.esz()), op.imm(), op.esz()));
         }
     }
 
     /// `_zzw`: o elemento de `Zm` que governa é o doubleword (64 bits) que CONTÉM o elemento de `Zn`.
-    private static void shiftWide(Aarch64ScalableRegisters regs, Ir64Op.SveIntegerUnpredicated op, int elements) {
+    private static void shiftWide(Aarch64ScalableRegisters regs, SveIntegerOp64.IntegerUnpredicated op, int elements) {
         int esz = op.esz();
         int perDoubleword = Long.BYTES >> esz;
         for (int e = 0; e < elements; e++) {
@@ -321,12 +321,12 @@ final class SveIntegerOps {
     /// `MLA`/`MLS`: `Zda ± Zn*Zm`; `MAD`/`MSB`: `Za ± Zdn*Zm`. Merging: elemento inativo fica como está.
     /// O bit do predicado de um elemento é o do byte mais baixo dele (`P` guarda um bit por byte).
     private static void multiplyAdd(Aarch64Core core, Aarch64ScalableRegisters regs,
-            Ir64Op.SveIntegerUnpredicated op, int elements) {
+            SveIntegerOp64.IntegerUnpredicated op, int elements) {
         int esz = op.esz();
-        boolean accumulateIntoDestination = op.op() == Ir64Op.SveIntegerUnpredicated.Op.MLA
-                || op.op() == Ir64Op.SveIntegerUnpredicated.Op.MLS;
-        boolean subtract = op.op() == Ir64Op.SveIntegerUnpredicated.Op.MLS
-                || op.op() == Ir64Op.SveIntegerUnpredicated.Op.MSB;
+        boolean accumulateIntoDestination = op.op() == SveIntegerOp64.IntegerUnpredicated.Op.MLA
+                || op.op() == SveIntegerOp64.IntegerUnpredicated.Op.MLS;
+        boolean subtract = op.op() == SveIntegerOp64.IntegerUnpredicated.Op.MLS
+                || op.op() == SveIntegerOp64.IntegerUnpredicated.Op.MSB;
         for (int e = 0; e < elements; e++) {
             int bit = e << esz;
             if (((regs.pWord(op.pg(), bit >>> WORD_INDEX_SHIFT) >>> (bit & WORD_BIT_MASK)) & 1L) == 0L) {
@@ -347,7 +347,7 @@ final class SveIntegerOps {
         }
     }
 
-    private static void exponentialAccelerator(Aarch64ScalableRegisters regs, Ir64Op.SveIntegerUnpredicated op,
+    private static void exponentialAccelerator(Aarch64ScalableRegisters regs, SveIntegerOp64.IntegerUnpredicated op,
             int elements) {
         int esz = op.esz();
         for (int e = 0; e < elements; e++) {
@@ -366,7 +366,7 @@ final class SveIntegerOps {
 
     /// `FTSSEL`: bit 0 de `Zm` troca o elemento por `1.0`; bit 1 inverte o sinal (`FPCR.AH` não é
     /// modelado no core — pendência nomeada da task, vale o caso `AH = 0`).
-    private static void trigonometricSelect(Aarch64ScalableRegisters regs, Ir64Op.SveIntegerUnpredicated op,
+    private static void trigonometricSelect(Aarch64ScalableRegisters regs, SveIntegerOp64.IntegerUnpredicated op,
             int elements) {
         int esz = op.esz();
         long one = switch (esz) {
@@ -392,7 +392,7 @@ final class SveIntegerOps {
 
     /// `INDEX`: `Zd[i] = início + i * incremento`, truncado ao elemento. Os quatro formatos só diferem
     /// em de onde vêm o início e o incremento (imediato com sinal ou `Xn`/`Xm`, sendo `31` = `XZR`).
-    private static void index(Aarch64Core core, Aarch64ScalableRegisters regs, Ir64Op.SveIntegerUnpredicated op,
+    private static void index(Aarch64Core core, Aarch64ScalableRegisters regs, SveIntegerOp64.IntegerUnpredicated op,
             int elements) {
         long start;
         long increment;

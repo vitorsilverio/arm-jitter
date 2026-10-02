@@ -3,6 +3,7 @@ package dev.vitorsilverio.armjitter.decoder64;
 import dev.vitorsilverio.armjitter.arch64.Aarch64Architecture;
 import dev.vitorsilverio.armjitter.arch64.Aarch64Feature;
 import dev.vitorsilverio.armjitter.ir64.Ir64Op;
+import dev.vitorsilverio.armjitter.ir64.SveIntegerOp64;
 
 /// Decoder SVE da permutação não predicada (B17.10): os grupos `### SVE Permute - Extract`, `- Unpredicated` e
 /// `- Interleaving` do `sve.decode` do QEMU — 42 encodings.
@@ -108,19 +109,19 @@ final class Aarch64SvePermuteDecoder {
         int rm = (word >>> RM_SHIFT) & RM_MASK;
         int esz = (word >>> ESZ_SHIFT) & ESZ_MASK;
         if ((word & EXT_MASK) == EXT_VALUE) {
-            return permute(Ir64Op.SvePermute.Op.EXT, 0, rd, 0, rn, extImmediate(word), address);
+            return permute(SveIntegerOp64.Permute.Op.EXT, 0, rd, 0, rn, extImmediate(word), address);
         }
         if ((word & EXT_MASK) == EXT_SVE2_VALUE) {
             return architecture.has(Aarch64Feature.SVE2)
-                    ? permute(Ir64Op.SvePermute.Op.EXT_SVE2, 0, rd, rn, 0, extImmediate(word), address)
+                    ? permute(SveIntegerOp64.Permute.Op.EXT_SVE2, 0, rd, rn, 0, extImmediate(word), address)
                     : null;
         }
         if ((word & EXTQ_MASK) == EXTQ_VALUE) {
-            return sve2p1() ? permute(Ir64Op.SvePermute.Op.EXTQ, 0, rd, 0, rn, (word >>> RM_SHIFT) & EXTQ_IMM_MASK,
+            return sve2p1() ? permute(SveIntegerOp64.Permute.Op.EXTQ, 0, rd, 0, rn, (word >>> RM_SHIFT) & EXTQ_IMM_MASK,
                     address) : null;
         }
         if ((word & SCALAR_MASK) == DUP_S_VALUE) {
-            return permute(Ir64Op.SvePermute.Op.DUP_S, esz, rd, rn, 0, 0, address);
+            return permute(SveIntegerOp64.Permute.Op.DUP_S, esz, rd, rn, 0, 0, address);
         }
         if ((word & DUP_X_MASK) == DUP_X_VALUE) {
             return decodeDupIndexed(word, rd, rn, address);
@@ -129,13 +130,13 @@ final class Aarch64SvePermuteDecoder {
             return sve2p1() ? decodeDupq(word, rd, rn, address) : null;
         }
         if ((word & SCALAR_MASK) == INSR_R_VALUE) {
-            return permute(Ir64Op.SvePermute.Op.INSR_R, esz, rd, 0, rn, 0, address);
+            return permute(SveIntegerOp64.Permute.Op.INSR_R, esz, rd, 0, rn, 0, address);
         }
         if ((word & SCALAR_MASK) == INSR_F_VALUE) {
-            return permute(Ir64Op.SvePermute.Op.INSR_F, esz, rd, 0, rn, 0, address);
+            return permute(SveIntegerOp64.Permute.Op.INSR_F, esz, rd, 0, rn, 0, address);
         }
         if ((word & SCALAR_MASK) == REV_VALUE) {
-            return permute(Ir64Op.SvePermute.Op.REV, esz, rd, rn, 0, 0, address);
+            return permute(SveIntegerOp64.Permute.Op.REV, esz, rd, rn, 0, 0, address);
         }
         if ((word & UNPK_MASK) == UNPK_VALUE) {
             return decodeUnpack(word, esz, rd, rn, address);
@@ -162,12 +163,12 @@ final class Aarch64SvePermuteDecoder {
         if ((word & PER_SEGMENT_MASK) != PER_SEGMENT_VALUE || !sve2p1()) {
             return null;
         }
-        Ir64Op.SvePermute.Op op = switch ((word >>> OPCODE_SHIFT) & OPCODE_MASK) {
-            case ORDER_ZIP1 -> Ir64Op.SvePermute.Op.ZIPQ1;
-            case ORDER_ZIP2 -> Ir64Op.SvePermute.Op.ZIPQ2;
-            case ORDER_UZP1 -> Ir64Op.SvePermute.Op.UZPQ1;
-            case ORDER_UZP2 -> Ir64Op.SvePermute.Op.UZPQ2;
-            case PER_SEGMENT_TBLQ -> Ir64Op.SvePermute.Op.TBLQ;
+        SveIntegerOp64.Permute.Op op = switch ((word >>> OPCODE_SHIFT) & OPCODE_MASK) {
+            case ORDER_ZIP1 -> SveIntegerOp64.Permute.Op.ZIPQ1;
+            case ORDER_ZIP2 -> SveIntegerOp64.Permute.Op.ZIPQ2;
+            case ORDER_UZP1 -> SveIntegerOp64.Permute.Op.UZPQ1;
+            case ORDER_UZP2 -> SveIntegerOp64.Permute.Op.UZPQ2;
+            case PER_SEGMENT_TBLQ -> SveIntegerOp64.Permute.Op.TBLQ;
             default -> null;
         };
         return op == null ? null : permute(op, (word >>> ESZ_SHIFT) & ESZ_MASK, word & RD_MASK,
@@ -192,7 +193,7 @@ final class Aarch64SvePermuteDecoder {
         }
         int imm7 = (((word >>> ESZ_SHIFT) & ESZ_MASK) << TSZ_HIGH_SHIFT) | tsz;
         int esz = Integer.numberOfTrailingZeros(imm7);
-        return permute(Ir64Op.SvePermute.Op.DUP_X, esz, rd, rn, 0, imm7 >>> (esz + 1), address);
+        return permute(SveIntegerOp64.Permute.Op.DUP_X, esz, rd, rn, 0, imm7 >>> (esz + 1), address);
     }
 
     /// `DUPQ`: mesma codificação `tsz`, mas o quadword (`tsz = 10000`) não existe.
@@ -202,7 +203,7 @@ final class Aarch64SvePermuteDecoder {
             return null;
         }
         int esz = Integer.numberOfTrailingZeros(tsz);
-        return permute(Ir64Op.SvePermute.Op.DUPQ, esz, rd, rn, 0, tsz >>> (esz + 1), address);
+        return permute(SveIntegerOp64.Permute.Op.DUPQ, esz, rd, rn, 0, tsz >>> (esz + 1), address);
     }
 
     private Ir64Op decodeUnpack(int word, int esz, int rd, int rn, long address) {
@@ -211,9 +212,9 @@ final class Aarch64SvePermuteDecoder {
         }
         boolean high = ((word >>> UNPK_HIGH_BIT) & 1) != 0;
         boolean unsigned = ((word >>> UNPK_UNSIGNED_BIT) & 1) != 0;
-        Ir64Op.SvePermute.Op op = unsigned
-                ? (high ? Ir64Op.SvePermute.Op.UUNPKHI : Ir64Op.SvePermute.Op.UUNPKLO)
-                : (high ? Ir64Op.SvePermute.Op.SUNPKHI : Ir64Op.SvePermute.Op.SUNPKLO);
+        SveIntegerOp64.Permute.Op op = unsigned
+                ? (high ? SveIntegerOp64.Permute.Op.UUNPKHI : SveIntegerOp64.Permute.Op.UUNPKLO)
+                : (high ? SveIntegerOp64.Permute.Op.SUNPKHI : SveIntegerOp64.Permute.Op.SUNPKLO);
         return permute(op, esz, rd, rn, 0, 0, address);
     }
 
@@ -241,51 +242,51 @@ final class Aarch64SvePermuteDecoder {
             return null;
         }
         return toPredicate
-                ? permute(Ir64Op.SvePermute.Op.PMOV_PV, esz, word & PMOV_PREDICATE_MASK,
+                ? permute(SveIntegerOp64.Permute.Op.PMOV_PV, esz, word & PMOV_PREDICATE_MASK,
                         (word >>> RN_SHIFT) & RN_MASK, 0, index, address)
-                : permute(Ir64Op.SvePermute.Op.PMOV_VP, esz, word & RD_MASK,
+                : permute(SveIntegerOp64.Permute.Op.PMOV_VP, esz, word & RD_MASK,
                         (word >>> RN_SHIFT) & PMOV_PREDICATE_MASK, 0, index, address);
     }
 
     /// `TBL`/`TBL_sve2`/`TBX`/`TBXQ`: mesmo formato `@rd_rn_rm`, só os bits `[15:10]` mudam.
     private Ir64Op decodeTable(int word, int esz, int rd, int rn, int rm, long address) {
-        Ir64Op.SvePermute.Op op = switch (word & TABLE_MASK) {
-            case TBL_VALUE -> Ir64Op.SvePermute.Op.TBL;
-            case TBL_SVE2_VALUE -> architecture.has(Aarch64Feature.SVE2) ? Ir64Op.SvePermute.Op.TBL_SVE2 : null;
-            case TBX_VALUE -> architecture.has(Aarch64Feature.SVE2) ? Ir64Op.SvePermute.Op.TBX : null;
-            case TBXQ_VALUE -> sve2p1() ? Ir64Op.SvePermute.Op.TBXQ : null;
+        SveIntegerOp64.Permute.Op op = switch (word & TABLE_MASK) {
+            case TBL_VALUE -> SveIntegerOp64.Permute.Op.TBL;
+            case TBL_SVE2_VALUE -> architecture.has(Aarch64Feature.SVE2) ? SveIntegerOp64.Permute.Op.TBL_SVE2 : null;
+            case TBX_VALUE -> architecture.has(Aarch64Feature.SVE2) ? SveIntegerOp64.Permute.Op.TBX : null;
+            case TBXQ_VALUE -> sve2p1() ? SveIntegerOp64.Permute.Op.TBXQ : null;
             default -> null;
         };
         return op == null ? null : permute(op, esz, rd, rn, rm, 0, address);
     }
 
     private Ir64Op decodeInterleave(int word, int esz, int rd, int rn, int rm, long address) {
-        Ir64Op.SvePermute.Op op = switch ((word >>> OPCODE_SHIFT) & OPCODE_MASK) {
-            case ORDER_ZIP1 -> Ir64Op.SvePermute.Op.ZIP1;
-            case ORDER_ZIP2 -> Ir64Op.SvePermute.Op.ZIP2;
-            case ORDER_UZP1 -> Ir64Op.SvePermute.Op.UZP1;
-            case ORDER_UZP2 -> Ir64Op.SvePermute.Op.UZP2;
-            case ORDER_TRN1 -> Ir64Op.SvePermute.Op.TRN1;
-            case ORDER_TRN2 -> Ir64Op.SvePermute.Op.TRN2;
+        SveIntegerOp64.Permute.Op op = switch ((word >>> OPCODE_SHIFT) & OPCODE_MASK) {
+            case ORDER_ZIP1 -> SveIntegerOp64.Permute.Op.ZIP1;
+            case ORDER_ZIP2 -> SveIntegerOp64.Permute.Op.ZIP2;
+            case ORDER_UZP1 -> SveIntegerOp64.Permute.Op.UZP1;
+            case ORDER_UZP2 -> SveIntegerOp64.Permute.Op.UZP2;
+            case ORDER_TRN1 -> SveIntegerOp64.Permute.Op.TRN1;
+            case ORDER_TRN2 -> SveIntegerOp64.Permute.Op.TRN2;
             default -> null;
         };
         return op == null ? null : permute(op, esz, rd, rn, rm, 0, address);
     }
 
     private Ir64Op decodeSegmentInterleave(int word, int rd, int rn, int rm, long address) {
-        Ir64Op.SvePermute.Op op = switch ((word >>> OPCODE_SHIFT) & OPCODE_MASK) {
-            case ORDER_ZIP1 -> Ir64Op.SvePermute.Op.ZIP1_Q;
-            case ORDER_ZIP2 -> Ir64Op.SvePermute.Op.ZIP2_Q;
-            case ORDER_UZP1 -> Ir64Op.SvePermute.Op.UZP1_Q;
-            case ORDER_UZP2 -> Ir64Op.SvePermute.Op.UZP2_Q;
-            case SEGMENT_ORDER_TRN1 -> Ir64Op.SvePermute.Op.TRN1_Q;
-            case SEGMENT_ORDER_TRN2 -> Ir64Op.SvePermute.Op.TRN2_Q;
+        SveIntegerOp64.Permute.Op op = switch ((word >>> OPCODE_SHIFT) & OPCODE_MASK) {
+            case ORDER_ZIP1 -> SveIntegerOp64.Permute.Op.ZIP1_Q;
+            case ORDER_ZIP2 -> SveIntegerOp64.Permute.Op.ZIP2_Q;
+            case ORDER_UZP1 -> SveIntegerOp64.Permute.Op.UZP1_Q;
+            case ORDER_UZP2 -> SveIntegerOp64.Permute.Op.UZP2_Q;
+            case SEGMENT_ORDER_TRN1 -> SveIntegerOp64.Permute.Op.TRN1_Q;
+            case SEGMENT_ORDER_TRN2 -> SveIntegerOp64.Permute.Op.TRN2_Q;
             default -> null;
         };
         return op == null ? null : permute(op, ESZ_QUADWORD, rd, rn, rm, 0, address);
     }
 
-    private static Ir64Op permute(Ir64Op.SvePermute.Op op, int esz, int rd, int rn, int rm, int imm, long address) {
-        return new Ir64Op.SvePermute(op, esz, rd, rn, rm, imm, address);
+    private static Ir64Op permute(SveIntegerOp64.Permute.Op op, int esz, int rd, int rn, int rm, int imm, long address) {
+        return new SveIntegerOp64.Permute(op, esz, rd, rn, rm, imm, address);
     }
 }

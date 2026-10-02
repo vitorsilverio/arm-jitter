@@ -2,11 +2,12 @@ package dev.vitorsilverio.armjitter.executor64;
 
 import dev.vitorsilverio.armjitter.core64.Aarch64Core;
 import dev.vitorsilverio.armjitter.core64.Aarch64ScalableRegisters;
-import dev.vitorsilverio.armjitter.ir64.Ir64Op;
+import dev.vitorsilverio.armjitter.ir64.SveMemoryOp64;
+import dev.vitorsilverio.armjitter.ir64.SvePredicateOp64;
 import dev.vitorsilverio.armjitter.memory.AddressSpace64;
 
 /// Predicado-como-contador do SVE2.1 (B17.28): o modelo do contador e as instruções que o consomem — `PTRUE`, `CNTP` e
-/// `PEXT` ({@link Ir64Op.SveCounterPredicate}) e os `LD1`/`ST1` multi-vetor ({@link Ir64Op.SveMultiVectorMemory}). O
+/// `PEXT` ({@link SvePredicateOp64.CounterPredicate}) e os `LD1`/`ST1` multi-vetor ({@link SveMemoryOp64.MultiVectorMemory}). O
 /// `WHILE*` que ESCREVE um contador vive em {@link SveCompareOps}, junto dos demais `WHILE`, e usa {@link #encode}.
 ///
 /// **O contador NÃO é uma máscara de bits.** Um `PNn` (`n = 8..15`) é o registrador `Pn` lido pelos seus 16 bits baixos:
@@ -97,7 +98,7 @@ final class SveCounterOps {
     // ── PTRUE / CNTP / PEXT ──────────────────────────────────────────────────────────────────────
 
     /// Executa `PTRUE`/`CNTP`/`PEXT` sobre contador. `true` = a instrução já entrou numa exceção (acesso negado).
-    static boolean execute(Aarch64Core core, Ir64Op.SveCounterPredicate op) {
+    static boolean execute(Aarch64Core core, SvePredicateOp64.CounterPredicate op) {
         boolean allowed = op.streamingOnly()
                 ? core.smeStreamingEnabledCheck(op.instructionAddress())
                 : SvePredicateOps.accessAllowed(core, op.instructionAddress());
@@ -127,7 +128,7 @@ final class SveCounterOps {
     }
 
     /// `CNTP <Xd>, <PNn>.<T>, <vlx2|vlx4>`: quantos elementos de `T` o contador descreve em 2 ou 4 vetores.
-    private static long countElements(Aarch64Core core, Ir64Op.SveCounterPredicate op) {
+    private static long countElements(Aarch64Core core, SvePredicateOp64.CounterPredicate op) {
         int vectorBytes = core.vectorLengthBytes();
         Counter counter = Counter.decode(counterBits(core, op.pn()), vectorBytes, op.esz());
         int maxElements = (vectorBytes << op.index()) >> op.esz();
@@ -141,7 +142,7 @@ final class SveCounterOps {
     }
 
     /// `PEXT`: o segmento `imm` (de `VL` bits) do contador vira uma máscara comum; `PEXT_2` escreve dois segmentos.
-    private static void extractPredicate(Aarch64Core core, Ir64Op.SveCounterPredicate op, int registers) {
+    private static void extractPredicate(Aarch64Core core, SvePredicateOp64.CounterPredicate op, int registers) {
         Aarch64ScalableRegisters regs = core.scalable();
         int vectorBytes = core.vectorLengthBytes();
         Counter counter = Counter.decode(counterBits(core, op.pn()), vectorBytes, op.esz());
@@ -176,7 +177,7 @@ final class SveCounterOps {
     // ── LD1 / ST1 multi-vetor ────────────────────────────────────────────────────────────────────
 
     /// Executa `LD1`/`ST1` multi-vetor governado por contador. `true` = a instrução já entrou numa exceção.
-    static boolean execute(Aarch64Core core, Ir64Op.SveMultiVectorMemory op) {
+    static boolean execute(Aarch64Core core, SveMemoryOp64.MultiVectorMemory op) {
         boolean allowed = op.streamingOnly()
                 ? core.smeStreamingEnabledCheck(op.instructionAddress())
                 : SvePredicateOps.accessAllowed(core, op.instructionAddress());
@@ -212,11 +213,11 @@ final class SveCounterOps {
         return false;
     }
 
-    private static int register(Ir64Op.SveMultiVectorMemory op, int index) {
+    private static int register(SveMemoryOp64.MultiVectorMemory op, int index) {
         return (op.rt() + index * op.registerStride()) & VECTOR_REGISTER_MASK;
     }
 
-    private static long address(Aarch64Core core, Ir64Op.SveMultiVectorMemory op, int vectorBytes) {
+    private static long address(Aarch64Core core, SveMemoryOp64.MultiVectorMemory op, int vectorBytes) {
         long base = op.rn() == STACK_POINTER_ENCODING ? core.sp() : core.x(op.rn());
         if (op.registerOffset()) {
             return base + (core.x(op.rm()) << op.esz());

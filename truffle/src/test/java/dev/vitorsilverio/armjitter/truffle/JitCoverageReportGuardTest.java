@@ -34,7 +34,7 @@ class JitCoverageReportGuardTest {
     @Test
     void every32BitRecordHasExactlyOneRowMappedToANamedKind() {
         var rows = JitCoverageReport.measure32();
-        assertEquals(IrOp.class.getPermittedSubclasses().length, rows.size(),
+        assertEquals(JitCoverageReport.recordsOf(IrOp.class).size(), rows.size(),
                 "toda subclasse selada de IrOp tem de virar uma linha");
 
         Set<Integer> rowKinds = rows.stream().map(JitCoverageReport.Row32::kind)

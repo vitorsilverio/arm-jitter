@@ -10,6 +10,7 @@ import dev.vitorsilverio.armjitter.ir64.Aarch64SystemRegisterId;
 import dev.vitorsilverio.armjitter.ir64.Ir64Block;
 import dev.vitorsilverio.armjitter.ir64.Ir64Op;
 import dev.vitorsilverio.armjitter.ir64.StandardIr64BlockLifter;
+import dev.vitorsilverio.armjitter.ir64.SveIntegerOp64;
 import dev.vitorsilverio.armjitter.memory.AddressSpace64;
 import dev.vitorsilverio.armjitter.support.TestAddressSpace;
 import org.junit.jupiter.api.Test;
@@ -56,14 +57,14 @@ class Aarch64SvePermuteTest {
     private static final Aarch64Architecture ALL = Aarch64Architecture.extending(SVE2P1, "teste-tudo",
             Aarch64Feature.F64MM);
 
-    private record Row(int word, String asm, Ir64Op.SvePermute.Op op, int esz, int rd, int rn, int rm, int imm) {
-        Ir64Op.SvePermute expected() {
-            return new Ir64Op.SvePermute(op, esz, rd, rn, rm, imm, 0L);
+    private record Row(int word, String asm, SveIntegerOp64.Permute.Op op, int esz, int rd, int rn, int rm, int imm) {
+        SveIntegerOp64.Permute expected() {
+            return new SveIntegerOp64.Permute(op, esz, rd, rn, rm, imm, 0L);
         }
     }
 
     private static Row row(int word, String asm, String op, int esz, int rd, int rn, int rm, int imm) {
-        return new Row(word, asm, Ir64Op.SvePermute.Op.valueOf(op), esz, rd, rn, rm, imm);
+        return new Row(word, asm, SveIntegerOp64.Permute.Op.valueOf(op), esz, rd, rn, rm, imm);
     }
 
     private static Stream<Row> rows() {
@@ -178,7 +179,7 @@ class Aarch64SvePermuteTest {
 
     private static boolean decodesToPermute(Aarch64Architecture architecture, int word) {
         try {
-            return decode(architecture, word) instanceof Ir64Op.SvePermute;
+            return decode(architecture, word) instanceof SveIntegerOp64.Permute;
         } catch (UnsupportedOperationException refused) {
             return false;
         }
@@ -236,7 +237,7 @@ class Aarch64SvePermuteTest {
     @Test
     void theTableHasAllFortyTwoEncodingsPlusTheirVariants() {
         assertEquals(86, rows().count());
-        assertEquals(Ir64Op.SvePermute.Op.values().length, rows().map(Row::op).distinct().count(),
+        assertEquals(SveIntegerOp64.Permute.Op.values().length, rows().map(Row::op).distinct().count(),
                 "toda operação do grupo tem ao menos uma linha");
     }
 
@@ -248,7 +249,7 @@ class Aarch64SvePermuteTest {
 
     private enum Tier { BASE, SVE2, SVE2P1, F64MM }
 
-    private static Tier tierOf(Ir64Op.SvePermute.Op op) {
+    private static Tier tierOf(SveIntegerOp64.Permute.Op op) {
         return switch (op) {
             case EXT, DUP_S, DUP_X, INSR_F, INSR_R, REV, TBL, SUNPKLO, SUNPKHI, UUNPKLO, UUNPKHI,
                  ZIP1, ZIP2, UZP1, UZP2, TRN1, TRN2 -> Tier.BASE;

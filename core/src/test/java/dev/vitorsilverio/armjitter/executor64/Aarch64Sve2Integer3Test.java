@@ -7,6 +7,7 @@ import dev.vitorsilverio.armjitter.core64.Aarch64ExceptionLevel;
 import dev.vitorsilverio.armjitter.ir64.Aarch64SystemRegisterId;
 import dev.vitorsilverio.armjitter.decoder64.Aarch64Decoder;
 import dev.vitorsilverio.armjitter.ir64.Ir64Op;
+import dev.vitorsilverio.armjitter.ir64.SveIntegerOp64;
 import dev.vitorsilverio.armjitter.memory.AddressSpace64;
 import dev.vitorsilverio.armjitter.support.TestAddressSpace;
 import org.junit.jupiter.api.Test;
@@ -423,7 +424,7 @@ class Aarch64Sve2Integer3Test {
             long imm2) {
         Ir64Op decoded = decodeOrNull(ALL, word);
         assertNotNull(decoded, "decodifica sob SVE2 + sub-features");
-        Ir64Op.SveIntegerUnpredicated op = (Ir64Op.SveIntegerUnpredicated) decoded;
+        SveIntegerOp64.IntegerUnpredicated op = (SveIntegerOp64.IntegerUnpredicated) decoded;
         assertEquals(expected, op.op().name());
         assertEquals(esz, op.esz(), "esz (tamanho do elemento largo)");
         assertEquals(imm, op.imm(), "imm (seleção B/T ou deslocamento)");
@@ -441,10 +442,10 @@ class Aarch64Sve2Integer3Test {
 
     @Test
     void pairConvertReadsTheRegisterPairFromBits9To6() {
-        Ir64Op.SveIntegerUnpredicated low = (Ir64Op.SveIntegerUnpredicated) decodeOrNull(ALL, 0x45314081);
-        assertEquals(Ir64Op.SveIntegerUnpredicated.Op.SQCVTN, low.op());
+        SveIntegerOp64.IntegerUnpredicated low = (SveIntegerOp64.IntegerUnpredicated) decodeOrNull(ALL, 0x45314081);
+        assertEquals(SveIntegerOp64.IntegerUnpredicated.Op.SQCVTN, low.op());
         assertEquals(4, low.rn(), "z4,z5");
-        Ir64Op.SveIntegerUnpredicated high = (Ir64Op.SveIntegerUnpredicated) decodeOrNull(ALL, 0x453143c1);
+        SveIntegerOp64.IntegerUnpredicated high = (SveIntegerOp64.IntegerUnpredicated) decodeOrNull(ALL, 0x453143c1);
         assertEquals(30, high.rn(), "z30,z31");
         assertNull(decodeOrNull(ALL, 0x453140a1), "bit 5 = 1: não é SQCVTN (e SQXTNB recusa o imm3 não nulo)");
     }
@@ -640,31 +641,31 @@ class Aarch64Sve2Integer3Test {
         };
     }
 
-    private static final Set<Ir64Op.SveIntegerUnpredicated.Op> NEW_OPS = Set.of(
-            Ir64Op.SveIntegerUnpredicated.Op.SADDL, Ir64Op.SveIntegerUnpredicated.Op.UADDL,
-            Ir64Op.SveIntegerUnpredicated.Op.SSUBL, Ir64Op.SveIntegerUnpredicated.Op.USUBL,
-            Ir64Op.SveIntegerUnpredicated.Op.SABDL, Ir64Op.SveIntegerUnpredicated.Op.UABDL,
-            Ir64Op.SveIntegerUnpredicated.Op.SADDW, Ir64Op.SveIntegerUnpredicated.Op.UADDW,
-            Ir64Op.SveIntegerUnpredicated.Op.SSUBW, Ir64Op.SveIntegerUnpredicated.Op.USUBW,
-            Ir64Op.SveIntegerUnpredicated.Op.SQDMULL, Ir64Op.SveIntegerUnpredicated.Op.SMULL,
-            Ir64Op.SveIntegerUnpredicated.Op.UMULL, Ir64Op.SveIntegerUnpredicated.Op.PMULL,
-            Ir64Op.SveIntegerUnpredicated.Op.SSHLL, Ir64Op.SveIntegerUnpredicated.Op.USHLL,
-            Ir64Op.SveIntegerUnpredicated.Op.EORBT, Ir64Op.SveIntegerUnpredicated.Op.EORTB,
-            Ir64Op.SveIntegerUnpredicated.Op.SMMLA, Ir64Op.SveIntegerUnpredicated.Op.USMMLA,
-            Ir64Op.SveIntegerUnpredicated.Op.UMMLA, Ir64Op.SveIntegerUnpredicated.Op.BEXT,
-            Ir64Op.SveIntegerUnpredicated.Op.BDEP, Ir64Op.SveIntegerUnpredicated.Op.BGRP,
-            Ir64Op.SveIntegerUnpredicated.Op.SQXTN, Ir64Op.SveIntegerUnpredicated.Op.UQXTN,
-            Ir64Op.SveIntegerUnpredicated.Op.SQXTUN, Ir64Op.SveIntegerUnpredicated.Op.SQCVTN,
-            Ir64Op.SveIntegerUnpredicated.Op.UQCVTN, Ir64Op.SveIntegerUnpredicated.Op.SQCVTUN,
-            Ir64Op.SveIntegerUnpredicated.Op.SHRN, Ir64Op.SveIntegerUnpredicated.Op.RSHRN,
-            Ir64Op.SveIntegerUnpredicated.Op.SQSHRN, Ir64Op.SveIntegerUnpredicated.Op.SQRSHRN,
-            Ir64Op.SveIntegerUnpredicated.Op.UQSHRN, Ir64Op.SveIntegerUnpredicated.Op.UQRSHRN,
-            Ir64Op.SveIntegerUnpredicated.Op.SQSHRUN, Ir64Op.SveIntegerUnpredicated.Op.SQRSHRUN,
-            Ir64Op.SveIntegerUnpredicated.Op.ADDHN, Ir64Op.SveIntegerUnpredicated.Op.RADDHN,
-            Ir64Op.SveIntegerUnpredicated.Op.SUBHN, Ir64Op.SveIntegerUnpredicated.Op.RSUBHN);
+    private static final Set<SveIntegerOp64.IntegerUnpredicated.Op> NEW_OPS = Set.of(
+            SveIntegerOp64.IntegerUnpredicated.Op.SADDL, SveIntegerOp64.IntegerUnpredicated.Op.UADDL,
+            SveIntegerOp64.IntegerUnpredicated.Op.SSUBL, SveIntegerOp64.IntegerUnpredicated.Op.USUBL,
+            SveIntegerOp64.IntegerUnpredicated.Op.SABDL, SveIntegerOp64.IntegerUnpredicated.Op.UABDL,
+            SveIntegerOp64.IntegerUnpredicated.Op.SADDW, SveIntegerOp64.IntegerUnpredicated.Op.UADDW,
+            SveIntegerOp64.IntegerUnpredicated.Op.SSUBW, SveIntegerOp64.IntegerUnpredicated.Op.USUBW,
+            SveIntegerOp64.IntegerUnpredicated.Op.SQDMULL, SveIntegerOp64.IntegerUnpredicated.Op.SMULL,
+            SveIntegerOp64.IntegerUnpredicated.Op.UMULL, SveIntegerOp64.IntegerUnpredicated.Op.PMULL,
+            SveIntegerOp64.IntegerUnpredicated.Op.SSHLL, SveIntegerOp64.IntegerUnpredicated.Op.USHLL,
+            SveIntegerOp64.IntegerUnpredicated.Op.EORBT, SveIntegerOp64.IntegerUnpredicated.Op.EORTB,
+            SveIntegerOp64.IntegerUnpredicated.Op.SMMLA, SveIntegerOp64.IntegerUnpredicated.Op.USMMLA,
+            SveIntegerOp64.IntegerUnpredicated.Op.UMMLA, SveIntegerOp64.IntegerUnpredicated.Op.BEXT,
+            SveIntegerOp64.IntegerUnpredicated.Op.BDEP, SveIntegerOp64.IntegerUnpredicated.Op.BGRP,
+            SveIntegerOp64.IntegerUnpredicated.Op.SQXTN, SveIntegerOp64.IntegerUnpredicated.Op.UQXTN,
+            SveIntegerOp64.IntegerUnpredicated.Op.SQXTUN, SveIntegerOp64.IntegerUnpredicated.Op.SQCVTN,
+            SveIntegerOp64.IntegerUnpredicated.Op.UQCVTN, SveIntegerOp64.IntegerUnpredicated.Op.SQCVTUN,
+            SveIntegerOp64.IntegerUnpredicated.Op.SHRN, SveIntegerOp64.IntegerUnpredicated.Op.RSHRN,
+            SveIntegerOp64.IntegerUnpredicated.Op.SQSHRN, SveIntegerOp64.IntegerUnpredicated.Op.SQRSHRN,
+            SveIntegerOp64.IntegerUnpredicated.Op.UQSHRN, SveIntegerOp64.IntegerUnpredicated.Op.UQRSHRN,
+            SveIntegerOp64.IntegerUnpredicated.Op.SQSHRUN, SveIntegerOp64.IntegerUnpredicated.Op.SQRSHRUN,
+            SveIntegerOp64.IntegerUnpredicated.Op.ADDHN, SveIntegerOp64.IntegerUnpredicated.Op.RADDHN,
+            SveIntegerOp64.IntegerUnpredicated.Op.SUBHN, SveIntegerOp64.IntegerUnpredicated.Op.RSUBHN);
 
     private static boolean isNewOp(Ir64Op decoded) {
-        return decoded instanceof Ir64Op.SveIntegerUnpredicated u && NEW_OPS.contains(u.op());
+        return decoded instanceof SveIntegerOp64.IntegerUnpredicated u && NEW_OPS.contains(u.op());
     }
 
     /// Varre TODO o espaço `bits[23:16]` × `bits[15:10]` do prefixo `0x45` (16384 combinações, com `Zn` par e ímpar): uma
@@ -694,7 +695,7 @@ class Aarch64Sve2Integer3Test {
                     }
                     // B17.29: `SMMLA`/`USMMLA`/`UMMLA` são a ÚNICA exceção do grupo que não exige `SVE2`.
                     Ir64Op underSve = decodeOrNull(SVE, word);
-                    if (decoded instanceof Ir64Op.SveIntegerUnpredicated u && MATRIX_MULTIPLY.contains(u.op().name())) {
+                    if (decoded instanceof SveIntegerOp64.IntegerUnpredicated u && MATRIX_MULTIPLY.contains(u.op().name())) {
                         assertNotNull(underSve, "SMMLA/USMMLA/UMMLA deveriam decodificar sob SVE+I8MM: 0x"
                                 + Integer.toHexString(word));
                     } else {

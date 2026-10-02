@@ -3,6 +3,7 @@ package dev.vitorsilverio.armjitter.decoder64;
 import dev.vitorsilverio.armjitter.arch64.Aarch64Architecture;
 import dev.vitorsilverio.armjitter.arch64.Aarch64Feature;
 import dev.vitorsilverio.armjitter.ir64.Ir64Op;
+import dev.vitorsilverio.armjitter.ir64.SveIntegerOp64;
 
 /// Decoder SVE da permutação de predicado, da permutação predicada e do `SEL` (B17.11): os grupos
 /// `### SVE Permute - Predicates`, `- Predicated` e `### SVE Select Vectors` do `sve.decode` do QEMU — 36 encodings,
@@ -95,19 +96,19 @@ final class Aarch64SvePredicatedPermuteDecoder {
             return decodePredicatePermute(word, esz, address);
         }
         if ((word & REV_P_MASK) == REV_P_VALUE) {
-            return predicate(Ir64Op.SvePermutePredicated.Op.REV_P, esz, word & PREDICATE_MASK,
+            return predicate(SveIntegerOp64.PermutePredicated.Op.REV_P, esz, word & PREDICATE_MASK,
                     (word >>> RN_SHIFT) & PREDICATE_MASK, 0, address);
         }
         if ((word & PUNPK_MASK) == PUNPK_VALUE) {
             boolean high = ((word >>> PUNPK_HIGH_BIT) & 1) != 0;
-            return predicate(high ? Ir64Op.SvePermutePredicated.Op.PUNPKHI : Ir64Op.SvePermutePredicated.Op.PUNPKLO,
+            return predicate(high ? SveIntegerOp64.PermutePredicated.Op.PUNPKHI : SveIntegerOp64.PermutePredicated.Op.PUNPKLO,
                     0, word & PREDICATE_MASK, (word >>> RN_SHIFT) & PREDICATE_MASK, 0, address);
         }
         if ((word & SEL_MASK) == SEL_VALUE) {
-            return op(Ir64Op.SvePermutePredicated.Op.SEL, esz, rd, rn, (word >>> RM_SHIFT) & RM_MASK,
+            return op(SveIntegerOp64.PermutePredicated.Op.SEL, esz, rd, rn, (word >>> RM_SHIFT) & RM_MASK,
                     (word >>> PG_SHIFT) & PG_WIDE_MASK, address);
         }
-        Ir64Op.SvePermutePredicated.Op kind = decodePredicatedKind(word, esz);
+        SveIntegerOp64.PermutePredicated.Op kind = decodePredicatedKind(word, esz);
         if (kind == null) {
             return null;
         }
@@ -115,19 +116,19 @@ final class Aarch64SvePredicatedPermuteDecoder {
         return isDestructive(kind) ? op(kind, esz, rd, 0, rn, pg, address) : op(kind, esz, rd, rn, 0, pg, address);
     }
 
-    private static boolean isDestructive(Ir64Op.SvePermutePredicated.Op kind) {
-        return kind == Ir64Op.SvePermutePredicated.Op.CLASTA_Z || kind == Ir64Op.SvePermutePredicated.Op.CLASTB_Z
-                || kind == Ir64Op.SvePermutePredicated.Op.SPLICE;
+    private static boolean isDestructive(SveIntegerOp64.PermutePredicated.Op kind) {
+        return kind == SveIntegerOp64.PermutePredicated.Op.CLASTA_Z || kind == SveIntegerOp64.PermutePredicated.Op.CLASTB_Z
+                || kind == SveIntegerOp64.PermutePredicated.Op.SPLICE;
     }
 
     private Ir64Op decodePredicatePermute(int word, int esz, long address) {
-        Ir64Op.SvePermutePredicated.Op kind = switch ((word >>> PREDICATE_OPCODE_SHIFT) & PREDICATE_OPCODE_MASK) {
-            case PREDICATE_ORDER_ZIP1 -> Ir64Op.SvePermutePredicated.Op.ZIP1_P;
-            case PREDICATE_ORDER_ZIP2 -> Ir64Op.SvePermutePredicated.Op.ZIP2_P;
-            case PREDICATE_ORDER_UZP1 -> Ir64Op.SvePermutePredicated.Op.UZP1_P;
-            case PREDICATE_ORDER_UZP2 -> Ir64Op.SvePermutePredicated.Op.UZP2_P;
-            case PREDICATE_ORDER_TRN1 -> Ir64Op.SvePermutePredicated.Op.TRN1_P;
-            case PREDICATE_ORDER_TRN2 -> Ir64Op.SvePermutePredicated.Op.TRN2_P;
+        SveIntegerOp64.PermutePredicated.Op kind = switch ((word >>> PREDICATE_OPCODE_SHIFT) & PREDICATE_OPCODE_MASK) {
+            case PREDICATE_ORDER_ZIP1 -> SveIntegerOp64.PermutePredicated.Op.ZIP1_P;
+            case PREDICATE_ORDER_ZIP2 -> SveIntegerOp64.PermutePredicated.Op.ZIP2_P;
+            case PREDICATE_ORDER_UZP1 -> SveIntegerOp64.PermutePredicated.Op.UZP1_P;
+            case PREDICATE_ORDER_UZP2 -> SveIntegerOp64.PermutePredicated.Op.UZP2_P;
+            case PREDICATE_ORDER_TRN1 -> SveIntegerOp64.PermutePredicated.Op.TRN1_P;
+            case PREDICATE_ORDER_TRN2 -> SveIntegerOp64.PermutePredicated.Op.TRN2_P;
             default -> null;
         };
         return kind == null ? null : predicate(kind, esz, word & PREDICATE_MASK,
@@ -136,48 +137,48 @@ final class Aarch64SvePredicatedPermuteDecoder {
 
     /// As 26 predicadas. Devolve `null` quando a palavra não é uma delas, quando falta a feature da linha ou quando o
     /// `esz` não comporta a operação.
-    private Ir64Op.SvePermutePredicated.Op decodePredicatedKind(int word, int esz) {
+    private SveIntegerOp64.PermutePredicated.Op decodePredicatedKind(int word, int esz) {
         boolean before = ((word >>> AFTER_BEFORE_BIT) & 1) != 0;
         int fullPattern = word & FULL_MASK;
         int pairPattern = word & PAIR_MASK;
         if (fullPattern == COMPACT_VALUE) {
-            return esz >= ESZ_WORD || sve22() ? Ir64Op.SvePermutePredicated.Op.COMPACT : null;
+            return esz >= ESZ_WORD || sve22() ? SveIntegerOp64.PermutePredicated.Op.COMPACT : null;
         }
         if (fullPattern == EXPAND_VALUE) {
-            return sve22() ? Ir64Op.SvePermutePredicated.Op.EXPAND : null;
+            return sve22() ? SveIntegerOp64.PermutePredicated.Op.EXPAND : null;
         }
         if (fullPattern == SPLICE_VALUE) {
-            return Ir64Op.SvePermutePredicated.Op.SPLICE;
+            return SveIntegerOp64.PermutePredicated.Op.SPLICE;
         }
         if (fullPattern == SPLICE_SVE2_VALUE) {
-            return architecture.has(Aarch64Feature.SVE2) ? Ir64Op.SvePermutePredicated.Op.SPLICE_SVE2 : null;
+            return architecture.has(Aarch64Feature.SVE2) ? SveIntegerOp64.PermutePredicated.Op.SPLICE_SVE2 : null;
         }
         if (fullPattern == CPY_M_V_VALUE) {
-            return Ir64Op.SvePermutePredicated.Op.CPY_M_V;
+            return SveIntegerOp64.PermutePredicated.Op.CPY_M_V;
         }
         if (fullPattern == CPY_M_R_VALUE) {
-            return Ir64Op.SvePermutePredicated.Op.CPY_M_R;
+            return SveIntegerOp64.PermutePredicated.Op.CPY_M_R;
         }
         if (pairPattern == CLAST_Z_VALUE) {
-            return before ? Ir64Op.SvePermutePredicated.Op.CLASTB_Z : Ir64Op.SvePermutePredicated.Op.CLASTA_Z;
+            return before ? SveIntegerOp64.PermutePredicated.Op.CLASTB_Z : SveIntegerOp64.PermutePredicated.Op.CLASTA_Z;
         }
         if (pairPattern == CLAST_V_VALUE) {
-            return before ? Ir64Op.SvePermutePredicated.Op.CLASTB_V : Ir64Op.SvePermutePredicated.Op.CLASTA_V;
+            return before ? SveIntegerOp64.PermutePredicated.Op.CLASTB_V : SveIntegerOp64.PermutePredicated.Op.CLASTA_V;
         }
         if (pairPattern == CLAST_R_VALUE) {
-            return before ? Ir64Op.SvePermutePredicated.Op.CLASTB_R : Ir64Op.SvePermutePredicated.Op.CLASTA_R;
+            return before ? SveIntegerOp64.PermutePredicated.Op.CLASTB_R : SveIntegerOp64.PermutePredicated.Op.CLASTA_R;
         }
         if (pairPattern == LAST_V_VALUE) {
-            return before ? Ir64Op.SvePermutePredicated.Op.LASTB_V : Ir64Op.SvePermutePredicated.Op.LASTA_V;
+            return before ? SveIntegerOp64.PermutePredicated.Op.LASTB_V : SveIntegerOp64.PermutePredicated.Op.LASTA_V;
         }
         if (pairPattern == LAST_R_VALUE) {
-            return before ? Ir64Op.SvePermutePredicated.Op.LASTB_R : Ir64Op.SvePermutePredicated.Op.LASTA_R;
+            return before ? SveIntegerOp64.PermutePredicated.Op.LASTB_R : SveIntegerOp64.PermutePredicated.Op.LASTA_R;
         }
         return decodeReverse(word, esz);
     }
 
     /// `REVB`/`REVH`/`REVW`/`RBIT`/`REVD`, formas `_m` (bit 13 = 0) e `_z` (bit 13 = 1, SVE2.2).
-    private Ir64Op.SvePermutePredicated.Op decodeReverse(int word, int esz) {
+    private SveIntegerOp64.PermutePredicated.Op decodeReverse(int word, int esz) {
         boolean zeroing = ((word >>> ZEROING_BIT) & 1) != 0;
         if (zeroing && !sve22()) {
             return null;
@@ -186,23 +187,23 @@ final class Aarch64SvePredicatedPermuteDecoder {
             if (!zeroing && !sve21()) {
                 return null;
             }
-            return zeroing ? Ir64Op.SvePermutePredicated.Op.REVD_Z : Ir64Op.SvePermutePredicated.Op.REVD_M;
+            return zeroing ? SveIntegerOp64.PermutePredicated.Op.REVD_Z : SveIntegerOp64.PermutePredicated.Op.REVD_M;
         }
         int pattern = word & REVERSE_KIND_MASK & ~(1 << ZEROING_BIT);
         if (pattern == REVB_VALUE) {
-            return esz < 1 ? null : zeroing ? Ir64Op.SvePermutePredicated.Op.REVB_Z
-                    : Ir64Op.SvePermutePredicated.Op.REVB_M;
+            return esz < 1 ? null : zeroing ? SveIntegerOp64.PermutePredicated.Op.REVB_Z
+                    : SveIntegerOp64.PermutePredicated.Op.REVB_M;
         }
         if (pattern == REVH_VALUE) {
-            return esz < ESZ_WORD ? null : zeroing ? Ir64Op.SvePermutePredicated.Op.REVH_Z
-                    : Ir64Op.SvePermutePredicated.Op.REVH_M;
+            return esz < ESZ_WORD ? null : zeroing ? SveIntegerOp64.PermutePredicated.Op.REVH_Z
+                    : SveIntegerOp64.PermutePredicated.Op.REVH_M;
         }
         if (pattern == REVW_VALUE) {
-            return esz != ESZ_DOUBLEWORD ? null : zeroing ? Ir64Op.SvePermutePredicated.Op.REVW_Z
-                    : Ir64Op.SvePermutePredicated.Op.REVW_M;
+            return esz != ESZ_DOUBLEWORD ? null : zeroing ? SveIntegerOp64.PermutePredicated.Op.REVW_Z
+                    : SveIntegerOp64.PermutePredicated.Op.REVW_M;
         }
         if (pattern == RBIT_VALUE) {
-            return zeroing ? Ir64Op.SvePermutePredicated.Op.RBIT_Z : Ir64Op.SvePermutePredicated.Op.RBIT_M;
+            return zeroing ? SveIntegerOp64.PermutePredicated.Op.RBIT_Z : SveIntegerOp64.PermutePredicated.Op.RBIT_M;
         }
         return null;
     }
@@ -215,12 +216,12 @@ final class Aarch64SvePredicatedPermuteDecoder {
         return architecture.has(Aarch64Feature.SVE2_2);
     }
 
-    private static Ir64Op predicate(Ir64Op.SvePermutePredicated.Op op, int esz, int rd, int rn, int rm, long address) {
+    private static Ir64Op predicate(SveIntegerOp64.PermutePredicated.Op op, int esz, int rd, int rn, int rm, long address) {
         return op(op, esz, rd, rn, rm, 0, address);
     }
 
-    private static Ir64Op op(Ir64Op.SvePermutePredicated.Op op, int esz, int rd, int rn, int rm, int pg,
+    private static Ir64Op op(SveIntegerOp64.PermutePredicated.Op op, int esz, int rd, int rn, int rm, int pg,
             long address) {
-        return new Ir64Op.SvePermutePredicated(op, esz, rd, rn, rm, pg, address);
+        return new SveIntegerOp64.PermutePredicated(op, esz, rd, rn, rm, pg, address);
     }
 }

@@ -3,7 +3,7 @@ package dev.vitorsilverio.armjitter.executor64;
 import dev.vitorsilverio.armjitter.advsimd.AdvSimdLanes;
 import dev.vitorsilverio.armjitter.core64.Aarch64Core;
 import dev.vitorsilverio.armjitter.core64.Aarch64FpRegisters;
-import dev.vitorsilverio.armjitter.ir64.Ir64Op;
+import dev.vitorsilverio.armjitter.ir64.FpOp64;
 
 /// Executa a IR de FP escalar de A64 (B6.5.2): aritmética/unárias, comparação, conversão — sibling
 /// de {@link dev.vitorsilverio.armjitter.codegen.executor.IrVfpExecutor} (VFP32), mas sem estado
@@ -15,7 +15,7 @@ final class Ir64FpExecutor {
     }
 
     /// `FADD`/`FSUB`/`FMUL`/`FDIV`/`FNEG`/`FABS`/`FMOV` registrador↔registrador.
-    static boolean executeFpAlu(Aarch64Core core, Ir64Op.Fp64Alu op) {
+    static boolean executeFpAlu(Aarch64Core core, FpOp64.Alu op) {
         Aarch64FpRegisters fp = core.fp();
         if (op.doublePrecision()) {
             fp.setD(op.vd(), computeDouble(fp, op));
@@ -25,7 +25,7 @@ final class Ir64FpExecutor {
         return false;
     }
 
-    private static int computeSingle(Aarch64FpRegisters fp, Ir64Op.Fp64Alu op) {
+    private static int computeSingle(Aarch64FpRegisters fp, FpOp64.Alu op) {
         return switch (op.op()) {
             case ADD -> Float.floatToRawIntBits(fp.sFloat(op.vn()) + fp.sFloat(op.vm()));
             case SUB -> Float.floatToRawIntBits(fp.sFloat(op.vn()) - fp.sFloat(op.vm()));
@@ -54,7 +54,7 @@ final class Ir64FpExecutor {
         };
     }
 
-    private static long computeDouble(Aarch64FpRegisters fp, Ir64Op.Fp64Alu op) {
+    private static long computeDouble(Aarch64FpRegisters fp, FpOp64.Alu op) {
         return switch (op.op()) {
             case ADD -> Double.doubleToRawLongBits(fp.dDouble(op.vn()) + fp.dDouble(op.vm()));
             case SUB -> Double.doubleToRawLongBits(fp.dDouble(op.vn()) - fp.dDouble(op.vm()));
@@ -94,9 +94,9 @@ final class Ir64FpExecutor {
 
     /// `FMADD`/`FMSUB`/`FNMADD`/`FNMSUB` (B8.4): multiplicação-acumulação fundida com
     /// arredondamento único (`Math.fma`). As negações acontecem no BIT DE SINAL antes da `fma`
-    /// (nunca `-x` aritmético) — mesma armadilha de {@link Ir64Op.Fp64Operation#NEG}, ver
-    /// javadoc de {@link Ir64Op.Fp64MultiplyAdd}.
-    static boolean executeFpMultiplyAdd(Aarch64Core core, Ir64Op.Fp64MultiplyAdd op) {
+    /// (nunca `-x` aritmético) — mesma armadilha de {@link FpOp64.Fp64Operation#NEG}, ver
+    /// javadoc de {@link FpOp64.MultiplyAdd}.
+    static boolean executeFpMultiplyAdd(Aarch64Core core, FpOp64.MultiplyAdd op) {
         Aarch64FpRegisters fp = core.fp();
         if (op.doublePrecision()) {
             long vnBits = op.negateProduct() ? fp.d(op.vn()) ^ Long.MIN_VALUE : fp.d(op.vn());
@@ -118,7 +118,7 @@ final class Ir64FpExecutor {
 
     /// `FMOV Sd, #imm`/`FMOV Dd, #imm`: os bits já vêm expandidos do decoder (B6.5.3) — o
     /// executor só grava.
-    static boolean executeFpMoveImmediate(Aarch64Core core, Ir64Op.Fp64MoveImmediate op) {
+    static boolean executeFpMoveImmediate(Aarch64Core core, FpOp64.MoveImmediate op) {
         if (op.doublePrecision()) {
             core.fp().setD(op.vd(), op.immediateBits());
         } else {
@@ -127,12 +127,12 @@ final class Ir64FpExecutor {
         return false;
     }
 
-    /// `FCMP`/`FCMPE`: grava `PSTATE.NZCV` diretamente (ver javadoc de {@link Ir64Op.Fp64Compare}
+    /// `FCMP`/`FCMPE`: grava `PSTATE.NZCV` diretamente (ver javadoc de {@link FpOp64.Compare}
     /// — diferente do precedente VFP32, não existe um segundo passo de transferência de flags em
     /// A64). `signalOnQuietNaN` é carregado sem efeito observável (mesmo precedente de
     /// {@code IrVfpExecutor#executeVfpCompare}, que também não o consulta — este core não modela
     /// traps de exceção de ponto flutuante).
-    static boolean executeFpCompare(Aarch64Core core, Ir64Op.Fp64Compare op) {
+    static boolean executeFpCompare(Aarch64Core core, FpOp64.Compare op) {
         Aarch64FpRegisters fp = core.fp();
         boolean unordered;
         boolean equal;
@@ -181,11 +181,11 @@ final class Ir64FpExecutor {
         return false;
     }
 
-    /// `FCVT` F32↔F64 (leitura literal do épico — ver javadoc de {@link Ir64Op.Fp64Convert}):
+    /// `FCVT` F32↔F64 (leitura literal do épico — ver javadoc de {@link FpOp64.Convert}):
     /// cast direto do Java já é round-to-nearest correto para os dois sentidos (widening exato
     /// F32→F64, narrowing corretamente arredondado F64→F32 — mesma garantia que
     /// {@code IrVfpExecutor} já usa para o precedente `VCVT`/`SQRT`).
-    static boolean executeFpConvert(Aarch64Core core, Ir64Op.Fp64Convert op) {
+    static boolean executeFpConvert(Aarch64Core core, FpOp64.Convert op) {
         Aarch64FpRegisters fp = core.fp();
         switch (op.conversion()) {
             case F32_TO_F64 -> fp.setDDouble(op.vd(), fp.sFloat(op.vm()));
@@ -196,7 +196,7 @@ final class Ir64FpExecutor {
 
     /// `FCSEL` (B8.5) — só LÊ `PSTATE` (nunca escreve), mesmo padrão de
     /// {@code Ir64BlockExecutor#executeConditionalSelect} no mundo inteiro (`CSEL`).
-    static boolean executeFpConditionalSelect(Aarch64Core core, Ir64Op.Fp64ConditionalSelect op) {
+    static boolean executeFpConditionalSelect(Aarch64Core core, FpOp64.ConditionalSelect op) {
         Aarch64FpRegisters fp = core.fp();
         boolean useVn = core.pstate().evalCond(op.condition());
         if (op.doublePrecision()) {
@@ -208,13 +208,13 @@ final class Ir64FpExecutor {
     }
 
     /// `FCCMP`/`FCCMPE` (B8.5) — reaproveita a MESMA tabela de resultado de
-    /// {@link #executeFpCompare} quando {@link Ir64Op.Fp64ConditionalCompare#condition} é
-    /// verdadeira; senão, `NZCV` recebe os 4 bits crus de {@link Ir64Op.Fp64ConditionalCompare#nzcv}
-    /// diretamente, SEM ler {@link Ir64Op.Fp64ConditionalCompare#vn}/{@link
-    /// Ir64Op.Fp64ConditionalCompare#vm} — mesma armadilha de `CCMP`/`CCMN`.
-    static boolean executeFpConditionalCompare(Aarch64Core core, Ir64Op.Fp64ConditionalCompare op) {
+    /// {@link #executeFpCompare} quando {@link FpOp64.ConditionalCompare#condition} é
+    /// verdadeira; senão, `NZCV` recebe os 4 bits crus de {@link FpOp64.ConditionalCompare#nzcv}
+    /// diretamente, SEM ler {@link FpOp64.ConditionalCompare#vn}/{@link
+    /// FpOp64.ConditionalCompare#vm} — mesma armadilha de `CCMP`/`CCMN`.
+    static boolean executeFpConditionalCompare(Aarch64Core core, FpOp64.ConditionalCompare op) {
         if (core.pstate().evalCond(op.condition())) {
-            executeFpCompare(core, new Ir64Op.Fp64Compare(
+            executeFpCompare(core, new FpOp64.Compare(
                     op.doublePrecision(), false, op.signalOnQuietNaN(), op.vn(), op.vm()));
         } else {
             core.pstate().setNzcv(op.nzcv());
@@ -226,7 +226,7 @@ final class Ir64FpExecutor {
     /// valor integral, mantendo o resultado em ponto flutuante. `NaN`/infinito passam intocados
     /// (mesma convenção do restante do executor A64: não há valor integral "mais próximo" de um
     /// deles).
-    static boolean executeFpRound(Aarch64Core core, Ir64Op.Fp64Round op) {
+    static boolean executeFpRound(Aarch64Core core, FpOp64.Round op) {
         Aarch64FpRegisters fp = core.fp();
         if (op.doublePrecision()) {
             fp.setDDouble(op.vd(), roundToIntegral(fp.dDouble(op.vn()), op.direction()));
@@ -240,7 +240,7 @@ final class Ir64FpExecutor {
     /// {@link #roundToIntegral}) e depois satura para o alcance de um inteiro de 32/64 bits com
     /// sinal, mantendo o resultado em ponto flutuante (nunca converte para inteiro de verdade —
     /// Armadilha 1 da task, não confundir com `FCVTZS`/`FCVTZU`).
-    static boolean executeFpRoundRangeLimited(Aarch64Core core, Ir64Op.Fp64RoundRangeLimited op) {
+    static boolean executeFpRoundRangeLimited(Aarch64Core core, FpOp64.RoundRangeLimited op) {
         Aarch64FpRegisters fp = core.fp();
         if (op.doublePrecision()) {
             fp.setDDouble(op.vd(),
@@ -265,7 +265,7 @@ final class Ir64FpExecutor {
     /// `NaN` passa intocado (herdado de {@link #roundToIntegral}, nunca satura); `±Infinito` SATURA
     /// como qualquer valor fora de alcance (não é caso especial — diferente do `NaN`).
     static double roundToIntegralWithRangeLimit(
-            double value, Ir64Op.Fp64RoundingDirection direction, boolean rangeIs64Bit) {
+            double value, FpOp64.Fp64RoundingDirection direction, boolean rangeIs64Bit) {
         double rounded = roundToIntegral(value, direction);
         if (Double.isNaN(rounded)) {
             return rounded;
@@ -283,7 +283,7 @@ final class Ir64FpExecutor {
     /// Package-private (B8.9): reaproveitado por {@link Ir64VectorFpArithmeticExecutor} para
     /// `FRINTx_v`/`FCVTxS_vi`/`FCVTxU_vi` — MESMA tabela de arredondamento do escalar (B8.5), sem
     /// duplicar a lógica.
-    static double roundToIntegral(double value, Ir64Op.Fp64RoundingDirection direction) {
+    static double roundToIntegral(double value, FpOp64.Fp64RoundingDirection direction) {
         if (Double.isNaN(value) || Double.isInfinite(value)) {
             return value;
         }
@@ -316,7 +316,7 @@ final class Ir64FpExecutor {
     }
 
     /// `SCVTF`/`UCVTF`/`FCVTxS`/`FCVTxU` (forma registrador-geral, B8.5) — nos dois sentidos.
-    static boolean executeFpIntegerConvert(Aarch64Core core, Ir64Op.Fp64IntegerConvert op) {
+    static boolean executeFpIntegerConvert(Aarch64Core core, FpOp64.IntegerConvert op) {
         Aarch64FpRegisters fp = core.fp();
         if (op.toFloat()) {
             long raw = core.xForWidth(op.gpReg(), op.wide());
@@ -349,7 +349,7 @@ final class Ir64FpExecutor {
     /// Mesma direção de {@link #roundToIntegral}, mas SEM o curto-circuito NaN/infinito — quem
     /// chama ({@link #saturateToInteger}) precisa do `NaN`/infinito intactos para saturar
     /// corretamente (`FPToFixed`: `NaN`→`0`, infinito→limite da largura).
-    static double roundToIntegralForConversion(double value, Ir64Op.Fp64RoundingDirection direction) {
+    static double roundToIntegralForConversion(double value, FpOp64.Fp64RoundingDirection direction) {
         if (Double.isNaN(value)) {
             return value;
         }
@@ -384,11 +384,11 @@ final class Ir64FpExecutor {
     /// dupla) para `int32` em direção a zero e reduz MÓDULO 2³² (`NaN`/infinito produzem `0`;
     /// nunca satura, diferente de {@link #executeFpIntegerConvert}); `PSTATE.Z` sinaliza se a
     /// conversão foi EXATA (entrada já inteira, dentro de alcance e não `-0.0`) — não a semântica
-    /// comum de "resultado zero" (ver Javadoc de {@link Ir64Op.Fp64JavascriptConvert}, Armadilha
+    /// comum de "resultado zero" (ver Javadoc de {@link FpOp64.JavascriptConvert}, Armadilha
     /// nº2 da task). **Corrigido na B22.7**: a versão original devolvia `0` em overflow e tratava
     /// `-0.0` como exato — o QEMU real reduz módulo 2³² e marca `-0.0` como inexato. Lógica
     /// compartilhada com o `VJCVT` de 32 bits em {@link AdvSimdLanes#javascriptToInt32}.
-    static boolean executeFpJavascriptConvert(Aarch64Core core, Ir64Op.Fp64JavascriptConvert op) {
+    static boolean executeFpJavascriptConvert(Aarch64Core core, FpOp64.JavascriptConvert op) {
         double value = core.fp().dDouble(op.rn());
         core.setXForWidth(op.rd(), AdvSimdLanes.javascriptToInt32(value), false);
         core.pstate().setNzcv(false, AdvSimdLanes.javascriptToInt32IsExact(value), false, false);
@@ -396,7 +396,7 @@ final class Ir64FpExecutor {
     }
 
     /// `FMOV` registrador-geral↔FP escalar (B8.5) — cópia CRUA de bits, sem conversão de valor.
-    static boolean executeFpGeneralRegisterMove(Aarch64Core core, Ir64Op.Fp64GeneralRegisterMove op) {
+    static boolean executeFpGeneralRegisterMove(Aarch64Core core, FpOp64.GeneralRegisterMove op) {
         Aarch64FpRegisters fp = core.fp();
         if (op.toFloat()) {
             long raw = core.xForWidth(op.gpReg(), op.wide());
@@ -419,9 +419,9 @@ final class Ir64FpExecutor {
 
     /// `FMOV_hx`/`FMOV_xh` (B19.26, `FEAT_FP16`) — cópia CRUA de bits entre registrador geral e
     /// `H<n>`. O lado geral é sempre resolvido como `X` completo (`wide=true`): o resultado
-    /// observável não muda com `sf` (ver Javadoc de {@link Ir64Op.Fp64HalfPrecisionGeneralRegisterMove}).
+    /// observável não muda com `sf` (ver Javadoc de {@link FpOp64.HalfPrecisionGeneralRegisterMove}).
     static boolean executeFpHalfPrecisionGeneralRegisterMove(
-            Aarch64Core core, Ir64Op.Fp64HalfPrecisionGeneralRegisterMove op) {
+            Aarch64Core core, FpOp64.HalfPrecisionGeneralRegisterMove op) {
         Aarch64FpRegisters fp = core.fp();
         if (op.toFloat()) {
             long raw = core.xForWidth(op.gpReg(), true) & 0xFFFFL;
@@ -438,8 +438,8 @@ final class Ir64FpExecutor {
     /// `float16ToFloat` já usado por toda conversão de meia precisão do projeto
     /// ({@link AdvSimdLanes#halfBits}/{@link AdvSimdLanes#halfToFloat}). `DOUBLE_TO_HALF` passa por
     /// `float` intermediário — simplificação documentada no Javadoc de
-    /// {@link Ir64Op.Fp64ConvertHalfPrecision} (double rounding).
-    static boolean executeFpConvertHalfPrecision(Aarch64Core core, Ir64Op.Fp64ConvertHalfPrecision op) {
+    /// {@link FpOp64.ConvertHalfPrecision} (double rounding).
+    static boolean executeFpConvertHalfPrecision(Aarch64Core core, FpOp64.ConvertHalfPrecision op) {
         Aarch64FpRegisters fp = core.fp();
         switch (op.conversion()) {
             case HALF_TO_SINGLE ->

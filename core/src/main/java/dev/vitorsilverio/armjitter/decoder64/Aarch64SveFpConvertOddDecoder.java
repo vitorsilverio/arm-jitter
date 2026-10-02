@@ -3,11 +3,12 @@ package dev.vitorsilverio.armjitter.decoder64;
 import dev.vitorsilverio.armjitter.arch64.Aarch64Architecture;
 import dev.vitorsilverio.armjitter.arch64.Aarch64Feature;
 import dev.vitorsilverio.armjitter.ir64.Ir64Op;
+import dev.vitorsilverio.armjitter.ir64.SveFpOp64;
 
 /// Decoder SVE2 da B17.23: as 12 conversões "odd elements" (`FCVTNT_sh`/`FCVTLT_hs`/`FCVTNT_ds`/`FCVTLT_sd`/
 /// `FCVTXNT_ds`/`BFCVTNT`, formas `_m`/`_z`, prefixo `0x64`) e `FLOGB` (`_m` no `0x65`, `_z` no `0x64`).
 /// `FCVTX_ds_m` (a 13ª linha do recorte da B17.23) tem seu PRÓPRIO método aqui, mas devolve um
-/// {@link Ir64Op.SveFpUnary} — reusa o MESMO `Kind`/executor de `FCVTX_ds_z` (B17.16, `Op.FCVTX`), já que é a
+/// {@link SveFpOp64.FpUnary} — reusa o MESMO `Kind`/executor de `FCVTX_ds_z` (B17.16, `Op.FCVTX`), já que é a
 /// mesma instrução decodificada de um layout de bits diferente (Achado 2 da task).
 ///
 /// Padrões medidos byte a byte contra `target/isa-decode/sve.decode` (linhas 1954-1972) e contra
@@ -88,32 +89,32 @@ final class Aarch64SveFpConvertOddDecoder {
     /// {@code zeroing}, já resolvido pelo chamador a partir de `b`).
     private Ir64Op decodeExact(int a, int b, int c, int word, long address) {
         boolean zeroing = b == ODD_B_ZEROING;
-        Ir64Op.SveFpConvertOddElements.Op op;
+        SveFpOp64.FpConvertOddElements.Op op;
         int wideEsz;
         boolean roundToOdd = false;
         boolean bfloat16 = false;
         if (a == 0b00 && c == 0b10) {
-            op = Ir64Op.SveFpConvertOddElements.Op.FCVTXNT;
+            op = SveFpOp64.FpConvertOddElements.Op.FCVTXNT;
             wideEsz = 3;
             roundToOdd = true;
         } else if (a == 0b10 && c == 0b00) {
-            op = Ir64Op.SveFpConvertOddElements.Op.FCVTNT;
+            op = SveFpOp64.FpConvertOddElements.Op.FCVTNT;
             wideEsz = 2;
         } else if (a == 0b10 && c == 0b10) {
             if (!architecture.has(Aarch64Feature.BFLOAT16)) {
                 return null; // `BFCVTNT`
             }
-            op = Ir64Op.SveFpConvertOddElements.Op.FCVTNT;
+            op = SveFpOp64.FpConvertOddElements.Op.FCVTNT;
             wideEsz = 2;
             bfloat16 = true;
         } else if (a == 0b10 && c == 0b01) {
-            op = Ir64Op.SveFpConvertOddElements.Op.FCVTLT;
+            op = SveFpOp64.FpConvertOddElements.Op.FCVTLT;
             wideEsz = 2;
         } else if (a == 0b11 && c == 0b10) {
-            op = Ir64Op.SveFpConvertOddElements.Op.FCVTNT;
+            op = SveFpOp64.FpConvertOddElements.Op.FCVTNT;
             wideEsz = 3;
         } else if (a == 0b11 && c == 0b11) {
-            op = Ir64Op.SveFpConvertOddElements.Op.FCVTLT;
+            op = SveFpOp64.FpConvertOddElements.Op.FCVTLT;
             wideEsz = 3;
         } else {
             return null;
@@ -121,7 +122,7 @@ final class Aarch64SveFpConvertOddDecoder {
         int pg = field(word, ODD_PG_SHIFT, PREDICATE_MASK);
         int rn = field(word, 5, REGISTER_MASK);
         int rd = field(word, 0, REGISTER_MASK);
-        return new Ir64Op.SveFpConvertOddElements(op, wideEsz, roundToOdd, bfloat16, zeroing, rd, rn, pg, address);
+        return new SveFpOp64.FpConvertOddElements(op, wideEsz, roundToOdd, bfloat16, zeroing, rd, rn, pg, address);
     }
 
     private Ir64Op decodeFcvtxDsM(int word, long address) {
@@ -131,7 +132,7 @@ final class Aarch64SveFpConvertOddDecoder {
         int pg = field(word, ODD_PG_SHIFT, PREDICATE_MASK);
         int rn = field(word, 5, REGISTER_MASK);
         int rd = field(word, 0, REGISTER_MASK);
-        return new Ir64Op.SveFpUnary(Ir64Op.SveFpUnary.Op.FCVTX, 3, 2, false, rd, rn, pg, address);
+        return new SveFpOp64.FpUnary(SveFpOp64.FpUnary.Op.FCVTX, 3, 2, false, rd, rn, pg, address);
     }
 
     private Ir64Op decodeFlogbM(int word, long address) {
@@ -142,7 +143,7 @@ final class Aarch64SveFpConvertOddDecoder {
         int pg = field(word, ODD_PG_SHIFT, PREDICATE_MASK);
         int rn = field(word, 5, REGISTER_MASK);
         int rd = field(word, 0, REGISTER_MASK);
-        return new Ir64Op.SveFpLogB(esz, false, rd, rn, pg, address);
+        return new SveFpOp64.FpLogB(esz, false, rd, rn, pg, address);
     }
 
     private Ir64Op decodeFlogbZ(int word, long address) {
@@ -153,7 +154,7 @@ final class Aarch64SveFpConvertOddDecoder {
         int pg = field(word, ODD_PG_SHIFT, PREDICATE_MASK);
         int rn = field(word, 5, REGISTER_MASK);
         int rd = field(word, 0, REGISTER_MASK);
-        return new Ir64Op.SveFpLogB(esz, true, rd, rn, pg, address);
+        return new SveFpOp64.FpLogB(esz, true, rd, rn, pg, address);
     }
 
     private static int field(int word, int shift, int mask) {

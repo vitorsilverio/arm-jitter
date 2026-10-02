@@ -3,7 +3,8 @@ package dev.vitorsilverio.armjitter.decoder64;
 import dev.vitorsilverio.armjitter.arch64.Aarch64Architecture;
 import dev.vitorsilverio.armjitter.arch64.Aarch64Feature;
 import dev.vitorsilverio.armjitter.ir64.Ir64Op;
-import dev.vitorsilverio.armjitter.ir64.Ir64Op.SveFpUnary.Op;
+import dev.vitorsilverio.armjitter.ir64.SveFpOp64.FpUnary.Op;
+import dev.vitorsilverio.armjitter.ir64.SveFpOp64;
 
 /// Decoder SVE das operações unárias de ponto flutuante predicadas da B17.16: as 105 linhas de `### SVE FP Unary
 /// Operations Predicated Group` do `sve.decode` do QEMU (conversões de precisão, FP↔inteiro, `FRINT*`, `FRINT32/64`,
@@ -172,7 +173,7 @@ final class Aarch64SveFpUnaryDecoder {
                 }
                 destination = source;
             }
-            return new Ir64Op.SveFpUnary(e.op, source, destination, e.zeroing, word & REGISTER_MASK,
+            return new SveFpOp64.FpUnary(e.op, source, destination, e.zeroing, word & REGISTER_MASK,
                     (word >>> RN_SHIFT) & REGISTER_MASK, (word >>> PG_SHIFT) & PREDICATE_MASK, address);
         }
         return null;

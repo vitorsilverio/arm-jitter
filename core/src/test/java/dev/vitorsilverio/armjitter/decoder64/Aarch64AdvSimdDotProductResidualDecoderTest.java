@@ -1,6 +1,7 @@
 package dev.vitorsilverio.armjitter.decoder64;
 
 import dev.vitorsilverio.armjitter.arch64.Aarch64Architecture;
+import dev.vitorsilverio.armjitter.ir64.AdvSimdIntegerOp64;
 import dev.vitorsilverio.armjitter.ir64.Ir64Op;
 import dev.vitorsilverio.armjitter.memory.AddressSpace64;
 import dev.vitorsilverio.armjitter.support.TestAddressSpace;
@@ -63,8 +64,8 @@ class Aarch64AdvSimdDotProductResidualDecoderTest {
 
     @Test
     void sdotVector4s() {
-        Ir64Op.VectorIntegerDotProduct op =
-                (Ir64Op.VectorIntegerDotProduct) decode(DOTPROD_DECODER, SDOT_V0_4S_V1_16B_V2_16B);
+        AdvSimdIntegerOp64.IntegerDotProduct op =
+                (AdvSimdIntegerOp64.IntegerDotProduct) decode(DOTPROD_DECODER, SDOT_V0_4S_V1_16B_V2_16B);
         assertTrue(op.q());
         assertTrue(op.signedN());
         assertTrue(op.signedM());
@@ -75,8 +76,8 @@ class Aarch64AdvSimdDotProductResidualDecoderTest {
 
     @Test
     void udotVector4s() {
-        Ir64Op.VectorIntegerDotProduct op =
-                (Ir64Op.VectorIntegerDotProduct) decode(DOTPROD_DECODER, UDOT_V0_4S_V1_16B_V2_16B);
+        AdvSimdIntegerOp64.IntegerDotProduct op =
+                (AdvSimdIntegerOp64.IntegerDotProduct) decode(DOTPROD_DECODER, UDOT_V0_4S_V1_16B_V2_16B);
         assertTrue(op.q());
         assertFalse(op.signedN());
         assertFalse(op.signedM());
@@ -84,8 +85,8 @@ class Aarch64AdvSimdDotProductResidualDecoderTest {
 
     @Test
     void sdotVector2s() {
-        Ir64Op.VectorIntegerDotProduct op =
-                (Ir64Op.VectorIntegerDotProduct) decode(DOTPROD_DECODER, SDOT_V3_2S_V4_8B_V5_8B);
+        AdvSimdIntegerOp64.IntegerDotProduct op =
+                (AdvSimdIntegerOp64.IntegerDotProduct) decode(DOTPROD_DECODER, SDOT_V3_2S_V4_8B_V5_8B);
         assertFalse(op.q());
         assertTrue(op.signedN());
         assertTrue(op.signedM());
@@ -96,8 +97,8 @@ class Aarch64AdvSimdDotProductResidualDecoderTest {
 
     @Test
     void udotVector2s() {
-        Ir64Op.VectorIntegerDotProduct op =
-                (Ir64Op.VectorIntegerDotProduct) decode(DOTPROD_DECODER, UDOT_V3_2S_V4_8B_V5_8B);
+        AdvSimdIntegerOp64.IntegerDotProduct op =
+                (AdvSimdIntegerOp64.IntegerDotProduct) decode(DOTPROD_DECODER, UDOT_V3_2S_V4_8B_V5_8B);
         assertFalse(op.q());
         assertFalse(op.signedN());
         assertFalse(op.signedM());
@@ -107,8 +108,8 @@ class Aarch64AdvSimdDotProductResidualDecoderTest {
 
     @Test
     void sdotIndexedIndex0() {
-        Ir64Op.VectorIntegerDotProductByElement op =
-                (Ir64Op.VectorIntegerDotProductByElement) decode(DOTPROD_DECODER, SDOT_VI_V0_4S_V1_16B_V2_4B0);
+        AdvSimdIntegerOp64.IntegerDotProductByElement op =
+                (AdvSimdIntegerOp64.IntegerDotProductByElement) decode(DOTPROD_DECODER, SDOT_VI_V0_4S_V1_16B_V2_4B0);
         assertTrue(op.q());
         assertTrue(op.signedN());
         assertTrue(op.signedM());
@@ -120,29 +121,29 @@ class Aarch64AdvSimdDotProductResidualDecoderTest {
 
     @Test
     void sdotIndexedIndex1() {
-        Ir64Op.VectorIntegerDotProductByElement op =
-                (Ir64Op.VectorIntegerDotProductByElement) decode(DOTPROD_DECODER, SDOT_VI_V0_4S_V1_16B_V2_4B1);
+        AdvSimdIntegerOp64.IntegerDotProductByElement op =
+                (AdvSimdIntegerOp64.IntegerDotProductByElement) decode(DOTPROD_DECODER, SDOT_VI_V0_4S_V1_16B_V2_4B1);
         assertEquals(1, op.index());
     }
 
     @Test
     void sdotIndexedIndex2() {
-        Ir64Op.VectorIntegerDotProductByElement op =
-                (Ir64Op.VectorIntegerDotProductByElement) decode(DOTPROD_DECODER, SDOT_VI_V0_4S_V1_16B_V2_4B2);
+        AdvSimdIntegerOp64.IntegerDotProductByElement op =
+                (AdvSimdIntegerOp64.IntegerDotProductByElement) decode(DOTPROD_DECODER, SDOT_VI_V0_4S_V1_16B_V2_4B2);
         assertEquals(2, op.index());
     }
 
     @Test
     void sdotIndexedIndex3() {
-        Ir64Op.VectorIntegerDotProductByElement op =
-                (Ir64Op.VectorIntegerDotProductByElement) decode(DOTPROD_DECODER, SDOT_VI_V0_4S_V1_16B_V2_4B3);
+        AdvSimdIntegerOp64.IntegerDotProductByElement op =
+                (AdvSimdIntegerOp64.IntegerDotProductByElement) decode(DOTPROD_DECODER, SDOT_VI_V0_4S_V1_16B_V2_4B3);
         assertEquals(3, op.index());
     }
 
     @Test
     void udotIndexedIndex0() {
-        Ir64Op.VectorIntegerDotProductByElement op =
-                (Ir64Op.VectorIntegerDotProductByElement) decode(DOTPROD_DECODER, UDOT_VI_V0_4S_V1_16B_V2_4B0);
+        AdvSimdIntegerOp64.IntegerDotProductByElement op =
+                (AdvSimdIntegerOp64.IntegerDotProductByElement) decode(DOTPROD_DECODER, UDOT_VI_V0_4S_V1_16B_V2_4B0);
         assertFalse(op.signedN());
         assertFalse(op.signedM());
         assertEquals(0, op.index());
@@ -150,29 +151,29 @@ class Aarch64AdvSimdDotProductResidualDecoderTest {
 
     @Test
     void udotIndexedIndex1() {
-        Ir64Op.VectorIntegerDotProductByElement op =
-                (Ir64Op.VectorIntegerDotProductByElement) decode(DOTPROD_DECODER, UDOT_VI_V0_4S_V1_16B_V2_4B1);
+        AdvSimdIntegerOp64.IntegerDotProductByElement op =
+                (AdvSimdIntegerOp64.IntegerDotProductByElement) decode(DOTPROD_DECODER, UDOT_VI_V0_4S_V1_16B_V2_4B1);
         assertEquals(1, op.index());
     }
 
     @Test
     void udotIndexedIndex2() {
-        Ir64Op.VectorIntegerDotProductByElement op =
-                (Ir64Op.VectorIntegerDotProductByElement) decode(DOTPROD_DECODER, UDOT_VI_V0_4S_V1_16B_V2_4B2);
+        AdvSimdIntegerOp64.IntegerDotProductByElement op =
+                (AdvSimdIntegerOp64.IntegerDotProductByElement) decode(DOTPROD_DECODER, UDOT_VI_V0_4S_V1_16B_V2_4B2);
         assertEquals(2, op.index());
     }
 
     @Test
     void udotIndexedIndex3() {
-        Ir64Op.VectorIntegerDotProductByElement op =
-                (Ir64Op.VectorIntegerDotProductByElement) decode(DOTPROD_DECODER, UDOT_VI_V0_4S_V1_16B_V2_4B3);
+        AdvSimdIntegerOp64.IntegerDotProductByElement op =
+                (AdvSimdIntegerOp64.IntegerDotProductByElement) decode(DOTPROD_DECODER, UDOT_VI_V0_4S_V1_16B_V2_4B3);
         assertEquals(3, op.index());
     }
 
     @Test
     void sdotIndexed2s() {
-        Ir64Op.VectorIntegerDotProductByElement op =
-                (Ir64Op.VectorIntegerDotProductByElement) decode(DOTPROD_DECODER, SDOT_VI_V0_2S_V1_8B_V2_4B3);
+        AdvSimdIntegerOp64.IntegerDotProductByElement op =
+                (AdvSimdIntegerOp64.IntegerDotProductByElement) decode(DOTPROD_DECODER, SDOT_VI_V0_2S_V1_8B_V2_4B3);
         assertFalse(op.q());
         assertEquals(3, op.index());
     }
@@ -181,7 +182,7 @@ class Aarch64AdvSimdDotProductResidualDecoderTest {
     void sdotIndexedRmIsFullFiveBitsUnlikeUsdotViRestrictedToV15() {
         // `USDOT_vi`/`SUDOT_vi` restringem `Rm` a `V0`-`V15` (`@qrrx_s` com `Rm` de 4 bits); `SDOT_vi`/
         // `UDOT_vi` usam o `Rm` de 5 bits LIVRES do formato geral `@qrrx_s` — `v31` é alcançável.
-        Ir64Op.VectorIntegerDotProductByElement op = (Ir64Op.VectorIntegerDotProductByElement)
+        AdvSimdIntegerOp64.IntegerDotProductByElement op = (AdvSimdIntegerOp64.IntegerDotProductByElement)
                 decode(DOTPROD_DECODER, SDOT_VI_V0_4S_V1_16B_V31_4B3);
         assertEquals(31, op.rm());
         assertEquals(3, op.index());

@@ -2,7 +2,7 @@ package dev.vitorsilverio.armjitter.executor64;
 
 import dev.vitorsilverio.armjitter.core64.Aarch64Core;
 import dev.vitorsilverio.armjitter.core64.Aarch64FpRegisters;
-import dev.vitorsilverio.armjitter.ir64.Ir64Op;
+import dev.vitorsilverio.armjitter.ir64.AdvSimdFpOp64;
 import dev.vitorsilverio.armjitter.memory.AddressSpace64;
 import dev.vitorsilverio.armjitter.support.TestAddressSpace;
 import org.junit.jupiter.api.Test;
@@ -39,7 +39,7 @@ class Ir64VectorFpArithmeticExecutorFhmTest {
             fp.setElement(2, i, 1, f16(2));     // Vm.4H = [2,2,2,2]
         }
         fp.setElement(0, 0, 2, Float.floatToRawIntBits(0.5f)); // acumulador pré-existente na lane0
-        EXECUTOR.executeOp(core, new Ir64Op.VectorFpMultiplyAddLong(true, false, false, 0, 1, 2));
+        EXECUTOR.executeOp(core, new AdvSimdFpOp64.FpMultiplyAddLong(true, false, false, 0, 1, 2));
         assertEquals(2.5f, f32At(fp, 0, 0), "0.5 + 1*2");
         assertEquals(4.0f, f32At(fp, 0, 1), "0 + 2*2");
         assertEquals(6.0f, f32At(fp, 0, 2), "0 + 3*2");
@@ -56,7 +56,7 @@ class Ir64VectorFpArithmeticExecutorFhmTest {
         // sujar só os 64 bits ALTOS (`word(1)`, `WORDS_PER_REGISTER=2` ⇒ "word" aqui é de 64 bits) —
         // sujar os 64 bits BAIXOS corromperia o próprio acumulador que a op vai ler.
         fp.setQ(0, fp.low64(0), 0xFFFF_FFFF_FFFF_FFFFL);
-        EXECUTOR.executeOp(core, new Ir64Op.VectorFpMultiplyAddLong(false, false, false, 0, 1, 2));
+        EXECUTOR.executeOp(core, new AdvSimdFpOp64.FpMultiplyAddLong(false, false, false, 0, 1, 2));
         assertEquals(9.0f, f32At(fp, 0, 0));
         assertEquals(0L, fp.word(1), "q=false zera os 64 bits altos de Vd (escrita destructive)");
     }
@@ -68,7 +68,7 @@ class Ir64VectorFpArithmeticExecutorFhmTest {
         fp.setElement(1, 0, 1, f16(3));
         fp.setElement(2, 0, 1, f16(4));
         fp.setElement(0, 0, 2, Float.floatToRawIntBits(20f));
-        EXECUTOR.executeOp(core, new Ir64Op.VectorFpMultiplyAddLong(false, false, true, 0, 1, 2));
+        EXECUTOR.executeOp(core, new AdvSimdFpOp64.FpMultiplyAddLong(false, false, true, 0, 1, 2));
         assertEquals(8f, f32At(fp, 0, 0), "20 - 3*4");
     }
 
@@ -85,7 +85,7 @@ class Ir64VectorFpArithmeticExecutorFhmTest {
             fp.setElement(1, 4 + i, 1, f16(i + 1)); // bloco alto = [1,2,3,4]
             fp.setElement(2, 4 + i, 1, f16(2));
         }
-        EXECUTOR.executeOp(core, new Ir64Op.VectorFpMultiplyAddLong(true, true, false, 0, 1, 2));
+        EXECUTOR.executeOp(core, new AdvSimdFpOp64.FpMultiplyAddLong(true, true, false, 0, 1, 2));
         assertEquals(2.0f, f32At(fp, 0, 0));
         assertEquals(4.0f, f32At(fp, 0, 1));
         assertEquals(6.0f, f32At(fp, 0, 2));
@@ -99,7 +99,7 @@ class Ir64VectorFpArithmeticExecutorFhmTest {
         fp.setElement(1, 4, 1, f16(5));
         fp.setElement(2, 4, 1, f16(2));
         fp.setElement(0, 0, 2, Float.floatToRawIntBits(100f));
-        EXECUTOR.executeOp(core, new Ir64Op.VectorFpMultiplyAddLong(true, true, true, 0, 1, 2));
+        EXECUTOR.executeOp(core, new AdvSimdFpOp64.FpMultiplyAddLong(true, true, true, 0, 1, 2));
         assertEquals(90f, f32At(fp, 0, 0), "100 - 5*2");
     }
 
@@ -119,7 +119,7 @@ class Ir64VectorFpArithmeticExecutorFhmTest {
         fp.setElement(0, 1, 1, f16(3)); // Vn.H[1] — MESMOS bits que a escrita da lane0 sobrescreve
         fp.setElement(2, 0, 1, f16(10));
         fp.setElement(2, 1, 1, f16(10));
-        EXECUTOR.executeOp(core, new Ir64Op.VectorFpMultiplyAddLong(false, false, false, 0, 0, 2));
+        EXECUTOR.executeOp(core, new AdvSimdFpOp64.FpMultiplyAddLong(false, false, false, 0, 0, 2));
         assertEquals(30f, f32At(fp, 0, 1),
                 "3*10 — Vn.H[1] lido ANTES da escrita da lane0 corromper os bits (Rd==Rn)");
     }
@@ -132,7 +132,7 @@ class Ir64VectorFpArithmeticExecutorFhmTest {
         fp.setElement(1, 1, 1, f16(3));
         fp.setElement(0, 0, 1, f16(10)); // Vm.H[0] == Vd, mesmos bits da escrita f32 da lane0
         fp.setElement(0, 1, 1, f16(10)); // Vm.H[1] == Vd, idem
-        EXECUTOR.executeOp(core, new Ir64Op.VectorFpMultiplyAddLong(false, false, false, 0, 1, 0));
+        EXECUTOR.executeOp(core, new AdvSimdFpOp64.FpMultiplyAddLong(false, false, false, 0, 1, 0));
         assertEquals(30f, f32At(fp, 0, 1),
                 "3*10 — Vm.H[1] lido ANTES da escrita da lane0 corromper os bits (Rd==Rm)");
     }
@@ -173,7 +173,7 @@ class Ir64VectorFpArithmeticExecutorFhmTest {
             fp.setElement(1, i, 1, f16(i + 1)); // Vn.4H = [1,2,3,4]
         }
         fp.setElement(2, 3, 1, f16(10)); // Vm elemento fixo índice 3
-        EXECUTOR.executeOp(core, new Ir64Op.VectorFpMultiplyAddLongByElement(true, false, false, 0, 1, 2, 3));
+        EXECUTOR.executeOp(core, new AdvSimdFpOp64.FpMultiplyAddLongByElement(true, false, false, 0, 1, 2, 3));
         assertEquals(10f, f32At(fp, 0, 0));
         assertEquals(20f, f32At(fp, 0, 1));
         assertEquals(30f, f32At(fp, 0, 2));
@@ -192,7 +192,7 @@ class Ir64VectorFpArithmeticExecutorFhmTest {
         }
         fp.setElement(2, 7, 1, f16(2)); // Vm elemento fixo índice 7 (só existe com Q real, mas
         // aqui testamos só a leitura do índice cru — decoder já garante 0-7 real)
-        EXECUTOR.executeOp(core, new Ir64Op.VectorFpMultiplyAddLongByElement(true, true, false, 0, 1, 2, 7));
+        EXECUTOR.executeOp(core, new AdvSimdFpOp64.FpMultiplyAddLongByElement(true, true, false, 0, 1, 2, 7));
         assertEquals(2f, f32At(fp, 0, 0));
         assertEquals(4f, f32At(fp, 0, 1));
         assertEquals(6f, f32At(fp, 0, 2));
@@ -206,7 +206,7 @@ class Ir64VectorFpArithmeticExecutorFhmTest {
         fp.setElement(1, 0, 1, f16(3));
         fp.setElement(2, 0, 1, f16(4));
         fp.setElement(0, 0, 2, Float.floatToRawIntBits(20f));
-        EXECUTOR.executeOp(core, new Ir64Op.VectorFpMultiplyAddLongByElement(false, false, true, 0, 1, 2, 0));
+        EXECUTOR.executeOp(core, new AdvSimdFpOp64.FpMultiplyAddLongByElement(false, false, true, 0, 1, 2, 0));
         assertEquals(8f, f32At(fp, 0, 0), "20 - 3*4");
     }
 
@@ -216,7 +216,7 @@ class Ir64VectorFpArithmeticExecutorFhmTest {
         Aarch64FpRegisters fp = core.fp();
         fp.setElement(0, 0, 1, f16(2)); // Vn.H[0] == Vd (lido)
         fp.setElement(2, 0, 1, f16(5));
-        EXECUTOR.executeOp(core, new Ir64Op.VectorFpMultiplyAddLongByElement(false, false, false, 0, 0, 2, 0));
+        EXECUTOR.executeOp(core, new AdvSimdFpOp64.FpMultiplyAddLongByElement(false, false, false, 0, 0, 2, 0));
         assertEquals(10f, f32At(fp, 0, 0), "2*5, lido ANTES da escrita (Rd==Rn)");
     }
 
@@ -226,7 +226,7 @@ class Ir64VectorFpArithmeticExecutorFhmTest {
         Aarch64FpRegisters fp = core.fp();
         fp.setElement(1, 0, 1, f16(2));
         fp.setElement(0, 0, 1, f16(5)); // Vm.H[0] == Vd (lido, elemento fixo)
-        EXECUTOR.executeOp(core, new Ir64Op.VectorFpMultiplyAddLongByElement(false, false, false, 0, 1, 0, 0));
+        EXECUTOR.executeOp(core, new AdvSimdFpOp64.FpMultiplyAddLongByElement(false, false, false, 0, 1, 0, 0));
         assertEquals(10f, f32At(fp, 0, 0), "2*5, lido ANTES da escrita (Rd==Rm)");
     }
 }

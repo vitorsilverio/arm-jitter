@@ -3,6 +3,7 @@ package dev.vitorsilverio.armjitter.decoder64;
 import dev.vitorsilverio.armjitter.arch64.Aarch64Architecture;
 import dev.vitorsilverio.armjitter.arch64.Aarch64Feature;
 import dev.vitorsilverio.armjitter.ir64.Ir64Op;
+import dev.vitorsilverio.armjitter.ir64.SmeOp64;
 import dev.vitorsilverio.armjitter.memory.AddressSpace64;
 import dev.vitorsilverio.armjitter.support.TestAddressSpace;
 import org.junit.jupiter.api.Test;
@@ -232,9 +233,9 @@ class Aarch64SmeMultiVectorMultipleDecoderTest {
             "0xC1E8B945, FAMIN, 3, 4, 4, 8",   // famin {z4.d-z7.d}, {z4.d-z7.d}, {z8.d-z11.d}
             "0xC1F8B95D, FAMIN, 3, 4, 28, 24",   // famin {z28.d-z31.d}, {z28.d-z31.d}, {z24.d-z27.d}
     })
-    void decodesEveryEncodingFromTheAssembler(String hex, Ir64Op.SmeMultiVectorSingle.Op expectedOp, int esz, int count,
+    void decodesEveryEncodingFromTheAssembler(String hex, SmeOp64.MultiVectorSingle.Op expectedOp, int esz, int count,
             int zdn, int zm) {
-        Ir64Op.SmeMultiVectorSingle op = assertInstanceOf(Ir64Op.SmeMultiVectorSingle.class,
+        SmeOp64.MultiVectorSingle op = assertInstanceOf(SmeOp64.MultiVectorSingle.class,
                 decode(SME2_FP8_FAMINMAX, (int) Long.decode(hex).longValue()));
         assertEquals(expectedOp, op.op());
         assertEquals(esz, op.esz());
@@ -248,10 +249,10 @@ class Aarch64SmeMultiVectorMultipleDecoderTest {
     @Test
     void zmExtractorsUseTheirOwnBitBases() {
         // %zm_ax2 = bits[20:17] × 2: campo 0b0011 endereça Z6; %zm_ax4 = bits[20:18] × 4: campo 0b011 endereça Z12.
-        Ir64Op.SmeMultiVectorSingle x2 = assertInstanceOf(Ir64Op.SmeMultiVectorSingle.class,
+        SmeOp64.MultiVectorSingle x2 = assertInstanceOf(SmeOp64.MultiVectorSingle.class,
                 decode(SME2, 0xC120B000 | 0b0011 << 17));
         assertEquals(6, x2.zm());
-        Ir64Op.SmeMultiVectorSingle x4 = assertInstanceOf(Ir64Op.SmeMultiVectorSingle.class,
+        SmeOp64.MultiVectorSingle x4 = assertInstanceOf(SmeOp64.MultiVectorSingle.class,
                 decode(SME2, 0xC120B800 | 0b011 << 18));
         assertEquals(12, x4.zm());
     }
@@ -282,9 +283,9 @@ class Aarch64SmeMultiVectorMultipleDecoderTest {
     @Test
     void singleFormIsNotConfusedWithMultipleOne() {
         // 1010 (n1, Zm avulso) x 1011 (nn, grupo): a palavra só difere no bit 12.
-        Ir64Op.SmeMultiVectorSingle single = assertInstanceOf(Ir64Op.SmeMultiVectorSingle.class,
+        SmeOp64.MultiVectorSingle single = assertInstanceOf(SmeOp64.MultiVectorSingle.class,
                 decode(SME2_FP8_FAMINMAX, 0xC124A002));
-        Ir64Op.SmeMultiVectorSingle multiple = assertInstanceOf(Ir64Op.SmeMultiVectorSingle.class,
+        SmeOp64.MultiVectorSingle multiple = assertInstanceOf(SmeOp64.MultiVectorSingle.class,
                 decode(SME2_FP8_FAMINMAX, 0xC124B002));
         assertEquals(false, single.zmIsGroup());
         assertEquals(true, multiple.zmIsGroup());
@@ -294,7 +295,7 @@ class Aarch64SmeMultiVectorMultipleDecoderTest {
     void famaxOnlyExistsAsMultipleVectorsAndNeedsFaminmax() {
         int famaxX2 = 0xC164B142;
         assertThrows(UnsupportedOperationException.class, () -> decode(SME2, famaxX2));
-        assertInstanceOf(Ir64Op.SmeMultiVectorSingle.class, decode(SME2_FP8_FAMINMAX, famaxX2));
+        assertInstanceOf(SmeOp64.MultiVectorSingle.class, decode(SME2_FP8_FAMINMAX, famaxX2));
         // FAMAX_n1 não existe: o mesmo opcode com o prefixo 1010 é recusado mesmo com as duas features.
         assertThrows(UnsupportedOperationException.class, () -> decode(SME2_FP8_FAMINMAX, famaxX2 & ~0x1000));
     }
@@ -311,7 +312,7 @@ class Aarch64SmeMultiVectorMultipleDecoderTest {
     @Test
     void fscaleAlsoNeedsFp8ButTheOtherOnesDoNot() {
         assertThrows(UnsupportedOperationException.class, () -> decode(SME2, 0xC164B182));
-        assertInstanceOf(Ir64Op.SmeMultiVectorSingle.class, decode(SME2, 0xC164B102));
-        assertInstanceOf(Ir64Op.SmeMultiVectorSingle.class, decode(SME2_FP8_FAMINMAX, 0xC164B182));
+        assertInstanceOf(SmeOp64.MultiVectorSingle.class, decode(SME2, 0xC164B102));
+        assertInstanceOf(SmeOp64.MultiVectorSingle.class, decode(SME2_FP8_FAMINMAX, 0xC164B182));
     }
 }

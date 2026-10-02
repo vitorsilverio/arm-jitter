@@ -8,11 +8,13 @@ import dev.vitorsilverio.armjitter.core64.Aarch64Core;
 import dev.vitorsilverio.armjitter.core64.Aarch64ExceptionLevel;
 import dev.vitorsilverio.armjitter.ir64.Aarch64AddressTranslateForm;
 import dev.vitorsilverio.armjitter.ir64.Aarch64SystemRegisterId;
+import dev.vitorsilverio.armjitter.ir64.IntegerOp64;
 import dev.vitorsilverio.armjitter.ir64.Ir64AluOp;
 import dev.vitorsilverio.armjitter.ir64.Ir64Block;
 import dev.vitorsilverio.armjitter.ir64.Ir64MoveWideOp;
 import dev.vitorsilverio.armjitter.ir64.Ir64Op;
 import dev.vitorsilverio.armjitter.ir64.Ir64SystemInstructionOp;
+import dev.vitorsilverio.armjitter.ir64.SystemOp64;
 import dev.vitorsilverio.armjitter.memory.AddressSpace64;
 import dev.vitorsilverio.armjitter.memory.mmu.TranslatingAddressSpace64;
 import dev.vitorsilverio.armjitter.support.TestAddressSpace;
@@ -75,53 +77,53 @@ class Asm64SystemOpsNativeTest {
     @Test
     void allEightSystemKindsGoThroughHelperNotWholeBlockPolicy() {
         // Default WHOLE_BLOCK os recusa de propósito (blocos frios, ver a task): só PER_OP os compila.
-        assertFalse(new Asm64CodeEmitter().isNativeSupported(blockOf(0x1000, new Ir64Op.PrivilegedCall(true))));
-        assertTrue(Ir64NativePolicy.isSystemViaHelper(new Ir64Op.PrivilegedCall(true)));
-        assertTrue(Ir64NativePolicy.isSystemViaHelper(new Ir64Op.SystemRegister(true, Aarch64SystemRegisterId.CURRENT_EL, 0)));
-        assertTrue(Ir64NativePolicy.isSystemViaHelper(new Ir64Op.SystemInstruction(Ir64SystemInstructionOp.TLBI_ALL)));
-        assertTrue(Ir64NativePolicy.isSystemViaHelper(new Ir64Op.ExceptionReturn()));
-        assertTrue(Ir64NativePolicy.isSystemViaHelper(new Ir64Op.PrivilegedCall(true)));
-        assertTrue(Ir64NativePolicy.isSystemViaHelper(new Ir64Op.InterruptMask(true, 0b0010)));
-        assertTrue(Ir64NativePolicy.isSystemViaHelper(new Ir64Op.Breakpoint(0x1234)));
-        assertTrue(Ir64NativePolicy.isSystemViaHelper(new Ir64Op.UndefinedInstructionTrap()));
-        assertTrue(Ir64NativePolicy.isSystemViaHelper(new Ir64Op.AddressTranslate(Aarch64AddressTranslateForm.S1E1R, 0)));
+        assertFalse(new Asm64CodeEmitter().isNativeSupported(blockOf(0x1000, new SystemOp64.PrivilegedCall(true))));
+        assertTrue(Ir64NativePolicy.isSystemViaHelper(new SystemOp64.PrivilegedCall(true)));
+        assertTrue(Ir64NativePolicy.isSystemViaHelper(new SystemOp64.SystemRegister(true, Aarch64SystemRegisterId.CURRENT_EL, 0)));
+        assertTrue(Ir64NativePolicy.isSystemViaHelper(new SystemOp64.SystemInstruction(Ir64SystemInstructionOp.TLBI_ALL)));
+        assertTrue(Ir64NativePolicy.isSystemViaHelper(new SystemOp64.ExceptionReturn()));
+        assertTrue(Ir64NativePolicy.isSystemViaHelper(new SystemOp64.PrivilegedCall(true)));
+        assertTrue(Ir64NativePolicy.isSystemViaHelper(new SystemOp64.InterruptMask(true, 0b0010)));
+        assertTrue(Ir64NativePolicy.isSystemViaHelper(new SystemOp64.Breakpoint(0x1234)));
+        assertTrue(Ir64NativePolicy.isSystemViaHelper(new SystemOp64.UndefinedInstructionTrap()));
+        assertTrue(Ir64NativePolicy.isSystemViaHelper(new SystemOp64.AddressTranslate(Aarch64AddressTranslateForm.S1E1R, 0)));
     }
 
     @Test
     void systemRegisterReadAndWriteMatchInterpreter() {
         assertNativeAndEquivalent(blockOf(0x1000,
-                new Ir64Op.MoveWide(Ir64MoveWideOp.MOVZ, 0, 0xBEEF, 0, true),
-                new Ir64Op.SystemRegister(false, Aarch64SystemRegisterId.TPIDR_EL0, 0),
-                new Ir64Op.SystemRegister(true, Aarch64SystemRegisterId.TPIDR_EL0, 1),
-                new Ir64Op.SystemRegister(true, Aarch64SystemRegisterId.CURRENT_EL, 2)), pair());
+                new IntegerOp64.MoveWide(Ir64MoveWideOp.MOVZ, 0, 0xBEEF, 0, true),
+                new SystemOp64.SystemRegister(false, Aarch64SystemRegisterId.TPIDR_EL0, 0),
+                new SystemOp64.SystemRegister(true, Aarch64SystemRegisterId.TPIDR_EL0, 1),
+                new SystemOp64.SystemRegister(true, Aarch64SystemRegisterId.CURRENT_EL, 2)), pair());
     }
 
     @Test
     void systemInstructionMatchesInterpreter() {
         assertNativeAndEquivalent(blockOf(0x1100,
-                new Ir64Op.SystemInstruction(Ir64SystemInstructionOp.TLBI_ALL),
-                new Ir64Op.SystemInstruction(Ir64SystemInstructionOp.BARRIER)), pair());
+                new SystemOp64.SystemInstruction(Ir64SystemInstructionOp.TLBI_ALL),
+                new SystemOp64.SystemInstruction(Ir64SystemInstructionOp.BARRIER)), pair());
     }
 
     @Test
     void interruptMaskMatchesInterpreter() {
         assertNativeAndEquivalent(blockOf(0x1200,
-                new Ir64Op.InterruptMask(true, 0b0010),
-                new Ir64Op.InterruptMask(false, 0b0010)), pair());
+                new SystemOp64.InterruptMask(true, 0b0010),
+                new SystemOp64.InterruptMask(false, 0b0010)), pair());
     }
 
     @Test
     void addressTranslateMatchesInterpreter() {
         // Sem descritor válido a tradução falha: PAR_EL1.F=1, sem exceção para o guest.
         assertNativeAndEquivalent(blockOf(0x1300,
-                new Ir64Op.MoveWide(Ir64MoveWideOp.MOVZ, 0, 0x2000, 0, true),
-                new Ir64Op.AddressTranslate(Aarch64AddressTranslateForm.S1E1R, 0)), () -> new EquivalencePair64(newMmuCore(), newMmuCore()));
+                new IntegerOp64.MoveWide(Ir64MoveWideOp.MOVZ, 0, 0x2000, 0, true),
+                new SystemOp64.AddressTranslate(Aarch64AddressTranslateForm.S1E1R, 0)), () -> new EquivalencePair64(newMmuCore(), newMmuCore()));
     }
 
     /// `ERET` de EL1 para EL0: PC e PSTATE vêm de `ELR_EL1`/`SPSR_EL1` pelo mesmo caminho do interpretado.
     @Test
     void exceptionReturnMatchesInterpreter() {
-        assertNativeAndEquivalent(blockOf(0x3000, new Ir64Op.ExceptionReturn()), () -> {
+        assertNativeAndEquivalent(blockOf(0x3000, new SystemOp64.ExceptionReturn()), () -> {
             Aarch64Core reference = newEl1Core();
             Aarch64Core candidate = newEl1Core();
             for (Aarch64Core core : new Aarch64Core[]{reference, candidate}) {
@@ -134,14 +136,14 @@ class Asm64SystemOpsNativeTest {
 
     @Test
     void hypervisorAndSecureMonitorCallAreCapturedByBlockHandler() {
-        assertNativeAndEquivalent(blockOf(0x6000, new Ir64Op.PrivilegedCall(true)), pair());
-        assertNativeAndEquivalent(blockOf(0x6100, new Ir64Op.PrivilegedCall(false)), pair());
+        assertNativeAndEquivalent(blockOf(0x6000, new SystemOp64.PrivilegedCall(true)), pair());
+        assertNativeAndEquivalent(blockOf(0x6100, new SystemOp64.PrivilegedCall(false)), pair());
     }
 
     @Test
     void breakpointAndUndefinedTrapAreCapturedByBlockHandler() {
-        assertNativeAndEquivalent(blockOf(0x6200, new Ir64Op.Breakpoint(0x1234)), pair());
-        assertNativeAndEquivalent(blockOf(0x6300, new Ir64Op.UndefinedInstructionTrap()), pair());
+        assertNativeAndEquivalent(blockOf(0x6200, new SystemOp64.Breakpoint(0x1234)), pair());
+        assertNativeAndEquivalent(blockOf(0x6300, new SystemOp64.UndefinedInstructionTrap()), pair());
     }
 
     /// Aceite central (E7): a op que lança está no MEIO — as anteriores executaram, as posteriores
@@ -149,15 +151,15 @@ class Asm64SystemOpsNativeTest {
     @Test
     void throwingOpInTheMiddleKeepsPartialStateIdentical() {
         for (Ir64Op thrower : new Ir64Op[]{
-                new Ir64Op.Breakpoint(0x42),
-                new Ir64Op.UndefinedInstructionTrap(),
-                new Ir64Op.PrivilegedCall(true),
-                new Ir64Op.PrivilegedCall(false)}) {
+                new SystemOp64.Breakpoint(0x42),
+                new SystemOp64.UndefinedInstructionTrap(),
+                new SystemOp64.PrivilegedCall(true),
+                new SystemOp64.PrivilegedCall(false)}) {
             assertNativeAndEquivalent(blockOf(0x7000,
-                    new Ir64Op.MoveWide(Ir64MoveWideOp.MOVZ, 0, 0x1111, 0, true),
-                    new Ir64Op.Alu64(Ir64AluOp.ADD, 2, 0, 1, true, true, false, false),
+                    new IntegerOp64.MoveWide(Ir64MoveWideOp.MOVZ, 0, 0x1111, 0, true),
+                    new IntegerOp64.Alu64(Ir64AluOp.ADD, 2, 0, 1, true, true, false, false),
                     thrower,
-                    new Ir64Op.MoveWide(Ir64MoveWideOp.MOVZ, 1, 0x2222, 0, true)), pair());
+                    new IntegerOp64.MoveWide(Ir64MoveWideOp.MOVZ, 1, 0x2222, 0, true)), pair());
         }
     }
 }

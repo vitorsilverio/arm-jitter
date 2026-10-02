@@ -1,6 +1,6 @@
 package dev.vitorsilverio.armjitter.decoder64;
 
-import dev.vitorsilverio.armjitter.ir64.Ir64Op.SmeConstructive.Op;
+import dev.vitorsilverio.armjitter.ir64.SmeOp64.Constructive.Op;
 
 import java.util.List;
 

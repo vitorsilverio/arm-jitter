@@ -116,7 +116,7 @@ G5 = suites de gbaemu/ndsemu obrigatórias (regra do `tasks/README.md`).
 | Task | Escopo | G5 | Status |
 |---|---|---|---|
 | [E15.1](e15.1-rede-de-seguranca-contrato-e-catraca.md) | Testes de contrato por `record` do IR (absorve a E14) + catraca JaCoCo + guarda de tamanho. Zero mudança em `src/main` | não | ✅ 2026-10-02 |
-| [E15.2](e15.2-ir64op-por-familia.md) | `Ir64Op` em sub-interfaces seladas por família (D4) | não | ⬜ |
+| [E15.2](e15.2-ir64op-por-familia.md) | `Ir64Op` em sub-interfaces seladas por família (D4) | não | ✅ 2026-10-02 |
 | [E15.3](e15.3-irop-por-familia.md) | `IrOp` idem (D4) | sim | ⬜ |
 | E15.4 | A64: `Ir64Op#execute` (D1), remove o dispatch duplo; `Ir64BlockExecutor` dividido por família | não | ⬜ [REFINAR] após E15.2 |
 | E15.5 | 32 bits: `IrOp#execute` (D1), funde `execute`+`executeOp`; **gate: `InterpretedThroughputBenchTest` (gbaemu, C8) ≥ −1%**, senão manter `switch` para os `Kind` quentes medidos | sim | ⬜ [REFINAR] após E15.3 |
@@ -148,6 +148,10 @@ daqui.
 3 referências no total a records do IR (`IrOp.Load`, `IrOp.VfpLoad`, `Ir64Op.ShiftVariable`),
 nenhuma a `Kind` — ajustadas na mesma task que renomeia. E15.2/E15.3 seguem a forma completa de
 D4 (sem a alternativa de manter os records inteiro/sistema dentro de `IrOp`).
+
+⚠️ **Correção de fato (achado da E15.2, 2026-10-02):** a `1.4.0` JÁ está no Maven Central
+(`arm-jitter-1.4.0.pom` → `200`, tag `v1.4.0`). A quebra de nome sai na próxima versão; o número
+dela (`1.5.0` com a exceção ao G3 documentada, ou `2.0.0`) está pendente de decisão do usuário.
 
 ## Pré-condição
 

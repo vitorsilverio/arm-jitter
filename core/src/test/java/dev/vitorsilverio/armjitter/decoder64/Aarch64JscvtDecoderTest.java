@@ -1,6 +1,7 @@
 package dev.vitorsilverio.armjitter.decoder64;
 
 import dev.vitorsilverio.armjitter.arch64.Aarch64Architecture;
+import dev.vitorsilverio.armjitter.ir64.FpOp64;
 import dev.vitorsilverio.armjitter.ir64.Ir64Op;
 import dev.vitorsilverio.armjitter.memory.AddressSpace64;
 import dev.vitorsilverio.armjitter.support.TestAddressSpace;
@@ -33,7 +34,7 @@ class Aarch64JscvtDecoderTest {
 
     @Test
     void decodesRegisters() {
-        Ir64Op.Fp64JavascriptConvert op = (Ir64Op.Fp64JavascriptConvert) decode(JSCVT_DECODER, FJCVTZS_W0_D1);
+        FpOp64.JavascriptConvert op = (FpOp64.JavascriptConvert) decode(JSCVT_DECODER, FJCVTZS_W0_D1);
         assertEquals(0, op.rd());
         assertEquals(1, op.rn());
     }

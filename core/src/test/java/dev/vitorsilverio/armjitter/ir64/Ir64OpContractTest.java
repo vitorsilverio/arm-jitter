@@ -63,7 +63,14 @@ class Ir64OpContractTest {
     }
 
     static Stream<Named<Ir64Op>> samples() {
-        return IrOpSamples.ir64Ops().stream().map(op -> Named.of(op.getClass().getSimpleName(), op));
+        return IrOpSamples.ir64Ops().stream().map(op -> Named.of(displayName(op), op));
+    }
+
+    /// `Família.Record` — o nome simples sozinho se repete entre famílias (`MemoryOp64.Load64` e
+    /// `FpOp64.Load64`, task E15.2).
+    private static String displayName(Ir64Op op) {
+        Class<?> recordClass = op.getClass();
+        return recordClass.getEnclosingClass().getSimpleName() + "." + recordClass.getSimpleName();
     }
 
     private static Ir64Block blockOf(Ir64Op... ops) {
@@ -139,7 +146,7 @@ class Ir64OpContractTest {
         }
 
         Aarch64CpuSnapshot.capture(viaBlock.core())
-                .assertEqualTo(Aarch64CpuSnapshot.capture(core), op.getClass().getSimpleName());
+                .assertEqualTo(Aarch64CpuSnapshot.capture(core), displayName(op));
         assertEquals(viaBlock.core().exceptionState().currentEl(), core.exceptionState().currentEl());
         assertArrayEquals(memoryOf(viaBlock), memoryOf(viaOp));
     }
@@ -157,16 +164,16 @@ class Ir64OpContractTest {
 
     static Stream<Arguments> controlExceptions() {
         return Stream.of(
-                Arguments.of(Named.of("Breakpoint", IrOpSamples.<Ir64Op>sample(Ir64Op.Breakpoint.class)),
+                Arguments.of(Named.of("Breakpoint", IrOpSamples.<Ir64Op>sample(SystemOp64.Breakpoint.class)),
                         Aarch64BreakpointException.class),
                 Arguments.of(Named.of("UndefinedInstructionTrap",
-                        IrOpSamples.<Ir64Op>sample(Ir64Op.UndefinedInstructionTrap.class)),
+                        IrOpSamples.<Ir64Op>sample(SystemOp64.UndefinedInstructionTrap.class)),
                         Aarch64UndefinedInstructionException.class),
                 Arguments.of(Named.of("PrivilegedCall[hvc]",
-                        IrOpSamples.<Ir64Op>sample(Ir64Op.PrivilegedCall.class, Map.of("isHvc", true))),
+                        IrOpSamples.<Ir64Op>sample(SystemOp64.PrivilegedCall.class, Map.of("isHvc", true))),
                         Aarch64HypervisorCallException.class),
                 Arguments.of(Named.of("PrivilegedCall[smc]",
-                        IrOpSamples.<Ir64Op>sample(Ir64Op.PrivilegedCall.class)),
+                        IrOpSamples.<Ir64Op>sample(SystemOp64.PrivilegedCall.class)),
                         Aarch64SecureMonitorCallException.class));
     }
 

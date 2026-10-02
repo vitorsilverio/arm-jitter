@@ -2,7 +2,7 @@ package dev.vitorsilverio.armjitter.executor64;
 
 import dev.vitorsilverio.armjitter.core64.Aarch64Core;
 import dev.vitorsilverio.armjitter.core64.Aarch64FpRegisters;
-import dev.vitorsilverio.armjitter.ir64.Ir64Op;
+import dev.vitorsilverio.armjitter.ir64.AdvSimdMoveOp64;
 import dev.vitorsilverio.armjitter.ir64.Ir64VectorPermuteOp;
 import dev.vitorsilverio.armjitter.memory.AddressSpace64;
 import dev.vitorsilverio.armjitter.support.TestAddressSpace;
@@ -28,7 +28,7 @@ class Ir64VectorExtractPermuteTableExecutorTest {
         fp.setQ(1, 0x0706050403020100L, 0L); // Rn byte i = i
         fp.setQ(2, 0x0F0E0D0C0B0A0908L, 0L); // Rm byte i = 8+i
 
-        EXECUTOR.executeOp(core, new Ir64Op.VectorExtract(false, 3, 0, 1, 2));
+        EXECUTOR.executeOp(core, new AdvSimdMoveOp64.Extract(false, 3, 0, 1, 2));
 
         // datasize=8: janela começa no byte 3 de Rn, ultrapassa para Rm nos últimos bytes.
         assertEquals(0x0A09080706050403L, fp.low64(0));
@@ -42,7 +42,7 @@ class Ir64VectorExtractPermuteTableExecutorTest {
         fp.setQ(1, 0x0706050403020100L, 0x0F0E0D0C0B0A0908L); // Rn byte i = i (0..15)
         fp.setQ(2, 0x1716151413121110L, 0x1F1E1D1C1B1A1918L); // Rm byte i = 16+i (16..31)
 
-        EXECUTOR.executeOp(core, new Ir64Op.VectorExtract(true, 11, 0, 1, 2));
+        EXECUTOR.executeOp(core, new AdvSimdMoveOp64.Extract(true, 11, 0, 1, 2));
 
         // byte j do resultado = byte (11+j) da concatenação {Rm,Rn} (32 bytes lógicos):
         // j=0..4 vêm de Rn[11..15], j=5..15 vêm de Rm[0..10].
@@ -59,7 +59,7 @@ class Ir64VectorExtractPermuteTableExecutorTest {
             fp.setElement(2, i, 0, 0x10 + i);
         }
 
-        EXECUTOR.executeOp(core, new Ir64Op.VectorPermute(Ir64VectorPermuteOp.UZP1, false, 0, 0, 1, 2));
+        EXECUTOR.executeOp(core, new AdvSimdMoveOp64.Permute(Ir64VectorPermuteOp.UZP1, false, 0, 0, 1, 2));
 
         for (int i = 0; i < 4; i++) {
             assertEquals(2 * i, fp.element(0, i, 0));
@@ -76,7 +76,7 @@ class Ir64VectorExtractPermuteTableExecutorTest {
             fp.setElement(2, i, 0, 0x10 + i);
         }
 
-        EXECUTOR.executeOp(core, new Ir64Op.VectorPermute(Ir64VectorPermuteOp.UZP2, false, 0, 0, 1, 2));
+        EXECUTOR.executeOp(core, new AdvSimdMoveOp64.Permute(Ir64VectorPermuteOp.UZP2, false, 0, 0, 1, 2));
 
         for (int i = 0; i < 4; i++) {
             assertEquals(2 * i + 1, fp.element(0, i, 0));
@@ -93,7 +93,7 @@ class Ir64VectorExtractPermuteTableExecutorTest {
             fp.setElement(2, i, 0, 0x10 + i);
         }
 
-        EXECUTOR.executeOp(core, new Ir64Op.VectorPermute(Ir64VectorPermuteOp.TRN1, false, 0, 0, 1, 2));
+        EXECUTOR.executeOp(core, new AdvSimdMoveOp64.Permute(Ir64VectorPermuteOp.TRN1, false, 0, 0, 1, 2));
 
         long[] expected = {0, 0x10, 2, 0x12, 4, 0x14, 6, 0x16};
         for (int i = 0; i < 8; i++) {
@@ -110,7 +110,7 @@ class Ir64VectorExtractPermuteTableExecutorTest {
             fp.setElement(2, i, 0, 0x10 + i);
         }
 
-        EXECUTOR.executeOp(core, new Ir64Op.VectorPermute(Ir64VectorPermuteOp.TRN2, false, 0, 0, 1, 2));
+        EXECUTOR.executeOp(core, new AdvSimdMoveOp64.Permute(Ir64VectorPermuteOp.TRN2, false, 0, 0, 1, 2));
 
         long[] expected = {1, 0x11, 3, 0x13, 5, 0x15, 7, 0x17};
         for (int i = 0; i < 8; i++) {
@@ -127,7 +127,7 @@ class Ir64VectorExtractPermuteTableExecutorTest {
             fp.setElement(2, i, 0, 0x10 + i);
         }
 
-        EXECUTOR.executeOp(core, new Ir64Op.VectorPermute(Ir64VectorPermuteOp.ZIP1, false, 0, 0, 1, 2));
+        EXECUTOR.executeOp(core, new AdvSimdMoveOp64.Permute(Ir64VectorPermuteOp.ZIP1, false, 0, 0, 1, 2));
 
         long[] expected = {0, 0x10, 1, 0x11, 2, 0x12, 3, 0x13};
         for (int i = 0; i < 8; i++) {
@@ -144,7 +144,7 @@ class Ir64VectorExtractPermuteTableExecutorTest {
             fp.setElement(2, i, 0, 0x10 + i);
         }
 
-        EXECUTOR.executeOp(core, new Ir64Op.VectorPermute(Ir64VectorPermuteOp.ZIP2, false, 0, 0, 1, 2));
+        EXECUTOR.executeOp(core, new AdvSimdMoveOp64.Permute(Ir64VectorPermuteOp.ZIP2, false, 0, 0, 1, 2));
 
         long[] expected = {4, 0x14, 5, 0x15, 6, 0x16, 7, 0x17};
         for (int i = 0; i < 8; i++) {
@@ -160,7 +160,7 @@ class Ir64VectorExtractPermuteTableExecutorTest {
         // índices: 0 (in range->0), 15 (in range->15), 16 (fora, len=0->tableBytes=16), 255 (fora)
         fp.setQ(2, 0x00000000FF100F00L, 0L);
 
-        EXECUTOR.executeOp(core, new Ir64Op.VectorTableLookup(false, 0, true, 0, 1, 2));
+        EXECUTOR.executeOp(core, new AdvSimdMoveOp64.TableLookup(false, 0, true, 0, 1, 2));
 
         assertEquals(0L, fp.element(0, 0, 0));
         assertEquals(15L, fp.element(0, 1, 0));
@@ -176,7 +176,7 @@ class Ir64VectorExtractPermuteTableExecutorTest {
         fp.setQ(1, 0x0706050403020100L, 0x0F0E0D0C0B0A0908L); // tabela (1 registrador, len=0)
         fp.setQ(2, 0xFF00000000000000L, 0L); // índice 0 no byte 0, índice 0xFF (fora) no byte 7
 
-        EXECUTOR.executeOp(core, new Ir64Op.VectorTableLookup(true, 0, true, 0, 1, 2));
+        EXECUTOR.executeOp(core, new AdvSimdMoveOp64.TableLookup(true, 0, true, 0, 1, 2));
 
         assertEquals(0L, fp.element(0, 0, 0), "índice 0 → tabela[0]=0");
         assertEquals(0x11L, fp.element(0, 7, 0), "índice fora da tabela → byte ATUAL de Rd preservado (TBX)");
@@ -191,7 +191,7 @@ class Ir64VectorExtractPermuteTableExecutorTest {
         fp.setQ(2, 0x1716151413121110L, 0x1F1E1D1C1B1A1918L);
         fp.setQ(3, 20L, 0L); // índice 20 no byte 0, resto 0
 
-        EXECUTOR.executeOp(core, new Ir64Op.VectorTableLookup(false, 1, true, 0, 1, 3));
+        EXECUTOR.executeOp(core, new AdvSimdMoveOp64.TableLookup(false, 1, true, 0, 1, 3));
 
         assertEquals(20L, fp.element(0, 0, 0), "índice 20 cai em v2 (rn+1), byte 4 (20-16=4), valor=20");
     }

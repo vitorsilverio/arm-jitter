@@ -3,7 +3,7 @@ package dev.vitorsilverio.armjitter.executor64;
 import dev.vitorsilverio.armjitter.core64.Aarch64Core;
 import dev.vitorsilverio.armjitter.core64.Aarch64ScalableRegisters;
 import dev.vitorsilverio.armjitter.core64.Aarch64UndefinedInstructionException;
-import dev.vitorsilverio.armjitter.ir64.Ir64Op;
+import dev.vitorsilverio.armjitter.ir64.SveIntegerOp64;
 
 /// Semântica da permutação SVE não predicada (B17.10), transcrita de `sve_helper.c`/`translate-sve.c` do QEMU.
 ///
@@ -25,7 +25,7 @@ final class SvePermuteOps {
     }
 
     /// Executa uma operação do grupo. `true` = a instrução já entrou numa exceção (acesso negado).
-    static boolean execute(Aarch64Core core, Ir64Op.SvePermute op) {
+    static boolean execute(Aarch64Core core, SveIntegerOp64.Permute op) {
         if (!SvePredicateOps.accessAllowed(core, op.instructionAddress())) {
             return true;
         }
@@ -114,7 +114,7 @@ final class SvePermuteOps {
         return result;
     }
 
-    private static void broadcast(Aarch64Core core, Aarch64ScalableRegisters regs, Ir64Op.SvePermute op, int vl) {
+    private static void broadcast(Aarch64Core core, Aarch64ScalableRegisters regs, SveIntegerOp64.Permute op, int vl) {
         long value = op.rn() == STACK_POINTER_ENCODING ? core.sp() : core.x(op.rn());
         int size = 1 << op.esz();
         byte[] element = littleEndian(value, size);
@@ -150,7 +150,7 @@ final class SvePermuteOps {
     }
 
     /// `INSR`: desloca o vetor inteiro um elemento para cima e escreve o escalar (truncado) no elemento 0.
-    private static void insert(Aarch64ScalableRegisters regs, Ir64Op.SvePermute op, long value, int vl) {
+    private static void insert(Aarch64ScalableRegisters regs, SveIntegerOp64.Permute op, long value, int vl) {
         int size = 1 << op.esz();
         byte[] source = load(regs, op.rd(), vl);
         byte[] result = new byte[vl];
@@ -218,11 +218,11 @@ final class SvePermuteOps {
     // ── UNPK ─────────────────────────────────────────────────────────────────────────────────────
 
     /// `SUNPK*`/`UUNPK*`: estende os elementos da metade baixa (ou alta) do vetor fonte para o DOBRO do tamanho.
-    private static byte[] unpack(byte[] source, Ir64Op.SvePermute op, int vl) {
+    private static byte[] unpack(byte[] source, SveIntegerOp64.Permute op, int vl) {
         int size = 1 << op.esz();
         int sourceSize = size / 2;
-        boolean signed = op.op() == Ir64Op.SvePermute.Op.SUNPKLO || op.op() == Ir64Op.SvePermute.Op.SUNPKHI;
-        boolean high = op.op() == Ir64Op.SvePermute.Op.SUNPKHI || op.op() == Ir64Op.SvePermute.Op.UUNPKHI;
+        boolean signed = op.op() == SveIntegerOp64.Permute.Op.SUNPKLO || op.op() == SveIntegerOp64.Permute.Op.SUNPKHI;
+        boolean high = op.op() == SveIntegerOp64.Permute.Op.SUNPKHI || op.op() == SveIntegerOp64.Permute.Op.UUNPKHI;
         int base = high ? vl / 2 : 0;
         byte[] result = new byte[vl];
         for (int i = 0; i * size < vl; i++) {
@@ -240,7 +240,7 @@ final class SvePermuteOps {
 
     /// `PMOV Pd.T, Zn[imm]`: o bit 0 de cada elemento da fatia `imm` do vetor vira o bit de predicado do elemento `e`
     /// correspondente (posição `e × esize`), e o resto de `Pd` é zerado. `elements = VL / esize` (em bytes).
-    private static void moveToPredicate(Aarch64ScalableRegisters regs, Ir64Op.SvePermute op, int vl) {
+    private static void moveToPredicate(Aarch64ScalableRegisters regs, SveIntegerOp64.Permute op, int vl) {
         int size = 1 << op.esz();
         int elements = vl / size;
         long[] predicate = new long[regs.wordsPerPredicate()];
@@ -257,7 +257,7 @@ final class SvePermuteOps {
 
     /// `PMOV Zd[imm], Pn.T`: o inverso. Só a fatia `imm` é reescrita, e `imm = 0` zera antes o vetor inteiro
     /// (`DO_PMOV_VP`) — é assim que a forma de byte (única fatia) limpa o resto de `Zd`.
-    private static void moveToVector(Aarch64ScalableRegisters regs, Ir64Op.SvePermute op, int vl) {
+    private static void moveToVector(Aarch64ScalableRegisters regs, SveIntegerOp64.Permute op, int vl) {
         int size = 1 << op.esz();
         int elements = vl / size;
         long[] vector = new long[vl / Long.BYTES];
@@ -284,7 +284,7 @@ final class SvePermuteOps {
 
     private enum Family { ZIP, UZP, TRN }
 
-    private static Family family(Ir64Op.SvePermute.Op kind) {
+    private static Family family(SveIntegerOp64.Permute.Op kind) {
         return switch (kind) {
             case ZIP1, ZIP2, ZIP1_Q, ZIP2_Q, ZIPQ1, ZIPQ2 -> Family.ZIP;
             case UZP1, UZP2, UZP1_Q, UZP2_Q, UZPQ1, UZPQ2 -> Family.UZP;
@@ -293,27 +293,27 @@ final class SvePermuteOps {
     }
 
     /// `true` nas formas `2` (elementos ímpares / metade alta).
-    private static boolean second(Ir64Op.SvePermute.Op kind) {
+    private static boolean second(SveIntegerOp64.Permute.Op kind) {
         return switch (kind) {
             case ZIP2, ZIP2_Q, ZIPQ2, UZP2, UZP2_Q, UZPQ2, TRN2, TRN2_Q -> true;
             default -> false;
         };
     }
 
-    private static boolean segmentAsElement(Ir64Op.SvePermute.Op kind) {
+    private static boolean segmentAsElement(SveIntegerOp64.Permute.Op kind) {
         return switch (kind) {
             case ZIP1_Q, ZIP2_Q, UZP1_Q, UZP2_Q, TRN1_Q, TRN2_Q -> true;
             default -> false;
         };
     }
 
-    private static boolean perSegment(Ir64Op.SvePermute.Op kind) {
-        return kind == Ir64Op.SvePermute.Op.ZIPQ1 || kind == Ir64Op.SvePermute.Op.ZIPQ2
-                || kind == Ir64Op.SvePermute.Op.UZPQ1 || kind == Ir64Op.SvePermute.Op.UZPQ2;
+    private static boolean perSegment(SveIntegerOp64.Permute.Op kind) {
+        return kind == SveIntegerOp64.Permute.Op.ZIPQ1 || kind == SveIntegerOp64.Permute.Op.ZIPQ2
+                || kind == SveIntegerOp64.Permute.Op.UZPQ1 || kind == SveIntegerOp64.Permute.Op.UZPQ2;
     }
 
-    private static void interleave(Aarch64Core core, Aarch64ScalableRegisters regs, Ir64Op.SvePermute op, int vl) {
-        Ir64Op.SvePermute.Op kind = op.op();
+    private static void interleave(Aarch64Core core, Aarch64ScalableRegisters regs, SveIntegerOp64.Permute op, int vl) {
+        SveIntegerOp64.Permute.Op kind = op.op();
         boolean segmentElement = segmentAsElement(kind);
         if (segmentElement) {
             // As formas `_q` não existem em modo streaming (sem `FEAT_SME_FA64`) e exigem `VL >= 256`.

@@ -3,6 +3,7 @@ package dev.vitorsilverio.armjitter.decoder64;
 import dev.vitorsilverio.armjitter.arch64.Aarch64Architecture;
 import dev.vitorsilverio.armjitter.arch64.Aarch64Feature;
 import dev.vitorsilverio.armjitter.ir64.Ir64Op;
+import dev.vitorsilverio.armjitter.ir64.SveFpOp64;
 
 /// Decoder SVE2 da B17.23: multiply-accumulate `fp8` fundido (`FMLAL_hb`/`FMLALL_sb`, vetorial e indexado,
 /// `FEAT_FP8FMA`) e produto escalar `fp8` (`FDOT_hb`/`FDOT_sb`, vetorial e indexado, `FEAT_FP8DOT2`/
@@ -114,7 +115,7 @@ final class Aarch64SveFp8MultiplyDecoder {
         if (!wideDestination && bit(word, 13)) {
             return null; // `hb`: bit 13 tem que ser 0 (só `sb` usa os 2 bits)
         }
-        return new Ir64Op.SveFp8FusedMultiplyAddLong(wideDestination, rd, rn, rm, select, false, 0, address);
+        return new SveFpOp64.Fp8FusedMultiplyAddLong(wideDestination, rd, rn, rm, select, false, 0, address);
     }
 
     private Ir64Op decodeFmaIndexedHb(int word, long address) {
@@ -126,7 +127,7 @@ final class Aarch64SveFp8MultiplyDecoder {
         int rn = field(word, 5, REGISTER_MASK);
         int rm = field(word, RM_LOW3_SHIFT, REGISTER_LOW_MASK);
         int index = index4(word);
-        return new Ir64Op.SveFp8FusedMultiplyAddLong(false, rd, rn, rm, top ? 1 : 0, true, index, address);
+        return new SveFpOp64.Fp8FusedMultiplyAddLong(false, rd, rn, rm, top ? 1 : 0, true, index, address);
     }
 
     private Ir64Op decodeFmaIndexedSb(int word, long address) {
@@ -138,7 +139,7 @@ final class Aarch64SveFp8MultiplyDecoder {
         int rn = field(word, 5, REGISTER_MASK);
         int rm = field(word, RM_LOW3_SHIFT, REGISTER_LOW_MASK);
         int index = index4(word);
-        return new Ir64Op.SveFp8FusedMultiplyAddLong(true, rd, rn, rm, idxn, true, index, address);
+        return new SveFpOp64.Fp8FusedMultiplyAddLong(true, rd, rn, rm, idxn, true, index, address);
     }
 
     /// `%index4_19_10`: bits[20:19] (alta) concatenados com bits[11:10] (baixa).
@@ -171,7 +172,7 @@ final class Aarch64SveFp8MultiplyDecoder {
         int rd = field(word, 0, REGISTER_MASK);
         int rn = field(word, 5, REGISTER_MASK);
         int rm = field(word, 16, REGISTER_MASK);
-        return new Ir64Op.SveFp8DotProduct(wideDestination, rd, rn, rm, false, 0, address);
+        return new SveFpOp64.Fp8DotProduct(wideDestination, rd, rn, rm, false, 0, address);
     }
 
     private Ir64Op decodeDotIndexedHb(int word, long address) {
@@ -184,7 +185,7 @@ final class Aarch64SveFp8MultiplyDecoder {
         int rd = field(word, 0, REGISTER_MASK);
         int rn = field(word, 5, REGISTER_MASK);
         int rm = field(word, RM_LOW3_SHIFT, REGISTER_LOW_MASK);
-        return new Ir64Op.SveFp8DotProduct(false, rd, rn, rm, true, index, address);
+        return new SveFpOp64.Fp8DotProduct(false, rd, rn, rm, true, index, address);
     }
 
     private Ir64Op decodeDotIndexedSb(int word, long address) {
@@ -195,7 +196,7 @@ final class Aarch64SveFp8MultiplyDecoder {
         int rd = field(word, 0, REGISTER_MASK);
         int rn = field(word, 5, REGISTER_MASK);
         int rm = field(word, RM_LOW3_SHIFT, REGISTER_LOW_MASK);
-        return new Ir64Op.SveFp8DotProduct(true, rd, rn, rm, true, index, address);
+        return new SveFpOp64.Fp8DotProduct(true, rd, rn, rm, true, index, address);
     }
 
     private static boolean bit(int word, int shift) {

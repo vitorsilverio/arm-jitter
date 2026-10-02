@@ -1,6 +1,6 @@
 package dev.vitorsilverio.armjitter.ir64;
 
-/// Operação de {@link Ir64Op.VectorPermute} (`UZP1`/`UZP2`/`TRN1`/`TRN2`/`ZIP1`/`ZIP2`, B8.10) —
+/// Operação de {@link AdvSimdMoveOp64.Permute} (`UZP1`/`UZP2`/`TRN1`/`TRN2`/`ZIP1`/`ZIP2`, B8.10) —
 /// combina os elementos de `Rn`/`Rm` numa ordem fixa diferente de {@link Ir64VectorPairwiseOp}
 /// (que soma/reduz pares; aqui os elementos são apenas REORGANIZADOS, sem aritmética).
 public enum Ir64VectorPermuteOp {

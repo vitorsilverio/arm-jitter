@@ -1,6 +1,6 @@
 package dev.vitorsilverio.armjitter.ir64;
 
-/// Tipo de deslocamento aplicado ao segundo operando de {@link Ir64Op.AluShiftedRegister}
+/// Tipo de deslocamento aplicado ao segundo operando de {@link IntegerOp64.AluShiftedRegister}
 /// (`ARM DDI 0487 C6.2.4` variante registrador, campo `shift` de 2 bits `[23:22]`). Só as 3
 /// combinações válidas para `ADD`/`SUB` existem aqui — `11` (que seria `ROR` em outras
 /// instruções, ex. `Logical (shifted register)`) é RESERVADO para `ADD`/`SUB` e nunca

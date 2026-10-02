@@ -1,9 +1,13 @@
 package dev.vitorsilverio.armjitter.decoder64;
 
 import dev.vitorsilverio.armjitter.arch64.Aarch64Architecture;
+import dev.vitorsilverio.armjitter.ir64.BranchOp64;
+import dev.vitorsilverio.armjitter.ir64.IntegerOp64;
 import dev.vitorsilverio.armjitter.ir64.Ir64BranchForm;
 import dev.vitorsilverio.armjitter.ir64.Ir64Op;
 import dev.vitorsilverio.armjitter.ir64.Ir64PointerAuthOp;
+import dev.vitorsilverio.armjitter.ir64.MemoryOp64;
+import dev.vitorsilverio.armjitter.ir64.SystemOp64;
 import dev.vitorsilverio.armjitter.memory.AddressSpace64;
 import dev.vitorsilverio.armjitter.support.TestAddressSpace;
 import org.junit.jupiter.api.Test;
@@ -74,7 +78,7 @@ class Aarch64PauthResidualDecoderTest {
 
     @Test
     void braazDecodesAsUnauthenticatedBranchToRn() {
-        Ir64Op.Branch64 op = (Ir64Op.Branch64) decode(PAUTH_DECODER, BRAAZ_X1);
+        BranchOp64.Branch64 op = (BranchOp64.Branch64) decode(PAUTH_DECODER, BRAAZ_X1);
         assertEquals(Ir64BranchForm.REGISTER, op.form());
         assertEquals(1, op.registerOperand());
         assertFalse(op.link());
@@ -83,8 +87,8 @@ class Aarch64PauthResidualDecoderTest {
     @Test
     void brabzKeyBitDoesNotChangeDecodedBehavior() {
         // Rota (b): a chave A/B (`m`) não afeta o resultado — BRAAZ/BRABZ decodificam IGUAL.
-        Ir64Op.Branch64 a = (Ir64Op.Branch64) decode(PAUTH_DECODER, BRAAZ_X1);
-        Ir64Op.Branch64 b = (Ir64Op.Branch64) decode(PAUTH_DECODER, BRABZ_X1);
+        BranchOp64.Branch64 a = (BranchOp64.Branch64) decode(PAUTH_DECODER, BRAAZ_X1);
+        BranchOp64.Branch64 b = (BranchOp64.Branch64) decode(PAUTH_DECODER, BRABZ_X1);
         assertEquals(a.form(), b.form());
         assertEquals(a.registerOperand(), b.registerOperand());
         assertEquals(a.link(), b.link());
@@ -92,7 +96,7 @@ class Aarch64PauthResidualDecoderTest {
 
     @Test
     void blraazDecodesWithLink() {
-        Ir64Op.Branch64 op = (Ir64Op.Branch64) decode(PAUTH_DECODER, BLRAAZ_X2);
+        BranchOp64.Branch64 op = (BranchOp64.Branch64) decode(PAUTH_DECODER, BLRAAZ_X2);
         assertEquals(Ir64BranchForm.REGISTER, op.form());
         assertEquals(2, op.registerOperand());
         assertTrue(op.link());
@@ -100,7 +104,7 @@ class Aarch64PauthResidualDecoderTest {
 
     @Test
     void blrabzDecodesWithLink() {
-        Ir64Op.Branch64 op = (Ir64Op.Branch64) decode(PAUTH_DECODER, BLRABZ_X2);
+        BranchOp64.Branch64 op = (BranchOp64.Branch64) decode(PAUTH_DECODER, BLRABZ_X2);
         assertEquals(2, op.registerOperand());
         assertTrue(op.link());
     }
@@ -109,7 +113,7 @@ class Aarch64PauthResidualDecoderTest {
 
     @Test
     void retaaTargetsX30Implicitly() {
-        Ir64Op.Branch64 op = (Ir64Op.Branch64) decode(PAUTH_DECODER, RETAA);
+        BranchOp64.Branch64 op = (BranchOp64.Branch64) decode(PAUTH_DECODER, RETAA);
         assertEquals(Ir64BranchForm.REGISTER, op.form());
         assertEquals(30, op.registerOperand());
         assertFalse(op.link());
@@ -117,20 +121,20 @@ class Aarch64PauthResidualDecoderTest {
 
     @Test
     void retabTargetsX30Implicitly() {
-        Ir64Op.Branch64 op = (Ir64Op.Branch64) decode(PAUTH_DECODER, RETAB);
+        BranchOp64.Branch64 op = (BranchOp64.Branch64) decode(PAUTH_DECODER, RETAB);
         assertEquals(30, op.registerOperand());
     }
 
     @Test
     void eretaaDecodesAsExceptionReturn() {
         Ir64Op op = decode(PAUTH_DECODER, ERETAA);
-        assertTrue(op instanceof Ir64Op.ExceptionReturn);
+        assertTrue(op instanceof SystemOp64.ExceptionReturn);
     }
 
     @Test
     void eretabDecodesAsExceptionReturn() {
         Ir64Op op = decode(PAUTH_DECODER, ERETAB);
-        assertTrue(op instanceof Ir64Op.ExceptionReturn);
+        assertTrue(op instanceof SystemOp64.ExceptionReturn);
     }
 
     // ── BRA/BLRA ────────────────────────────────────────────────────────────────────────────────
@@ -138,29 +142,29 @@ class Aarch64PauthResidualDecoderTest {
     @Test
     void braaDecodesToRnIgnoringModifierRm() {
         // BRAA Xn, Xm: alvo é Xn; Xm (modificador) é ignorado sob a rota (b).
-        Ir64Op.Branch64 op = (Ir64Op.Branch64) decode(PAUTH_DECODER, BRAA_X1_X2);
+        BranchOp64.Branch64 op = (BranchOp64.Branch64) decode(PAUTH_DECODER, BRAA_X1_X2);
         assertEquals(1, op.registerOperand());
         assertFalse(op.link());
     }
 
     @Test
     void brabDecodesSameAsBraaKeyIgnored() {
-        Ir64Op.Branch64 a = (Ir64Op.Branch64) decode(PAUTH_DECODER, BRAA_X1_X2);
-        Ir64Op.Branch64 b = (Ir64Op.Branch64) decode(PAUTH_DECODER, BRAB_X1_X2);
+        BranchOp64.Branch64 a = (BranchOp64.Branch64) decode(PAUTH_DECODER, BRAA_X1_X2);
+        BranchOp64.Branch64 b = (BranchOp64.Branch64) decode(PAUTH_DECODER, BRAB_X1_X2);
         assertEquals(a.registerOperand(), b.registerOperand());
         assertEquals(a.link(), b.link());
     }
 
     @Test
     void blraaDecodesWithLink() {
-        Ir64Op.Branch64 op = (Ir64Op.Branch64) decode(PAUTH_DECODER, BLRAA_X1_X2);
+        BranchOp64.Branch64 op = (BranchOp64.Branch64) decode(PAUTH_DECODER, BLRAA_X1_X2);
         assertEquals(1, op.registerOperand());
         assertTrue(op.link());
     }
 
     @Test
     void blrabDecodesWithLink() {
-        Ir64Op.Branch64 op = (Ir64Op.Branch64) decode(PAUTH_DECODER, BLRAB_X1_X2);
+        BranchOp64.Branch64 op = (BranchOp64.Branch64) decode(PAUTH_DECODER, BLRAB_X1_X2);
         assertTrue(op.link());
     }
 
@@ -168,7 +172,7 @@ class Aarch64PauthResidualDecoderTest {
 
     @Test
     void ldraaNoOffsetNoWriteback() {
-        Ir64Op.Load64 op = (Ir64Op.Load64) decode(PAUTH_DECODER, LDRAA_X0_X1);
+        MemoryOp64.Load64 op = (MemoryOp64.Load64) decode(PAUTH_DECODER, LDRAA_X0_X1);
         assertEquals(0, op.rt());
         assertEquals(1, op.rn());
         assertEquals(0L, op.immediate());
@@ -178,21 +182,21 @@ class Aarch64PauthResidualDecoderTest {
 
     @Test
     void ldraaPositiveOffsetNoWriteback() {
-        Ir64Op.Load64 op = (Ir64Op.Load64) decode(PAUTH_DECODER, LDRAA_X0_X1_8);
+        MemoryOp64.Load64 op = (MemoryOp64.Load64) decode(PAUTH_DECODER, LDRAA_X0_X1_8);
         assertEquals(8L, op.immediate());
         assertEquals(dev.vitorsilverio.armjitter.ir64.Ir64AddressingMode.OFFSET, op.addressingMode());
     }
 
     @Test
     void ldraaPreIndexedWithWriteback() {
-        Ir64Op.Load64 op = (Ir64Op.Load64) decode(PAUTH_DECODER, LDRAA_X0_X1_8_PRE);
+        MemoryOp64.Load64 op = (MemoryOp64.Load64) decode(PAUTH_DECODER, LDRAA_X0_X1_8_PRE);
         assertEquals(8L, op.immediate());
         assertEquals(dev.vitorsilverio.armjitter.ir64.Ir64AddressingMode.PRE_INDEX, op.addressingMode());
     }
 
     @Test
     void ldrabNegativeOffsetPreIndexedKeyIgnored() {
-        Ir64Op.Load64 op = (Ir64Op.Load64) decode(PAUTH_DECODER, LDRAB_X0_X1_M8_PRE);
+        MemoryOp64.Load64 op = (MemoryOp64.Load64) decode(PAUTH_DECODER, LDRAB_X0_X1_M8_PRE);
         assertEquals(-8L, op.immediate());
         assertEquals(dev.vitorsilverio.armjitter.ir64.Ir64AddressingMode.PRE_INDEX, op.addressingMode());
     }
@@ -201,7 +205,7 @@ class Aarch64PauthResidualDecoderTest {
 
     @Test
     void autdaDecodesAsPointerAuthInPlace() {
-        Ir64Op.PointerAuthInPlace op = (Ir64Op.PointerAuthInPlace) decode(PAUTH_DECODER, AUTDA_X0_X1);
+        IntegerOp64.PointerAuthInPlace op = (IntegerOp64.PointerAuthInPlace) decode(PAUTH_DECODER, AUTDA_X0_X1);
         assertEquals(Ir64PointerAuthOp.AUTDA, op.op());
         assertEquals(0, op.rd());
         assertEquals(1, op.rn());
@@ -209,35 +213,35 @@ class Aarch64PauthResidualDecoderTest {
 
     @Test
     void autdbDecodesAsPointerAuthInPlace() {
-        Ir64Op.PointerAuthInPlace op = (Ir64Op.PointerAuthInPlace) decode(PAUTH_DECODER, AUTDB_X0_X1);
+        IntegerOp64.PointerAuthInPlace op = (IntegerOp64.PointerAuthInPlace) decode(PAUTH_DECODER, AUTDB_X0_X1);
         assertEquals(Ir64PointerAuthOp.AUTDB, op.op());
     }
 
     @Test
     void autiaAndAutibDecode() {
         assertEquals(Ir64PointerAuthOp.AUTIA,
-                ((Ir64Op.PointerAuthInPlace) decode(PAUTH_DECODER, AUTIA_X0_X1)).op());
+                ((IntegerOp64.PointerAuthInPlace) decode(PAUTH_DECODER, AUTIA_X0_X1)).op());
         assertEquals(Ir64PointerAuthOp.AUTIB,
-                ((Ir64Op.PointerAuthInPlace) decode(PAUTH_DECODER, AUTIB_X0_X1)).op());
+                ((IntegerOp64.PointerAuthInPlace) decode(PAUTH_DECODER, AUTIB_X0_X1)).op());
     }
 
     @Test
     void paciaPacibPacdaPacdbDecode() {
         assertEquals(Ir64PointerAuthOp.PACIA,
-                ((Ir64Op.PointerAuthInPlace) decode(PAUTH_DECODER, PACIA_X0_X1)).op());
+                ((IntegerOp64.PointerAuthInPlace) decode(PAUTH_DECODER, PACIA_X0_X1)).op());
         assertEquals(Ir64PointerAuthOp.PACIB,
-                ((Ir64Op.PointerAuthInPlace) decode(PAUTH_DECODER, PACIB_X0_X1)).op());
+                ((IntegerOp64.PointerAuthInPlace) decode(PAUTH_DECODER, PACIB_X0_X1)).op());
         assertEquals(Ir64PointerAuthOp.PACDA,
-                ((Ir64Op.PointerAuthInPlace) decode(PAUTH_DECODER, PACDA_X0_X1)).op());
+                ((IntegerOp64.PointerAuthInPlace) decode(PAUTH_DECODER, PACDA_X0_X1)).op());
         assertEquals(Ir64PointerAuthOp.PACDB,
-                ((Ir64Op.PointerAuthInPlace) decode(PAUTH_DECODER, PACDB_X0_X1)).op());
+                ((IntegerOp64.PointerAuthInPlace) decode(PAUTH_DECODER, PACDB_X0_X1)).op());
     }
 
     // ── XPACI/XPACD ─────────────────────────────────────────────────────────────────────────────
 
     @Test
     void xpaciDecodesAsPointerAuthInPlaceNoModifier() {
-        Ir64Op.PointerAuthInPlace op = (Ir64Op.PointerAuthInPlace) decode(PAUTH_DECODER, XPACI_X0);
+        IntegerOp64.PointerAuthInPlace op = (IntegerOp64.PointerAuthInPlace) decode(PAUTH_DECODER, XPACI_X0);
         assertEquals(Ir64PointerAuthOp.XPACI, op.op());
         assertEquals(0, op.rd());
         assertEquals(-1, op.rn());
@@ -245,7 +249,7 @@ class Aarch64PauthResidualDecoderTest {
 
     @Test
     void xpacdDecodesAsPointerAuthInPlaceNoModifier() {
-        Ir64Op.PointerAuthInPlace op = (Ir64Op.PointerAuthInPlace) decode(PAUTH_DECODER, XPACD_X0);
+        IntegerOp64.PointerAuthInPlace op = (IntegerOp64.PointerAuthInPlace) decode(PAUTH_DECODER, XPACD_X0);
         assertEquals(Ir64PointerAuthOp.XPACD, op.op());
         assertEquals(-1, op.rn());
     }
@@ -279,7 +283,7 @@ class Aarch64PauthResidualDecoderTest {
         // sob CSSC, mesmo com o novo gate de opcode2 no topo de decodeDataProcessing1Source.
         Aarch64Decoder cssc = new Aarch64Decoder(Aarch64Architecture.ARMV8_9_A);
         // abs x0, x1 == 0xdac02020 (mesma constante usada em Aarch64Cssc2SourceResidualDecoderTest)
-        Ir64Op.AbsGeneral op = (Ir64Op.AbsGeneral) decode(cssc, 0xdac02020);
+        IntegerOp64.AbsGeneral op = (IntegerOp64.AbsGeneral) decode(cssc, 0xdac02020);
         assertEquals(0, op.rd());
         assertEquals(1, op.rn());
     }

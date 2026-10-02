@@ -18,7 +18,7 @@ espaço de encoding" se cumpriu de um jeito inesperado: não por encoding novo, 
 (`LDRA`, `SETGP`/`SETGM`/`SETGE`, `CPYP`/`CPYM`/`CPYE`, `FAMAX`/`FAMIN`/`FSCALE`)
 estavam em `docs/isa-nao-aplicavel.tsv` medindo `·` nas 16 colunas; ao migrar a
 curadoria para o mapa de versão elas mediriam `✅`, e a sondagem direta mostrou que o
-decoder devolve OUTRA instrução (`FpLoadLiteral64`, `SystemInstruction[NOP_HINT]`,
+decoder devolve OUTRA instrução (`FpOp64.LoadLiteral64`, `SystemInstruction[NOP_HINT]`,
 `VectorInsert*`). São dívida do invariante **G8**, listadas em
 `IsaCoverageReport.AARCH64_MISDECODED`. As ocorrências antigas de 32 bits
 (`VMOV_half` em MPCore/v7-A) seguem eliminadas pela B22.2.

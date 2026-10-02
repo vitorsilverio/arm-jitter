@@ -611,7 +611,7 @@ public final class ArmDecoder implements InstructionDecoder {
             // LDA*/STL*: carga/escrita simples em `[Rn]`, sem offset, SEM tocar o monitor de
             // exclusividade — reusa InstructionKind.LOAD/STORE (zero IrOp novo, G1). A ordenação
             // acquire/release é NOP observável neste interpretador single-thread (mesma decisão
-            // documentada em Ir64Op.LoadExclusive#acquireRelease para o lado A64): como não há
+            // documentada em MemoryOp64.LoadExclusive#acquireRelease para o lado A64): como não há
             // efeito algum a modelar, o decoder nem carrega um sinalizador — reproduzir a MESMA
             // instrução exata (LDR/STR de `[Rn]`) já conta a mesma história.
             if (rn == PROGRAM_COUNTER) {

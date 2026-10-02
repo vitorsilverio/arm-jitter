@@ -2,6 +2,7 @@ package dev.vitorsilverio.armjitter.decoder64;
 
 import dev.vitorsilverio.armjitter.arch64.Aarch64Architecture;
 import dev.vitorsilverio.armjitter.arch64.Aarch64Feature;
+import dev.vitorsilverio.armjitter.ir64.CryptoOp64;
 import dev.vitorsilverio.armjitter.ir64.Ir64CryptoSha512Op;
 import dev.vitorsilverio.armjitter.ir64.Ir64CryptoSm3Op;
 import dev.vitorsilverio.armjitter.ir64.Ir64CryptoSm3TtOp;
@@ -33,8 +34,8 @@ class Aarch64CryptoSha512Sm3Sm4DecoderTest {
     @Test
     void sha512h() {
         // `sha512h q0, q1, v2.2d`
-        Ir64Op.CryptoSha512ThreeRegister op =
-                (Ir64Op.CryptoSha512ThreeRegister) decodeWord(FULL_DECODER, 0xce628020);
+        CryptoOp64.Sha512ThreeRegister op =
+                (CryptoOp64.Sha512ThreeRegister) decodeWord(FULL_DECODER, 0xce628020);
         assertEquals(Ir64CryptoSha512Op.SHA512H, op.op());
         assertEquals(0, op.rd());
         assertEquals(1, op.rn());
@@ -44,8 +45,8 @@ class Aarch64CryptoSha512Sm3Sm4DecoderTest {
     @Test
     void sha512hSecondForm() {
         // `sha512h q10, q11, v12.2d`
-        Ir64Op.CryptoSha512ThreeRegister op =
-                (Ir64Op.CryptoSha512ThreeRegister) decodeWord(FULL_DECODER, 0xce6c816a);
+        CryptoOp64.Sha512ThreeRegister op =
+                (CryptoOp64.Sha512ThreeRegister) decodeWord(FULL_DECODER, 0xce6c816a);
         assertEquals(Ir64CryptoSha512Op.SHA512H, op.op());
         assertEquals(10, op.rd());
         assertEquals(11, op.rn());
@@ -55,8 +56,8 @@ class Aarch64CryptoSha512Sm3Sm4DecoderTest {
     @Test
     void sha512h2() {
         // `sha512h2 q0, q1, v2.2d`
-        Ir64Op.CryptoSha512ThreeRegister op =
-                (Ir64Op.CryptoSha512ThreeRegister) decodeWord(FULL_DECODER, 0xce628420);
+        CryptoOp64.Sha512ThreeRegister op =
+                (CryptoOp64.Sha512ThreeRegister) decodeWord(FULL_DECODER, 0xce628420);
         assertEquals(Ir64CryptoSha512Op.SHA512H2, op.op());
         assertEquals(0, op.rd());
         assertEquals(1, op.rn());
@@ -66,8 +67,8 @@ class Aarch64CryptoSha512Sm3Sm4DecoderTest {
     @Test
     void sha512h2SecondForm() {
         // `sha512h2 q13, q14, v15.2d`
-        Ir64Op.CryptoSha512ThreeRegister op =
-                (Ir64Op.CryptoSha512ThreeRegister) decodeWord(FULL_DECODER, 0xce6f85cd);
+        CryptoOp64.Sha512ThreeRegister op =
+                (CryptoOp64.Sha512ThreeRegister) decodeWord(FULL_DECODER, 0xce6f85cd);
         assertEquals(Ir64CryptoSha512Op.SHA512H2, op.op());
         assertEquals(13, op.rd());
         assertEquals(14, op.rn());
@@ -77,8 +78,8 @@ class Aarch64CryptoSha512Sm3Sm4DecoderTest {
     @Test
     void sha512su0() {
         // `sha512su0 v0.2d, v1.2d`
-        Ir64Op.CryptoSha512TwoRegister op =
-                (Ir64Op.CryptoSha512TwoRegister) decodeWord(FULL_DECODER, 0xcec08020);
+        CryptoOp64.Sha512TwoRegister op =
+                (CryptoOp64.Sha512TwoRegister) decodeWord(FULL_DECODER, 0xcec08020);
         assertEquals(0, op.rd());
         assertEquals(1, op.rn());
     }
@@ -86,8 +87,8 @@ class Aarch64CryptoSha512Sm3Sm4DecoderTest {
     @Test
     void sha512su0SecondForm() {
         // `sha512su0 v20.2d, v21.2d`
-        Ir64Op.CryptoSha512TwoRegister op =
-                (Ir64Op.CryptoSha512TwoRegister) decodeWord(FULL_DECODER, 0xcec082b4);
+        CryptoOp64.Sha512TwoRegister op =
+                (CryptoOp64.Sha512TwoRegister) decodeWord(FULL_DECODER, 0xcec082b4);
         assertEquals(20, op.rd());
         assertEquals(21, op.rn());
     }
@@ -95,8 +96,8 @@ class Aarch64CryptoSha512Sm3Sm4DecoderTest {
     @Test
     void sha512su1() {
         // `sha512su1 v0.2d, v1.2d, v2.2d`
-        Ir64Op.CryptoSha512ThreeRegister op =
-                (Ir64Op.CryptoSha512ThreeRegister) decodeWord(FULL_DECODER, 0xce628820);
+        CryptoOp64.Sha512ThreeRegister op =
+                (CryptoOp64.Sha512ThreeRegister) decodeWord(FULL_DECODER, 0xce628820);
         assertEquals(Ir64CryptoSha512Op.SHA512SU1, op.op());
         assertEquals(0, op.rd());
         assertEquals(1, op.rn());
@@ -106,8 +107,8 @@ class Aarch64CryptoSha512Sm3Sm4DecoderTest {
     @Test
     void sha512su1SecondForm() {
         // `sha512su1 v9.2d, v10.2d, v11.2d`
-        Ir64Op.CryptoSha512ThreeRegister op =
-                (Ir64Op.CryptoSha512ThreeRegister) decodeWord(FULL_DECODER, 0xce6b8949);
+        CryptoOp64.Sha512ThreeRegister op =
+                (CryptoOp64.Sha512ThreeRegister) decodeWord(FULL_DECODER, 0xce6b8949);
         assertEquals(Ir64CryptoSha512Op.SHA512SU1, op.op());
         assertEquals(9, op.rd());
         assertEquals(10, op.rn());
@@ -119,8 +120,8 @@ class Aarch64CryptoSha512Sm3Sm4DecoderTest {
     @Test
     void sm3partw1() {
         // `sm3partw1 v0.4s, v1.4s, v2.4s`
-        Ir64Op.CryptoSm3ThreeRegister op =
-                (Ir64Op.CryptoSm3ThreeRegister) decodeWord(FULL_DECODER, 0xce62c020);
+        CryptoOp64.Sm3ThreeRegister op =
+                (CryptoOp64.Sm3ThreeRegister) decodeWord(FULL_DECODER, 0xce62c020);
         assertEquals(Ir64CryptoSm3Op.PARTW1, op.op());
         assertEquals(0, op.rd());
         assertEquals(1, op.rn());
@@ -130,8 +131,8 @@ class Aarch64CryptoSha512Sm3Sm4DecoderTest {
     @Test
     void sm3partw1SecondForm() {
         // `sm3partw1 v17.4s, v18.4s, v19.4s`
-        Ir64Op.CryptoSm3ThreeRegister op =
-                (Ir64Op.CryptoSm3ThreeRegister) decodeWord(FULL_DECODER, 0xce73c251);
+        CryptoOp64.Sm3ThreeRegister op =
+                (CryptoOp64.Sm3ThreeRegister) decodeWord(FULL_DECODER, 0xce73c251);
         assertEquals(Ir64CryptoSm3Op.PARTW1, op.op());
         assertEquals(17, op.rd());
         assertEquals(18, op.rn());
@@ -141,8 +142,8 @@ class Aarch64CryptoSha512Sm3Sm4DecoderTest {
     @Test
     void sm3partw2() {
         // `sm3partw2 v0.4s, v1.4s, v2.4s`
-        Ir64Op.CryptoSm3ThreeRegister op =
-                (Ir64Op.CryptoSm3ThreeRegister) decodeWord(FULL_DECODER, 0xce62c420);
+        CryptoOp64.Sm3ThreeRegister op =
+                (CryptoOp64.Sm3ThreeRegister) decodeWord(FULL_DECODER, 0xce62c420);
         assertEquals(Ir64CryptoSm3Op.PARTW2, op.op());
         assertEquals(0, op.rd());
         assertEquals(1, op.rn());
@@ -152,8 +153,8 @@ class Aarch64CryptoSha512Sm3Sm4DecoderTest {
     @Test
     void sm3partw2SecondForm() {
         // `sm3partw2 v22.4s, v23.4s, v24.4s`
-        Ir64Op.CryptoSm3ThreeRegister op =
-                (Ir64Op.CryptoSm3ThreeRegister) decodeWord(FULL_DECODER, 0xce78c6f6);
+        CryptoOp64.Sm3ThreeRegister op =
+                (CryptoOp64.Sm3ThreeRegister) decodeWord(FULL_DECODER, 0xce78c6f6);
         assertEquals(Ir64CryptoSm3Op.PARTW2, op.op());
         assertEquals(22, op.rd());
         assertEquals(23, op.rn());
@@ -165,8 +166,8 @@ class Aarch64CryptoSha512Sm3Sm4DecoderTest {
     @Test
     void sm3ss1() {
         // `sm3ss1 v0.4s, v1.4s, v2.4s, v3.4s`
-        Ir64Op.CryptoSm3FourRegister op =
-                (Ir64Op.CryptoSm3FourRegister) decodeWord(FULL_DECODER, 0xce420c20);
+        CryptoOp64.Sm3FourRegister op =
+                (CryptoOp64.Sm3FourRegister) decodeWord(FULL_DECODER, 0xce420c20);
         assertEquals(0, op.rd());
         assertEquals(1, op.rn());
         assertEquals(2, op.rm());
@@ -176,8 +177,8 @@ class Aarch64CryptoSha512Sm3Sm4DecoderTest {
     @Test
     void sm3ss1SecondForm() {
         // `sm3ss1 v10.4s, v11.4s, v12.4s, v13.4s`
-        Ir64Op.CryptoSm3FourRegister op =
-                (Ir64Op.CryptoSm3FourRegister) decodeWord(FULL_DECODER, 0xce4c356a);
+        CryptoOp64.Sm3FourRegister op =
+                (CryptoOp64.Sm3FourRegister) decodeWord(FULL_DECODER, 0xce4c356a);
         assertEquals(10, op.rd());
         assertEquals(11, op.rn());
         assertEquals(12, op.rm());
@@ -190,8 +191,8 @@ class Aarch64CryptoSha512Sm3Sm4DecoderTest {
     @Test
     void sm3tt1a() {
         // `sm3tt1a v0.4s, v1.4s, v2.s[0]`
-        Ir64Op.CryptoSm3ThreeRegisterImm2 op =
-                (Ir64Op.CryptoSm3ThreeRegisterImm2) decodeWord(FULL_DECODER, 0xce428020);
+        CryptoOp64.Sm3ThreeRegisterImm2 op =
+                (CryptoOp64.Sm3ThreeRegisterImm2) decodeWord(FULL_DECODER, 0xce428020);
         assertEquals(Ir64CryptoSm3TtOp.TT1A, op.op());
         assertEquals(0, op.rd());
         assertEquals(1, op.rn());
@@ -202,8 +203,8 @@ class Aarch64CryptoSha512Sm3Sm4DecoderTest {
     @Test
     void sm3tt1aSecondFormWithImm2Three() {
         // `sm3tt1a v5.4s, v6.4s, v7.s[3]`
-        Ir64Op.CryptoSm3ThreeRegisterImm2 op =
-                (Ir64Op.CryptoSm3ThreeRegisterImm2) decodeWord(FULL_DECODER, 0xce47b0c5);
+        CryptoOp64.Sm3ThreeRegisterImm2 op =
+                (CryptoOp64.Sm3ThreeRegisterImm2) decodeWord(FULL_DECODER, 0xce47b0c5);
         assertEquals(Ir64CryptoSm3TtOp.TT1A, op.op());
         assertEquals(5, op.rd());
         assertEquals(6, op.rn());
@@ -214,8 +215,8 @@ class Aarch64CryptoSha512Sm3Sm4DecoderTest {
     @Test
     void sm3tt1b() {
         // `sm3tt1b v0.4s, v1.4s, v2.s[1]`
-        Ir64Op.CryptoSm3ThreeRegisterImm2 op =
-                (Ir64Op.CryptoSm3ThreeRegisterImm2) decodeWord(FULL_DECODER, 0xce429420);
+        CryptoOp64.Sm3ThreeRegisterImm2 op =
+                (CryptoOp64.Sm3ThreeRegisterImm2) decodeWord(FULL_DECODER, 0xce429420);
         assertEquals(Ir64CryptoSm3TtOp.TT1B, op.op());
         assertEquals(0, op.rd());
         assertEquals(1, op.rn());
@@ -226,8 +227,8 @@ class Aarch64CryptoSha512Sm3Sm4DecoderTest {
     @Test
     void sm3tt2a() {
         // `sm3tt2a v0.4s, v1.4s, v2.s[2]`
-        Ir64Op.CryptoSm3ThreeRegisterImm2 op =
-                (Ir64Op.CryptoSm3ThreeRegisterImm2) decodeWord(FULL_DECODER, 0xce42a820);
+        CryptoOp64.Sm3ThreeRegisterImm2 op =
+                (CryptoOp64.Sm3ThreeRegisterImm2) decodeWord(FULL_DECODER, 0xce42a820);
         assertEquals(Ir64CryptoSm3TtOp.TT2A, op.op());
         assertEquals(2, op.imm2());
     }
@@ -235,8 +236,8 @@ class Aarch64CryptoSha512Sm3Sm4DecoderTest {
     @Test
     void sm3tt2b() {
         // `sm3tt2b v0.4s, v1.4s, v2.s[3]`
-        Ir64Op.CryptoSm3ThreeRegisterImm2 op =
-                (Ir64Op.CryptoSm3ThreeRegisterImm2) decodeWord(FULL_DECODER, 0xce42bc20);
+        CryptoOp64.Sm3ThreeRegisterImm2 op =
+                (CryptoOp64.Sm3ThreeRegisterImm2) decodeWord(FULL_DECODER, 0xce42bc20);
         assertEquals(Ir64CryptoSm3TtOp.TT2B, op.op());
         assertEquals(3, op.imm2());
     }
@@ -246,7 +247,7 @@ class Aarch64CryptoSha512Sm3Sm4DecoderTest {
     @Test
     void sm4e() {
         // `sm4e v0.4s, v1.4s`
-        Ir64Op.CryptoSm4Encrypt op = (Ir64Op.CryptoSm4Encrypt) decodeWord(FULL_DECODER, 0xcec08420);
+        CryptoOp64.Sm4Encrypt op = (CryptoOp64.Sm4Encrypt) decodeWord(FULL_DECODER, 0xcec08420);
         assertEquals(0, op.rd());
         assertEquals(1, op.rn());
     }
@@ -254,7 +255,7 @@ class Aarch64CryptoSha512Sm3Sm4DecoderTest {
     @Test
     void sm4eSecondForm() {
         // `sm4e v25.4s, v26.4s`
-        Ir64Op.CryptoSm4Encrypt op = (Ir64Op.CryptoSm4Encrypt) decodeWord(FULL_DECODER, 0xcec08759);
+        CryptoOp64.Sm4Encrypt op = (CryptoOp64.Sm4Encrypt) decodeWord(FULL_DECODER, 0xcec08759);
         assertEquals(25, op.rd());
         assertEquals(26, op.rn());
     }
@@ -262,7 +263,7 @@ class Aarch64CryptoSha512Sm3Sm4DecoderTest {
     @Test
     void sm4ekey() {
         // `sm4ekey v0.4s, v1.4s, v2.4s`
-        Ir64Op.CryptoSm4KeyUpdate op = (Ir64Op.CryptoSm4KeyUpdate) decodeWord(FULL_DECODER, 0xce62c820);
+        CryptoOp64.Sm4KeyUpdate op = (CryptoOp64.Sm4KeyUpdate) decodeWord(FULL_DECODER, 0xce62c820);
         assertEquals(0, op.rd());
         assertEquals(1, op.rn());
         assertEquals(2, op.rm());
@@ -271,7 +272,7 @@ class Aarch64CryptoSha512Sm3Sm4DecoderTest {
     @Test
     void sm4ekeySecondForm() {
         // `sm4ekey v27.4s, v28.4s, v29.4s`
-        Ir64Op.CryptoSm4KeyUpdate op = (Ir64Op.CryptoSm4KeyUpdate) decodeWord(FULL_DECODER, 0xce7dcb9b);
+        CryptoOp64.Sm4KeyUpdate op = (CryptoOp64.Sm4KeyUpdate) decodeWord(FULL_DECODER, 0xce7dcb9b);
         assertEquals(27, op.rd());
         assertEquals(28, op.rn());
         assertEquals(29, op.rm());
@@ -284,16 +285,16 @@ class Aarch64CryptoSha512Sm3Sm4DecoderTest {
     @Test
     void eor3StillDecodes() {
         // `eor3 v0.16b, v1.16b, v2.16b, v3.16b`
-        Ir64Op.CryptoSha3FourRegister op =
-                (Ir64Op.CryptoSha3FourRegister) decodeWord(FULL_DECODER, 0xce020c20);
+        CryptoOp64.Sha3FourRegister op =
+                (CryptoOp64.Sha3FourRegister) decodeWord(FULL_DECODER, 0xce020c20);
         assertEquals(0, op.rd());
     }
 
     @Test
     void rax1StillDecodes() {
         // `rax1 v0.2d, v1.2d, v2.2d`
-        Ir64Op.CryptoSha3TwoSourceRotate op =
-                (Ir64Op.CryptoSha3TwoSourceRotate) decodeWord(FULL_DECODER, 0xce628c20);
+        CryptoOp64.Sha3TwoSourceRotate op =
+                (CryptoOp64.Sha3TwoSourceRotate) decodeWord(FULL_DECODER, 0xce628c20);
         assertEquals(0, op.rd());
     }
 
@@ -364,7 +365,7 @@ class Aarch64CryptoSha512Sm3Sm4DecoderTest {
     void sha512OnlyArchitectureAcceptsSha512AndRejectsSm3AndSm4() {
         Aarch64Decoder decoder = new Aarch64Decoder(
                 Aarch64Architecture.of("sha512-only", Aarch64Feature.SHA512));
-        assertEquals(0, ((Ir64Op.CryptoSha512ThreeRegister) decodeWord(decoder, 0xce628020)).rd());
+        assertEquals(0, ((CryptoOp64.Sha512ThreeRegister) decodeWord(decoder, 0xce628020)).rd());
         assertThrows(UnsupportedOperationException.class, () -> decodeWord(decoder, 0xce62c020)); // SM3PARTW1
         assertThrows(UnsupportedOperationException.class, () -> decodeWord(decoder, 0xcec08420)); // SM4E
     }
@@ -372,7 +373,7 @@ class Aarch64CryptoSha512Sm3Sm4DecoderTest {
     @Test
     void sm3OnlyArchitectureAcceptsSm3AndRejectsSha512AndSm4() {
         Aarch64Decoder decoder = new Aarch64Decoder(Aarch64Architecture.of("sm3-only", Aarch64Feature.SM3));
-        assertEquals(0, ((Ir64Op.CryptoSm3ThreeRegister) decodeWord(decoder, 0xce62c020)).rd());
+        assertEquals(0, ((CryptoOp64.Sm3ThreeRegister) decodeWord(decoder, 0xce62c020)).rd());
         assertThrows(UnsupportedOperationException.class, () -> decodeWord(decoder, 0xce628020)); // SHA512H
         assertThrows(UnsupportedOperationException.class, () -> decodeWord(decoder, 0xcec08420)); // SM4E
     }
@@ -380,7 +381,7 @@ class Aarch64CryptoSha512Sm3Sm4DecoderTest {
     @Test
     void sm4OnlyArchitectureAcceptsSm4AndRejectsSha512AndSm3() {
         Aarch64Decoder decoder = new Aarch64Decoder(Aarch64Architecture.of("sm4-only", Aarch64Feature.SM4));
-        assertEquals(0, ((Ir64Op.CryptoSm4Encrypt) decodeWord(decoder, 0xcec08420)).rd());
+        assertEquals(0, ((CryptoOp64.Sm4Encrypt) decodeWord(decoder, 0xcec08420)).rd());
         assertThrows(UnsupportedOperationException.class, () -> decodeWord(decoder, 0xce628020)); // SHA512H
         assertThrows(UnsupportedOperationException.class, () -> decodeWord(decoder, 0xce62c020)); // SM3PARTW1
     }

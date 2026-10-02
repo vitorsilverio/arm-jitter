@@ -2,7 +2,7 @@ package dev.vitorsilverio.armjitter.executor64;
 
 import dev.vitorsilverio.armjitter.core64.Aarch64Core;
 import dev.vitorsilverio.armjitter.core64.Aarch64ScalableRegisters;
-import dev.vitorsilverio.armjitter.ir64.Ir64Op;
+import dev.vitorsilverio.armjitter.ir64.SveMemoryOp64;
 import dev.vitorsilverio.armjitter.memory.AddressSpace64;
 
 /// Semântica dos stores SVE (B17.18): `ST1` contíguo (todo par `msz`/`esz`), `ST2`/`ST3`/`ST4` entrelaçados (as formas
@@ -39,7 +39,7 @@ final class SveStoreOps {
     }
 
     /// Executa uma instrução do grupo. `true` = a instrução já entrou numa exceção (acesso negado).
-    static boolean execute(Aarch64Core core, Ir64Op.SveStore op) {
+    static boolean execute(Aarch64Core core, SveMemoryOp64.Store op) {
         if (op.nonStreaming()) {
             SvePredicateOps.requireNonStreaming(core);
         }
@@ -60,12 +60,12 @@ final class SveStoreOps {
 
     // ── Endereço e elementos ─────────────────────────────────────────────────────────────────────
 
-    private static long base(Aarch64Core core, Ir64Op.SveStore op) {
+    private static long base(Aarch64Core core, SveMemoryOp64.Store op) {
         return op.rn() == STACK_POINTER_ENCODING ? core.sp() : core.x(op.rn());
     }
 
     /// Endereço do primeiro elemento de `ST1`/`ST[234]`.
-    private static long contiguousAddress(Aarch64Core core, Ir64Op.SveStore op) {
+    private static long contiguousAddress(Aarch64Core core, SveMemoryOp64.Store op) {
         long base = base(core, op);
         if (op.registerOffset()) {
             return base + (core.x(op.rm()) << op.msz());
@@ -106,7 +106,7 @@ final class SveStoreOps {
 
     /// Escreve UM elemento (`msz`/`esz` da instrução) do vetor `register` em `address`. Em `esz = 4` o elemento tem 128
     /// bits: as formas `ST1W`/`ST1D` `.Q` gravam só os `msz` bytes baixos dele e `ST[234]Q` gravam os 128 bits.
-    private static void storeElement(AddressSpace64 memory, long address, Ir64Op.SveStore op,
+    private static void storeElement(AddressSpace64 memory, long address, SveMemoryOp64.Store op,
             Aarch64ScalableRegisters regs, int register, int element) {
         if (op.esz() == ESZ_QUAD) {
             writeMemory(memory, address, Math.min(op.msz(), ESZ_QUAD - 1), regs.zWord(register, element * WORDS_PER_QUADWORD));
@@ -120,7 +120,7 @@ final class SveStoreOps {
 
     // ── ST1 / ST2 / ST3 / ST4 (e STNT1) ──────────────────────────────────────────────────────────
 
-    private static void storeStructures(Aarch64Core core, Ir64Op.SveStore op) {
+    private static void storeStructures(Aarch64Core core, SveMemoryOp64.Store op) {
         Aarch64ScalableRegisters regs = core.scalable();
         AddressSpace64 memory = core.memory();
         int registers = op.nreg() + 1;
@@ -142,7 +142,7 @@ final class SveStoreOps {
 
     /// `ST1_zprz`: `Xn|SP + (Zm[e] estendido << (scaled ? msz : 0))`. Com `esz = 3` e `xs` = `UXTW`/`SXTW` só os 32 bits
     /// baixos de cada elemento de 64 bits são o deslocamento.
-    private static void scatterVectorIndex(Aarch64Core core, Ir64Op.SveStore op) {
+    private static void scatterVectorIndex(Aarch64Core core, SveMemoryOp64.Store op) {
         Aarch64ScalableRegisters regs = core.scalable();
         AddressSpace64 memory = core.memory();
         int elements = core.vectorLengthBytes() >> op.esz();
@@ -155,8 +155,8 @@ final class SveStoreOps {
             }
             long offset = element(regs, op.rm(), e, op.esz());
             offset = switch (op.offsetExtend()) {
-                case Ir64Op.SveStore.OFFSET_UXTW -> offset & WORD_OFFSET_MASK;
-                case Ir64Op.SveStore.OFFSET_SXTW -> (long) (int) offset;
+                case SveMemoryOp64.Store.OFFSET_UXTW -> offset & WORD_OFFSET_MASK;
+                case SveMemoryOp64.Store.OFFSET_SXTW -> (long) (int) offset;
                 default -> offset;
             };
             writeMemory(memory, base + (offset << shift), op.msz(), element(regs, op.rt(), e, op.esz()));
@@ -164,7 +164,7 @@ final class SveStoreOps {
     }
 
     /// `ST1_zpiz`: `Zn[e] (zero-estendido em 32 bits) + (imm5 << msz)`.
-    private static void scatterVectorBase(Aarch64Core core, Ir64Op.SveStore op) {
+    private static void scatterVectorBase(Aarch64Core core, SveMemoryOp64.Store op) {
         Aarch64ScalableRegisters regs = core.scalable();
         AddressSpace64 memory = core.memory();
         int elements = core.vectorLengthBytes() >> op.esz();
@@ -181,7 +181,7 @@ final class SveStoreOps {
 
     /// `STNT1_zprz`: `Zn[e] (zero-estendido em 32 bits quando `esz = 2`) + Xm` (`XZR` se `31`). "Non-temporal" é só hint de
     /// cache: sem modelo de cache, o acesso é o de um `ST1`.
-    private static void scatterVectorPlusScalar(Aarch64Core core, Ir64Op.SveStore op) {
+    private static void scatterVectorPlusScalar(Aarch64Core core, SveMemoryOp64.Store op) {
         Aarch64ScalableRegisters regs = core.scalable();
         AddressSpace64 memory = core.memory();
         int elements = core.vectorLengthBytes() >> op.esz();
@@ -197,7 +197,7 @@ final class SveStoreOps {
 
     /// `ST1Q`: um quadword por segmento de 128 bits; o predicado usa o bit de índice `16 × segmento`, o endereço é o
     /// `D[0]` do segmento de `Zn` mais `Xm` (`XZR` se `31`) e o dado são os 128 bits do segmento de `Zt`.
-    private static void scatterQuadword(Aarch64Core core, Ir64Op.SveStore op) {
+    private static void scatterQuadword(Aarch64Core core, SveMemoryOp64.Store op) {
         Aarch64ScalableRegisters regs = core.scalable();
         AddressSpace64 memory = core.memory();
         int segments = core.vectorLengthBytes() / QUADWORD_BYTES;
@@ -215,7 +215,7 @@ final class SveStoreOps {
 
     // ── STR de vetor e de predicado ──────────────────────────────────────────────────────────────
 
-    private static void storeVectorRegister(Aarch64Core core, Ir64Op.SveStore op) {
+    private static void storeVectorRegister(Aarch64Core core, SveMemoryOp64.Store op) {
         Aarch64ScalableRegisters regs = core.scalable();
         long start = base(core, op) + op.immediate() * core.vectorLengthBytes();
         for (int w = 0; w < core.vectorLengthBytes() / WORD_BYTES; w++) {
@@ -223,7 +223,7 @@ final class SveStoreOps {
         }
     }
 
-    private static void storePredicateRegister(Aarch64Core core, Ir64Op.SveStore op) {
+    private static void storePredicateRegister(Aarch64Core core, SveMemoryOp64.Store op) {
         Aarch64ScalableRegisters regs = core.scalable();
         int predicateBytes = core.vectorLengthBytes() / VECTOR_BYTES_PER_PREDICATE_BYTE;
         long start = base(core, op) + op.immediate() * predicateBytes;

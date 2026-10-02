@@ -3,7 +3,7 @@ package dev.vitorsilverio.armjitter.executor64;
 import dev.vitorsilverio.armjitter.core64.Aarch64Core;
 import dev.vitorsilverio.armjitter.decoder64.Aarch64Decoder;
 import dev.vitorsilverio.armjitter.ir64.Aarch64SystemRegisterId;
-import dev.vitorsilverio.armjitter.ir64.Ir64Op;
+import dev.vitorsilverio.armjitter.ir64.SystemOp64;
 import dev.vitorsilverio.armjitter.memory.AddressSpace64;
 import dev.vitorsilverio.armjitter.support.TestAddressSpace;
 import org.junit.jupiter.api.Test;
@@ -22,16 +22,16 @@ class Aarch64SpEl0SystemRegisterTest {
         return new Aarch64Core(AddressSpace64.wrapping(new TestAddressSpace(8)));
     }
 
-    private static Ir64Op.SystemRegister decode(int word) {
+    private static SystemOp64.SystemRegister decode(int word) {
         TestAddressSpace raw = new TestAddressSpace(4);
         raw.put32(0, word);
-        return (Ir64Op.SystemRegister) DECODER.decode(AddressSpace64.wrapping(raw), 0);
+        return (SystemOp64.SystemRegister) DECODER.decode(AddressSpace64.wrapping(raw), 0);
     }
 
     @Test
     void msrSpEl0Decodes() {
         // d5184104: msr sp_el0, x4
-        Ir64Op.SystemRegister op = decode(0xd5184104);
+        SystemOp64.SystemRegister op = decode(0xd5184104);
         assertEquals(false, op.read());
         assertEquals(Aarch64SystemRegisterId.SP_EL0, op.register());
         assertEquals(4, op.rt());
@@ -40,7 +40,7 @@ class Aarch64SpEl0SystemRegisterTest {
     @Test
     void mrsSpEl0Decodes() {
         // d5384105: mrs x5, sp_el0
-        Ir64Op.SystemRegister op = decode(0xd5384105);
+        SystemOp64.SystemRegister op = decode(0xd5384105);
         assertEquals(true, op.read());
         assertEquals(Aarch64SystemRegisterId.SP_EL0, op.register());
         assertEquals(5, op.rt());
@@ -54,7 +54,7 @@ class Aarch64SpEl0SystemRegisterTest {
             raw.put32(0, word);
             try {
                 Object op = DECODER.decode(AddressSpace64.wrapping(raw), 0);
-                assertTrue(!(op instanceof Ir64Op.SystemRegister sr) || sr.register() != Aarch64SystemRegisterId.SP_EL0);
+                assertTrue(!(op instanceof SystemOp64.SystemRegister sr) || sr.register() != Aarch64SystemRegisterId.SP_EL0);
             } catch (UnsupportedOperationException expected) {
                 // recusado: também correto
             }
@@ -73,8 +73,8 @@ class Aarch64SpEl0SystemRegisterTest {
         core.setSp(0x8000_1000L);
         core.setX(4, 0xFFFF_FFC0_8123_4560L);
 
-        EXECUTOR.executeOp(core, new Ir64Op.SystemRegister(false, Aarch64SystemRegisterId.SP_EL0, 4));
-        EXECUTOR.executeOp(core, new Ir64Op.SystemRegister(true, Aarch64SystemRegisterId.SP_EL0, 5));
+        EXECUTOR.executeOp(core, new SystemOp64.SystemRegister(false, Aarch64SystemRegisterId.SP_EL0, 4));
+        EXECUTOR.executeOp(core, new SystemOp64.SystemRegister(true, Aarch64SystemRegisterId.SP_EL0, 5));
 
         assertEquals(0xFFFF_FFC0_8123_4560L, core.x(5));
         assertEquals(0x8000_1000L, core.sp(), "SP ativo em EL1 (SP_EL1) não pode ser tocado por SP_EL0");
@@ -85,11 +85,11 @@ class Aarch64SpEl0SystemRegisterTest {
     @Test
     void cntkctlEl1DecodesAndRoundTrips() {
         // d538e113: mrs x19, cntkctl_el1; d518e113: msr cntkctl_el1, x19
-        Ir64Op.SystemRegister read = decode(0xd538e113);
+        SystemOp64.SystemRegister read = decode(0xd538e113);
         assertEquals(true, read.read());
         assertEquals(Aarch64SystemRegisterId.CNTKCTL_EL1, read.register());
         assertEquals(19, read.rt());
-        Ir64Op.SystemRegister write = decode(0xd518e113);
+        SystemOp64.SystemRegister write = decode(0xd518e113);
         assertEquals(false, write.read());
         assertEquals(Aarch64SystemRegisterId.CNTKCTL_EL1, write.register());
 
@@ -108,7 +108,7 @@ class Aarch64SpEl0SystemRegisterTest {
         for (int word : new int[] {0xd538e213, 0xd538e133}) {
             try {
                 Object op = DECODER.decode(AddressSpace64.wrapping(rawWith(word)), 0);
-                assertTrue(!(op instanceof Ir64Op.SystemRegister sr)
+                assertTrue(!(op instanceof SystemOp64.SystemRegister sr)
                         || sr.register() != Aarch64SystemRegisterId.CNTKCTL_EL1);
             } catch (UnsupportedOperationException expected) {
                 // recusado: correto

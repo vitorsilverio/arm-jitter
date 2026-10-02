@@ -1,10 +1,10 @@
 package dev.vitorsilverio.armjitter.ir64;
 
-/// Sub-operação de {@link Ir64Op.PointerAuthInPlace} (B19.15, subgrupo "Data-processing (1 source)"
+/// Sub-operação de {@link IntegerOp64.PointerAuthInPlace} (B19.15, subgrupo "Data-processing (1 source)"
 /// de "Data Processing — Register", `opcode2=00001`, `FEAT_PAuth`) — as formas de propósito geral
 /// que assinam/autenticam/removem a assinatura de um ponteiro IN-PLACE (`Xd`). Só documentam qual
 /// mnemônico foi decodificado (fidelidade de desmontagem): sob a rota (b) registrada na task (mesmo
-/// precedente de {@link Ir64Op.PointerAuthGeneric}, `PACGA`), nenhuma autenticação real é modelada
+/// precedente de {@link IntegerOp64.PointerAuthGeneric}, `PACGA`), nenhuma autenticação real é modelada
 /// — a chave A-vs-B e o modificador (`Xn`, quando existe) não afetam o resultado observável.
 public enum Ir64PointerAuthOp {
     /// `PACIA Xd, Xn` — assina `Xd` (ponteiro de INSTRUÇÃO) com a chave A e modificador `Xn`.

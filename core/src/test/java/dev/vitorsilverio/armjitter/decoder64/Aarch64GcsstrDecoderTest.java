@@ -4,6 +4,7 @@ import dev.vitorsilverio.armjitter.arch64.Aarch64Architecture;
 import dev.vitorsilverio.armjitter.ir64.Ir64AddressingMode;
 import dev.vitorsilverio.armjitter.ir64.Ir64MemSize;
 import dev.vitorsilverio.armjitter.ir64.Ir64Op;
+import dev.vitorsilverio.armjitter.ir64.MemoryOp64;
 import dev.vitorsilverio.armjitter.memory.AddressSpace64;
 import dev.vitorsilverio.armjitter.support.TestAddressSpace;
 import org.junit.jupiter.api.Test;
@@ -39,7 +40,7 @@ class Aarch64GcsstrDecoderTest {
 
     @Test
     void decodesAsPlainDoublewordStoreWithoutOffset() {
-        Ir64Op.Store64 store = (Ir64Op.Store64) decode(GCS_DECODER, GCSSTR_X0_X1);
+        MemoryOp64.Store64 store = (MemoryOp64.Store64) decode(GCS_DECODER, GCSSTR_X0_X1);
         assertEquals(0, store.rt());
         assertEquals(1, store.rn());
         assertEquals(Ir64MemSize.DOUBLEWORD, store.size());
@@ -50,7 +51,7 @@ class Aarch64GcsstrDecoderTest {
 
     @Test
     void decodesSpAsBaseRegister() {
-        Ir64Op.Store64 store = (Ir64Op.Store64) decode(GCS_DECODER, GCSSTR_X5_SP);
+        MemoryOp64.Store64 store = (MemoryOp64.Store64) decode(GCS_DECODER, GCSSTR_X5_SP);
         assertEquals(5, store.rt());
         assertEquals(31, store.rn());
     }
@@ -59,7 +60,7 @@ class Aarch64GcsstrDecoderTest {
     void unprivilegedVariantDecodesTheSameFunctionally() {
         // `GCSSTTR` (unpriv=1): mesma simplificação de `LDTR`/`STTR` — sem modelo de EL0/EL1
         // distinto neste emulador, então o resultado funcional é idêntico ao de `GCSSTR`.
-        Ir64Op.Store64 store = (Ir64Op.Store64) decode(GCS_DECODER, GCSSTTR_X0_X1);
+        MemoryOp64.Store64 store = (MemoryOp64.Store64) decode(GCS_DECODER, GCSSTTR_X0_X1);
         assertEquals(0, store.rt());
         assertEquals(1, store.rn());
         assertEquals(Ir64MemSize.DOUBLEWORD, store.size());

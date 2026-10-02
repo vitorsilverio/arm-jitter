@@ -1,6 +1,6 @@
 package dev.vitorsilverio.armjitter.ir64;
 
-/// Sub-operação de {@link Ir64Op.Bitfield} (`ARM DDI 0487 C6.2`, `SBFM`/`BFM`/`UBFM`, B6.3.2):
+/// Sub-operação de {@link IntegerOp64.Bitfield} (`ARM DDI 0487 C6.2`, `SBFM`/`BFM`/`UBFM`, B6.3.2):
 /// distinguidas pelo campo `opc` de 2 bits `[30:29]` do encoding (`00`=`SBFM`, `01`=`BFM`,
 /// `10`=`UBFM` — `11` é `EXTR`, fora de escopo, ver a task). Os 11 aliases citados no épico
 /// (`UBFX`/`SBFX`/`BFI`/`BFXIL`/`LSL`/`LSR`/`ASR`/`UXTB`/`UXTH`/`SXTB`/`SXTH`/`SXTW`) não têm

@@ -8,6 +8,7 @@ import dev.vitorsilverio.armjitter.decoder64.Aarch64Decoder;
 import dev.vitorsilverio.armjitter.ir64.Ir64Block;
 import dev.vitorsilverio.armjitter.ir64.Ir64Op;
 import dev.vitorsilverio.armjitter.ir64.StandardIr64BlockLifter;
+import dev.vitorsilverio.armjitter.ir64.SveMemoryOp64;
 import dev.vitorsilverio.armjitter.memory.AddressSpace64;
 import dev.vitorsilverio.armjitter.memory.MemoryAccessType;
 import dev.vitorsilverio.armjitter.memory.mmu.FaultStatus64;
@@ -449,9 +450,9 @@ class Aarch64SveStoreTest {
     /// (palavra, bytes do elemento do vetor, bytes escritos por elemento, extensão do deslocamento, escalado).
     /// `x2 = base`, `Z3 = deslocamentos`, `Z0 = dado`.
     private static Stream<Object[]> scatters() {
-        int u = Ir64Op.SveStore.OFFSET_UXTW;
-        int s = Ir64Op.SveStore.OFFSET_SXTW;
-        int d = Ir64Op.SveStore.OFFSET_64;
+        int u = SveMemoryOp64.Store.OFFSET_UXTW;
+        int s = SveMemoryOp64.Store.OFFSET_SXTW;
+        int d = SveMemoryOp64.Store.OFFSET_64;
         return IntStream.of(VECTOR_LENGTHS).boxed().flatMap(vl -> Stream.of(
                 scatter(vl, 0xe4438440, 4, 1, u, false), // st1b {z0.s}, [x2, z3.s, uxtw]
                 scatter(vl, 0xe443c440, 4, 1, s, false), // st1b {z0.s}, [x2, z3.s, sxtw]
@@ -500,7 +501,7 @@ class Aarch64SveStoreTest {
             target[e] = order[e] * 16L; // alvos distintos e sem sobreposição
             long offset = target[e] >> shift;
             // Com deslocamento de 32 bits em elemento de 64, os 32 bits ALTOS são lixo que não pode contar.
-            long value = extend == Ir64Op.SveStore.OFFSET_64 || elementBytes == 4 ? offset
+            long value = extend == SveMemoryOp64.Store.OFFSET_64 || elementBytes == 4 ? offset
                     : offset | (garbage.nextLong() << 32);
             setElement(core, Z3, e, elementBytes, value);
         }
@@ -671,7 +672,7 @@ class Aarch64SveStoreTest {
     }
 
     private static boolean decodes(Aarch64Architecture architecture, int word) {
-        return decodeOrNull(architecture, word) instanceof Ir64Op.SveStore;
+        return decodeOrNull(architecture, word) instanceof SveMemoryOp64.Store;
     }
 
     @Test
@@ -757,7 +758,7 @@ class Aarch64SveStoreTest {
         Ir64Block block = new StandardIr64BlockLifter(SVE).lift(memory, 0, 1);
         new Ir64BlockExecutor(SVE).executeBlock(core, block);
         assertMemory(expected, memory);
-        assertInstanceOf(Ir64Op.SveStore.class, decodeOrNull(SVE, 0xe4034440));
+        assertInstanceOf(SveMemoryOp64.Store.class, decodeOrNull(SVE, 0xe4034440));
     }
 
     /// `CPACR_EL1.ZEN` negando SVE: a exceção é tomada e NENHUM byte é escrito.

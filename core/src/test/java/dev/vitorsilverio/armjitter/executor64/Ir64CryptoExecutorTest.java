@@ -2,8 +2,9 @@ package dev.vitorsilverio.armjitter.executor64;
 
 import dev.vitorsilverio.armjitter.core64.Aarch64Core;
 import dev.vitorsilverio.armjitter.core64.Aarch64FpRegisters;
+import dev.vitorsilverio.armjitter.ir64.AdvSimdIntegerOp64;
+import dev.vitorsilverio.armjitter.ir64.CryptoOp64;
 import dev.vitorsilverio.armjitter.ir64.Ir64CryptoAesOp;
-import dev.vitorsilverio.armjitter.ir64.Ir64Op;
 import dev.vitorsilverio.armjitter.memory.AddressSpace64;
 import dev.vitorsilverio.armjitter.support.TestAddressSpace;
 import org.junit.jupiter.api.Test;
@@ -34,7 +35,7 @@ class Ir64CryptoExecutorTest {
         fp.setQ(0, 0L, 0L);
         fp.setQ(1, 0L, 0L);
 
-        EXECUTOR.executeOp(core, new Ir64Op.CryptoAes(Ir64CryptoAesOp.AESE, 0, 1));
+        EXECUTOR.executeOp(core, new CryptoOp64.Aes(Ir64CryptoAesOp.AESE, 0, 1));
 
         assertEquals(0x6363636363636363L, fp.low64(0));
         assertEquals(0x6363636363636363L, fp.high64(0));
@@ -48,7 +49,7 @@ class Ir64CryptoExecutorTest {
         fp.setQ(2, 0L, 0L);
         fp.setQ(3, 0L, 0L);
 
-        EXECUTOR.executeOp(core, new Ir64Op.CryptoAes(Ir64CryptoAesOp.AESD, 2, 3));
+        EXECUTOR.executeOp(core, new CryptoOp64.Aes(Ir64CryptoAesOp.AESD, 2, 3));
 
         assertEquals(0x5252525252525252L, fp.low64(2));
         assertEquals(0x5252525252525252L, fp.high64(2));
@@ -63,8 +64,8 @@ class Ir64CryptoExecutorTest {
         fp.setQ(0, 0x0706050403020100L, 0x0F0E0D0C0B0A0908L);
         fp.setQ(1, 0L, 0L); // "round key" zero
 
-        EXECUTOR.executeOp(core, new Ir64Op.CryptoAes(Ir64CryptoAesOp.AESE, 0, 1));
-        EXECUTOR.executeOp(core, new Ir64Op.CryptoAes(Ir64CryptoAesOp.AESD, 0, 1));
+        EXECUTOR.executeOp(core, new CryptoOp64.Aes(Ir64CryptoAesOp.AESE, 0, 1));
+        EXECUTOR.executeOp(core, new CryptoOp64.Aes(Ir64CryptoAesOp.AESD, 0, 1));
 
         assertEquals(0x0706050403020100L, fp.low64(0));
         assertEquals(0x0F0E0D0C0B0A0908L, fp.high64(0));
@@ -79,7 +80,7 @@ class Ir64CryptoExecutorTest {
         Aarch64FpRegisters fp = core.fp();
         fp.setQ(5, 0x0000000000000001L, 0L);
 
-        EXECUTOR.executeOp(core, new Ir64Op.CryptoAes(Ir64CryptoAesOp.AESMC, 4, 5));
+        EXECUTOR.executeOp(core, new CryptoOp64.Aes(Ir64CryptoAesOp.AESMC, 4, 5));
 
         assertEquals(0x0000000003010102L, fp.low64(4));
         assertEquals(0L, fp.high64(4));
@@ -91,8 +92,8 @@ class Ir64CryptoExecutorTest {
         Aarch64FpRegisters fp = core.fp();
         fp.setQ(5, 0x1122334455667788L, 0x99AABBCCDDEEFF00L);
 
-        EXECUTOR.executeOp(core, new Ir64Op.CryptoAes(Ir64CryptoAesOp.AESMC, 4, 5));
-        EXECUTOR.executeOp(core, new Ir64Op.CryptoAes(Ir64CryptoAesOp.AESIMC, 6, 4));
+        EXECUTOR.executeOp(core, new CryptoOp64.Aes(Ir64CryptoAesOp.AESMC, 4, 5));
+        EXECUTOR.executeOp(core, new CryptoOp64.Aes(Ir64CryptoAesOp.AESIMC, 6, 4));
 
         assertEquals(0x1122334455667788L, fp.low64(6));
         assertEquals(0x99AABBCCDDEEFF00L, fp.high64(6));
@@ -107,7 +108,7 @@ class Ir64CryptoExecutorTest {
         fp.setQ(9, 0x0000000000000003L, 0L);
         fp.setQ(10, 0x0000000000000005L, 0L);
 
-        EXECUTOR.executeOp(core, new Ir64Op.VectorPolynomialMultiplyLong(false, false, 8, 9, 10));
+        EXECUTOR.executeOp(core, new AdvSimdIntegerOp64.PolynomialMultiplyLong(false, false, 8, 9, 10));
 
         assertEquals(0x000000000000000FL, fp.low64(8));
         assertEquals(0L, fp.high64(8));
@@ -121,7 +122,7 @@ class Ir64CryptoExecutorTest {
         fp.setQ(9, 0xFFFFFFFFFFFFFFFFL, 0x0000000000000003L);
         fp.setQ(10, 0xFFFFFFFFFFFFFFFFL, 0x0000000000000005L);
 
-        EXECUTOR.executeOp(core, new Ir64Op.VectorPolynomialMultiplyLong(false, true, 8, 9, 10));
+        EXECUTOR.executeOp(core, new AdvSimdIntegerOp64.PolynomialMultiplyLong(false, true, 8, 9, 10));
 
         assertEquals(0x000000000000000FL, fp.low64(8));
         assertEquals(0L, fp.high64(8));
@@ -135,7 +136,7 @@ class Ir64CryptoExecutorTest {
         fp.setQ(15, 2L, 0L);
         fp.setQ(16, 2L, 0L);
 
-        EXECUTOR.executeOp(core, new Ir64Op.VectorPolynomialMultiplyLong(true, false, 14, 15, 16));
+        EXECUTOR.executeOp(core, new AdvSimdIntegerOp64.PolynomialMultiplyLong(true, false, 14, 15, 16));
 
         assertEquals(4L, fp.low64(14));
         assertEquals(0L, fp.high64(14));
@@ -149,7 +150,7 @@ class Ir64CryptoExecutorTest {
         fp.setQ(15, 1L, 0L);
         fp.setQ(16, Long.MIN_VALUE /* 1L << 63 */, 0L);
 
-        EXECUTOR.executeOp(core, new Ir64Op.VectorPolynomialMultiplyLong(true, false, 14, 15, 16));
+        EXECUTOR.executeOp(core, new AdvSimdIntegerOp64.PolynomialMultiplyLong(true, false, 14, 15, 16));
 
         assertEquals(Long.MIN_VALUE, fp.low64(14));
         assertEquals(0L, fp.high64(14));
@@ -162,7 +163,7 @@ class Ir64CryptoExecutorTest {
         fp.setQ(15, 0xFFFFFFFFFFFFFFFFL, 2L);
         fp.setQ(16, 0xFFFFFFFFFFFFFFFFL, 2L);
 
-        EXECUTOR.executeOp(core, new Ir64Op.VectorPolynomialMultiplyLong(true, true, 14, 15, 16));
+        EXECUTOR.executeOp(core, new AdvSimdIntegerOp64.PolynomialMultiplyLong(true, true, 14, 15, 16));
 
         assertEquals(4L, fp.low64(14));
         assertEquals(0L, fp.high64(14));

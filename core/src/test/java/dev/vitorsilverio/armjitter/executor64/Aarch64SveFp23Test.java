@@ -6,6 +6,8 @@ import dev.vitorsilverio.armjitter.core64.Aarch64Core;
 import dev.vitorsilverio.armjitter.core64.Aarch64ExceptionLevel;
 import dev.vitorsilverio.armjitter.decoder64.Aarch64Decoder;
 import dev.vitorsilverio.armjitter.ir64.Ir64Op;
+import dev.vitorsilverio.armjitter.ir64.SveFpOp64;
+import dev.vitorsilverio.armjitter.ir64.SystemOp64;
 import dev.vitorsilverio.armjitter.memory.AddressSpace64;
 import dev.vitorsilverio.armjitter.support.TestAddressSpace;
 import org.junit.jupiter.api.Test;
@@ -133,7 +135,7 @@ class Aarch64SveFp23Test {
     @Test
     void f1cvtRefusedWithoutFeature() {
         assertNull(decodeOrNull(SVE2, f1cvtWord(Z0, Z1)), "sem FEAT_SVE_F8CVT recusa");
-        assertInstanceOf(Ir64Op.SveFpConvertFp8.class, decodeOrNull(F8CVT, f1cvtWord(Z0, Z1)));
+        assertInstanceOf(SveFpOp64.FpConvertFp8.class, decodeOrNull(F8CVT, f1cvtWord(Z0, Z1)));
     }
 
     /// `F1CVT`/`F1CVTLT` leem bytes PAR/ÍMPAR distintos — Achado 5/7 da task (metade correta).
@@ -239,9 +241,9 @@ class Aarch64SveFp23Test {
         int fmmlaS = matmulWord(0b10, 0b001, Z2, Z1, Z0);
         int fmmlaD = matmulWord(0b11, 0b001, Z2, Z1, Z0);
         assertNull(decodeOrNull(SVE2, fmmlaS), "sem F32MM recusa");
-        assertInstanceOf(Ir64Op.SveFpMatrixMultiply.class, decodeOrNull(F32MM, fmmlaS));
+        assertInstanceOf(SveFpOp64.FpMatrixMultiply.class, decodeOrNull(F32MM, fmmlaS));
         assertNull(decodeOrNull(SVE2, fmmlaD), "sem F64MM recusa");
-        assertInstanceOf(Ir64Op.SveFpMatrixMultiply.class, decodeOrNull(F64MM, fmmlaD));
+        assertInstanceOf(SveFpOp64.FpMatrixMultiply.class, decodeOrNull(F64MM, fmmlaD));
     }
 
     /// `FMMLA_s`: `Zda[i][j] += Σ_k Zn[i][k] × Zm[k][j]` (não fundida — `SveFloat.multiply`/`add` separados).
@@ -272,9 +274,9 @@ class Aarch64SveFp23Test {
         int fmmlaSb = matmulWord(0b00, 0b000, Z2, Z1, Z0);
         int fmmlaHb = matmulWord(0b01, 0b000, Z2, Z1, Z0);
         assertNull(decodeOrNull(SVE2, fmmlaSb));
-        assertInstanceOf(Ir64Op.SveFpMatrixMultiply.class, decodeOrNull(FP8_MM32, fmmlaSb));
+        assertInstanceOf(SveFpOp64.FpMatrixMultiply.class, decodeOrNull(FP8_MM32, fmmlaSb));
         assertNull(decodeOrNull(SVE2, fmmlaHb));
-        assertInstanceOf(Ir64Op.SveFpMatrixMultiply.class, decodeOrNull(FP8_MM16, fmmlaHb));
+        assertInstanceOf(SveFpOp64.FpMatrixMultiply.class, decodeOrNull(FP8_MM16, fmmlaHb));
     }
 
     // ── FCVTNT/FCVTLT/FCVTXNT (odd elements) + FCVTX_ds_m ───────────────────────────────────────────
@@ -314,8 +316,8 @@ class Aarch64SveFp23Test {
     void fcvtxDsMReusesTheExistingFcvtxKind() {
         int fcvtxDsM = 0x650AA000 | (P0 << 10) | (Z1 << 5) | Z0;
         Ir64Op decoded = decodeOrNull(SVE2, fcvtxDsM);
-        assertInstanceOf(Ir64Op.SveFpUnary.class, decoded);
-        assertEquals(Ir64Op.SveFpUnary.Op.FCVTX, ((Ir64Op.SveFpUnary) decoded).op());
+        assertInstanceOf(SveFpOp64.FpUnary.class, decoded);
+        assertEquals(SveFpOp64.FpUnary.Op.FCVTX, ((SveFpOp64.FpUnary) decoded).op());
     }
 
     // ── FLOGB ────────────────────────────────────────────────────────────────────────────────────────
@@ -327,12 +329,12 @@ class Aarch64SveFp23Test {
         int flogbZEszS = 0x641E8000 | (2 << 13) | (P0 << 10) | (Z1 << 5) | Z0;
         Ir64Op m = decodeOrNull(SVE2, flogbMEszS);
         Ir64Op z = decodeOrNull(SVE2, flogbZEszS);
-        assertInstanceOf(Ir64Op.SveFpLogB.class, m);
-        assertInstanceOf(Ir64Op.SveFpLogB.class, z);
-        assertEquals(2, ((Ir64Op.SveFpLogB) m).esz());
-        assertEquals(2, ((Ir64Op.SveFpLogB) z).esz());
-        assertTrue(!((Ir64Op.SveFpLogB) m).zeroing());
-        assertTrue(((Ir64Op.SveFpLogB) z).zeroing());
+        assertInstanceOf(SveFpOp64.FpLogB.class, m);
+        assertInstanceOf(SveFpOp64.FpLogB.class, z);
+        assertEquals(2, ((SveFpOp64.FpLogB) m).esz());
+        assertEquals(2, ((SveFpOp64.FpLogB) z).esz());
+        assertTrue(!((SveFpOp64.FpLogB) m).zeroing());
+        assertTrue(((SveFpOp64.FpLogB) z).zeroing());
     }
 
     @Test
@@ -373,9 +375,9 @@ class Aarch64SveFp23Test {
         int bfmlalb = mlalWord(0b11, false, false, Z2, Z1, Z0);
         int bfmlslb = mlalWord(0b11, true, false, Z2, Z1, Z0);
         assertNull(decodeOrNull(SVE2, bfmlalb), "sem BFLOAT16 recusa BFMLALB");
-        assertInstanceOf(Ir64Op.SveFpMultiplyAddLongWidenBFloat16.class, decodeOrNull(BF16, bfmlalb));
+        assertInstanceOf(SveFpOp64.FpMultiplyAddLongWidenBFloat16.class, decodeOrNull(BF16, bfmlalb));
         assertNull(decodeOrNull(BF16, bfmlslb), "BFLOAT16 sozinho não basta para BFMLSLB");
-        assertInstanceOf(Ir64Op.SveFpMultiplyAddLongWidenBFloat16.class, decodeOrNull(SVE2_1, bfmlslb));
+        assertInstanceOf(SveFpOp64.FpMultiplyAddLongWidenBFloat16.class, decodeOrNull(SVE2_1, bfmlslb));
     }
 
     /// Indexado: `Zm` fixo por segmento de 128 bits — `VL >= 256` distingue de "índice global".
@@ -411,26 +413,26 @@ class Aarch64SveFp23Test {
     void fdotZzzzIsNotConfusedWithFmlalbZzzw() {
         int fdotZzzz = fdotWidenWord(0b00, Z2, Z1, Z0);
         int fmlalbZzzw = mlalWord(0b10, false, false, Z2, Z1, Z0);
-        assertInstanceOf(Ir64Op.SveFpDotProductWiden.class, decodeOrNull(SVE2_1, fdotZzzz));
-        assertInstanceOf(Ir64Op.SveFpMultiplyAddLongWiden.class, decodeOrNull(SVE2, fmlalbZzzw));
+        assertInstanceOf(SveFpOp64.FpDotProductWiden.class, decodeOrNull(SVE2_1, fdotZzzz));
+        assertInstanceOf(SveFpOp64.FpMultiplyAddLongWiden.class, decodeOrNull(SVE2, fmlalbZzzw));
     }
 
     @Test
     void bfdotZzzzIsNotConfusedWithFmlaltZzzw() {
         int bfdotZzzz = fdotWidenWord(0b01, Z2, Z1, Z0);
         int fmlaltZzzw = mlalWord(0b10, false, true, Z2, Z1, Z0);
-        assertInstanceOf(Ir64Op.SveFpDotProductWidenBFloat16.class, decodeOrNull(BF16, bfdotZzzz));
-        assertInstanceOf(Ir64Op.SveFpMultiplyAddLongWiden.class, decodeOrNull(SVE2, fmlaltZzzw));
+        assertInstanceOf(SveFpOp64.FpDotProductWidenBFloat16.class, decodeOrNull(BF16, bfdotZzzz));
+        assertInstanceOf(SveFpOp64.FpMultiplyAddLongWiden.class, decodeOrNull(SVE2, fmlaltZzzw));
     }
 
     @Test
     void fdotHbIsNotConfusedWithFmlaltZzzwOrFmlalb() {
         int fdotHb = 0x64208400 | (Z2 << 16) | (Z1 << 5) | Z0;
         int fdotSb = 0x64608400 | (Z2 << 16) | (Z1 << 5) | Z0;
-        assertInstanceOf(Ir64Op.SveFp8DotProduct.class, decodeOrNull(FP8_DOT2, fdotHb));
+        assertInstanceOf(SveFpOp64.Fp8DotProduct.class, decodeOrNull(FP8_DOT2, fdotHb));
         assertNull(decodeOrNull(SVE2, fdotHb), "sem FEAT_FP8DOT2 recusa");
-        assertInstanceOf(Ir64Op.SveFp8DotProduct.class, decodeOrNull(FP8_DOT4, fdotSb));
-        assertInstanceOf(Ir64Op.SveFpMultiplyAddLongWiden.class,
+        assertInstanceOf(SveFpOp64.Fp8DotProduct.class, decodeOrNull(FP8_DOT4, fdotSb));
+        assertInstanceOf(SveFpOp64.FpMultiplyAddLongWiden.class,
                 decodeOrNull(SVE2, mlalWord(0b10, false, true, Z2, Z1, Z0)));
     }
 
@@ -444,16 +446,16 @@ class Aarch64SveFp23Test {
     void fmlalHbDecodesUnderFp8Fma() {
         int word = fmlalHbWord(Z2, Z1, Z0);
         assertNull(decodeOrNull(SVE2, word), "sem FEAT_FP8FMA recusa");
-        assertInstanceOf(Ir64Op.SveFp8FusedMultiplyAddLong.class, decodeOrNull(FP8_FMA, word));
+        assertInstanceOf(SveFpOp64.Fp8FusedMultiplyAddLong.class, decodeOrNull(FP8_FMA, word));
     }
 
     @Test
     void fdotHbAndSbDecodeUnderTheirOwnFeature() {
         int fdotHb = 0x64208400 | (Z2 << 16) | (Z1 << 5) | Z0;
         int fdotSb = 0x64608400 | (Z2 << 16) | (Z1 << 5) | Z0;
-        assertInstanceOf(Ir64Op.SveFp8DotProduct.class, decodeOrNull(FP8_DOT2, fdotHb));
+        assertInstanceOf(SveFpOp64.Fp8DotProduct.class, decodeOrNull(FP8_DOT2, fdotHb));
         assertNull(decodeOrNull(FP8_DOT4, fdotHb), "FP8DOT4 não habilita a forma de 2 vias");
-        assertInstanceOf(Ir64Op.SveFp8DotProduct.class, decodeOrNull(FP8_DOT4, fdotSb));
+        assertInstanceOf(SveFpOp64.Fp8DotProduct.class, decodeOrNull(FP8_DOT4, fdotSb));
     }
 
     /// `FMLAL_hb Zda.H, Zn.B, Zm.B`: 1.0 × 1.0 + 0.0 = 1.0 em `binary16` (`FPMR = 0` ⇒ `E5M2`, escala 0).
@@ -820,7 +822,7 @@ class Aarch64SveFp23Test {
     @Test
     void convertFp8DecoderRefusesUnmatchedWords() {
         assertNull(decodeOrNull(F8CVT, 0x00000000)); // nem widen nem narrow
-        assertInstanceOf(Ir64Op.SveFpConvertToFp8.class, decodeOrNull(F8CVT, 0x650A3800)); // BFCVTN (rn=0)
+        assertInstanceOf(SveFpOp64.FpConvertToFp8.class, decodeOrNull(F8CVT, 0x650A3800)); // BFCVTN (rn=0)
     }
 
     @Test
@@ -829,9 +831,9 @@ class Aarch64SveFp23Test {
         assertNull(decodeOrNull(SVE2, bfcvtnt), "sem BFLOAT16 recusa BFCVTNT");
         int fcvtntDs = oddWord(0b11, 0b0010, 0b10, P0, Z1, Z0);
         Ir64Op decoded = decodeOrNull(SVE2, fcvtntDs);
-        assertInstanceOf(Ir64Op.SveFpConvertOddElements.class, decoded);
-        assertEquals(Ir64Op.SveFpConvertOddElements.Op.FCVTNT, ((Ir64Op.SveFpConvertOddElements) decoded).op());
-        assertEquals(3, ((Ir64Op.SveFpConvertOddElements) decoded).wideEsz());
+        assertInstanceOf(SveFpOp64.FpConvertOddElements.class, decoded);
+        assertEquals(SveFpOp64.FpConvertOddElements.Op.FCVTNT, ((SveFpOp64.FpConvertOddElements) decoded).op());
+        assertEquals(3, ((SveFpOp64.FpConvertOddElements) decoded).wideEsz());
     }
 
     @Test
@@ -883,7 +885,7 @@ class Aarch64SveFp23Test {
 
     private static void writeFpmr(Aarch64Core core, Aarch64Architecture architecture, long value) {
         core.setX(0, value);
-        new Ir64BlockExecutor(architecture).executeOp(core, new Ir64Op.SystemRegister(false,
+        new Ir64BlockExecutor(architecture).executeOp(core, new SystemOp64.SystemRegister(false,
                 dev.vitorsilverio.armjitter.ir64.Aarch64SystemRegisterId.FPMR, 0));
     }
 
@@ -948,7 +950,7 @@ class Aarch64SveFp23Test {
         setElement(core, Z1, 2, 0, 0x00400000L); // subnormal
         core.setX(0, 1L << 24); // FPCR.FZ
         new Ir64BlockExecutor(SVE2).executeOp(core,
-                new Ir64Op.SystemRegister(false, dev.vitorsilverio.armjitter.ir64.Aarch64SystemRegisterId.FPCR, 0));
+                new SystemOp64.SystemRegister(false, dev.vitorsilverio.armjitter.ir64.Aarch64SystemRegisterId.FPCR, 0));
         int flogbM = 0x6518A000 | (2 << 17) | (P0 << 10) | (Z1 << 5) | Z0;
         run(SVE2, core, flogbM);
         assertEquals(Integer.MIN_VALUE & 0xFFFF_FFFFL, getElement(core, Z0, 2, 0));

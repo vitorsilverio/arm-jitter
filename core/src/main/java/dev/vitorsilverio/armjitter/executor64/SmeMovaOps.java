@@ -4,7 +4,7 @@ import dev.vitorsilverio.armjitter.core64.Aarch64Core;
 import dev.vitorsilverio.armjitter.core64.Aarch64MatrixRegisters;
 import dev.vitorsilverio.armjitter.core64.Aarch64MatrixTileAddressing;
 import dev.vitorsilverio.armjitter.core64.Aarch64ScalableRegisters;
-import dev.vitorsilverio.armjitter.ir64.Ir64Op;
+import dev.vitorsilverio.armjitter.ir64.SmeOp64;
 
 /// Semântica de `ZERO`/`ZERO_zt0`/`MOVA`/`MOVAZ` (SME, B18.3). O endereçamento de tile/slice é todo
 /// {@link Aarch64MatrixTileAddressing} (B18.4/B18.5/B18.9+ reusam); esta classe só lê/escreve
@@ -33,7 +33,7 @@ final class SmeMovaOps {
     /// depende de `esz`, e essa interpretação não importa para `ZERO` zerar bytes).
     ///
     /// @return `true` = a instrução já entrou numa exceção (acesso negado)
-    static boolean execute(Aarch64Core core, Ir64Op.SmeZero op) {
+    static boolean execute(Aarch64Core core, SmeOp64.Zero op) {
         if (!core.smeStreamingAndZaEnabledCheck(op.instructionAddress())) {
             return true;
         }
@@ -53,7 +53,7 @@ final class SmeMovaOps {
     }
 
     /// `ZERO_zt0`: zera o registrador `ZT0` (512 bits) inteiro.
-    static boolean execute(Aarch64Core core, Ir64Op.SmeZeroZt0 op) {
+    static boolean execute(Aarch64Core core, SmeOp64.ZeroZt0 op) {
         if (!core.smeZt0EnabledCheck(op.instructionAddress())) {
             return true;
         }
@@ -67,7 +67,7 @@ final class SmeMovaOps {
     // ── `MOVA`/`MOVAZ` ───────────────────────────────────────────────────────────────────────────
 
     /// @return `true` = a instrução já entrou numa exceção (acesso negado)
-    static boolean execute(Aarch64Core core, Ir64Op.SmeMova op) {
+    static boolean execute(Aarch64Core core, SmeOp64.Mova op) {
         if (!core.smeStreamingAndZaEnabledCheck(op.instructionAddress())) {
             return true;
         }
@@ -84,10 +84,10 @@ final class SmeMovaOps {
         return false;
     }
 
-    /// `MOVA_tz`/`MOVA_zt` — predicada, 1 vetor. Elemento com {@link Ir64Op.SmeMova#pg()} falso não
+    /// `MOVA_tz`/`MOVA_zt` — predicada, 1 vetor. Elemento com {@link SmeOp64.Mova#pg()} falso não
     /// é escrito (merging), nos dois sentidos e nos dois eixos.
     private static void executeSingle(Aarch64Core core, Aarch64MatrixRegisters matrix, Aarch64ScalableRegisters regs,
-            Ir64Op.SmeMova op, int svlBytes) {
+            SmeOp64.Mova op, int svlBytes) {
         int esz = op.esz();
         int elementsPerRow = svlBytes >>> esz;
         long registerValue = core.x(op.registerIndex());
@@ -113,11 +113,11 @@ final class SmeMovaOps {
     }
 
     /// `MOVA_tz2`/`zt2`/`tz4`/`zt4` + `MOVAZ_zt`/`zt2`/`zt4` — multi-vetor de tile, sem predicado
-    /// (sempre ativo). Cada um dos {@link Ir64Op.SmeMova#count()} sub-vetores resolve sua PRÓPRIA
+    /// (sempre ativo). Cada um dos {@link SmeOp64.Mova#count()} sub-vetores resolve sua PRÓPRIA
     /// slice (`off × count + i`, {@code group = count}): no horizontal isso escolhe `count` LINHAS
     /// consecutivas (copiadas inteiras); no vertical, `count` COLUNAS consecutivas do MESMO tile.
     private static void executeGroup(Aarch64Core core, Aarch64MatrixRegisters matrix, Aarch64ScalableRegisters regs,
-            Ir64Op.SmeMova op, int svlBytes) {
+            SmeOp64.Mova op, int svlBytes) {
         int esz = op.esz();
         int elementsPerRow = svlBytes >>> esz;
         long registerValue = core.x(op.registerIndex());
@@ -149,10 +149,10 @@ final class SmeMovaOps {
         }
     }
 
-    /// `MOVA_az2`/`az4`/`za2`/`za4` + `MOVAZ_za2`/`za4` — array-vetor: {@link Ir64Op.SmeMova#count()}
+    /// `MOVA_az2`/`az4`/`za2`/`za4` + `MOVAZ_za2`/`za4` — array-vetor: {@link SmeOp64.Mova#count()}
     /// LINHAS inteiras de `ZA` (sem tile/`esz`/eixo), endereçadas por `W8`-`W11`.
     private static void executeArray(Aarch64Core core, Aarch64MatrixRegisters matrix, Aarch64ScalableRegisters regs,
-            Ir64Op.SmeMova op, int svlBytes) {
+            SmeOp64.Mova op, int svlBytes) {
         long registerValue = core.x(op.registerIndex());
         int rowsPerGroup = svlBytes / op.count();
         int baseRow = Aarch64MatrixTileAddressing.resolveArrayBaseRow(registerValue, op.offset(), svlBytes, op.count());

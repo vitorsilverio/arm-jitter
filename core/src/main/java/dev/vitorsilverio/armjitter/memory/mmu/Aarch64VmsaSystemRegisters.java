@@ -9,7 +9,7 @@ import dev.vitorsilverio.armjitter.ir64.Aarch64SystemRegisterId;
 import dev.vitorsilverio.armjitter.memory.MemoryAccessType;
 
 /// VMSA64 (`ARM DDI 0487 D8`, task B6.6.3): liga `MRS`/`MSR (register)` (B6.6.1) e `TLBI VMALLE1`/
-/// `VMALLE1IS` (`Ir64Op.SystemInstruction`, também B6.6.3) aos controles expostos por
+/// `VMALLE1IS` (`SystemOp64.SystemInstruction`, também B6.6.3) aos controles expostos por
 /// {@link TranslatingAddressSpace64} (B6.6.2) — espelho direto do precedente 32-bit
 /// ({@link Cp15VmsaCoprocessor}, `MCR`/`MRC`), mas ligando `MRS`/`MSR` em vez de `MCR`/`MRC`.
 /// Composição, não herança (mesma decisão D2 do precedente): o hospedeiro instala

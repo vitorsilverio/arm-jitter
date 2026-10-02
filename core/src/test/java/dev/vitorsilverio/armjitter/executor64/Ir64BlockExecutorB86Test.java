@@ -2,7 +2,7 @@ package dev.vitorsilverio.armjitter.executor64;
 
 import dev.vitorsilverio.armjitter.core64.Aarch64Core;
 import dev.vitorsilverio.armjitter.core64.Aarch64FpRegisters;
-import dev.vitorsilverio.armjitter.ir64.Ir64Op;
+import dev.vitorsilverio.armjitter.ir64.AdvSimdMoveOp64;
 import dev.vitorsilverio.armjitter.memory.AddressSpace64;
 import dev.vitorsilverio.armjitter.support.TestAddressSpace;
 import org.junit.jupiter.api.Test;
@@ -29,7 +29,7 @@ class Ir64BlockExecutorB86Test {
             core.memory().write32(i * 4L, 0x1000 + i);
         }
 
-        EXECUTOR.executeOp(core, new Ir64Op.VectorLoadStoreMultiple(true, 0, 0, -1, true, false, 2, 1, 2));
+        EXECUTOR.executeOp(core, new AdvSimdMoveOp64.LoadStoreMultiple(true, 0, 0, -1, true, false, 2, 1, 2));
 
         Aarch64FpRegisters fp = core.fp();
         for (int lane = 0; lane < 4; lane++) {
@@ -49,7 +49,7 @@ class Ir64BlockExecutorB86Test {
             fp.setElement(1, lane, 2, 0x2000 + lane * 2 + 1);
         }
 
-        EXECUTOR.executeOp(core, new Ir64Op.VectorLoadStoreMultiple(false, 0, 0, -1, true, false, 2, 1, 2));
+        EXECUTOR.executeOp(core, new AdvSimdMoveOp64.LoadStoreMultiple(false, 0, 0, -1, true, false, 2, 1, 2));
 
         for (int i = 0; i < 8; i++) {
             assertEquals(0x2000 + i, core.memory().read32(i * 4L));
@@ -65,7 +65,7 @@ class Ir64BlockExecutorB86Test {
         core.fp().setQ(0, 0L, 0xFFFF_FFFF_FFFF_FFFFL); // "sujeira" pré-existente nos bits altos
         core.memory().write64(0x0L, 0x0102_0304_0506_0708L);
 
-        EXECUTOR.executeOp(core, new Ir64Op.VectorLoadStoreMultiple(true, 0, 0, -1, false, false, 0, 1, 1));
+        EXECUTOR.executeOp(core, new AdvSimdMoveOp64.LoadStoreMultiple(true, 0, 0, -1, false, false, 0, 1, 1));
 
         assertEquals(0x0102_0304_0506_0708L, core.fp().low64(0));
         assertEquals(0L, core.fp().high64(0), "bits altos devem ser zerados (não-quad)");
@@ -77,7 +77,7 @@ class Ir64BlockExecutorB86Test {
         Aarch64Core core = newCore(80);
         core.setX(0, 0x0L);
 
-        EXECUTOR.executeOp(core, new Ir64Op.VectorLoadStoreMultiple(true, 0, 0, -1, true, true, 0, 1, 4));
+        EXECUTOR.executeOp(core, new AdvSimdMoveOp64.LoadStoreMultiple(true, 0, 0, -1, true, true, 0, 1, 4));
 
         assertEquals(64L, core.x(0));
     }
@@ -88,7 +88,7 @@ class Ir64BlockExecutorB86Test {
         core.setX(0, 0x0L);
         core.setX(1, 0x30L);
 
-        EXECUTOR.executeOp(core, new Ir64Op.VectorLoadStoreMultiple(true, 0, 0, 1, true, true, 0, 1, 1));
+        EXECUTOR.executeOp(core, new AdvSimdMoveOp64.LoadStoreMultiple(true, 0, 0, 1, true, true, 0, 1, 1));
 
         assertEquals(0x30L, core.x(0), "pós-índice por registrador soma Xm, ignora o total transferido");
     }
@@ -101,7 +101,7 @@ class Ir64BlockExecutorB86Test {
         core.fp().setQ(0, 0x1111_1111_1111_1111L, 0x2222_2222_2222_2222L);
         core.memory().write32(0x0L, 0xCAFEBABE);
 
-        EXECUTOR.executeOp(core, new Ir64Op.VectorLoadStoreSingle(true, 0, 0, -1, false, 2, 1, 2));
+        EXECUTOR.executeOp(core, new AdvSimdMoveOp64.LoadStoreSingle(true, 0, 0, -1, false, 2, 1, 2));
 
         assertEquals(0xCAFEBABEL, core.fp().element(0, 2, 2));
         assertEquals(0x1111_1111, core.fp().element(0, 0, 2), "lane 0 intacta");
@@ -115,7 +115,7 @@ class Ir64BlockExecutorB86Test {
         core.setX(0, 0x0L);
         core.fp().setQ(0, 0x0000_0000_ABCD_1234L, 0L);
 
-        EXECUTOR.executeOp(core, new Ir64Op.VectorLoadStoreSingle(false, 0, 0, -1, false, 1, 1, 1));
+        EXECUTOR.executeOp(core, new AdvSimdMoveOp64.LoadStoreSingle(false, 0, 0, -1, false, 1, 1, 1));
 
         assertEquals(0xABCD, core.memory().read16(0x0L) & 0xFFFF);
     }
@@ -129,7 +129,7 @@ class Ir64BlockExecutorB86Test {
         core.memory().write16(0x2L, 0x2222);
         core.memory().write16(0x4L, 0x3333);
 
-        EXECUTOR.executeOp(core, new Ir64Op.VectorLoadStoreSingle(true, 0, 0, -1, false, 1, 3, 0));
+        EXECUTOR.executeOp(core, new AdvSimdMoveOp64.LoadStoreSingle(true, 0, 0, -1, false, 1, 3, 0));
 
         assertEquals(0x1111, core.fp().element(0, 0, 1));
         assertEquals(0x2222, core.fp().element(1, 0, 1));
@@ -142,7 +142,7 @@ class Ir64BlockExecutorB86Test {
         Aarch64Core core = newCore(16);
         core.setX(0, 0x0L);
 
-        EXECUTOR.executeOp(core, new Ir64Op.VectorLoadStoreSingle(true, 0, 0, -1, true, 2, 2, 0));
+        EXECUTOR.executeOp(core, new AdvSimdMoveOp64.LoadStoreSingle(true, 0, 0, -1, true, 2, 2, 0));
 
         assertEquals(8L, core.x(0));
     }
@@ -154,7 +154,7 @@ class Ir64BlockExecutorB86Test {
         core.setX(0, 0x0L);
         core.memory().write32(0x0L, 0xDEADBEEF);
 
-        EXECUTOR.executeOp(core, new Ir64Op.VectorLoadSingleReplicate(0, 0, -1, true, false, 2, 1));
+        EXECUTOR.executeOp(core, new AdvSimdMoveOp64.LoadSingleReplicate(0, 0, -1, true, false, 2, 1));
 
         for (int lane = 0; lane < 4; lane++) {
             assertEquals(0xDEADBEEFL, core.fp().element(0, lane, 2));
@@ -169,7 +169,7 @@ class Ir64BlockExecutorB86Test {
         core.fp().setQ(0, 0L, 0xFFFF_FFFF_FFFF_FFFFL);
         core.memory().write32(0x0L, 0x12345678);
 
-        EXECUTOR.executeOp(core, new Ir64Op.VectorLoadSingleReplicate(0, 0, -1, false, false, 2, 1));
+        EXECUTOR.executeOp(core, new AdvSimdMoveOp64.LoadSingleReplicate(0, 0, -1, false, false, 2, 1));
 
         assertEquals(0x12345678L, core.fp().element(0, 0, 2));
         assertEquals(0x12345678L, core.fp().element(0, 1, 2));
@@ -184,7 +184,7 @@ class Ir64BlockExecutorB86Test {
         core.memory().write16(0x0L, 0xAAAA);
         core.memory().write16(0x2L, 0xBBBB);
 
-        EXECUTOR.executeOp(core, new Ir64Op.VectorLoadSingleReplicate(0, 0, -1, false, false, 1, 2));
+        EXECUTOR.executeOp(core, new AdvSimdMoveOp64.LoadSingleReplicate(0, 0, -1, false, false, 1, 2));
 
         for (int lane = 0; lane < 4; lane++) {
             assertEquals(0xAAAAL, core.fp().element(0, lane, 1));
@@ -198,7 +198,7 @@ class Ir64BlockExecutorB86Test {
         core.setX(0, 0x0L);
         core.setX(2, 0x8L);
 
-        EXECUTOR.executeOp(core, new Ir64Op.VectorLoadSingleReplicate(0, 0, 2, true, true, 0, 1));
+        EXECUTOR.executeOp(core, new AdvSimdMoveOp64.LoadSingleReplicate(0, 0, 2, true, true, 0, 1));
 
         assertEquals(0x8L, core.x(0));
     }

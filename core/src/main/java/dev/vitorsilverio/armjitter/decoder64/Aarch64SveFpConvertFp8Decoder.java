@@ -3,6 +3,7 @@ package dev.vitorsilverio.armjitter.decoder64;
 import dev.vitorsilverio.armjitter.arch64.Aarch64Architecture;
 import dev.vitorsilverio.armjitter.arch64.Aarch64Feature;
 import dev.vitorsilverio.armjitter.ir64.Ir64Op;
+import dev.vitorsilverio.armjitter.ir64.SveFpOp64;
 
 /// Decoder SVE2 das conversões `fp8` sem predicado da B17.23 (`FEAT_SVE_F8CVT`), prefixo `0x65`: alargar
 /// (`F1CVT`/`F2CVT`/`F1CVTLT`/`F2CVTLT`/`BF1CVT`/`BF2CVT`/`BF1CVTLT`/`BF2CVTLT`) e estreitar
@@ -57,7 +58,7 @@ final class Aarch64SveFpConvertFp8Decoder {
         boolean stream2 = bit(word, WIDEN_STREAM2_BIT);
         int rd = field(word, 0, REGISTER_MASK);
         int rn = field(word, 5, REGISTER_MASK);
-        return new Ir64Op.SveFpConvertFp8(rd, rn, stream2, top, bfloat16Destination, address);
+        return new SveFpOp64.FpConvertFp8(rd, rn, stream2, top, bfloat16Destination, address);
     }
 
     private Ir64Op decodeNarrow(int word, long address) {
@@ -69,16 +70,16 @@ final class Aarch64SveFpConvertFp8Decoder {
         int rnRaw = field(word, NARROW_RN_RAW_SHIFT, NARROW_RN_RAW_MASK);
         int rn = rnRaw << NARROW_RN_RAW_TO_ACTUAL_SHIFT;
         if (variant == NARROW_FCVTN) {
-            return new Ir64Op.SveFpConvertToFp8(rd, rn, false, false, false, address);
+            return new SveFpOp64.FpConvertToFp8(rd, rn, false, false, false, address);
         }
         if (variant == NARROW_BFCVTN) {
-            return new Ir64Op.SveFpConvertToFp8(rd, rn, true, false, false, address);
+            return new SveFpOp64.FpConvertToFp8(rd, rn, true, false, false, address);
         }
         if (variant == NARROW_FCVTNB) {
-            return new Ir64Op.SveFpConvertToFp8(rd, rn, false, true, false, address);
+            return new SveFpOp64.FpConvertToFp8(rd, rn, false, true, false, address);
         }
         if (variant == NARROW_FCVTNT) {
-            return new Ir64Op.SveFpConvertToFp8(rd, rn, false, true, true, address);
+            return new SveFpOp64.FpConvertToFp8(rd, rn, false, true, true, address);
         }
         return null;
     }

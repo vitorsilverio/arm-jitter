@@ -2,10 +2,10 @@ package dev.vitorsilverio.armjitter.executor64;
 
 import dev.vitorsilverio.armjitter.core64.Aarch64Core;
 import dev.vitorsilverio.armjitter.core64.Aarch64ScalableRegisters;
-import dev.vitorsilverio.armjitter.ir64.Ir64Op;
+import dev.vitorsilverio.armjitter.ir64.SvePredicateOp64;
 
 /// Semântica das comparações SVE da B17.9: as que produzem predicado a partir de vetores/imediato
-/// ({@link Ir64Op.SveCompare}) e as de escalares ({@link Ir64Op.SveScalarCompare}: `WHILE*`, `CTERM`).
+/// ({@link SvePredicateOp64.Compare}) e as de escalares ({@link SvePredicateOp64.ScalarCompare}: `WHILE*`, `CTERM`).
 ///
 /// **Toda comparação seta `NZCV`** (não existe forma sem `S`) pelo MESMO `PredTest` da B17.4
 /// ({@link SvePredicateOps#predTest}) — uma segunda fórmula de flags é a classe de bug que o G1 existe para pegar. O
@@ -32,7 +32,7 @@ final class SveCompareOps {
     // ── Comparação que produz predicado ─────────────────────────────────────────────────────────
 
     /// Executa `CMP<cond>` (vetor, largo ou imediato). `true` = a instrução já entrou numa exceção (acesso negado).
-    static boolean execute(Aarch64Core core, Ir64Op.SveCompare op) {
+    static boolean execute(Aarch64Core core, SvePredicateOp64.Compare op) {
         if (!SvePredicateOps.accessAllowed(core, op.instructionAddress())) {
             return true;
         }
@@ -61,7 +61,7 @@ final class SveCompareOps {
             };
             // Só o elemento (e `Zm` na forma vetorial) precisam ser estendidos: o operando largo e o imediato já são de 64 bits.
             long left = signed ? signExtend(nn, esz) : nn;
-            long right = op.form() == Ir64Op.SveCompare.Form.VECTOR && signed ? signExtend(mm, esz) : mm;
+            long right = op.form() == SvePredicateOp64.Compare.Form.VECTOR && signed ? signExtend(mm, esz) : mm;
             if (compare(op.cond(), left, right)) {
                 SvePredicateOps.setBit(result, index, true);
             }
@@ -71,7 +71,7 @@ final class SveCompareOps {
         return false;
     }
 
-    private static boolean compare(Ir64Op.SveCompare.Cond cond, long left, long right) {
+    private static boolean compare(SvePredicateOp64.Compare.Cond cond, long left, long right) {
         return switch (cond) {
             case EQ -> left == right;
             case NE -> left != right;
@@ -94,7 +94,7 @@ final class SveCompareOps {
     // ── WHILE* / CTERM ──────────────────────────────────────────────────────────────────────────
 
     /// Executa `WHILE*`/`CTERM`. `true` = a instrução já entrou numa exceção (acesso negado).
-    static boolean execute(Aarch64Core core, Ir64Op.SveScalarCompare op) {
+    static boolean execute(Aarch64Core core, SvePredicateOp64.ScalarCompare op) {
         if (!SvePredicateOps.accessAllowed(core, op.instructionAddress())) {
             return true;
         }
@@ -107,7 +107,7 @@ final class SveCompareOps {
     }
 
     /// `CTERMEQ`/`CTERMNE`: `N = cond`, `V = !cond && !C`; `Z` e `C` inalterados (`trans_CTERM`).
-    private static void conditionallyTerminate(Aarch64Core core, Ir64Op.SveScalarCompare op) {
+    private static void conditionallyTerminate(Aarch64Core core, SvePredicateOp64.ScalarCompare op) {
         long left = op.sf() ? core.x(op.rn()) : core.x(op.rn()) & LOW_32_BITS;
         long right = op.sf() ? core.x(op.rm()) : core.x(op.rm()) & LOW_32_BITS;
         boolean condition = (left == right) != op.flag();
@@ -118,23 +118,23 @@ final class SveCompareOps {
     /// `WHILE<cond>`: quantos elementos, a partir do 0 (`LT`) ou do último (`GT`), satisfazem a condição — limitado
     /// ao que cabe no(s) predicado(s). As formas `_PAIR` escrevem `Pd` e `Pd+1` e contam sobre `2 * VL`; as `_CNT2`/`_CNT4`
     /// (B17.28) escrevem UM predicado-como-contador (`SveCounterOps.encode`) sobre 2 ou 4 vetores.
-    private static void whileCount(Aarch64Core core, Ir64Op.SveScalarCompare op) {
+    private static void whileCount(Aarch64Core core, SvePredicateOp64.ScalarCompare op) {
         boolean less = switch (op.op()) {
             case WHILE_LT, WHILE_LT_PAIR, WHILE_LT_CNT2, WHILE_LT_CNT4 -> true;
             default -> false;
         };
-        boolean pair = op.op() == Ir64Op.SveScalarCompare.Op.WHILE_LT_PAIR
-                || op.op() == Ir64Op.SveScalarCompare.Op.WHILE_GT_PAIR;
+        boolean pair = op.op() == SvePredicateOp64.ScalarCompare.Op.WHILE_LT_PAIR
+                || op.op() == SvePredicateOp64.ScalarCompare.Op.WHILE_GT_PAIR;
         // Quantos vetores o resultado cobre, em log2: as `_PAIR` e `CNT2` valem 2, as `CNT4`, 4.
         int lg2Vectors = switch (op.op()) {
             case WHILE_LT_PAIR, WHILE_GT_PAIR, WHILE_LT_CNT2, WHILE_GT_CNT2 -> 1;
             case WHILE_LT_CNT4, WHILE_GT_CNT4 -> 2;
             default -> 0;
         };
-        boolean counter = op.op() == Ir64Op.SveScalarCompare.Op.WHILE_LT_CNT2
-                || op.op() == Ir64Op.SveScalarCompare.Op.WHILE_LT_CNT4
-                || op.op() == Ir64Op.SveScalarCompare.Op.WHILE_GT_CNT2
-                || op.op() == Ir64Op.SveScalarCompare.Op.WHILE_GT_CNT4;
+        boolean counter = op.op() == SvePredicateOp64.ScalarCompare.Op.WHILE_LT_CNT2
+                || op.op() == SvePredicateOp64.ScalarCompare.Op.WHILE_LT_CNT4
+                || op.op() == SvePredicateOp64.ScalarCompare.Op.WHILE_GT_CNT2
+                || op.op() == SvePredicateOp64.ScalarCompare.Op.WHILE_GT_CNT4;
         // `flag` é o bit `eq` cru; nas formas `GT` o sentido é invertido (`eq = 0` é `GE`/`HS`).
         boolean orEqual = op.flag() == less;
         long left = core.x(op.rn());
@@ -188,7 +188,7 @@ final class SveCompareOps {
     }
 
     /// `WHILERW`/`WHILEWR` (SVE2): quantos elementos podem ser processados sem que os dois ponteiros conflitem.
-    private static void whilePointers(Aarch64Core core, Ir64Op.SveScalarCompare op) {
+    private static void whilePointers(Aarch64Core core, SvePredicateOp64.ScalarCompare op) {
         long first = core.x(op.rn());
         long second = core.x(op.rm());
         long difference;

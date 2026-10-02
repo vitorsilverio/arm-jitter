@@ -2,7 +2,7 @@ package dev.vitorsilverio.armjitter.executor64;
 
 import dev.vitorsilverio.armjitter.core64.Aarch64Core;
 import dev.vitorsilverio.armjitter.core64.Aarch64ScalableRegisters;
-import dev.vitorsilverio.armjitter.ir64.Ir64Op;
+import dev.vitorsilverio.armjitter.ir64.SveIntegerOp64;
 
 /// Semântica do endereçamento SVE (B17.12): `ADDVL`/`ADDPL`/`RDVL` e `ADR` vetorial.
 ///
@@ -23,9 +23,9 @@ final class SveAddressOps {
     }
 
     /// Executa uma operação do grupo. `true` = a instrução já entrou numa exceção (acesso negado).
-    static boolean execute(Aarch64Core core, Ir64Op.SveAddress op) {
-        boolean streamingVariant = op.op() == Ir64Op.SveAddress.Op.ADDSVL
-                || op.op() == Ir64Op.SveAddress.Op.ADDSPL || op.op() == Ir64Op.SveAddress.Op.RDSVL;
+    static boolean execute(Aarch64Core core, SveIntegerOp64.Address op) {
+        boolean streamingVariant = op.op() == SveIntegerOp64.Address.Op.ADDSVL
+                || op.op() == SveIntegerOp64.Address.Op.ADDSPL || op.op() == SveIntegerOp64.Address.Op.RDSVL;
         // As formas SME exigem só o acesso à SME (CheckSMEAccess) — valem fora do modo streaming.
         if (streamingVariant
                 ? !core.smeEnabledCheck(op.instructionAddress())
@@ -60,9 +60,9 @@ final class SveAddressOps {
         }
     }
 
-    private static void vectorAddress(Aarch64Core core, Ir64Op.SveAddress op) {
+    private static void vectorAddress(Aarch64Core core, SveIntegerOp64.Address op) {
         Aarch64ScalableRegisters regs = core.scalable();
-        boolean packedWord = op.op() == Ir64Op.SveAddress.Op.ADR_P32;
+        boolean packedWord = op.op() == SveIntegerOp64.Address.Op.ADR_P32;
         int esz = packedWord ? ESZ_WORD : ESZ_DOUBLEWORD;
         int elements = core.vectorLengthBytes() >> esz;
         // Lê tudo antes de escrever: `Zd` pode ser o mesmo registrador de `Zn`/`Zm`.

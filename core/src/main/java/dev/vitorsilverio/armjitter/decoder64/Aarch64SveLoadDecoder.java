@@ -3,7 +3,8 @@ package dev.vitorsilverio.armjitter.decoder64;
 import dev.vitorsilverio.armjitter.arch64.Aarch64Architecture;
 import dev.vitorsilverio.armjitter.arch64.Aarch64Feature;
 import dev.vitorsilverio.armjitter.ir64.Ir64Op;
-import dev.vitorsilverio.armjitter.ir64.Ir64Op.SveLoad.Op;
+import dev.vitorsilverio.armjitter.ir64.SveMemoryOp64.Load.Op;
+import dev.vitorsilverio.armjitter.ir64.SveMemoryOp64;
 
 /// Decoder SVE dos loads contíguos da B17.17, nos prefixos `0x84`/`0x85` (`LDR` de predicado e de vetor, `LD1R*`, os
 /// quatro `PRF*`) e `0xA4`/`0xA5` (`### SVE Memory Contiguous Load Group` inteiro do `sve.decode` do QEMU: `LD1*`,
@@ -134,7 +135,7 @@ final class Aarch64SveLoadDecoder {
         if ((word & LD1R_MASK) == LD1R_VALUE) {
             int dtype = ((word >>> LD1R_DTYPE_HIGH_SHIFT) & LD1R_DTYPE_FIELD_MASK) << LD1R_DTYPE_HIGH_TO_BITS
                     | (word >>> LD1R_DTYPE_LOW_SHIFT) & LD1R_DTYPE_FIELD_MASK;
-            return new Ir64Op.SveLoad(Op.LD1R, DTYPE_MSZ[dtype], DTYPE_ESZ[dtype], DTYPE_SIGNED[dtype], 0,
+            return new SveMemoryOp64.Load(Op.LD1R, DTYPE_MSZ[dtype], DTYPE_ESZ[dtype], DTYPE_SIGNED[dtype], 0,
                     word & REGISTER_MASK, (word >>> RN_SHIFT) & REGISTER_MASK, 0, false,
                     (word >>> RM_SHIFT) & LD1R_IMM_MASK, (word >>> PG_SHIFT) & PREDICATE_MASK, false, address);
         }
@@ -154,13 +155,13 @@ final class Aarch64SveLoadDecoder {
         int high = (word >>> LDR_IMM_HIGH_SHIFT) & LDR_IMM_HIGH_MASK;
         int low = (word >>> LDR_IMM_LOW_SHIFT) & LDR_IMM_LOW_MASK;
         long immediate = signExtend(high << LDR_IMM_LOW_BITS | low, LDR_IMMEDIATE_BITS);
-        return new Ir64Op.SveLoad(op, 0, 0, false, 0, rd, (word >>> RN_SHIFT) & REGISTER_MASK, 0, false, immediate, 0,
+        return new SveMemoryOp64.Load(op, 0, 0, false, 0, rd, (word >>> RN_SHIFT) & REGISTER_MASK, 0, false, immediate, 0,
                 false, address);
     }
 
     /// `PRF*` é hint: o IR só carrega a checagem de acesso (e, em `PRF_ns`, a de modo streaming).
     private static Ir64Op prefetch(boolean nonStreaming, int word, long address) {
-        return new Ir64Op.SveLoad(Op.PRF, 0, 0, false, 0, 0, 0, 0, false, 0, 0, nonStreaming, address);
+        return new SveMemoryOp64.Load(Op.PRF, 0, 0, false, 0, 0, 0, 0, false, 0, 0, nonStreaming, address);
     }
 
     // ── Prefixo 0xA4/0xA5 ────────────────────────────────────────────────────────────────────────
@@ -271,7 +272,7 @@ final class Aarch64SveLoadDecoder {
             return null;
         }
         long immediate = registerOffset ? 0 : signExtend((word >>> IMM4_SHIFT) & IMM4_MASK, SIGNED_IMMEDIATE_BITS);
-        return new Ir64Op.SveLoad(op, msz, esz, signExtend, nreg, word & REGISTER_MASK,
+        return new SveMemoryOp64.Load(op, msz, esz, signExtend, nreg, word & REGISTER_MASK,
                 (word >>> RN_SHIFT) & REGISTER_MASK, rm, registerOffset, immediate,
                 (word >>> PG_SHIFT) & PREDICATE_MASK, nonStreaming, address);
     }

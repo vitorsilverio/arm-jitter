@@ -1078,7 +1078,7 @@ class Ir64BlockExecutorTest {
     void fmovFaddFcmpBCondMinimalFloatBlock() {
         // "hello float" mínimo de A64 (B6.5.3, mesmo espírito do teste 3 de
         // b3.5-vfp-decoder.md, mas sem o passo VMRS intermediário: FCMP já escreve PSTATE.NZCV
-        // diretamente, ver Ir64Op.Fp64Compare javadoc): FMOV s0,#1.0; FADD s0,s0,s0 (-> 2.0);
+        // diretamente, ver FpOp64.Compare javadoc): FMOV s0,#1.0; FADD s0,s0,s0 (-> 2.0);
         // FCMP s0,#0.0 (2.0 > 0.0); B.gt salta por cima do FMOV s1,#2.0. Palavras reais
         // assembladas via aarch64-none-elf-as/objdump (devkitA64), não inventadas à mão.
         Aarch64Core core = newCore(32);

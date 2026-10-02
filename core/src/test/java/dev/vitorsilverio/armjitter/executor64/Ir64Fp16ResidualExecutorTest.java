@@ -1,7 +1,7 @@
 package dev.vitorsilverio.armjitter.executor64;
 
 import dev.vitorsilverio.armjitter.core64.Aarch64Core;
-import dev.vitorsilverio.armjitter.ir64.Ir64Op;
+import dev.vitorsilverio.armjitter.ir64.FpOp64;
 import dev.vitorsilverio.armjitter.memory.AddressSpace64;
 import dev.vitorsilverio.armjitter.support.TestAddressSpace;
 import org.junit.jupiter.api.Test;
@@ -23,7 +23,7 @@ class Ir64Fp16ResidualExecutorTest {
         // negativo em binary16) — confirma que os bits sobrevivem crus, sem reinterpretação.
         Aarch64Core core = newCore();
         core.setX(1, 0x1234_0000_0000_FFFFL);
-        EXECUTOR.executeOp(core, new Ir64Op.Fp64HalfPrecisionGeneralRegisterMove(true, 0, 1));
+        EXECUTOR.executeOp(core, new FpOp64.HalfPrecisionGeneralRegisterMove(true, 0, 1));
         assertEquals(0xFFFFL, core.fp().element(0, 0, 1));
         // Escrita destrutiva: o resto do registrador V0 é zerado (mesma disciplina de setS/setD).
         assertEquals(0L, core.fp().high64(0));
@@ -33,7 +33,7 @@ class Ir64Fp16ResidualExecutorTest {
     void fmovHToXMovesRawBitsZeroExtended() {
         Aarch64Core core = newCore();
         core.fp().setScalar(3, 1, 0xFFFFL);
-        EXECUTOR.executeOp(core, new Ir64Op.Fp64HalfPrecisionGeneralRegisterMove(false, 3, 2));
+        EXECUTOR.executeOp(core, new FpOp64.HalfPrecisionGeneralRegisterMove(false, 3, 2));
         assertEquals(0xFFFFL, core.x(2));
     }
 
@@ -44,7 +44,7 @@ class Ir64Fp16ResidualExecutorTest {
         // resultado observável não pode depender de qual largura a instrução original usava.
         Aarch64Core core = newCore();
         core.setX(1, 0xABCDL);
-        EXECUTOR.executeOp(core, new Ir64Op.Fp64HalfPrecisionGeneralRegisterMove(true, 0, 1));
+        EXECUTOR.executeOp(core, new FpOp64.HalfPrecisionGeneralRegisterMove(true, 0, 1));
         assertEquals(0xABCDL, core.fp().element(0, 0, 1));
     }
 
@@ -53,10 +53,10 @@ class Ir64Fp16ResidualExecutorTest {
         // 1.5 é exatamente representável em binary16 E binary32 — ida e volta preserva o valor.
         Aarch64Core core = newCore();
         core.fp().setSFloat(5, 1.5f);
-        EXECUTOR.executeOp(core, new Ir64Op.Fp64ConvertHalfPrecision(
-                Ir64Op.Fp64HalfPrecisionConversion.SINGLE_TO_HALF, 4, 5));
-        EXECUTOR.executeOp(core, new Ir64Op.Fp64ConvertHalfPrecision(
-                Ir64Op.Fp64HalfPrecisionConversion.HALF_TO_SINGLE, 8, 4));
+        EXECUTOR.executeOp(core, new FpOp64.ConvertHalfPrecision(
+                FpOp64.Fp64HalfPrecisionConversion.SINGLE_TO_HALF, 4, 5));
+        EXECUTOR.executeOp(core, new FpOp64.ConvertHalfPrecision(
+                FpOp64.Fp64HalfPrecisionConversion.HALF_TO_SINGLE, 8, 4));
         assertEquals(1.5f, core.fp().sFloat(8));
     }
 
@@ -68,10 +68,10 @@ class Ir64Fp16ResidualExecutorTest {
         Aarch64Core core = newCore();
         double value = 1.0 + Math.pow(2, -20);
         core.fp().setDDouble(7, value);
-        EXECUTOR.executeOp(core, new Ir64Op.Fp64ConvertHalfPrecision(
-                Ir64Op.Fp64HalfPrecisionConversion.DOUBLE_TO_HALF, 6, 7));
-        EXECUTOR.executeOp(core, new Ir64Op.Fp64ConvertHalfPrecision(
-                Ir64Op.Fp64HalfPrecisionConversion.HALF_TO_DOUBLE, 9, 6));
+        EXECUTOR.executeOp(core, new FpOp64.ConvertHalfPrecision(
+                FpOp64.Fp64HalfPrecisionConversion.DOUBLE_TO_HALF, 6, 7));
+        EXECUTOR.executeOp(core, new FpOp64.ConvertHalfPrecision(
+                FpOp64.Fp64HalfPrecisionConversion.HALF_TO_DOUBLE, 9, 6));
         assertEquals(1.0, core.fp().dDouble(9));
     }
 
@@ -79,10 +79,10 @@ class Ir64Fp16ResidualExecutorTest {
     void halfToDoubleWidensExactly() {
         Aarch64Core core = newCore();
         core.fp().setSFloat(9, 1.5f);
-        EXECUTOR.executeOp(core, new Ir64Op.Fp64ConvertHalfPrecision(
-                Ir64Op.Fp64HalfPrecisionConversion.SINGLE_TO_HALF, 11, 9));
-        EXECUTOR.executeOp(core, new Ir64Op.Fp64ConvertHalfPrecision(
-                Ir64Op.Fp64HalfPrecisionConversion.HALF_TO_DOUBLE, 12, 11));
+        EXECUTOR.executeOp(core, new FpOp64.ConvertHalfPrecision(
+                FpOp64.Fp64HalfPrecisionConversion.SINGLE_TO_HALF, 11, 9));
+        EXECUTOR.executeOp(core, new FpOp64.ConvertHalfPrecision(
+                FpOp64.Fp64HalfPrecisionConversion.HALF_TO_DOUBLE, 12, 11));
         assertEquals(1.5, core.fp().dDouble(12));
     }
 }

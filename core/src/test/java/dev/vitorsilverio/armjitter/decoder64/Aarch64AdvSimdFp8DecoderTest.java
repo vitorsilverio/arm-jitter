@@ -1,6 +1,7 @@
 package dev.vitorsilverio.armjitter.decoder64;
 
 import dev.vitorsilverio.armjitter.arch64.Aarch64Architecture;
+import dev.vitorsilverio.armjitter.ir64.AdvSimdFpOp64;
 import dev.vitorsilverio.armjitter.ir64.Ir64Op;
 import dev.vitorsilverio.armjitter.memory.AddressSpace64;
 import dev.vitorsilverio.armjitter.support.TestAddressSpace;
@@ -49,68 +50,68 @@ class Aarch64AdvSimdFp8DecoderTest {
 
     @Test
     void fcvtnBhDecodesHalfSourceWithQAsElementCountNotHalfSelector() {
-        Ir64Op.VectorFpConvertToFp8 d = (Ir64Op.VectorFpConvertToFp8) decodeWord(FP8_DECODER, FCVTN_BH_D);
+        AdvSimdFpOp64.FpConvertToFp8 d = (AdvSimdFpOp64.FpConvertToFp8) decodeWord(FP8_DECODER, FCVTN_BH_D);
         assertEquals(true, d.halfSource());
         assertEquals(false, d.q());
         assertEquals(0, d.rd());
         assertEquals(1, d.rn());
         assertEquals(2, d.rm());
 
-        Ir64Op.VectorFpConvertToFp8 q = (Ir64Op.VectorFpConvertToFp8) decodeWord(FP8_DECODER, FCVTN_BH_Q);
+        AdvSimdFpOp64.FpConvertToFp8 q = (AdvSimdFpOp64.FpConvertToFp8) decodeWord(FP8_DECODER, FCVTN_BH_Q);
         assertEquals(true, q.halfSource());
         assertEquals(true, q.q());
     }
 
     @Test
     void fcvtnBsDecodesSingleSourceWithQAsHalfSelector() {
-        Ir64Op.VectorFpConvertToFp8 lower = (Ir64Op.VectorFpConvertToFp8) decodeWord(FP8_DECODER, FCVTN_BS);
+        AdvSimdFpOp64.FpConvertToFp8 lower = (AdvSimdFpOp64.FpConvertToFp8) decodeWord(FP8_DECODER, FCVTN_BS);
         assertEquals(false, lower.halfSource());
         assertEquals(false, lower.q());
         assertEquals(3, lower.rd());
         assertEquals(4, lower.rn());
         assertEquals(5, lower.rm());
 
-        Ir64Op.VectorFpConvertToFp8 upper = (Ir64Op.VectorFpConvertToFp8) decodeWord(FP8_DECODER, FCVTN2_BS);
+        AdvSimdFpOp64.FpConvertToFp8 upper = (AdvSimdFpOp64.FpConvertToFp8) decodeWord(FP8_DECODER, FCVTN2_BS);
         assertEquals(false, upper.halfSource());
         assertEquals(true, upper.q());
     }
 
     @Test
     void f1cvtlDecodesFirstStreamHalfDestination() {
-        Ir64Op.VectorFpConvertFromFp8 op = (Ir64Op.VectorFpConvertFromFp8) decodeWord(FP8_DECODER, F1CVTL);
+        AdvSimdFpOp64.FpConvertFromFp8 op = (AdvSimdFpOp64.FpConvertFromFp8) decodeWord(FP8_DECODER, F1CVTL);
         assertEquals(false, op.secondStream());
         assertEquals(false, op.bfloat16Destination());
         assertEquals(false, op.q());
         assertEquals(6, op.rd());
         assertEquals(7, op.rn());
 
-        Ir64Op.VectorFpConvertFromFp8 op2 = (Ir64Op.VectorFpConvertFromFp8) decodeWord(FP8_DECODER, F1CVTL2);
+        AdvSimdFpOp64.FpConvertFromFp8 op2 = (AdvSimdFpOp64.FpConvertFromFp8) decodeWord(FP8_DECODER, F1CVTL2);
         assertEquals(false, op2.secondStream());
         assertEquals(true, op2.q());
     }
 
     @Test
     void f2cvtlDecodesSecondStreamHalfDestination() {
-        Ir64Op.VectorFpConvertFromFp8 op = (Ir64Op.VectorFpConvertFromFp8) decodeWord(FP8_DECODER, F2CVTL);
+        AdvSimdFpOp64.FpConvertFromFp8 op = (AdvSimdFpOp64.FpConvertFromFp8) decodeWord(FP8_DECODER, F2CVTL);
         assertEquals(true, op.secondStream());
         assertEquals(false, op.bfloat16Destination());
         assertEquals(8, op.rd());
         assertEquals(9, op.rn());
 
-        Ir64Op.VectorFpConvertFromFp8 op2 = (Ir64Op.VectorFpConvertFromFp8) decodeWord(FP8_DECODER, F2CVTL2);
+        AdvSimdFpOp64.FpConvertFromFp8 op2 = (AdvSimdFpOp64.FpConvertFromFp8) decodeWord(FP8_DECODER, F2CVTL2);
         assertEquals(true, op2.secondStream());
         assertEquals(true, op2.q());
     }
 
     @Test
     void bf1cvtlDecodesFirstStreamBfloat16Destination() {
-        Ir64Op.VectorFpConvertFromFp8 op = (Ir64Op.VectorFpConvertFromFp8) decodeWord(FP8_DECODER, BF1CVTL);
+        AdvSimdFpOp64.FpConvertFromFp8 op = (AdvSimdFpOp64.FpConvertFromFp8) decodeWord(FP8_DECODER, BF1CVTL);
         assertEquals(false, op.secondStream());
         assertEquals(true, op.bfloat16Destination());
         assertEquals(10, op.rd());
         assertEquals(11, op.rn());
 
-        Ir64Op.VectorFpConvertFromFp8 op2 = (Ir64Op.VectorFpConvertFromFp8) decodeWord(FP8_DECODER, BF1CVTL2);
+        AdvSimdFpOp64.FpConvertFromFp8 op2 = (AdvSimdFpOp64.FpConvertFromFp8) decodeWord(FP8_DECODER, BF1CVTL2);
         assertEquals(false, op2.secondStream());
         assertEquals(true, op2.bfloat16Destination());
         assertEquals(true, op2.q());
@@ -118,13 +119,13 @@ class Aarch64AdvSimdFp8DecoderTest {
 
     @Test
     void bf2cvtlDecodesSecondStreamBfloat16Destination() {
-        Ir64Op.VectorFpConvertFromFp8 op = (Ir64Op.VectorFpConvertFromFp8) decodeWord(FP8_DECODER, BF2CVTL);
+        AdvSimdFpOp64.FpConvertFromFp8 op = (AdvSimdFpOp64.FpConvertFromFp8) decodeWord(FP8_DECODER, BF2CVTL);
         assertEquals(true, op.secondStream());
         assertEquals(true, op.bfloat16Destination());
         assertEquals(12, op.rd());
         assertEquals(13, op.rn());
 
-        Ir64Op.VectorFpConvertFromFp8 op2 = (Ir64Op.VectorFpConvertFromFp8) decodeWord(FP8_DECODER, BF2CVTL2);
+        AdvSimdFpOp64.FpConvertFromFp8 op2 = (AdvSimdFpOp64.FpConvertFromFp8) decodeWord(FP8_DECODER, BF2CVTL2);
         assertEquals(true, op2.secondStream());
         assertEquals(true, op2.bfloat16Destination());
         assertEquals(true, op2.q());
@@ -140,7 +141,7 @@ class Aarch64AdvSimdFp8DecoderTest {
         // `Aarch64AdvSimdFp8DotProductDecoderTest`. Derivado bit a bit de FCVTN_BH_D (0x0e42f420)
         // trocando só bits[15:11] de `0b11110` para `0b11111` (bit11: 0->1).
         int fdotHbV = 0x0e42fc20;
-        assertEquals(Ir64Op.VectorFp8DotProduct.class, decodeWord(FP8_DECODER, fdotHbV).getClass());
+        assertEquals(AdvSimdFpOp64.Fp8DotProduct.class, decodeWord(FP8_DECODER, fdotHbV).getClass());
 
         // Mesmo opcode de FCVTN_bh (0b11110) mas `a`(bit23)=1 — combinação reservada dentro do
         // espaço desta task (só `u=0 && a=0` é `FCVTN_bh`/`FCVTN_bs`), tem que continuar
@@ -154,8 +155,8 @@ class Aarch64AdvSimdFp8DecoderTest {
         // fcvtl v6.4s, v7.4h (u=0, mesmo opcode/slot que F1CVTL/F2CVTL com u=1) — não pode ter sido
         // afetado pelo novo ramo `u` desta task. Golden: aarch64-linux-gnu-as -march=armv8.2-a.
         int fcvtlV = 0x0e2178e6;
-        Ir64Op.VectorFpConvertPrecision op =
-                (Ir64Op.VectorFpConvertPrecision) decodeWord(FP8_DECODER, fcvtlV);
+        AdvSimdFpOp64.FpConvertPrecision op =
+                (AdvSimdFpOp64.FpConvertPrecision) decodeWord(FP8_DECODER, fcvtlV);
         assertEquals(dev.vitorsilverio.armjitter.ir64.Ir64VectorFpConvertPrecisionOp.FCVTL, op.op());
     }
 }

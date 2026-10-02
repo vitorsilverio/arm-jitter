@@ -3,7 +3,8 @@ package dev.vitorsilverio.armjitter.executor64;
 import dev.vitorsilverio.armjitter.advsimd.AdvSimdLanes;
 import dev.vitorsilverio.armjitter.core64.Aarch64Core;
 import dev.vitorsilverio.armjitter.core64.Aarch64FpRegisters;
-import dev.vitorsilverio.armjitter.ir64.Ir64Op;
+import dev.vitorsilverio.armjitter.ir64.AdvSimdFpOp64;
+import dev.vitorsilverio.armjitter.ir64.FpOp64;
 import dev.vitorsilverio.armjitter.memory.AddressSpace64;
 import dev.vitorsilverio.armjitter.support.TestAddressSpace;
 import org.junit.jupiter.api.Test;
@@ -32,7 +33,7 @@ class Ir64VectorFpArithmeticExecutorBFloat16Test {
         Aarch64FpRegisters fp = core.fp();
         fp.setS(1, Float.floatToRawIntBits(1.0f));
         fp.setQ(0, 0xFFFF_FFFF_FFFF_FFFFL, 0xFFFF_FFFF_FFFF_FFFFL); // sujar Vd antes
-        EXECUTOR.executeOp(core, new Ir64Op.Fp64ConvertToBf16(0, 1));
+        EXECUTOR.executeOp(core, new FpOp64.ConvertToBf16(0, 1));
         assertEquals(0x3F80L, fp.word(0) & 0xFFFFL);
         assertEquals(0L, fp.word(0) >>> 16, "resto do V0 fica zerado (SIMD&FP destructive write)");
         assertEquals(0L, fp.word(1));
@@ -47,7 +48,7 @@ class Ir64VectorFpArithmeticExecutorBFloat16Test {
         fp.setElement(1, 0, 2, Float.floatToRawIntBits(1.0f));
         fp.setElement(1, 1, 2, Float.floatToRawIntBits(2.0f));
         fp.setQ(0, 0xFFFF_FFFF_FFFF_FFFFL, 0xFFFF_FFFF_FFFF_FFFFL);
-        EXECUTOR.executeOp(core, new Ir64Op.VectorFpConvertPrecision(
+        EXECUTOR.executeOp(core, new AdvSimdFpOp64.FpConvertPrecision(
                 dev.vitorsilverio.armjitter.ir64.Ir64VectorFpConvertPrecisionOp.BFCVTN, false, 1, 0, 1));
         assertEquals(bf16(1.0f), fp.element(0, 0, 1));
         assertEquals(bf16(2.0f), fp.element(0, 1, 1));
@@ -60,7 +61,7 @@ class Ir64VectorFpArithmeticExecutorBFloat16Test {
         Aarch64FpRegisters fp = core.fp();
         fp.setD(0, 0x1111_1111_2222_2222L); // metade baixa pré-existente, deve sobreviver
         fp.setElement(1, 0, 2, Float.floatToRawIntBits(3.0f));
-        EXECUTOR.executeOp(core, new Ir64Op.VectorFpConvertPrecision(
+        EXECUTOR.executeOp(core, new AdvSimdFpOp64.FpConvertPrecision(
                 dev.vitorsilverio.armjitter.ir64.Ir64VectorFpConvertPrecisionOp.BFCVTN, true, 1, 0, 1));
         assertEquals(0x1111_1111_2222_2222L, fp.low64(0), "BFCVTN2 preserva a metade baixa");
         assertEquals(bf16(3.0f), fp.element(0, 4, 1));
@@ -78,7 +79,7 @@ class Ir64VectorFpArithmeticExecutorBFloat16Test {
         fp.setElement(2, 0, 1, bf16(3.0f));
         fp.setElement(2, 1, 1, bf16(4.0f));
         fp.setElement(0, 0, 2, Float.floatToRawIntBits(0.5f)); // acumulador pré-existente
-        EXECUTOR.executeOp(core, new Ir64Op.VectorFpDotProductBFloat16(false, 0, 1, 2));
+        EXECUTOR.executeOp(core, new AdvSimdFpOp64.FpDotProductBFloat16(false, 0, 1, 2));
         assertEquals(11.5f, Float.intBitsToFloat((int) fp.element(0, 0, 2)));
         assertEquals(0L, fp.word(1), "q=false zera a metade alta de Vd");
     }
@@ -95,7 +96,7 @@ class Ir64VectorFpArithmeticExecutorBFloat16Test {
         // Vm par fixo no índice 1 (segundo par de 2 halfwords), replicado nas 2 lanes.
         fp.setElement(2, 2, 1, bf16(5.0f));
         fp.setElement(2, 3, 1, bf16(5.0f));
-        EXECUTOR.executeOp(core, new Ir64Op.VectorFpDotProductBFloat16ByElement(false, 0, 1, 2, 1));
+        EXECUTOR.executeOp(core, new AdvSimdFpOp64.FpDotProductBFloat16ByElement(false, 0, 1, 2, 1));
         // lane0 = 1*5 + 1*5 = 10 ; lane1 = 2*5 + 2*5 = 20
         assertEquals(10.0f, Float.intBitsToFloat((int) fp.element(0, 0, 2)));
         assertEquals(20.0f, Float.intBitsToFloat((int) fp.element(0, 1, 2)));
@@ -113,7 +114,7 @@ class Ir64VectorFpArithmeticExecutorBFloat16Test {
             fp.setElement(1, i, 1, bf16(n[i]));
             fp.setElement(2, i, 1, bf16(m[i]));
         }
-        EXECUTOR.executeOp(core, new Ir64Op.VectorFpMultiplyAddLongBFloat16(false, 0, 1, 2));
+        EXECUTOR.executeOp(core, new AdvSimdFpOp64.FpMultiplyAddLongBFloat16(false, 0, 1, 2));
         assertEquals(1f, Float.intBitsToFloat((int) fp.element(0, 0, 2)));
         assertEquals(2f, Float.intBitsToFloat((int) fp.element(0, 1, 2)));
         assertEquals(3f, Float.intBitsToFloat((int) fp.element(0, 2, 2)));
@@ -131,7 +132,7 @@ class Ir64VectorFpArithmeticExecutorBFloat16Test {
             fp.setElement(2, i, 1, bf16(m[i]));
         }
         fp.setElement(0, 0, 2, Float.floatToRawIntBits(100f)); // acumulador pré-existente na lane0
-        EXECUTOR.executeOp(core, new Ir64Op.VectorFpMultiplyAddLongBFloat16(true, 0, 1, 2));
+        EXECUTOR.executeOp(core, new AdvSimdFpOp64.FpMultiplyAddLongBFloat16(true, 0, 1, 2));
         assertEquals(120f, Float.intBitsToFloat((int) fp.element(0, 0, 2)), "100 + 10*2");
         assertEquals(40f, Float.intBitsToFloat((int) fp.element(0, 1, 2)), "0 + 20*2");
     }
@@ -145,7 +146,7 @@ class Ir64VectorFpArithmeticExecutorBFloat16Test {
             fp.setElement(1, i, 1, bf16(n[i]));
         }
         fp.setElement(2, 5, 1, bf16(2.0f)); // elemento fixo índice 5 (ímpar)
-        EXECUTOR.executeOp(core, new Ir64Op.VectorFpMultiplyAddLongBFloat16ByElement(true, 0, 1, 2, 5));
+        EXECUTOR.executeOp(core, new AdvSimdFpOp64.FpMultiplyAddLongBFloat16ByElement(true, 0, 1, 2, 5));
         // top=true -> elementos ímpares de Vn: [10,20,30,40] * 2 = [20,40,60,80]
         assertEquals(20f, Float.intBitsToFloat((int) fp.element(0, 0, 2)));
         assertEquals(40f, Float.intBitsToFloat((int) fp.element(0, 1, 2)));
@@ -168,7 +169,7 @@ class Ir64VectorFpArithmeticExecutorBFloat16Test {
             fp.setElement(2, i, 1, bf16(cols[i]));
         }
         fp.setElement(0, 0, 2, Float.floatToRawIntBits(0.5f)); // Vd[0][0] pré-existente
-        EXECUTOR.executeOp(core, new Ir64Op.VectorFpMatrixMultiplyAccumulateBFloat16(0, 1, 2));
+        EXECUTOR.executeOp(core, new AdvSimdFpOp64.FpMatrixMultiplyAccumulateBFloat16(0, 1, 2));
         // dot(row0,col0)=1*1=1 ; dot(row0,col1)=2*1+3*2=8 ; dot(row1,col0)=5*1=5 ; dot(row1,col1)=6*1+7*2=20
         assertEquals(1.5f, Float.intBitsToFloat((int) fp.element(0, 0, 2)), "0.5 + dot(row0,col0)");
         assertEquals(8f, Float.intBitsToFloat((int) fp.element(0, 1, 2)));

@@ -4,8 +4,8 @@ package dev.vitorsilverio.armjitter.ir64;
 /// subconjunto de 6 valores (campo `cc` de 3 bits no encoding, 2 combinações reservadas), bem menor
 /// que os 16 códigos de {@link Ir64Condition}. Deliberadamente SEPARADA de {@link Ir64Condition}:
 /// esta condição nunca lê `PSTATE.{N,Z,C,V}` (`CB_cond`/`CB_cond_imm` comparam os operandos
-/// diretamente, sem tocar `NZCV`) — ver `Ir64Op.CompareAndBranchRegister`/
-/// `Ir64Op.CompareAndBranchImmediate`.
+/// diretamente, sem tocar `NZCV`) — ver `BranchOp64.CompareAndBranchRegister`/
+/// `BranchOp64.CompareAndBranchImmediate`.
 ///
 /// **O mapeamento do campo `cc` de 3 bits é DIFERENTE entre a forma registrador e a forma
 /// imediata** (achado confirmado contra `trans_CB_cond`/`trans_CB_cond_imm` do QEMU real,

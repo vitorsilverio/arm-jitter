@@ -2,7 +2,7 @@ package dev.vitorsilverio.armjitter.executor64;
 
 import dev.vitorsilverio.armjitter.core64.Aarch64Core;
 import dev.vitorsilverio.armjitter.core64.Aarch64ScalableRegisters;
-import dev.vitorsilverio.armjitter.ir64.Ir64Op;
+import dev.vitorsilverio.armjitter.ir64.SveFpOp64;
 
 import java.util.Arrays;
 
@@ -41,8 +41,8 @@ final class SveFpCompareReduceOps {
     }
 
     /// Executa uma operação do grupo. `true` = a instrução já entrou numa exceção (acesso negado).
-    static boolean execute(Aarch64Core core, Ir64Op.SveFpCompareReduce op) {
-        if (op.op() == Ir64Op.SveFpCompareReduce.Op.FADDA) {
+    static boolean execute(Aarch64Core core, SveFpOp64.FpCompareReduce op) {
+        if (op.op() == SveFpOp64.FpCompareReduce.Op.FADDA) {
             SvePredicateOps.requireNonStreaming(core);
         }
         if (!SvePredicateOps.accessAllowed(core, op.instructionAddress())) {
@@ -66,13 +66,13 @@ final class SveFpCompareReduceOps {
 
     // ── Comparação ───────────────────────────────────────────────────────────────────────────────
 
-    private static void compare(Aarch64Core core, Ir64Op.SveFpCompareReduce op, SveFloat.Env env) {
+    private static void compare(Aarch64Core core, SveFpOp64.FpCompareReduce op, SveFloat.Env env) {
         Aarch64ScalableRegisters regs = core.scalable();
         int esz = op.esz();
         int elements = core.vectorLengthBytes() >> esz;
         long[] pg = SvePredicateOps.read(regs, op.pg());
         long[] result = new long[pg.length];
-        boolean absolute = op.op() == Ir64Op.SveFpCompareReduce.Op.FACGE || op.op() == Ir64Op.SveFpCompareReduce.Op.FACGT;
+        boolean absolute = op.op() == SveFpOp64.FpCompareReduce.Op.FACGE || op.op() == SveFpOp64.FpCompareReduce.Op.FACGT;
         boolean signaling = switch (op.op()) {
             case FCMEQ, FCMNE, FCMUO -> false;
             default -> true;
@@ -96,7 +96,7 @@ final class SveFpCompareReduceOps {
     }
 
     /// A condição sobre a relação `n ? m`; um par não ordenado só satisfaz `FCMNE` e `FCMUO`.
-    private static boolean holds(Ir64Op.SveFpCompareReduce.Op kind, int relation) {
+    private static boolean holds(SveFpOp64.FpCompareReduce.Op kind, int relation) {
         boolean unordered = relation == SveFloat.RELATION_UNORDERED;
         return switch (kind) {
             case FCMGE, FACGE -> !unordered && relation >= 0;
@@ -112,7 +112,7 @@ final class SveFpCompareReduceOps {
     // ── Reduções ─────────────────────────────────────────────────────────────────────────────────
 
     /// Valor neutro (elemento inativo e completamento até potência de dois).
-    private static long identity(Ir64Op.SveFpCompareReduce.Op kind, SveFloat.Env env) {
+    private static long identity(SveFpOp64.FpCompareReduce.Op kind, SveFloat.Env env) {
         return switch (kind) {
             case FADDV, FADDQV -> env.zero(false);
             case FMINV, FMINQV -> env.infinity(false);
@@ -122,7 +122,7 @@ final class SveFpCompareReduceOps {
     }
 
     /// Um nó da árvore: `op(baixo, alto)`.
-    private static long combine(Ir64Op.SveFpCompareReduce.Op kind, long low, long high, SveFloat.Env env) {
+    private static long combine(SveFpOp64.FpCompareReduce.Op kind, long low, long high, SveFloat.Env env) {
         return switch (kind) {
             case FADDV, FADDQV -> SveFloat.add(low, high, false, env);
             case FMAXNMV, FMAXNMQV -> SveFloat.maxMinNumber(low, high, true, env);
@@ -133,7 +133,7 @@ final class SveFpCompareReduceOps {
     }
 
     /// `Reduce` recursiva do manual sobre `count` elementos (potência de dois): metade baixa, metade alta, `op`.
-    private static long reduce(Ir64Op.SveFpCompareReduce.Op kind, long[] data, int start, int count, SveFloat.Env env) {
+    private static long reduce(SveFpOp64.FpCompareReduce.Op kind, long[] data, int start, int count, SveFloat.Env env) {
         if (count == 1) {
             return data[start];
         }
@@ -147,7 +147,7 @@ final class SveFpCompareReduceOps {
         return value <= 1 ? 1 : Integer.highestOneBit(value - 1) << 1;
     }
 
-    private static void treeReduce(Aarch64Core core, Ir64Op.SveFpCompareReduce op, SveFloat.Env env) {
+    private static void treeReduce(Aarch64Core core, SveFpOp64.FpCompareReduce op, SveFloat.Env env) {
         Aarch64ScalableRegisters regs = core.scalable();
         int esz = op.esz();
         int elements = core.vectorLengthBytes() >> esz;
@@ -162,7 +162,7 @@ final class SveFpCompareReduceOps {
         core.fp().setScalar(op.rd(), esz, reduce(op.op(), data, 0, data.length, env));
     }
 
-    private static void segmentReduce(Aarch64Core core, Ir64Op.SveFpCompareReduce op, SveFloat.Env env) {
+    private static void segmentReduce(Aarch64Core core, SveFpOp64.FpCompareReduce op, SveFloat.Env env) {
         Aarch64ScalableRegisters regs = core.scalable();
         int esz = op.esz();
         int perSegment = SEGMENT_BYTES >> esz;
@@ -186,7 +186,7 @@ final class SveFpCompareReduceOps {
     }
 
     /// `FADDA`: soma em ordem estrita dos elementos ativos, a partir do escalar `Vdn` (elemento `0` de `Zdn`).
-    private static void serialAdd(Aarch64Core core, Ir64Op.SveFpCompareReduce op, SveFloat.Env env) {
+    private static void serialAdd(Aarch64Core core, SveFpOp64.FpCompareReduce op, SveFloat.Env env) {
         Aarch64ScalableRegisters regs = core.scalable();
         int esz = op.esz();
         int elements = core.vectorLengthBytes() >> esz;

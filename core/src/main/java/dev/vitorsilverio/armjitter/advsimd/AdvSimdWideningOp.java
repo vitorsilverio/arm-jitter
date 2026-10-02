@@ -5,7 +5,7 @@ package dev.vitorsilverio.armjitter.advsimd;
 /// preenchendo o operando de destino inteiro. Mirror exato de
 /// {@link dev.vitorsilverio.armjitter.ir64.Ir64VectorWideningOp} (A64, B8.7/B8.8/B8.20), mais
 /// {@link #PMULL} — que não existe no lado A64 como membro deste enum (o A64 tem `PMULL`/`PMULL2`
-/// como `IrOp` próprio, `VectorPolynomialMultiplyLong`, fora desta família) mas é a MESMA operação
+/// como `IrOp` próprio, `AdvSimdIntegerOp64.PolynomialMultiplyLong`, fora desta família) mas é a MESMA operação
 /// que `VMULL.P8` do NEON A32 precisa (B13.10), reaproveitando
 /// {@link AdvSimdLanes#polynomialMultiply8}.
 public enum AdvSimdWideningOp {

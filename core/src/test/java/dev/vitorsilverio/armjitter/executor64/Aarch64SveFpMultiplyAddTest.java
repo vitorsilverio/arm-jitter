@@ -11,6 +11,7 @@ import dev.vitorsilverio.armjitter.ir64.Aarch64SystemRegisterId;
 import dev.vitorsilverio.armjitter.ir64.Ir64Block;
 import dev.vitorsilverio.armjitter.ir64.Ir64Op;
 import dev.vitorsilverio.armjitter.ir64.StandardIr64BlockLifter;
+import dev.vitorsilverio.armjitter.ir64.SveFpOp64;
 import dev.vitorsilverio.armjitter.memory.AddressSpace64;
 import dev.vitorsilverio.armjitter.support.TestAddressSpace;
 import org.junit.jupiter.api.Test;
@@ -111,14 +112,14 @@ class Aarch64SveFpMultiplyAddTest {
 
     private static boolean decodes(Aarch64Architecture architecture, int word) {
         try {
-            return decode(architecture, word) instanceof Ir64Op.SveFpMultiplyAdd;
+            return decode(architecture, word) instanceof SveFpOp64.FpMultiplyAdd;
         } catch (UnsupportedOperationException refused) {
             return false;
         }
     }
 
-    private static Ir64Op.SveFpMultiplyAdd decoded(int word) {
-        return assertInstanceOf(Ir64Op.SveFpMultiplyAdd.class, decode(SVE, word));
+    private static SveFpOp64.FpMultiplyAdd decoded(int word) {
+        return assertInstanceOf(SveFpOp64.FpMultiplyAdd.class, decode(SVE, word));
     }
 
     private static long fpsr(Aarch64Core core) {
@@ -235,7 +236,7 @@ class Aarch64SveFpMultiplyAddTest {
     @ParameterizedTest
     @ValueSource(ints = {0x65a40861, 0x65642861, 0x65e44861, 0x65a46861, 0x65a48861, 0x6564a861, 0x65e4c861, 0x65a4e861})
     void predicatedFmaWordsFromTheAssemblerDecode(int word) {
-        Ir64Op.SveFpMultiplyAdd op = decoded(word);
+        SveFpOp64.FpMultiplyAdd op = decoded(word);
         assertTrue(op.predicated());
         assertFalse(op.indexed());
         assertEquals(Z1, op.rd());
@@ -254,8 +255,8 @@ class Aarch64SveFpMultiplyAddTest {
 
     @Test
     void theEightOpcodesMapToTheFourMnemonics() {
-        Ir64Op.SveFpMultiplyAdd.Op[] expected = {Ir64Op.SveFpMultiplyAdd.Op.FMLA, Ir64Op.SveFpMultiplyAdd.Op.FMLS,
-            Ir64Op.SveFpMultiplyAdd.Op.FNMLA, Ir64Op.SveFpMultiplyAdd.Op.FNMLS};
+        SveFpOp64.FpMultiplyAdd.Op[] expected = {SveFpOp64.FpMultiplyAdd.Op.FMLA, SveFpOp64.FpMultiplyAdd.Op.FMLS,
+            SveFpOp64.FpMultiplyAdd.Op.FNMLA, SveFpOp64.FpMultiplyAdd.Op.FNMLS};
         for (int opcode = 0; opcode < 8; opcode++) {
             for (int esz = 1; esz <= 3; esz++) {
                 assertEquals(expected[opcode & 3], decoded(predicated(esz, opcode)).op());
@@ -266,49 +267,49 @@ class Aarch64SveFpMultiplyAddTest {
 
     @Test
     void indexedWordsFromTheAssemblerDecodeWithTheirFieldLayouts() {
-        Ir64Op.SveFpMultiplyAdd half = decoded(0x647b0041); // fmla z1.h, z2.h, z3.h[7]
-        assertEquals(Ir64Op.SveFpMultiplyAdd.Op.FMLA, half.op());
+        SveFpOp64.FpMultiplyAdd half = decoded(0x647b0041); // fmla z1.h, z2.h, z3.h[7]
+        assertEquals(SveFpOp64.FpMultiplyAdd.Op.FMLA, half.op());
         assertEquals(1, half.esz());
         assertEquals(7, half.index(), "bit 22 : bits 20:19");
         assertEquals(Z3, half.rm());
         assertTrue(half.indexed());
         assertFalse(half.predicated());
         assertEquals(Z1, half.ra());
-        Ir64Op.SveFpMultiplyAdd single = decoded(0x64bb0041); // fmla z1.s, z2.s, z3.s[3]
+        SveFpOp64.FpMultiplyAdd single = decoded(0x64bb0041); // fmla z1.s, z2.s, z3.s[3]
         assertEquals(2, single.esz());
         assertEquals(3, single.index());
-        Ir64Op.SveFpMultiplyAdd dbl = decoded(0x64fd0041); // fmla z1.d, z2.d, z13.d[1]
+        SveFpOp64.FpMultiplyAdd dbl = decoded(0x64fd0041); // fmla z1.d, z2.d, z13.d[1]
         assertEquals(3, dbl.esz());
         assertEquals(1, dbl.index());
         assertEquals(13, dbl.rm(), "Zm de 4 bits em dupla");
-        assertEquals(Ir64Op.SveFpMultiplyAdd.Op.FMLS, decoded(0x646b0441).op()); // fmls z1.h, z2.h, z3.h[5]
+        assertEquals(SveFpOp64.FpMultiplyAdd.Op.FMLS, decoded(0x646b0441).op()); // fmls z1.h, z2.h, z3.h[5]
         assertEquals(5, decoded(0x646b0441).index());
-        Ir64Op.SveFpMultiplyAdd mul = decoded(0x64732041); // fmul z1.h, z2.h, z3.h[6]
-        assertEquals(Ir64Op.SveFpMultiplyAdd.Op.FMUL, mul.op());
+        SveFpOp64.FpMultiplyAdd mul = decoded(0x64732041); // fmul z1.h, z2.h, z3.h[6]
+        assertEquals(SveFpOp64.FpMultiplyAdd.Op.FMUL, mul.op());
         assertEquals(6, mul.index());
         assertEquals(1, mul.esz());
     }
 
     @Test
     void complexWordsFromTheAssemblerDecode() {
-        Ir64Op.SveFpMultiplyAdd add90 = decoded(0x64408861); // fcadd z1.h, p2/m, z1.h, z3.h, #90
-        assertEquals(Ir64Op.SveFpMultiplyAdd.Op.FCADD, add90.op());
+        SveFpOp64.FpMultiplyAdd add90 = decoded(0x64408861); // fcadd z1.h, p2/m, z1.h, z3.h, #90
+        assertEquals(SveFpOp64.FpMultiplyAdd.Op.FCADD, add90.op());
         assertEquals(0, add90.rot());
         assertEquals(Z3, add90.rm());
         assertEquals(Z1, add90.rn());
         assertEquals(1, decoded(0x64818861).rot(), "#270 → rot = 1 (1 bit)");
-        Ir64Op.SveFpMultiplyAdd mla = decoded(0x64c34841); // fcmla z1.d, p2/m, z2.d, z3.d, #180
-        assertEquals(Ir64Op.SveFpMultiplyAdd.Op.FCMLA, mla.op());
+        SveFpOp64.FpMultiplyAdd mla = decoded(0x64c34841); // fcmla z1.d, p2/m, z2.d, z3.d, #180
+        assertEquals(SveFpOp64.FpMultiplyAdd.Op.FCMLA, mla.op());
         assertEquals(2, mla.rot(), "#180 → rot = 2 (2 bits)");
         assertEquals(Z2, mla.rn());
         assertEquals(Z3, mla.rm());
         assertEquals(Z1, mla.ra());
-        Ir64Op.SveFpMultiplyAdd idxHalf = decoded(0x64bb1441); // fcmla z1.h, z2.h, z3.h[3], #90
+        SveFpOp64.FpMultiplyAdd idxHalf = decoded(0x64bb1441); // fcmla z1.h, z2.h, z3.h[3], #90
         assertTrue(idxHalf.indexed());
         assertEquals(1, idxHalf.esz(), "bits 23:22 = 10 → meia");
         assertEquals(3, idxHalf.index());
         assertEquals(1, idxHalf.rot());
-        Ir64Op.SveFpMultiplyAdd idxSingle = decoded(0x64fd1c41); // fcmla z1.s, z2.s, z13.s[1], #270
+        SveFpOp64.FpMultiplyAdd idxSingle = decoded(0x64fd1c41); // fcmla z1.s, z2.s, z13.s[1], #270
         assertEquals(2, idxSingle.esz(), "bits 23:22 = 11 → simples");
         assertEquals(1, idxSingle.index());
         assertEquals(13, idxSingle.rm());

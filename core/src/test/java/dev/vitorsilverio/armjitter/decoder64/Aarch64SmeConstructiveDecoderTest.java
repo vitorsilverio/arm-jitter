@@ -3,7 +3,8 @@ package dev.vitorsilverio.armjitter.decoder64;
 import dev.vitorsilverio.armjitter.arch64.Aarch64Architecture;
 import dev.vitorsilverio.armjitter.arch64.Aarch64Feature;
 import dev.vitorsilverio.armjitter.ir64.Ir64Op;
-import dev.vitorsilverio.armjitter.ir64.Ir64Op.SmeConstructive.Op;
+import dev.vitorsilverio.armjitter.ir64.SmeOp64.Constructive.Op;
+import dev.vitorsilverio.armjitter.ir64.SmeOp64;
 import dev.vitorsilverio.armjitter.memory.AddressSpace64;
 import dev.vitorsilverio.armjitter.support.TestAddressSpace;
 import org.junit.jupiter.api.Test;
@@ -109,7 +110,7 @@ class Aarch64SmeConstructiveDecoderTest {
     @ParameterizedTest
     @MethodSource("cases")
     void decodesTheAssemblerWord(Case c) {
-        Ir64Op.SmeConstructive op = assertInstanceOf(Ir64Op.SmeConstructive.class, decode(ALL, c.word()), c.asm());
+        SmeOp64.Constructive op = assertInstanceOf(SmeOp64.Constructive.class, decode(ALL, c.word()), c.asm());
         assertEquals(c.op(), op.op(), c.asm());
         assertEquals(c.esz(), op.esz(), c.asm());
         assertEquals(c.sources(), op.sources(), c.asm());
@@ -146,7 +147,7 @@ class Aarch64SmeConstructiveDecoderTest {
     void everyRowDecodesWithItsOwnOperationUnderAllFeatures() {
         for (SmeConstructiveRows.Row row : SmeConstructiveRows.ROWS) {
             int word = row.value() | 0x0;
-            Ir64Op.SmeConstructive op = assertInstanceOf(Ir64Op.SmeConstructive.class, decode(ALL, word));
+            SmeOp64.Constructive op = assertInstanceOf(SmeOp64.Constructive.class, decode(ALL, word));
             assertEquals(row.op(), op.op());
         }
     }
@@ -166,28 +167,28 @@ class Aarch64SmeConstructiveDecoderTest {
         assertThrows(RuntimeException.class, () -> decode(SME2, 0xc124e083));
         int fclampBf16 = 0xc1a9c104 & ~(0b11 << 22) | (0b00 << 22);
         assertThrows(RuntimeException.class, () -> decode(SME2, fclampBf16));
-        assertInstanceOf(Ir64Op.SmeConstructive.class, decode(ALL, fclampBf16));
+        assertInstanceOf(SmeOp64.Constructive.class, decode(ALL, fclampBf16));
         // as três `*RSHRN_sh` do espaço SVE: SME2 OU SVE2p1
         int sqrshrn = 0x45b32883;
-        assertInstanceOf(Ir64Op.SmeConstructive.class, decode(SME2, sqrshrn));
+        assertInstanceOf(SmeOp64.Constructive.class, decode(SME2, sqrshrn));
         Aarch64Architecture sve21 = Aarch64Architecture.extending(Aarch64Architecture.ARMV9_2_A, "teste-sve21",
                 Aarch64Feature.SVE2_1);
-        assertInstanceOf(Ir64Op.SmeConstructive.class, decode(sve21, sqrshrn));
+        assertInstanceOf(SmeOp64.Constructive.class, decode(sve21, sqrshrn));
         assertThrows(RuntimeException.class, () -> decode(Aarch64Architecture.ARMV9_2_A, sqrshrn));
     }
 
     @Test
     void addSubArrayAccumulatorsDecodeWithTheI16I64Gate() {
         // add za.s[w8, 1, vgx2], {z4.s-z5.s} / sub za.d[w9, 7, vgx4], {z4.d-z7.d}
-        Ir64Op.SmeArrayMultiVector add = assertInstanceOf(Ir64Op.SmeArrayMultiVector.class, decode(SME2, 0xc1a01c91));
-        assertEquals(Ir64Op.SmeArrayMultiVector.Op.ADD_AAZ_S, add.op());
+        SmeOp64.ArrayMultiVector add = assertInstanceOf(SmeOp64.ArrayMultiVector.class, decode(SME2, 0xc1a01c91));
+        assertEquals(SmeOp64.ArrayMultiVector.Op.ADD_AAZ_S, add.op());
         assertEquals(2, add.count());
         assertEquals(8, add.registerIndex());
         assertEquals(1, add.off());
         assertEquals(4, add.zm());
         assertThrows(RuntimeException.class, () -> decode(SME2, 0xc1e13c9f));
-        Ir64Op.SmeArrayMultiVector sub = assertInstanceOf(Ir64Op.SmeArrayMultiVector.class, decode(ALL, 0xc1e13c9f));
-        assertEquals(Ir64Op.SmeArrayMultiVector.Op.SUB_AAZ_D, sub.op());
+        SmeOp64.ArrayMultiVector sub = assertInstanceOf(SmeOp64.ArrayMultiVector.class, decode(ALL, 0xc1e13c9f));
+        assertEquals(SmeOp64.ArrayMultiVector.Op.SUB_AAZ_D, sub.op());
         assertEquals(4, sub.count());
         assertEquals(9, sub.registerIndex());
         assertEquals(7, sub.off());

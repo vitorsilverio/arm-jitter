@@ -3,7 +3,8 @@ package dev.vitorsilverio.armjitter.decoder64;
 import dev.vitorsilverio.armjitter.arch64.Aarch64Architecture;
 import dev.vitorsilverio.armjitter.arch64.Aarch64Feature;
 import dev.vitorsilverio.armjitter.ir64.Ir64Op;
-import dev.vitorsilverio.armjitter.ir64.Ir64Op.SmeArrayMultiVector.Op;
+import dev.vitorsilverio.armjitter.ir64.SmeOp64.ArrayMultiVector.Op;
+import dev.vitorsilverio.armjitter.ir64.SmeOp64;
 import dev.vitorsilverio.armjitter.memory.AddressSpace64;
 import dev.vitorsilverio.armjitter.support.TestAddressSpace;
 import org.junit.jupiter.api.Test;
@@ -313,7 +314,7 @@ class Aarch64SmeArrayMultipleDecoderTest {
     @ParameterizedTest(name = "{0}")
     @MethodSource("allCases")
     void decodesEveryEncodingFromTheAssembler(Case c) {
-        Ir64Op.SmeArrayMultiVector op = assertInstanceOf(Ir64Op.SmeArrayMultiVector.class, decode(ALL, c.word()));
+        SmeOp64.ArrayMultiVector op = assertInstanceOf(SmeOp64.ArrayMultiVector.class, decode(ALL, c.word()));
         assertEquals(c.op(), op.op());
         assertEquals(c.count(), op.count());
         assertEquals(c.register(), op.registerIndex(), "W<rv> = campo + 8");
@@ -331,20 +332,20 @@ class Aarch64SmeArrayMultipleDecoderTest {
             assertThrows(UnsupportedOperationException.class, () -> decode(SME2, c.word()));
             for (Aarch64Feature either : List.of(Aarch64Feature.SME_F16F16, Aarch64Feature.SME_F8F16)) {
                 Aarch64Architecture only = Aarch64Architecture.extending(SME2, "teste-azz-nn-dec-" + either, either);
-                assertInstanceOf(Ir64Op.SmeArrayMultiVector.class, decode(only, c.word()),
+                assertInstanceOf(SmeOp64.ArrayMultiVector.class, decode(only, c.word()),
                         "FADD/FSUB half aceitam QUALQUER das duas: " + either);
             }
             return;
         }
         Aarch64Feature extra = extraFeature(c.op());
         if (extra == null) {
-            assertInstanceOf(Ir64Op.SmeArrayMultiVector.class, decode(SME2, c.word()));
+            assertInstanceOf(SmeOp64.ArrayMultiVector.class, decode(SME2, c.word()));
             return;
         }
         assertThrows(UnsupportedOperationException.class, () -> decode(SME2, c.word()),
                 "sem " + extra + " continua UNIMPLEMENTED");
         Aarch64Architecture only = Aarch64Architecture.extending(SME2, "teste-azz-nn-dec-" + extra, extra);
-        assertInstanceOf(Ir64Op.SmeArrayMultiVector.class, decode(only, c.word()));
+        assertInstanceOf(SmeOp64.ArrayMultiVector.class, decode(only, c.word()));
     }
 
     @Test
@@ -387,7 +388,7 @@ class Aarch64SmeArrayMultipleDecoderTest {
         List<Case> accumulate = cases().stream().filter(c -> ACCUMULATE_ONLY.contains(c.op())).toList();
         assertEquals(VARIANTS_PER_ENCODING * 2 * ACCUMULATE_MNEMONICS, accumulate.size());
         for (Case c : accumulate) {
-            Ir64Op.SmeArrayMultiVector op = assertInstanceOf(Ir64Op.SmeArrayMultiVector.class, decode(ALL, c.word()));
+            SmeOp64.ArrayMultiVector op = assertInstanceOf(SmeOp64.ArrayMultiVector.class, decode(ALL, c.word()));
             assertEquals(0, op.zn(), c.assembly());
             // Os bits[20:16] são FIXOS nestes encodings (tamanho do elemento): qualquer outro valor é indefinido.
             int flipped = c.word() ^ FADD_FIXED_FIELD_BIT;

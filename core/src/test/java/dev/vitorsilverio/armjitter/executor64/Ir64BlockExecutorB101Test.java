@@ -2,7 +2,7 @@ package dev.vitorsilverio.armjitter.executor64;
 
 import dev.vitorsilverio.armjitter.core64.Aarch64Core;
 import dev.vitorsilverio.armjitter.core64.Aarch64ExceptionLevel;
-import dev.vitorsilverio.armjitter.ir64.Ir64Op;
+import dev.vitorsilverio.armjitter.ir64.SystemOp64;
 import dev.vitorsilverio.armjitter.memory.AddressSpace64;
 import dev.vitorsilverio.armjitter.support.TestAddressSpace;
 import org.junit.jupiter.api.Test;
@@ -84,7 +84,7 @@ class Ir64BlockExecutorB101Test {
         core.exceptionState().setElr(Aarch64ExceptionLevel.EL2, 0x1234L);
         core.exceptionState().setSpsr(Aarch64ExceptionLevel.EL2, Aarch64ExceptionLevel.EL1.spsrMode());
 
-        boolean pcChanged = EXECUTOR.executeOp(core, new Ir64Op.ExceptionReturn());
+        boolean pcChanged = EXECUTOR.executeOp(core, new SystemOp64.ExceptionReturn());
 
         assertTrue(pcChanged);
         assertEquals(Aarch64ExceptionLevel.EL1, core.exceptionState().currentEl());

@@ -2,6 +2,7 @@ package dev.vitorsilverio.armjitter.decoder64;
 
 import dev.vitorsilverio.armjitter.arch64.Aarch64Architecture;
 import dev.vitorsilverio.armjitter.arch64.Aarch64Feature;
+import dev.vitorsilverio.armjitter.ir64.AdvSimdFpOp64;
 import dev.vitorsilverio.armjitter.ir64.Ir64Op;
 import dev.vitorsilverio.armjitter.memory.AddressSpace64;
 import dev.vitorsilverio.armjitter.support.TestAddressSpace;
@@ -83,11 +84,11 @@ class Aarch64AdvSimdFhmDecoderTest {
         Aarch64Architecture fhmOnly =
                 Aarch64Architecture.of("fhm-only", Aarch64Feature.FP16_FUSED_MULTIPLY_ADD_LONG);
         Aarch64Decoder decoder = new Aarch64Decoder(fhmOnly);
-        Ir64Op.VectorFpMultiplyAddLong op =
-                (Ir64Op.VectorFpMultiplyAddLong) decode(decoder, FMLAL_V0_4S_V1_4H_V2_4H);
+        AdvSimdFpOp64.FpMultiplyAddLong op =
+                (AdvSimdFpOp64.FpMultiplyAddLong) decode(decoder, FMLAL_V0_4S_V1_4H_V2_4H);
         assertFalse(op.subtract());
-        Ir64Op.VectorFpMultiplyAddLongByElement idx =
-                (Ir64Op.VectorFpMultiplyAddLongByElement) decode(decoder, FMLAL_VI_V0_4S_V1_4H_V2_H0);
+        AdvSimdFpOp64.FpMultiplyAddLongByElement idx =
+                (AdvSimdFpOp64.FpMultiplyAddLongByElement) decode(decoder, FMLAL_VI_V0_4S_V1_4H_V2_H0);
         assertFalse(idx.subtract());
     }
 
@@ -95,8 +96,8 @@ class Aarch64AdvSimdFhmDecoderTest {
 
     @Test
     void fmlalVector4s() {
-        Ir64Op.VectorFpMultiplyAddLong op =
-                (Ir64Op.VectorFpMultiplyAddLong) decode(FHM_DECODER, FMLAL_V0_4S_V1_4H_V2_4H);
+        AdvSimdFpOp64.FpMultiplyAddLong op =
+                (AdvSimdFpOp64.FpMultiplyAddLong) decode(FHM_DECODER, FMLAL_V0_4S_V1_4H_V2_4H);
         assertTrue(op.q());
         assertFalse(op.top());
         assertFalse(op.subtract());
@@ -107,8 +108,8 @@ class Aarch64AdvSimdFhmDecoderTest {
 
     @Test
     void fmlalVector2s() {
-        Ir64Op.VectorFpMultiplyAddLong op =
-                (Ir64Op.VectorFpMultiplyAddLong) decode(FHM_DECODER, FMLAL_V0_2S_V1_2H_V2_2H);
+        AdvSimdFpOp64.FpMultiplyAddLong op =
+                (AdvSimdFpOp64.FpMultiplyAddLong) decode(FHM_DECODER, FMLAL_V0_2S_V1_2H_V2_2H);
         assertFalse(op.q());
         assertFalse(op.top());
         assertFalse(op.subtract());
@@ -116,48 +117,48 @@ class Aarch64AdvSimdFhmDecoderTest {
 
     @Test
     void fmlal2VectorSelectsTop() {
-        Ir64Op.VectorFpMultiplyAddLong op4s =
-                (Ir64Op.VectorFpMultiplyAddLong) decode(FHM_DECODER, FMLAL2_V0_4S_V1_4H_V2_4H);
+        AdvSimdFpOp64.FpMultiplyAddLong op4s =
+                (AdvSimdFpOp64.FpMultiplyAddLong) decode(FHM_DECODER, FMLAL2_V0_4S_V1_4H_V2_4H);
         assertTrue(op4s.q());
         assertTrue(op4s.top());
         assertFalse(op4s.subtract());
 
-        Ir64Op.VectorFpMultiplyAddLong op2s =
-                (Ir64Op.VectorFpMultiplyAddLong) decode(FHM_DECODER, FMLAL2_V0_2S_V1_2H_V2_2H);
+        AdvSimdFpOp64.FpMultiplyAddLong op2s =
+                (AdvSimdFpOp64.FpMultiplyAddLong) decode(FHM_DECODER, FMLAL2_V0_2S_V1_2H_V2_2H);
         assertFalse(op2s.q());
         assertTrue(op2s.top());
     }
 
     @Test
     void fmlslVectorSelectsSubtract() {
-        Ir64Op.VectorFpMultiplyAddLong op4s =
-                (Ir64Op.VectorFpMultiplyAddLong) decode(FHM_DECODER, FMLSL_V0_4S_V1_4H_V2_4H);
+        AdvSimdFpOp64.FpMultiplyAddLong op4s =
+                (AdvSimdFpOp64.FpMultiplyAddLong) decode(FHM_DECODER, FMLSL_V0_4S_V1_4H_V2_4H);
         assertFalse(op4s.top());
         assertTrue(op4s.subtract());
 
-        Ir64Op.VectorFpMultiplyAddLong op2s =
-                (Ir64Op.VectorFpMultiplyAddLong) decode(FHM_DECODER, FMLSL_V0_2S_V1_2H_V2_2H);
+        AdvSimdFpOp64.FpMultiplyAddLong op2s =
+                (AdvSimdFpOp64.FpMultiplyAddLong) decode(FHM_DECODER, FMLSL_V0_2S_V1_2H_V2_2H);
         assertFalse(op2s.top());
         assertTrue(op2s.subtract());
     }
 
     @Test
     void fmlsl2VectorSelectsTopAndSubtract() {
-        Ir64Op.VectorFpMultiplyAddLong op4s =
-                (Ir64Op.VectorFpMultiplyAddLong) decode(FHM_DECODER, FMLSL2_V0_4S_V1_4H_V2_4H);
+        AdvSimdFpOp64.FpMultiplyAddLong op4s =
+                (AdvSimdFpOp64.FpMultiplyAddLong) decode(FHM_DECODER, FMLSL2_V0_4S_V1_4H_V2_4H);
         assertTrue(op4s.top());
         assertTrue(op4s.subtract());
 
-        Ir64Op.VectorFpMultiplyAddLong op2s =
-                (Ir64Op.VectorFpMultiplyAddLong) decode(FHM_DECODER, FMLSL2_V0_2S_V1_2H_V2_2H);
+        AdvSimdFpOp64.FpMultiplyAddLong op2s =
+                (AdvSimdFpOp64.FpMultiplyAddLong) decode(FHM_DECODER, FMLSL2_V0_2S_V1_2H_V2_2H);
         assertTrue(op2s.top());
         assertTrue(op2s.subtract());
     }
 
     @Test
     void fmlalVectorAliasingRdEqualsRn() {
-        Ir64Op.VectorFpMultiplyAddLong op =
-                (Ir64Op.VectorFpMultiplyAddLong) decode(FHM_DECODER, FMLAL_V1_4S_V1_4H_V2_4H);
+        AdvSimdFpOp64.FpMultiplyAddLong op =
+                (AdvSimdFpOp64.FpMultiplyAddLong) decode(FHM_DECODER, FMLAL_V1_4S_V1_4H_V2_4H);
         assertEquals(1, op.rd());
         assertEquals(1, op.rn());
         assertEquals(2, op.rm());
@@ -165,8 +166,8 @@ class Aarch64AdvSimdFhmDecoderTest {
 
     @Test
     void fmlalVectorAliasingRdEqualsRm() {
-        Ir64Op.VectorFpMultiplyAddLong op =
-                (Ir64Op.VectorFpMultiplyAddLong) decode(FHM_DECODER, FMLAL_V1_4S_V3_4H_V1_4H);
+        AdvSimdFpOp64.FpMultiplyAddLong op =
+                (AdvSimdFpOp64.FpMultiplyAddLong) decode(FHM_DECODER, FMLAL_V1_4S_V3_4H_V1_4H);
         assertEquals(1, op.rd());
         assertEquals(3, op.rn());
         assertEquals(1, op.rm());
@@ -176,8 +177,8 @@ class Aarch64AdvSimdFhmDecoderTest {
 
     @Test
     void fmlalIndexedReadsHlmIndex() {
-        Ir64Op.VectorFpMultiplyAddLongByElement idx0 =
-                (Ir64Op.VectorFpMultiplyAddLongByElement) decode(FHM_DECODER, FMLAL_VI_V0_4S_V1_4H_V2_H0);
+        AdvSimdFpOp64.FpMultiplyAddLongByElement idx0 =
+                (AdvSimdFpOp64.FpMultiplyAddLongByElement) decode(FHM_DECODER, FMLAL_VI_V0_4S_V1_4H_V2_H0);
         assertTrue(idx0.q());
         assertFalse(idx0.top());
         assertFalse(idx0.subtract());
@@ -186,68 +187,68 @@ class Aarch64AdvSimdFhmDecoderTest {
         assertEquals(2, idx0.rm());
         assertEquals(0, idx0.index());
 
-        Ir64Op.VectorFpMultiplyAddLongByElement idx3 =
-                (Ir64Op.VectorFpMultiplyAddLongByElement) decode(FHM_DECODER, FMLAL_VI_V0_4S_V1_4H_V2_H3);
+        AdvSimdFpOp64.FpMultiplyAddLongByElement idx3 =
+                (AdvSimdFpOp64.FpMultiplyAddLongByElement) decode(FHM_DECODER, FMLAL_VI_V0_4S_V1_4H_V2_H3);
         assertEquals(3, idx3.index());
 
-        Ir64Op.VectorFpMultiplyAddLongByElement idx7 =
-                (Ir64Op.VectorFpMultiplyAddLongByElement) decode(FHM_DECODER, FMLAL_VI_V0_4S_V1_4H_V2_H7);
+        AdvSimdFpOp64.FpMultiplyAddLongByElement idx7 =
+                (AdvSimdFpOp64.FpMultiplyAddLongByElement) decode(FHM_DECODER, FMLAL_VI_V0_4S_V1_4H_V2_H7);
         assertEquals(7, idx7.index());
     }
 
     @Test
     void fmlal2IndexedSelectsTop() {
-        Ir64Op.VectorFpMultiplyAddLongByElement idx0 =
-                (Ir64Op.VectorFpMultiplyAddLongByElement) decode(FHM_DECODER, FMLAL2_VI_V0_4S_V1_4H_V2_H0);
+        AdvSimdFpOp64.FpMultiplyAddLongByElement idx0 =
+                (AdvSimdFpOp64.FpMultiplyAddLongByElement) decode(FHM_DECODER, FMLAL2_VI_V0_4S_V1_4H_V2_H0);
         assertTrue(idx0.top());
         assertFalse(idx0.subtract());
 
-        Ir64Op.VectorFpMultiplyAddLongByElement idx3 =
-                (Ir64Op.VectorFpMultiplyAddLongByElement) decode(FHM_DECODER, FMLAL2_VI_V0_4S_V1_4H_V2_H3);
+        AdvSimdFpOp64.FpMultiplyAddLongByElement idx3 =
+                (AdvSimdFpOp64.FpMultiplyAddLongByElement) decode(FHM_DECODER, FMLAL2_VI_V0_4S_V1_4H_V2_H3);
         assertTrue(idx3.top());
         assertEquals(3, idx3.index());
     }
 
     @Test
     void fmlslIndexedSelectsSubtract() {
-        Ir64Op.VectorFpMultiplyAddLongByElement idx =
-                (Ir64Op.VectorFpMultiplyAddLongByElement) decode(FHM_DECODER, FMLSL_VI_V0_4S_V1_4H_V2_H0);
+        AdvSimdFpOp64.FpMultiplyAddLongByElement idx =
+                (AdvSimdFpOp64.FpMultiplyAddLongByElement) decode(FHM_DECODER, FMLSL_VI_V0_4S_V1_4H_V2_H0);
         assertFalse(idx.top());
         assertTrue(idx.subtract());
     }
 
     @Test
     void fmlsl2IndexedSelectsTopAndSubtract() {
-        Ir64Op.VectorFpMultiplyAddLongByElement idx0 =
-                (Ir64Op.VectorFpMultiplyAddLongByElement) decode(FHM_DECODER, FMLSL2_VI_V0_4S_V1_4H_V2_H0);
+        AdvSimdFpOp64.FpMultiplyAddLongByElement idx0 =
+                (AdvSimdFpOp64.FpMultiplyAddLongByElement) decode(FHM_DECODER, FMLSL2_VI_V0_4S_V1_4H_V2_H0);
         assertTrue(idx0.top());
         assertTrue(idx0.subtract());
 
-        Ir64Op.VectorFpMultiplyAddLongByElement idx7 =
-                (Ir64Op.VectorFpMultiplyAddLongByElement) decode(FHM_DECODER, FMLSL2_VI_V0_4S_V1_4H_V2_H7);
+        AdvSimdFpOp64.FpMultiplyAddLongByElement idx7 =
+                (AdvSimdFpOp64.FpMultiplyAddLongByElement) decode(FHM_DECODER, FMLSL2_VI_V0_4S_V1_4H_V2_H7);
         assertEquals(7, idx7.index());
     }
 
     @Test
     void fmlalIndexed2s() {
-        Ir64Op.VectorFpMultiplyAddLongByElement idx =
-                (Ir64Op.VectorFpMultiplyAddLongByElement) decode(FHM_DECODER, FMLAL_VI_V0_2S_V1_2H_V2_H0);
+        AdvSimdFpOp64.FpMultiplyAddLongByElement idx =
+                (AdvSimdFpOp64.FpMultiplyAddLongByElement) decode(FHM_DECODER, FMLAL_VI_V0_2S_V1_2H_V2_H0);
         assertFalse(idx.q());
         assertFalse(idx.top());
     }
 
     @Test
     void fmlal2Indexed2s() {
-        Ir64Op.VectorFpMultiplyAddLongByElement idx =
-                (Ir64Op.VectorFpMultiplyAddLongByElement) decode(FHM_DECODER, FMLAL2_VI_V0_2S_V1_2H_V2_H0);
+        AdvSimdFpOp64.FpMultiplyAddLongByElement idx =
+                (AdvSimdFpOp64.FpMultiplyAddLongByElement) decode(FHM_DECODER, FMLAL2_VI_V0_2S_V1_2H_V2_H0);
         assertFalse(idx.q());
         assertTrue(idx.top());
     }
 
     @Test
     void fmlalIndexedAliasingRdEqualsRn() {
-        Ir64Op.VectorFpMultiplyAddLongByElement idx =
-                (Ir64Op.VectorFpMultiplyAddLongByElement) decode(FHM_DECODER, FMLAL_VI_V1_4S_V1_4H_V2_H3);
+        AdvSimdFpOp64.FpMultiplyAddLongByElement idx =
+                (AdvSimdFpOp64.FpMultiplyAddLongByElement) decode(FHM_DECODER, FMLAL_VI_V1_4S_V1_4H_V2_H3);
         assertEquals(1, idx.rd());
         assertEquals(1, idx.rn());
         assertEquals(2, idx.rm());
@@ -256,8 +257,8 @@ class Aarch64AdvSimdFhmDecoderTest {
 
     @Test
     void fmlalIndexedAliasingRdEqualsRm() {
-        Ir64Op.VectorFpMultiplyAddLongByElement idx =
-                (Ir64Op.VectorFpMultiplyAddLongByElement) decode(FHM_DECODER, FMLAL_VI_V1_4S_V3_4H_V1_H3);
+        AdvSimdFpOp64.FpMultiplyAddLongByElement idx =
+                (AdvSimdFpOp64.FpMultiplyAddLongByElement) decode(FHM_DECODER, FMLAL_VI_V1_4S_V3_4H_V1_H3);
         assertEquals(1, idx.rd());
         assertEquals(3, idx.rn());
         assertEquals(1, idx.rm());

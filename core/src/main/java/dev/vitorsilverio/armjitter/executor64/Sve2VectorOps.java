@@ -1,7 +1,7 @@
 package dev.vitorsilverio.armjitter.executor64;
 
-import dev.vitorsilverio.armjitter.ir64.Ir64Op;
 
+import dev.vitorsilverio.armjitter.ir64.SveIntegerOp64;
 import java.math.BigInteger;
 
 /// Semântica por elemento das 28 operações SVE2 predicadas da B17.21a: shift por vetor saturante/arredondado
@@ -15,7 +15,7 @@ final class Sve2VectorOps {
     private Sve2VectorOps() {
     }
 
-    static long apply(Ir64Op.SveIntegerPredicated.Op op, long n, long m, int esz) {
+    static long apply(SveIntegerOp64.IntegerPredicated.Op op, long n, long m, int esz) {
         return switch (op) {
             case SRSHL -> shift(n, m, esz, true, true, false);
             case URSHL -> shift(n, m, esz, false, true, false);

@@ -2,7 +2,7 @@ package dev.vitorsilverio.armjitter.executor64;
 
 import dev.vitorsilverio.armjitter.core64.Aarch64Core;
 import dev.vitorsilverio.armjitter.core64.Aarch64ScalableRegisters;
-import dev.vitorsilverio.armjitter.ir64.Ir64Op;
+import dev.vitorsilverio.armjitter.ir64.SveFpOp64;
 
 /// Semântica da aritmética de ponto flutuante SVE (B17.13): as 6 não predicadas, `FRECPE`/`FRSQRTE`, as 15 predicadas
 /// por vetor, as 8 com imediato de UM bit e `FTMAD`. A matemática vive em {@link SveFloat} (IEEE exato, `FPCR`/`FPSR`
@@ -43,8 +43,8 @@ final class SveFpArithmeticOps {
     }
 
     /// Executa uma operação do grupo. `true` = a instrução já entrou numa exceção (acesso negado).
-    static boolean execute(Aarch64Core core, Ir64Op.SveFpArithmetic op) {
-        if (op.op() == Ir64Op.SveFpArithmetic.Op.TSMUL || op.op() == Ir64Op.SveFpArithmetic.Op.TMAD) {
+    static boolean execute(Aarch64Core core, SveFpOp64.FpArithmetic op) {
+        if (op.op() == SveFpOp64.FpArithmetic.Op.TSMUL || op.op() == SveFpOp64.FpArithmetic.Op.TMAD) {
             SvePredicateOps.requireNonStreaming(core);
         }
         if (!SvePredicateOps.accessAllowed(core, op.instructionAddress())) {
@@ -76,7 +76,7 @@ final class SveFpArithmeticOps {
     }
 
     /// Segundo operando: a constante das formas `_zpzi`, `Zm` nas demais (as unárias não o usam).
-    private static long operandM(Aarch64ScalableRegisters regs, Ir64Op.SveFpArithmetic op, int element, int esz,
+    private static long operandM(Aarch64ScalableRegisters regs, SveFpOp64.FpArithmetic op, int element, int esz,
             SveFloat.Env env) {
         if (op.immediateForm()) {
             return immediateConstant(op.op(), op.immediate(), env);
@@ -89,7 +89,7 @@ final class SveFpArithmeticOps {
 
     /// As duas constantes de cada forma `_zpzi`: `0.5`/`1.0` (`FADD`/`FSUB`/`FSUBR`), `0.5`/`2.0` (`FMUL`),
     /// `0.0`/`1.0` (`FMAXNM`/`FMINNM`/`FMAX`/`FMIN`).
-    private static long immediateConstant(Ir64Op.SveFpArithmetic.Op op, int immediate, SveFloat.Env env) {
+    private static long immediateConstant(SveFpOp64.FpArithmetic.Op op, int immediate, SveFloat.Env env) {
         return switch (op) {
             case ADD, SUB -> immediate == 0 ? env.half() : env.one();
             case MUL -> immediate == 0 ? env.half() : env.two();
@@ -97,7 +97,7 @@ final class SveFpArithmeticOps {
         };
     }
 
-    private static long compute(Ir64Op.SveFpArithmetic op, long n, long m, int esz, SveFloat.Env env) {
+    private static long compute(SveFpOp64.FpArithmetic op, long n, long m, int esz, SveFloat.Env env) {
         long a = op.reversed() ? m : n;
         long b = op.reversed() ? n : m;
         return switch (op.op()) {

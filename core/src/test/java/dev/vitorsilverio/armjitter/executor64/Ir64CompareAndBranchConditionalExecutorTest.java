@@ -1,9 +1,9 @@
 package dev.vitorsilverio.armjitter.executor64;
 
 import dev.vitorsilverio.armjitter.core64.Aarch64Core;
+import dev.vitorsilverio.armjitter.ir64.BranchOp64;
 import dev.vitorsilverio.armjitter.ir64.Ir64CompareBranchCondition;
 import dev.vitorsilverio.armjitter.ir64.Ir64MemSize;
-import dev.vitorsilverio.armjitter.ir64.Ir64Op;
 import dev.vitorsilverio.armjitter.memory.AddressSpace64;
 import dev.vitorsilverio.armjitter.support.TestAddressSpace;
 import org.junit.jupiter.api.Test;
@@ -30,7 +30,7 @@ class Ir64CompareAndBranchConditionalExecutorTest {
         Aarch64Core core = newCore();
         core.setX(1, 5L);
         core.setX(2, 3L);
-        boolean taken = EXECUTOR.executeOp(core, new Ir64Op.CompareAndBranchRegister(
+        boolean taken = EXECUTOR.executeOp(core, new BranchOp64.CompareAndBranchRegister(
                 Ir64CompareBranchCondition.GREATER_THAN, 1, 2, Ir64MemSize.DOUBLEWORD, TARGET));
         assertTrue(taken);
         assertEquals(TARGET, core.pc());
@@ -41,7 +41,7 @@ class Ir64CompareAndBranchConditionalExecutorTest {
         Aarch64Core core = newCore();
         core.setX(1, 3L);
         core.setX(2, 5L);
-        boolean taken = EXECUTOR.executeOp(core, new Ir64Op.CompareAndBranchRegister(
+        boolean taken = EXECUTOR.executeOp(core, new BranchOp64.CompareAndBranchRegister(
                 Ir64CompareBranchCondition.GREATER_THAN, 1, 2, Ir64MemSize.DOUBLEWORD, TARGET));
         assertFalse(taken);
     }
@@ -51,10 +51,10 @@ class Ir64CompareAndBranchConditionalExecutorTest {
         Aarch64Core core = newCore();
         core.setX(1, 5L);
         core.setX(2, 5L);
-        assertTrue(EXECUTOR.executeOp(core, new Ir64Op.CompareAndBranchRegister(
+        assertTrue(EXECUTOR.executeOp(core, new BranchOp64.CompareAndBranchRegister(
                 Ir64CompareBranchCondition.GREATER_OR_EQUAL, 1, 2, Ir64MemSize.DOUBLEWORD, TARGET)));
         core.setX(1, 4L);
-        assertFalse(EXECUTOR.executeOp(core, new Ir64Op.CompareAndBranchRegister(
+        assertFalse(EXECUTOR.executeOp(core, new BranchOp64.CompareAndBranchRegister(
                 Ir64CompareBranchCondition.GREATER_OR_EQUAL, 1, 2, Ir64MemSize.DOUBLEWORD, TARGET)));
     }
 
@@ -64,9 +64,9 @@ class Ir64CompareAndBranchConditionalExecutorTest {
         Aarch64Core core = newCore();
         core.setX(1, -1L);
         core.setX(2, 5L);
-        assertTrue(EXECUTOR.executeOp(core, new Ir64Op.CompareAndBranchRegister(
+        assertTrue(EXECUTOR.executeOp(core, new BranchOp64.CompareAndBranchRegister(
                 Ir64CompareBranchCondition.GREATER_THAN_UNSIGNED, 1, 2, Ir64MemSize.DOUBLEWORD, TARGET)));
-        assertFalse(EXECUTOR.executeOp(core, new Ir64Op.CompareAndBranchRegister(
+        assertFalse(EXECUTOR.executeOp(core, new BranchOp64.CompareAndBranchRegister(
                 Ir64CompareBranchCondition.GREATER_THAN_UNSIGNED, 2, 1, Ir64MemSize.DOUBLEWORD, TARGET)));
     }
 
@@ -75,10 +75,10 @@ class Ir64CompareAndBranchConditionalExecutorTest {
         Aarch64Core core = newCore();
         core.setX(1, 5L);
         core.setX(2, 5L);
-        assertTrue(EXECUTOR.executeOp(core, new Ir64Op.CompareAndBranchRegister(
+        assertTrue(EXECUTOR.executeOp(core, new BranchOp64.CompareAndBranchRegister(
                 Ir64CompareBranchCondition.GREATER_OR_EQUAL_UNSIGNED, 1, 2, Ir64MemSize.DOUBLEWORD, TARGET)));
         core.setX(1, 4L);
-        assertFalse(EXECUTOR.executeOp(core, new Ir64Op.CompareAndBranchRegister(
+        assertFalse(EXECUTOR.executeOp(core, new BranchOp64.CompareAndBranchRegister(
                 Ir64CompareBranchCondition.GREATER_OR_EQUAL_UNSIGNED, 1, 2, Ir64MemSize.DOUBLEWORD, TARGET)));
     }
 
@@ -87,15 +87,15 @@ class Ir64CompareAndBranchConditionalExecutorTest {
         Aarch64Core core = newCore();
         core.setX(1, 7L);
         core.setX(2, 7L);
-        assertTrue(EXECUTOR.executeOp(core, new Ir64Op.CompareAndBranchRegister(
+        assertTrue(EXECUTOR.executeOp(core, new BranchOp64.CompareAndBranchRegister(
                 Ir64CompareBranchCondition.EQUAL, 1, 2, Ir64MemSize.DOUBLEWORD, TARGET)));
-        assertFalse(EXECUTOR.executeOp(core, new Ir64Op.CompareAndBranchRegister(
+        assertFalse(EXECUTOR.executeOp(core, new BranchOp64.CompareAndBranchRegister(
                 Ir64CompareBranchCondition.NOT_EQUAL, 1, 2, Ir64MemSize.DOUBLEWORD, TARGET)));
 
         core.setX(2, 8L);
-        assertFalse(EXECUTOR.executeOp(core, new Ir64Op.CompareAndBranchRegister(
+        assertFalse(EXECUTOR.executeOp(core, new BranchOp64.CompareAndBranchRegister(
                 Ir64CompareBranchCondition.EQUAL, 1, 2, Ir64MemSize.DOUBLEWORD, TARGET)));
-        assertTrue(EXECUTOR.executeOp(core, new Ir64Op.CompareAndBranchRegister(
+        assertTrue(EXECUTOR.executeOp(core, new BranchOp64.CompareAndBranchRegister(
                 Ir64CompareBranchCondition.NOT_EQUAL, 1, 2, Ir64MemSize.DOUBLEWORD, TARGET)));
     }
 
@@ -106,7 +106,7 @@ class Ir64CompareAndBranchConditionalExecutorTest {
         Aarch64Core core = newCore();
         core.setX(1, 0x1234_5600L | 0xAAL); // bits altos diferentes, byte baixo = 0xAA
         core.setX(2, 0x9999_9900L | 0xAAL); // bits altos diferentes, byte baixo = 0xAA
-        boolean taken = EXECUTOR.executeOp(core, new Ir64Op.CompareAndBranchRegister(
+        boolean taken = EXECUTOR.executeOp(core, new BranchOp64.CompareAndBranchRegister(
                 Ir64CompareBranchCondition.EQUAL, 1, 2, Ir64MemSize.BYTE, TARGET));
         assertTrue(taken, "bytes baixos iguais (0xAA) devem comparar iguais, apesar dos bits altos");
     }
@@ -116,7 +116,7 @@ class Ir64CompareAndBranchConditionalExecutorTest {
         Aarch64Core core = newCore();
         core.setX(1, 0x1111_0000_BEEFL);
         core.setX(2, 0x2222_0000_BEEFL);
-        boolean taken = EXECUTOR.executeOp(core, new Ir64Op.CompareAndBranchRegister(
+        boolean taken = EXECUTOR.executeOp(core, new BranchOp64.CompareAndBranchRegister(
                 Ir64CompareBranchCondition.EQUAL, 1, 2, Ir64MemSize.HALF, TARGET));
         assertTrue(taken, "halfwords baixos iguais (0xBEEF) devem comparar iguais");
     }
@@ -127,10 +127,10 @@ class Ir64CompareAndBranchConditionalExecutorTest {
         Aarch64Core core = newCore();
         core.setX(1, 0xFFL);
         core.setX(2, 5L);
-        assertFalse(EXECUTOR.executeOp(core, new Ir64Op.CompareAndBranchRegister(
+        assertFalse(EXECUTOR.executeOp(core, new BranchOp64.CompareAndBranchRegister(
                 Ir64CompareBranchCondition.GREATER_THAN, 1, 2, Ir64MemSize.BYTE, TARGET)),
                 "com sinal: -1 não é maior que 5");
-        assertTrue(EXECUTOR.executeOp(core, new Ir64Op.CompareAndBranchRegister(
+        assertTrue(EXECUTOR.executeOp(core, new BranchOp64.CompareAndBranchRegister(
                 Ir64CompareBranchCondition.GREATER_THAN_UNSIGNED, 1, 2, Ir64MemSize.BYTE, TARGET)),
                 "sem sinal: 255 é maior que 5");
     }
@@ -141,9 +141,9 @@ class Ir64CompareAndBranchConditionalExecutorTest {
     void immediateFormComparesAgainstUnsignedImmediate() {
         Aarch64Core core = newCore();
         core.setX(1, 10L);
-        assertTrue(EXECUTOR.executeOp(core, new Ir64Op.CompareAndBranchImmediate(
+        assertTrue(EXECUTOR.executeOp(core, new BranchOp64.CompareAndBranchImmediate(
                 Ir64CompareBranchCondition.GREATER_THAN, 1, true, 5, TARGET)));
-        assertFalse(EXECUTOR.executeOp(core, new Ir64Op.CompareAndBranchImmediate(
+        assertFalse(EXECUTOR.executeOp(core, new BranchOp64.CompareAndBranchImmediate(
                 Ir64CompareBranchCondition.LESS_THAN, 1, true, 5, TARGET)));
     }
 
@@ -152,10 +152,10 @@ class Ir64CompareAndBranchConditionalExecutorTest {
         // W1 = 0xFFFFFFFF (-1 em 32 bits); comparação com sinal deve tratar como -1.
         Aarch64Core core = newCore();
         core.setX(1, 0xFFFF_FFFFL);
-        assertFalse(EXECUTOR.executeOp(core, new Ir64Op.CompareAndBranchImmediate(
+        assertFalse(EXECUTOR.executeOp(core, new BranchOp64.CompareAndBranchImmediate(
                 Ir64CompareBranchCondition.GREATER_THAN, 1, false, 5, TARGET)),
                 "com sinal: -1 não é maior que 5");
-        assertTrue(EXECUTOR.executeOp(core, new Ir64Op.CompareAndBranchImmediate(
+        assertTrue(EXECUTOR.executeOp(core, new BranchOp64.CompareAndBranchImmediate(
                 Ir64CompareBranchCondition.GREATER_THAN_UNSIGNED, 1, false, 5, TARGET)),
                 "sem sinal: 0xFFFFFFFF é maior que 5");
     }
@@ -169,11 +169,11 @@ class Ir64CompareAndBranchConditionalExecutorTest {
         int before = core.pstate().nzcv();
         core.setX(1, 5L);
         core.setX(2, 3L);
-        EXECUTOR.executeOp(core, new Ir64Op.CompareAndBranchRegister(
+        EXECUTOR.executeOp(core, new BranchOp64.CompareAndBranchRegister(
                 Ir64CompareBranchCondition.GREATER_THAN, 1, 2, Ir64MemSize.DOUBLEWORD, TARGET));
         assertEquals(before, core.pstate().nzcv());
 
-        EXECUTOR.executeOp(core, new Ir64Op.CompareAndBranchRegister(
+        EXECUTOR.executeOp(core, new BranchOp64.CompareAndBranchRegister(
                 Ir64CompareBranchCondition.EQUAL, 1, 2, Ir64MemSize.DOUBLEWORD, TARGET));
         assertEquals(before, core.pstate().nzcv(), "também não muda quando a condição é falsa");
     }
@@ -184,7 +184,7 @@ class Ir64CompareAndBranchConditionalExecutorTest {
         core.pstate().setNzcv(0b0110);
         int before = core.pstate().nzcv();
         core.setX(1, 10L);
-        EXECUTOR.executeOp(core, new Ir64Op.CompareAndBranchImmediate(
+        EXECUTOR.executeOp(core, new BranchOp64.CompareAndBranchImmediate(
                 Ir64CompareBranchCondition.GREATER_THAN, 1, true, 5, TARGET));
         assertEquals(before, core.pstate().nzcv());
     }
@@ -196,12 +196,12 @@ class Ir64CompareAndBranchConditionalExecutorTest {
         Aarch64Core core = newCore();
         core.setX(1, 1L);
         core.setX(2, 1L);
-        boolean forward = EXECUTOR.executeOp(core, new Ir64Op.CompareAndBranchRegister(
+        boolean forward = EXECUTOR.executeOp(core, new BranchOp64.CompareAndBranchRegister(
                 Ir64CompareBranchCondition.EQUAL, 1, 2, Ir64MemSize.DOUBLEWORD, 0x2000L));
         assertTrue(forward);
         assertEquals(0x2000L, core.pc());
 
-        boolean backward = EXECUTOR.executeOp(core, new Ir64Op.CompareAndBranchImmediate(
+        boolean backward = EXECUTOR.executeOp(core, new BranchOp64.CompareAndBranchImmediate(
                 Ir64CompareBranchCondition.EQUAL, 1, true, 1, 0x10L));
         assertTrue(backward);
         assertEquals(0x10L, core.pc());

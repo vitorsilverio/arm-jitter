@@ -3,6 +3,7 @@ package dev.vitorsilverio.armjitter.decoder64;
 import dev.vitorsilverio.armjitter.arch64.Aarch64Architecture;
 import dev.vitorsilverio.armjitter.arch64.Aarch64Feature;
 import dev.vitorsilverio.armjitter.ir64.Ir64Op;
+import dev.vitorsilverio.armjitter.ir64.SvePredicateOp64;
 
 /// Decoder SVE das comparações da B17.9: `### SVE Integer Compare - Vectors|Unsigned Immediate|Signed Immediate|Scalars
 /// Group` do `sve.decode` do QEMU — 26 encodings que produzem predicado (16 vetor/largo + 10 imediato) e, dos 12
@@ -94,24 +95,24 @@ final class Aarch64SveCompareDecoder {
         if (wide && esz == ESZ_DOUBLEWORD) {
             return null; // o operando largo já tem 64 bits: `esz = 3` não é alocado
         }
-        Ir64Op.SveCompare.Cond cond = switch (opcode) {
-            case OP_VECTOR_HS_HI, OP_WIDE_HS_HI -> second ? Ir64Op.SveCompare.Cond.HI : Ir64Op.SveCompare.Cond.HS;
-            case OP_VECTOR_GE_GT, OP_WIDE_GE_GT -> second ? Ir64Op.SveCompare.Cond.GT : Ir64Op.SveCompare.Cond.GE;
-            case OP_VECTOR_EQ_NE, OP_WIDE_EQ_NE -> second ? Ir64Op.SveCompare.Cond.NE : Ir64Op.SveCompare.Cond.EQ;
-            case OP_WIDE_LT_LE -> second ? Ir64Op.SveCompare.Cond.LE : Ir64Op.SveCompare.Cond.LT;
-            default -> second ? Ir64Op.SveCompare.Cond.LS : Ir64Op.SveCompare.Cond.LO; // OP_WIDE_LO_LS: os 8 opcodes existem
+        SvePredicateOp64.Compare.Cond cond = switch (opcode) {
+            case OP_VECTOR_HS_HI, OP_WIDE_HS_HI -> second ? SvePredicateOp64.Compare.Cond.HI : SvePredicateOp64.Compare.Cond.HS;
+            case OP_VECTOR_GE_GT, OP_WIDE_GE_GT -> second ? SvePredicateOp64.Compare.Cond.GT : SvePredicateOp64.Compare.Cond.GE;
+            case OP_VECTOR_EQ_NE, OP_WIDE_EQ_NE -> second ? SvePredicateOp64.Compare.Cond.NE : SvePredicateOp64.Compare.Cond.EQ;
+            case OP_WIDE_LT_LE -> second ? SvePredicateOp64.Compare.Cond.LE : SvePredicateOp64.Compare.Cond.LT;
+            default -> second ? SvePredicateOp64.Compare.Cond.LS : SvePredicateOp64.Compare.Cond.LO; // OP_WIDE_LO_LS: os 8 opcodes existem
         };
-        return new Ir64Op.SveCompare(cond, wide ? Ir64Op.SveCompare.Form.WIDE : Ir64Op.SveCompare.Form.VECTOR, esz,
+        return new SvePredicateOp64.Compare(cond, wide ? SvePredicateOp64.Compare.Form.WIDE : SvePredicateOp64.Compare.Form.VECTOR, esz,
                 field(word, 0, PREDICATE_MASK), field(word, PG_SHIFT, PG_MASK), field(word, RN_SHIFT, REGISTER_MASK),
                 field(word, RM_SHIFT, REGISTER_MASK), 0, address);
     }
 
     private Ir64Op decodeUnsignedImmediate(int word, long address) {
         boolean second = bit(word, BIT_SECOND);
-        Ir64Op.SveCompare.Cond cond = bit(word, UNSIGNED_IMM_LOW_BIT)
-                ? (second ? Ir64Op.SveCompare.Cond.LS : Ir64Op.SveCompare.Cond.LO)
-                : (second ? Ir64Op.SveCompare.Cond.HI : Ir64Op.SveCompare.Cond.HS);
-        return new Ir64Op.SveCompare(cond, Ir64Op.SveCompare.Form.IMMEDIATE, field(word, ESZ_SHIFT, ESZ_MASK),
+        SvePredicateOp64.Compare.Cond cond = bit(word, UNSIGNED_IMM_LOW_BIT)
+                ? (second ? SvePredicateOp64.Compare.Cond.LS : SvePredicateOp64.Compare.Cond.LO)
+                : (second ? SvePredicateOp64.Compare.Cond.HI : SvePredicateOp64.Compare.Cond.HS);
+        return new SvePredicateOp64.Compare(cond, SvePredicateOp64.Compare.Form.IMMEDIATE, field(word, ESZ_SHIFT, ESZ_MASK),
                 field(word, 0, PREDICATE_MASK), field(word, PG_SHIFT, PG_MASK), field(word, RN_SHIFT, REGISTER_MASK),
                 0, field(word, UNSIGNED_IMM_SHIFT, UNSIGNED_IMM_MASK), address);
     }
@@ -124,10 +125,10 @@ final class Aarch64SveCompareDecoder {
 
     private Ir64Op decodeSignedImmediate(int word, long address) {
         boolean second = bit(word, BIT_SECOND);
-        Ir64Op.SveCompare.Cond cond = switch (field(word, OPCODE_SHIFT, OPCODE_MASK)) {
-            case OP_SIGNED_IMM_GE_GT -> second ? Ir64Op.SveCompare.Cond.GT : Ir64Op.SveCompare.Cond.GE;
-            case OP_SIGNED_IMM_LT_LE -> second ? Ir64Op.SveCompare.Cond.LE : Ir64Op.SveCompare.Cond.LT;
-            case OP_SIGNED_IMM_EQ_NE -> second ? Ir64Op.SveCompare.Cond.NE : Ir64Op.SveCompare.Cond.EQ;
+        SvePredicateOp64.Compare.Cond cond = switch (field(word, OPCODE_SHIFT, OPCODE_MASK)) {
+            case OP_SIGNED_IMM_GE_GT -> second ? SvePredicateOp64.Compare.Cond.GT : SvePredicateOp64.Compare.Cond.GE;
+            case OP_SIGNED_IMM_LT_LE -> second ? SvePredicateOp64.Compare.Cond.LE : SvePredicateOp64.Compare.Cond.LT;
+            case OP_SIGNED_IMM_EQ_NE -> second ? SvePredicateOp64.Compare.Cond.NE : SvePredicateOp64.Compare.Cond.EQ;
             default -> null;
         };
         if (cond == null) {
@@ -135,7 +136,7 @@ final class Aarch64SveCompareDecoder {
         }
         int imm = (field(word, RM_SHIFT, REGISTER_MASK) << (Integer.SIZE - SIGNED_IMM_BITS))
                 >> (Integer.SIZE - SIGNED_IMM_BITS);
-        return new Ir64Op.SveCompare(cond, Ir64Op.SveCompare.Form.IMMEDIATE, field(word, ESZ_SHIFT, ESZ_MASK),
+        return new SvePredicateOp64.Compare(cond, SvePredicateOp64.Compare.Form.IMMEDIATE, field(word, ESZ_SHIFT, ESZ_MASK),
                 field(word, 0, PREDICATE_MASK), field(word, PG_SHIFT, PG_MASK), field(word, RN_SHIFT, REGISTER_MASK),
                 0, imm, address);
     }
@@ -146,22 +147,22 @@ final class Aarch64SveCompareDecoder {
         int esz = field(word, ESZ_SHIFT, ESZ_MASK);
         boolean secondBit = bit(word, BIT_SECOND);
         if ((word & CTERM_MASK) == CTERM_VALUE) {
-            return new Ir64Op.SveScalarCompare(Ir64Op.SveScalarCompare.Op.CTERM, 0, 0, rn, rm, bit(word, CTERM_SF_BIT),
+            return new SvePredicateOp64.ScalarCompare(SvePredicateOp64.ScalarCompare.Op.CTERM, 0, 0, rn, rm, bit(word, CTERM_SF_BIT),
                     false, secondBit, address);
         }
         if ((word & WHILE_MASK) == WHILE_VALUE) {
-            Ir64Op.SveScalarCompare.Op op = bit(word, WHILE_LESS_BIT)
-                    ? Ir64Op.SveScalarCompare.Op.WHILE_LT
-                    : Ir64Op.SveScalarCompare.Op.WHILE_GT;
-            if (op == Ir64Op.SveScalarCompare.Op.WHILE_GT && !architecture.has(Aarch64Feature.SVE2)) {
+            SvePredicateOp64.ScalarCompare.Op op = bit(word, WHILE_LESS_BIT)
+                    ? SvePredicateOp64.ScalarCompare.Op.WHILE_LT
+                    : SvePredicateOp64.ScalarCompare.Op.WHILE_GT;
+            if (op == SvePredicateOp64.ScalarCompare.Op.WHILE_GT && !architecture.has(Aarch64Feature.SVE2)) {
                 return null;
             }
-            return new Ir64Op.SveScalarCompare(op, esz, field(word, 0, PREDICATE_MASK), rn, rm,
+            return new SvePredicateOp64.ScalarCompare(op, esz, field(word, 0, PREDICATE_MASK), rn, rm,
                     bit(word, WHILE_SF_BIT), bit(word, WHILE_UNSIGNED_BIT), secondBit, address);
         }
         if ((word & WHILE_PTR_MASK) == WHILE_PTR_VALUE) {
             return architecture.has(Aarch64Feature.SVE2)
-                    ? new Ir64Op.SveScalarCompare(Ir64Op.SveScalarCompare.Op.WHILE_PTR, esz,
+                    ? new SvePredicateOp64.ScalarCompare(SvePredicateOp64.ScalarCompare.Op.WHILE_PTR, esz,
                             field(word, 0, PREDICATE_MASK), rn, rm, true, false, secondBit, address)
                     : null;
         }
@@ -169,25 +170,25 @@ final class Aarch64SveCompareDecoder {
             if (!architecture.has(Aarch64Feature.SVE2_1)) {
                 return null;
             }
-            Ir64Op.SveScalarCompare.Op op = bit(word, WHILE_LESS_BIT)
-                    ? Ir64Op.SveScalarCompare.Op.WHILE_LT_PAIR
-                    : Ir64Op.SveScalarCompare.Op.WHILE_GT_PAIR;
+            SvePredicateOp64.ScalarCompare.Op op = bit(word, WHILE_LESS_BIT)
+                    ? SvePredicateOp64.ScalarCompare.Op.WHILE_LT_PAIR
+                    : SvePredicateOp64.ScalarCompare.Op.WHILE_GT_PAIR;
             // O destino é um PAR: os bits 3:1 vezes 2 (o bit 0 é o `eq`, não faz parte do registrador).
-            return new Ir64Op.SveScalarCompare(op, esz,
+            return new SvePredicateOp64.ScalarCompare(op, esz,
                     field(word, PAIR_INDEX_SHIFT, PAIR_INDEX_MASK) * PAIR_STRIDE, rn, rm, true,
                     bit(word, WHILE_UNSIGNED_BIT), bit(word, 0), address);
         }
-        Ir64Op.SveScalarCompare.Op counterOp = switch (word & WHILE_COUNTER_MASK) {
-            case WHILE_COUNTER_LT_CNT2 -> Ir64Op.SveScalarCompare.Op.WHILE_LT_CNT2;
-            case WHILE_COUNTER_LT_CNT4 -> Ir64Op.SveScalarCompare.Op.WHILE_LT_CNT4;
-            case WHILE_COUNTER_GT_CNT2 -> Ir64Op.SveScalarCompare.Op.WHILE_GT_CNT2;
-            case WHILE_COUNTER_GT_CNT4 -> Ir64Op.SveScalarCompare.Op.WHILE_GT_CNT4;
+        SvePredicateOp64.ScalarCompare.Op counterOp = switch (word & WHILE_COUNTER_MASK) {
+            case WHILE_COUNTER_LT_CNT2 -> SvePredicateOp64.ScalarCompare.Op.WHILE_LT_CNT2;
+            case WHILE_COUNTER_LT_CNT4 -> SvePredicateOp64.ScalarCompare.Op.WHILE_LT_CNT4;
+            case WHILE_COUNTER_GT_CNT2 -> SvePredicateOp64.ScalarCompare.Op.WHILE_GT_CNT2;
+            case WHILE_COUNTER_GT_CNT4 -> SvePredicateOp64.ScalarCompare.Op.WHILE_GT_CNT4;
             default -> null;
         };
         if (counterOp != null) {
             // B17.28: destino é um predicado-COMO-CONTADOR (`PN8`-`PN15`), sempre com operandos de 64 bits.
             return architecture.has(Aarch64Feature.SVE2_1) || architecture.has(Aarch64Feature.SCALABLE_MATRIX_EXTENSION_2)
-                    ? new Ir64Op.SveScalarCompare(counterOp, esz, COUNTER_BASE + (word & COUNTER_FIELD_MASK), rn, rm, true,
+                    ? new SvePredicateOp64.ScalarCompare(counterOp, esz, COUNTER_BASE + (word & COUNTER_FIELD_MASK), rn, rm, true,
                             bit(word, WHILE_UNSIGNED_BIT), bit(word, WHILE_COUNTER_EQ_BIT), address)
                     : null;
         }

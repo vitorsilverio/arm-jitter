@@ -1,6 +1,6 @@
 package dev.vitorsilverio.armjitter.ir64;
 
-/// Operação de {@link Ir64Op.VectorShiftImmediate} (AdvSIMD "shift by immediate" não-largo/
+/// Operação de {@link AdvSimdIntegerOp64.ShiftImmediate} (AdvSIMD "shift by immediate" não-largo/
 /// não-estreito, B8.8) — `Rd`/`Rn` têm o MESMO tamanho de elemento; o deslocamento é um IMEDIATO
 /// (`immh:immb` do encoding, já resolvido pelo decoder — nunca recalculado no executor). Cobre
 /// também a forma ESCALAR das operações que a aceitam: {@link #SSHR}/{@link #USHR}/

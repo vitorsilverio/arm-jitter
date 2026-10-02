@@ -3,6 +3,8 @@ package dev.vitorsilverio.armjitter.decoder64;
 import dev.vitorsilverio.armjitter.arch64.Aarch64Architecture;
 import dev.vitorsilverio.armjitter.arch64.Aarch64Feature;
 import dev.vitorsilverio.armjitter.ir64.Ir64Op;
+import dev.vitorsilverio.armjitter.ir64.SveMemoryOp64;
+import dev.vitorsilverio.armjitter.ir64.SvePredicateOp64;
 
 /// Decoder das instruções que leem ou escrevem um predicado-COMO-CONTADOR (`PN8`-`PN15`) e não são `WHILE` (B17.28):
 /// `PTRUE_cnt`, `CNTP_c`, `PEXT_1`/`PEXT_2` (prefixo `0x25`) e os 16 `LD1`/`ST1` multi-vetor contíguos (`0xA0`/`0xA1`).
@@ -96,27 +98,27 @@ final class Aarch64SveCounterDecoder {
         }
         int esz = (word >>> ESZ_SHIFT) & ESZ_MASK;
         if ((word & PTRUE_MASK) == PTRUE_VALUE) {
-            return new Ir64Op.SveCounterPredicate(Ir64Op.SveCounterPredicate.Op.PTRUE, esz, counter(word, 0), 0, 0, 0,
+            return new SvePredicateOp64.CounterPredicate(SvePredicateOp64.CounterPredicate.Op.PTRUE, esz, counter(word, 0), 0, 0, 0,
                     false, address);
         }
         if ((word & CNTP_MASK) == CNTP_VALUE) {
             int lg2Vectors = ((word >>> CNTP_VL_BIT) & 1) + 1;
-            return new Ir64Op.SveCounterPredicate(Ir64Op.SveCounterPredicate.Op.CNTP, esz, 0,
+            return new SvePredicateOp64.CounterPredicate(SvePredicateOp64.CounterPredicate.Op.CNTP, esz, 0,
                     counter(word, CNTP_PN_SHIFT), word & CNTP_RD_MASK, lg2Vectors, streamingOnly(), address);
         }
         if ((word & PEXT_1_MASK) == PEXT_1_VALUE) {
-            return pext(Ir64Op.SveCounterPredicate.Op.PEXT_1, esz, word,
+            return pext(SvePredicateOp64.CounterPredicate.Op.PEXT_1, esz, word,
                     (word >>> PEXT_IMM_SHIFT) & PEXT_1_IMM_MASK, address);
         }
         if ((word & PEXT_2_MASK) == PEXT_2_VALUE) {
-            return pext(Ir64Op.SveCounterPredicate.Op.PEXT_2, esz, word,
+            return pext(SvePredicateOp64.CounterPredicate.Op.PEXT_2, esz, word,
                     (word >>> PEXT_IMM_SHIFT) & PEXT_2_IMM_MASK, address);
         }
         return null;
     }
 
-    private static Ir64Op pext(Ir64Op.SveCounterPredicate.Op op, int esz, int word, int index, long address) {
-        return new Ir64Op.SveCounterPredicate(op, esz, word & PEXT_PD_MASK, counter(word, PEXT_PN_SHIFT), 0, index, false,
+    private static Ir64Op pext(SvePredicateOp64.CounterPredicate.Op op, int esz, int word, int index, long address) {
+        return new SvePredicateOp64.CounterPredicate(op, esz, word & PEXT_PD_MASK, counter(word, PEXT_PN_SHIFT), 0, index, false,
                 address);
     }
 
@@ -178,7 +180,7 @@ final class Aarch64SveCounterDecoder {
             registerStride = 1;
         }
         long immediate = ((long) ((word >>> IMM4_SHIFT) & IMM4_MASK) << (Long.SIZE - IMM4_BITS)) >> (Long.SIZE - IMM4_BITS);
-        return new Ir64Op.SveMultiVectorMemory(store, (word >>> ESZ_MULTI_SHIFT) & ESZ_MASK, registers, rt,
+        return new SveMemoryOp64.MultiVectorMemory(store, (word >>> ESZ_MULTI_SHIFT) & ESZ_MASK, registers, rt,
                 registerStride, counter(word, PG_SHIFT), (word >>> RN_SHIFT) & REGISTER_MASK,
                 registerOffset ? (word >>> RM_SHIFT) & REGISTER_MASK : 0, registerOffset,
                 registerOffset ? 0 : immediate, strided || streamingOnly(), address);

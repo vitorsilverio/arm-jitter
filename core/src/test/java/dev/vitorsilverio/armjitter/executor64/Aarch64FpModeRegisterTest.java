@@ -3,7 +3,7 @@ package dev.vitorsilverio.armjitter.executor64;
 import dev.vitorsilverio.armjitter.core64.Aarch64Core;
 import dev.vitorsilverio.armjitter.core64.Aarch64Fp8Format;
 import dev.vitorsilverio.armjitter.ir64.Aarch64SystemRegisterId;
-import dev.vitorsilverio.armjitter.ir64.Ir64Op;
+import dev.vitorsilverio.armjitter.ir64.SystemOp64;
 import dev.vitorsilverio.armjitter.memory.AddressSpace64;
 import dev.vitorsilverio.armjitter.support.TestAddressSpace;
 import org.junit.jupiter.api.Test;
@@ -25,7 +25,7 @@ class Aarch64FpModeRegisterTest {
 
     private static void writeFpmr(Aarch64Core core, long value) {
         core.setX(0, value);
-        EXECUTOR.executeOp(core, new Ir64Op.SystemRegister(false, Aarch64SystemRegisterId.FPMR, 0));
+        EXECUTOR.executeOp(core, new SystemOp64.SystemRegister(false, Aarch64SystemRegisterId.FPMR, 0));
     }
 
     @Test
@@ -35,13 +35,13 @@ class Aarch64FpModeRegisterTest {
         core.setX(1, 0x0000_0000_0000_0001L); // FPSR
         core.setX(2, 0x0000_0001_2345_0007L); // FPMR sintético
 
-        EXECUTOR.executeOp(core, new Ir64Op.SystemRegister(false, Aarch64SystemRegisterId.FPCR, 0));
-        EXECUTOR.executeOp(core, new Ir64Op.SystemRegister(false, Aarch64SystemRegisterId.FPSR, 1));
-        EXECUTOR.executeOp(core, new Ir64Op.SystemRegister(false, Aarch64SystemRegisterId.FPMR, 2));
+        EXECUTOR.executeOp(core, new SystemOp64.SystemRegister(false, Aarch64SystemRegisterId.FPCR, 0));
+        EXECUTOR.executeOp(core, new SystemOp64.SystemRegister(false, Aarch64SystemRegisterId.FPSR, 1));
+        EXECUTOR.executeOp(core, new SystemOp64.SystemRegister(false, Aarch64SystemRegisterId.FPMR, 2));
 
-        EXECUTOR.executeOp(core, new Ir64Op.SystemRegister(true, Aarch64SystemRegisterId.FPCR, 10));
-        EXECUTOR.executeOp(core, new Ir64Op.SystemRegister(true, Aarch64SystemRegisterId.FPSR, 11));
-        EXECUTOR.executeOp(core, new Ir64Op.SystemRegister(true, Aarch64SystemRegisterId.FPMR, 12));
+        EXECUTOR.executeOp(core, new SystemOp64.SystemRegister(true, Aarch64SystemRegisterId.FPCR, 10));
+        EXECUTOR.executeOp(core, new SystemOp64.SystemRegister(true, Aarch64SystemRegisterId.FPSR, 11));
+        EXECUTOR.executeOp(core, new SystemOp64.SystemRegister(true, Aarch64SystemRegisterId.FPMR, 12));
 
         assertEquals(0x0000_0000_0180_0000L, core.x(10));
         assertEquals(0x0000_0000_0000_0001L, core.x(11));

@@ -1,8 +1,9 @@
 package dev.vitorsilverio.armjitter.executor64;
 
 import dev.vitorsilverio.armjitter.core64.Aarch64Core;
+import dev.vitorsilverio.armjitter.ir64.IntegerOp64;
 import dev.vitorsilverio.armjitter.ir64.Ir64AddressingMode;
-import dev.vitorsilverio.armjitter.ir64.Ir64Op;
+import dev.vitorsilverio.armjitter.ir64.MemoryOp64;
 import dev.vitorsilverio.armjitter.memory.AddressSpace64;
 import dev.vitorsilverio.armjitter.support.TestAddressSpace;
 import org.junit.jupiter.api.Test;
@@ -26,13 +27,13 @@ class Ir64MemoryTagExecutorTest {
         Aarch64Core core = newCore();
         core.setX(1, 256L); // rn (endereço base)
         core.setX(0, Aarch64Core.withAllocationTag(256L, 0xB)); // rt: ponteiro com tag lógica 0xB
-        EXECUTOR.executeOp(core, new Ir64Op.MemoryTag(
-                Ir64Op.Ir64MemoryTagOperation.STORE, false, 1, 0, 1, Ir64AddressingMode.OFFSET, 0L));
+        EXECUTOR.executeOp(core, new MemoryOp64.MemoryTag(
+                MemoryOp64.Ir64MemoryTagOperation.STORE, false, 1, 0, 1, Ir64AddressingMode.OFFSET, 0L));
 
         core.setX(2, 256L); // rn
         core.setX(3, 0L); // rt: ponteiro sem tag nenhuma, a ser preenchido pela leitura
-        EXECUTOR.executeOp(core, new Ir64Op.MemoryTag(
-                Ir64Op.Ir64MemoryTagOperation.LOAD, false, 1, 3, 2, Ir64AddressingMode.OFFSET, 0L));
+        EXECUTOR.executeOp(core, new MemoryOp64.MemoryTag(
+                MemoryOp64.Ir64MemoryTagOperation.LOAD, false, 1, 3, 2, Ir64AddressingMode.OFFSET, 0L));
 
         assertEquals(0xB, Aarch64Core.allocationTagFromAddress(core.x(3)));
     }
@@ -46,8 +47,8 @@ class Ir64MemoryTagExecutorTest {
         }
         core.setX(1, address);
         core.setX(0, Aarch64Core.withAllocationTag(address, 0x7));
-        EXECUTOR.executeOp(core, new Ir64Op.MemoryTag(
-                Ir64Op.Ir64MemoryTagOperation.STORE, true, 1, 0, 1, Ir64AddressingMode.OFFSET, 0L));
+        EXECUTOR.executeOp(core, new MemoryOp64.MemoryTag(
+                MemoryOp64.Ir64MemoryTagOperation.STORE, true, 1, 0, 1, Ir64AddressingMode.OFFSET, 0L));
 
         for (int i = 0; i < 16; i++) {
             assertEquals(0, core.memory().read8(address + i));
@@ -61,8 +62,8 @@ class Ir64MemoryTagExecutorTest {
         long address = 400L;
         core.setX(1, address);
         core.setX(0, Aarch64Core.withAllocationTag(address, 0x3));
-        EXECUTOR.executeOp(core, new Ir64Op.MemoryTag(
-                Ir64Op.Ir64MemoryTagOperation.STORE, false, 2, 0, 1, Ir64AddressingMode.OFFSET, 0L));
+        EXECUTOR.executeOp(core, new MemoryOp64.MemoryTag(
+                MemoryOp64.Ir64MemoryTagOperation.STORE, false, 2, 0, 1, Ir64AddressingMode.OFFSET, 0L));
 
         assertEquals(0x3, core.memoryTag(address));
         assertEquals(0x3, core.memoryTag(address + 16));
@@ -74,8 +75,8 @@ class Ir64MemoryTagExecutorTest {
         }
         core.setX(3, zeroAddress);
         core.setX(2, Aarch64Core.withAllocationTag(zeroAddress, 0x9));
-        EXECUTOR.executeOp(core, new Ir64Op.MemoryTag(
-                Ir64Op.Ir64MemoryTagOperation.STORE, true, 2, 2, 3, Ir64AddressingMode.OFFSET, 0L));
+        EXECUTOR.executeOp(core, new MemoryOp64.MemoryTag(
+                MemoryOp64.Ir64MemoryTagOperation.STORE, true, 2, 2, 3, Ir64AddressingMode.OFFSET, 0L));
         for (int i = 0; i < 32; i++) {
             assertEquals(0, core.memory().read8(zeroAddress + i));
         }
@@ -88,15 +89,15 @@ class Ir64MemoryTagExecutorTest {
         Aarch64Core core = newCore();
         core.setX(1, 100L);
         core.setX(0, 100L);
-        EXECUTOR.executeOp(core, new Ir64Op.MemoryTag(
-                Ir64Op.Ir64MemoryTagOperation.STORE, false, 1, 0, 1, Ir64AddressingMode.PRE_INDEX, 32L));
+        EXECUTOR.executeOp(core, new MemoryOp64.MemoryTag(
+                MemoryOp64.Ir64MemoryTagOperation.STORE, false, 1, 0, 1, Ir64AddressingMode.PRE_INDEX, 32L));
         assertEquals(0x0, core.memoryTag(132L));
         assertEquals(132L, core.x(1)); // pre-index escreve Rn+imm de volta
 
         core.setX(2, 200L);
         core.setX(3, 200L);
-        EXECUTOR.executeOp(core, new Ir64Op.MemoryTag(
-                Ir64Op.Ir64MemoryTagOperation.STORE, false, 1, 3, 2, Ir64AddressingMode.POST_INDEX, -16L));
+        EXECUTOR.executeOp(core, new MemoryOp64.MemoryTag(
+                MemoryOp64.Ir64MemoryTagOperation.STORE, false, 1, 3, 2, Ir64AddressingMode.POST_INDEX, -16L));
         assertEquals(184L, core.x(2)); // post-index: acesso em Rn, writeback Rn+imm
     }
 
@@ -111,16 +112,16 @@ class Ir64MemoryTagExecutorTest {
         }
         core.setX(0, bitmap);
         core.setX(1, blockBase);
-        EXECUTOR.executeOp(core, new Ir64Op.MemoryTagMultiple(
-                Ir64Op.Ir64MemoryTagMultipleOperation.STORE_TAGS, 0, 1));
+        EXECUTOR.executeOp(core, new MemoryOp64.MemoryTagMultiple(
+                MemoryOp64.Ir64MemoryTagMultipleOperation.STORE_TAGS, 0, 1));
 
         for (int i = 0; i < 16; i++) {
             assertEquals(i, core.memoryTag(blockBase + i * 16L));
         }
 
         core.setX(3, blockBase);
-        EXECUTOR.executeOp(core, new Ir64Op.MemoryTagMultiple(
-                Ir64Op.Ir64MemoryTagMultipleOperation.LOAD_TAGS, 2, 3));
+        EXECUTOR.executeOp(core, new MemoryOp64.MemoryTagMultiple(
+                MemoryOp64.Ir64MemoryTagMultipleOperation.LOAD_TAGS, 2, 3));
         assertEquals(bitmap, core.x(2));
     }
 
@@ -133,8 +134,8 @@ class Ir64MemoryTagExecutorTest {
         }
         core.setX(0, 0xDL); // tag nos 4 bits baixos, direto (não bits[59:56])
         core.setX(1, blockBase);
-        EXECUTOR.executeOp(core, new Ir64Op.MemoryTagMultiple(
-                Ir64Op.Ir64MemoryTagMultipleOperation.STORE_ZERO_DATA_TAGS, 0, 1));
+        EXECUTOR.executeOp(core, new MemoryOp64.MemoryTagMultiple(
+                MemoryOp64.Ir64MemoryTagMultipleOperation.STORE_ZERO_DATA_TAGS, 0, 1));
 
         for (int i = 0; i < 64; i++) {
             assertEquals(0, core.memory().read8(blockBase + i));
@@ -151,7 +152,7 @@ class Ir64MemoryTagExecutorTest {
         core.setX(1, address);
         core.setX(0, 0x1111111111111111L);
         core.setX(2, 0x2222222222222222L);
-        EXECUTOR.executeOp(core, new Ir64Op.StorePairTag(0, 2, 1, Ir64AddressingMode.OFFSET, 0L));
+        EXECUTOR.executeOp(core, new MemoryOp64.StorePairTag(0, 2, 1, Ir64AddressingMode.OFFSET, 0L));
 
         assertEquals(0x1111111111111111L, core.memory().read64(address));
         assertEquals(0x2222222222222222L, core.memory().read64(address + 8));
@@ -164,12 +165,12 @@ class Ir64MemoryTagExecutorTest {
         long base = 0x0000_1000_0000_1000L;
         core.setX(1, Aarch64Core.withAllocationTag(base, 0x3));
         core.setX(2, Aarch64Core.withAllocationTag(base, 0xC)); // MESMO endereço, tag DIFERENTE
-        EXECUTOR.executeOp(core, new Ir64Op.SubtractPointer(false, 0, 1, 2));
+        EXECUTOR.executeOp(core, new IntegerOp64.SubtractPointer(false, 0, 1, 2));
         assertEquals(0L, core.x(0));
 
         core.setX(4, Aarch64Core.withAllocationTag(base + 40, 0x1));
         core.setX(5, Aarch64Core.withAllocationTag(base, 0xE));
-        EXECUTOR.executeOp(core, new Ir64Op.SubtractPointer(true, 3, 4, 5));
+        EXECUTOR.executeOp(core, new IntegerOp64.SubtractPointer(true, 3, 4, 5));
         assertEquals(40L, core.x(3));
         assertEquals(false, core.pstate().negative());
         assertEquals(false, core.pstate().zero());
@@ -183,7 +184,7 @@ class Ir64MemoryTagExecutorTest {
         long pointerWithTag5 = Aarch64Core.withAllocationTag(0x2000L, 5);
         core.setX(1, pointerWithTag5);
         core.setX(2, 0L); // máscara acumulada vazia
-        EXECUTOR.executeOp(core, new Ir64Op.TagMaskInsert(0, 1, 2));
+        EXECUTOR.executeOp(core, new IntegerOp64.TagMaskInsert(0, 1, 2));
         assertEquals(1L << 5, core.x(0));
 
         // Exclui TODAS as tags menos a 5 -> IRG tem que gerar sempre 5, determinístico.
@@ -191,7 +192,7 @@ class Ir64MemoryTagExecutorTest {
         core.setX(4, 0x3000L);
         core.setX(5, excludeAllButFive);
         for (int i = 0; i < 5; i++) {
-            EXECUTOR.executeOp(core, new Ir64Op.InsertRandomTag(3, 4, 5));
+            EXECUTOR.executeOp(core, new IntegerOp64.InsertRandomTag(3, 4, 5));
             assertEquals(5, Aarch64Core.allocationTagFromAddress(core.x(3)));
         }
     }
@@ -203,8 +204,8 @@ class Ir64MemoryTagExecutorTest {
         core.setX(1, 48L); // rn: 3 granules
         core.setX(2, 0xABL); // rs: byte de preenchimento (a tag vem de Rd, não de Rs)
         core.setX(0, Aarch64Core.withAllocationTag(address, 0x6)); // rd: endereço + tag lógica
-        for (Ir64Op.Ir64MopsPhase phase : Ir64Op.Ir64MopsPhase.values()) {
-            EXECUTOR.executeOp(core, new Ir64Op.MemorySetTagged(phase, 0, 1, 2));
+        for (MemoryOp64.Ir64MopsPhase phase : MemoryOp64.Ir64MopsPhase.values()) {
+            EXECUTOR.executeOp(core, new MemoryOp64.MemorySetTagged(phase, 0, 1, 2));
         }
 
         for (int i = 0; i < 48; i++) {

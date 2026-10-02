@@ -3,8 +3,8 @@ package dev.vitorsilverio.armjitter.executor64;
 import dev.vitorsilverio.armjitter.core.CpuSleepState;
 import dev.vitorsilverio.armjitter.core64.Aarch64Core;
 import dev.vitorsilverio.armjitter.ir64.Aarch64SystemRegisterId;
-import dev.vitorsilverio.armjitter.ir64.Ir64Op;
 import dev.vitorsilverio.armjitter.ir64.Ir64SystemInstructionOp;
+import dev.vitorsilverio.armjitter.ir64.SystemOp64;
 import dev.vitorsilverio.armjitter.memory.AddressSpace64;
 import dev.vitorsilverio.armjitter.support.TestAddressSpace;
 import org.junit.jupiter.api.Test;
@@ -30,11 +30,11 @@ class Aarch64IrqAndCpuIdentityTest {
     void currentElReflectsActiveLevel() {
         Aarch64Core core = newCore();
         Ir64BlockExecutor executor = new Ir64BlockExecutor();
-        executor.executeOp(core, new Ir64Op.SystemRegister(true, Aarch64SystemRegisterId.CURRENT_EL, 0));
+        executor.executeOp(core, new SystemOp64.SystemRegister(true, Aarch64SystemRegisterId.CURRENT_EL, 0));
         assertEquals(0L, core.x(0), "EL0 por padrão");
 
         core.exceptionState().setInEl1(true);
-        executor.executeOp(core, new Ir64Op.SystemRegister(true, Aarch64SystemRegisterId.CURRENT_EL, 1));
+        executor.executeOp(core, new SystemOp64.SystemRegister(true, Aarch64SystemRegisterId.CURRENT_EL, 1));
         assertEquals(0b01L << 2, core.x(1), "CurrentEL[3:2]=01 dentro de EL1");
     }
 
@@ -42,9 +42,9 @@ class Aarch64IrqAndCpuIdentityTest {
     void mpidrAndMidrAreConstant() {
         Aarch64Core core = newCore();
         Ir64BlockExecutor executor = new Ir64BlockExecutor();
-        executor.executeOp(core, new Ir64Op.SystemRegister(true, Aarch64SystemRegisterId.MPIDR_EL1, 0));
+        executor.executeOp(core, new SystemOp64.SystemRegister(true, Aarch64SystemRegisterId.MPIDR_EL1, 0));
         assertEquals(0xC000_0000L, core.x(0), "RES1(31)+U(30), core único");
-        executor.executeOp(core, new Ir64Op.SystemRegister(true, Aarch64SystemRegisterId.MIDR_EL1, 1));
+        executor.executeOp(core, new SystemOp64.SystemRegister(true, Aarch64SystemRegisterId.MIDR_EL1, 1));
         assertEquals(0x410F_D034L, core.x(1), "Cortex-A53 real do Raspberry Pi 3");
     }
 
@@ -63,7 +63,7 @@ class Aarch64IrqAndCpuIdentityTest {
                 Aarch64SystemRegisterId.ID_AA64MMFR3_EL1, Aarch64SystemRegisterId.ID_AA64MMFR4_EL1,
                 Aarch64SystemRegisterId.ID_AA64ZFR0_EL1, Aarch64SystemRegisterId.ID_AA64DFR0_EL1,
                 Aarch64SystemRegisterId.ID_AA64DFR1_EL1, Aarch64SystemRegisterId.REVIDR_EL1}) {
-            executor.executeOp(core, new Ir64Op.SystemRegister(true, id, 2));
+            executor.executeOp(core, new SystemOp64.SystemRegister(true, id, 2));
         }
     }
 
@@ -72,8 +72,8 @@ class Aarch64IrqAndCpuIdentityTest {
         Aarch64Core core = newCore();
         Ir64BlockExecutor executor = new Ir64BlockExecutor();
         core.setX(3, 0x1234_5678_9ABC_DEF0L);
-        executor.executeOp(core, new Ir64Op.SystemRegister(false, Aarch64SystemRegisterId.TPIDR_EL1, 3));
-        executor.executeOp(core, new Ir64Op.SystemRegister(true, Aarch64SystemRegisterId.TPIDR_EL1, 4));
+        executor.executeOp(core, new SystemOp64.SystemRegister(false, Aarch64SystemRegisterId.TPIDR_EL1, 3));
+        executor.executeOp(core, new SystemOp64.SystemRegister(true, Aarch64SystemRegisterId.TPIDR_EL1, 4));
         assertEquals(0x1234_5678_9ABC_DEF0L, core.x(4), "MSR seguido de MRS deve fazer round-trip exato");
     }
 
@@ -81,7 +81,7 @@ class Aarch64IrqAndCpuIdentityTest {
     void writingReadOnlyIdentityThrows() {
         Aarch64Core core = newCore();
         Ir64BlockExecutor executor = new Ir64BlockExecutor();
-        Ir64Op.SystemRegister msr = new Ir64Op.SystemRegister(false, Aarch64SystemRegisterId.MIDR_EL1, 0);
+        SystemOp64.SystemRegister msr = new SystemOp64.SystemRegister(false, Aarch64SystemRegisterId.MIDR_EL1, 0);
         assertThrows(UnsupportedOperationException.class, () -> executor.executeOp(core, msr));
     }
 
@@ -91,9 +91,9 @@ class Aarch64IrqAndCpuIdentityTest {
     void ctrEl0AndDczidEl0AreConstant() {
         Aarch64Core core = newCore();
         Ir64BlockExecutor executor = new Ir64BlockExecutor();
-        executor.executeOp(core, new Ir64Op.SystemRegister(true, Aarch64SystemRegisterId.CTR_EL0, 3));
+        executor.executeOp(core, new SystemOp64.SystemRegister(true, Aarch64SystemRegisterId.CTR_EL0, 3));
         assertEquals(0x8444_8004L, core.x(3), "Cache Type Register real do Cortex-A53 (mesmo que MIDR_EL1)");
-        executor.executeOp(core, new Ir64Op.SystemRegister(true, Aarch64SystemRegisterId.DCZID_EL0, 4));
+        executor.executeOp(core, new SystemOp64.SystemRegister(true, Aarch64SystemRegisterId.DCZID_EL0, 4));
         assertEquals(0x10L, core.x(4), "só DZP(4) setado — DC ZVA não implementado, anunciado como desabilitado");
     }
 
@@ -103,9 +103,9 @@ class Aarch64IrqAndCpuIdentityTest {
         assertTrue(core.handlesSystemRegisterIntrinsically(Aarch64SystemRegisterId.CTR_EL0));
         assertTrue(core.handlesSystemRegisterIntrinsically(Aarch64SystemRegisterId.DCZID_EL0));
         Ir64BlockExecutor executor = new Ir64BlockExecutor();
-        Ir64Op.SystemRegister msrCtr = new Ir64Op.SystemRegister(false, Aarch64SystemRegisterId.CTR_EL0, 0);
+        SystemOp64.SystemRegister msrCtr = new SystemOp64.SystemRegister(false, Aarch64SystemRegisterId.CTR_EL0, 0);
         assertThrows(UnsupportedOperationException.class, () -> executor.executeOp(core, msrCtr));
-        Ir64Op.SystemRegister msrDczid = new Ir64Op.SystemRegister(false, Aarch64SystemRegisterId.DCZID_EL0, 0);
+        SystemOp64.SystemRegister msrDczid = new SystemOp64.SystemRegister(false, Aarch64SystemRegisterId.DCZID_EL0, 0);
         assertThrows(UnsupportedOperationException.class, () -> executor.executeOp(core, msrDczid));
     }
 
@@ -114,7 +114,7 @@ class Aarch64IrqAndCpuIdentityTest {
         Aarch64Core core = newCore();
         assertFalse(core.handlesSystemRegisterIntrinsically(Aarch64SystemRegisterId.CNTFRQ_EL0));
         Ir64BlockExecutor executor = new Ir64BlockExecutor();
-        Ir64Op.SystemRegister mrs = new Ir64Op.SystemRegister(true, Aarch64SystemRegisterId.CNTFRQ_EL0, 0);
+        SystemOp64.SystemRegister mrs = new SystemOp64.SystemRegister(true, Aarch64SystemRegisterId.CNTFRQ_EL0, 0);
         // Sem bus instalado (padrão) continua lançando — timer é host-pluggable, não intrínseco.
         assertThrows(UnsupportedOperationException.class, () -> executor.executeOp(core, mrs));
     }
@@ -128,7 +128,7 @@ class Aarch64IrqAndCpuIdentityTest {
         Aarch64Core core = newCore();
         Ir64BlockExecutor executor = new Ir64BlockExecutor();
         assertThrows(dev.vitorsilverio.armjitter.core64.Aarch64SecureMonitorCallException.class,
-                () -> executor.executeOp(core, new Ir64Op.PrivilegedCall(false)));
+                () -> executor.executeOp(core, new SystemOp64.PrivilegedCall(false)));
     }
 
     @Test

@@ -3,6 +3,7 @@ package dev.vitorsilverio.armjitter.decoder64;
 import dev.vitorsilverio.armjitter.arch64.Aarch64Architecture;
 import dev.vitorsilverio.armjitter.arch64.Aarch64Feature;
 import dev.vitorsilverio.armjitter.ir64.Ir64Op;
+import dev.vitorsilverio.armjitter.ir64.SmeOp64;
 
 /// `ZERO`/`ZERO_zt0`/`MOVA`/`MOVAZ` (B18.3) — as 47 linhas de `### SME Misc` + `### SME Move
 /// into/from Array` + `### SME Move and Zero` de `target/isa-decode/sme.decode` (linhas 22-138).
@@ -106,7 +107,7 @@ final class Aarch64SmeDecoder {
     /// `.decode`, nunca à mão — Armadilha 3: `SMOPA`/`SUMOPA`/`USMOPA`/`UMOPA` diferem em dois bits espalhados) +
     /// a feature EXTRA além de `FEAT_SME` (`null` = só `FEAT_SME`). `hasSubtract` é falso nas linhas sem o bit `sub`
     /// (`ADDHA`/`ADDVA` e as duas `fp8`, que o `.decode` fixa em `sub = 0`).
-    private record OuterProductRow(int mask, int value, Ir64Op.SmeOuterProduct.Op op, Aarch64Feature extra,
+    private record OuterProductRow(int mask, int value, SmeOp64.OuterProduct.Op op, Aarch64Feature extra,
                                    boolean hasSubtract, boolean hasSecondVector) {
         boolean matches(int word) {
             return (word & mask) == value;
@@ -115,35 +116,35 @@ final class Aarch64SmeDecoder {
 
     // Gerada por script a partir de `target/isa-decode/sme.decode` linhas 174-217 — NÃO editar à mão.
     private static final OuterProductRow[] OUTER_PRODUCT_ROWS = {
-            outer(0xFFFF001C, 0xC0900000, Ir64Op.SmeOuterProduct.Op.ADDHA_S, null, false, false),
-            outer(0xFFFF001C, 0xC0910000, Ir64Op.SmeOuterProduct.Op.ADDVA_S, null, false, false),
-            outer(0xFFFF0018, 0xC0D00000, Ir64Op.SmeOuterProduct.Op.ADDHA_D, Aarch64Feature.SME_I16I64, false, false),
-            outer(0xFFFF0018, 0xC0D10000, Ir64Op.SmeOuterProduct.Op.ADDVA_D, Aarch64Feature.SME_I16I64, false, false),
-            outer(0xFFE0000E, 0x81800008, Ir64Op.SmeOuterProduct.Op.FMOPA_H, Aarch64Feature.SME_F16F16, true, true),
-            outer(0xFFE0000C, 0x80800000, Ir64Op.SmeOuterProduct.Op.FMOPA_S, null, true, true),
-            outer(0xFFE00008, 0x80C00000, Ir64Op.SmeOuterProduct.Op.FMOPA_D, Aarch64Feature.SME_F64F64, true, true),
-            outer(0xFFE0000E, 0x81A00008, Ir64Op.SmeOuterProduct.Op.BFMOPA, Aarch64Feature.SME_B16B16, true, true),
-            outer(0xFFE0000C, 0x81800000, Ir64Op.SmeOuterProduct.Op.BFMOPA_W, null, true, true),
-            outer(0xFFE0000C, 0x81A00000, Ir64Op.SmeOuterProduct.Op.FMOPA_W_H, null, true, true),
-            outer(0xFFE0001C, 0x80A00000, Ir64Op.SmeOuterProduct.Op.FMOPA_SB, Aarch64Feature.SME_F8F32, false, true),
-            outer(0xFFE0001E, 0x80A00008, Ir64Op.SmeOuterProduct.Op.FMOPA_HB, Aarch64Feature.SME_F8F16, false, true),
-            outer(0xFFE0000C, 0xA0800000, Ir64Op.SmeOuterProduct.Op.SMOPA_S, null, true, true),
-            outer(0xFFE0000C, 0xA0A00000, Ir64Op.SmeOuterProduct.Op.SUMOPA_S, null, true, true),
-            outer(0xFFE0000C, 0xA1800000, Ir64Op.SmeOuterProduct.Op.USMOPA_S, null, true, true),
-            outer(0xFFE0000C, 0xA1A00000, Ir64Op.SmeOuterProduct.Op.UMOPA_S, null, true, true),
-            outer(0xFFE00008, 0xA0C00000, Ir64Op.SmeOuterProduct.Op.SMOPA_D, Aarch64Feature.SME_I16I64, true, true),
-            outer(0xFFE00008, 0xA0E00000, Ir64Op.SmeOuterProduct.Op.SUMOPA_D, Aarch64Feature.SME_I16I64, true, true),
-            outer(0xFFE00008, 0xA1C00000, Ir64Op.SmeOuterProduct.Op.USMOPA_D, Aarch64Feature.SME_I16I64, true, true),
-            outer(0xFFE00008, 0xA1E00000, Ir64Op.SmeOuterProduct.Op.UMOPA_D, Aarch64Feature.SME_I16I64, true, true),
-            outer(0xFFE0000C, 0x80800008, Ir64Op.SmeOuterProduct.Op.BMOPA, Aarch64Feature.SCALABLE_MATRIX_EXTENSION_2,
+            outer(0xFFFF001C, 0xC0900000, SmeOp64.OuterProduct.Op.ADDHA_S, null, false, false),
+            outer(0xFFFF001C, 0xC0910000, SmeOp64.OuterProduct.Op.ADDVA_S, null, false, false),
+            outer(0xFFFF0018, 0xC0D00000, SmeOp64.OuterProduct.Op.ADDHA_D, Aarch64Feature.SME_I16I64, false, false),
+            outer(0xFFFF0018, 0xC0D10000, SmeOp64.OuterProduct.Op.ADDVA_D, Aarch64Feature.SME_I16I64, false, false),
+            outer(0xFFE0000E, 0x81800008, SmeOp64.OuterProduct.Op.FMOPA_H, Aarch64Feature.SME_F16F16, true, true),
+            outer(0xFFE0000C, 0x80800000, SmeOp64.OuterProduct.Op.FMOPA_S, null, true, true),
+            outer(0xFFE00008, 0x80C00000, SmeOp64.OuterProduct.Op.FMOPA_D, Aarch64Feature.SME_F64F64, true, true),
+            outer(0xFFE0000E, 0x81A00008, SmeOp64.OuterProduct.Op.BFMOPA, Aarch64Feature.SME_B16B16, true, true),
+            outer(0xFFE0000C, 0x81800000, SmeOp64.OuterProduct.Op.BFMOPA_W, null, true, true),
+            outer(0xFFE0000C, 0x81A00000, SmeOp64.OuterProduct.Op.FMOPA_W_H, null, true, true),
+            outer(0xFFE0001C, 0x80A00000, SmeOp64.OuterProduct.Op.FMOPA_SB, Aarch64Feature.SME_F8F32, false, true),
+            outer(0xFFE0001E, 0x80A00008, SmeOp64.OuterProduct.Op.FMOPA_HB, Aarch64Feature.SME_F8F16, false, true),
+            outer(0xFFE0000C, 0xA0800000, SmeOp64.OuterProduct.Op.SMOPA_S, null, true, true),
+            outer(0xFFE0000C, 0xA0A00000, SmeOp64.OuterProduct.Op.SUMOPA_S, null, true, true),
+            outer(0xFFE0000C, 0xA1800000, SmeOp64.OuterProduct.Op.USMOPA_S, null, true, true),
+            outer(0xFFE0000C, 0xA1A00000, SmeOp64.OuterProduct.Op.UMOPA_S, null, true, true),
+            outer(0xFFE00008, 0xA0C00000, SmeOp64.OuterProduct.Op.SMOPA_D, Aarch64Feature.SME_I16I64, true, true),
+            outer(0xFFE00008, 0xA0E00000, SmeOp64.OuterProduct.Op.SUMOPA_D, Aarch64Feature.SME_I16I64, true, true),
+            outer(0xFFE00008, 0xA1C00000, SmeOp64.OuterProduct.Op.USMOPA_D, Aarch64Feature.SME_I16I64, true, true),
+            outer(0xFFE00008, 0xA1E00000, SmeOp64.OuterProduct.Op.UMOPA_D, Aarch64Feature.SME_I16I64, true, true),
+            outer(0xFFE0000C, 0x80800008, SmeOp64.OuterProduct.Op.BMOPA, Aarch64Feature.SCALABLE_MATRIX_EXTENSION_2,
                     true, true),
-            outer(0xFFE0000C, 0xA0800008, Ir64Op.SmeOuterProduct.Op.SMOPA2_S,
+            outer(0xFFE0000C, 0xA0800008, SmeOp64.OuterProduct.Op.SMOPA2_S,
                     Aarch64Feature.SCALABLE_MATRIX_EXTENSION_2, true, true),
-            outer(0xFFE0000C, 0xA1800008, Ir64Op.SmeOuterProduct.Op.UMOPA2_S,
+            outer(0xFFE0000C, 0xA1800008, SmeOp64.OuterProduct.Op.UMOPA2_S,
                     Aarch64Feature.SCALABLE_MATRIX_EXTENSION_2, true, true),
     };
 
-    private static OuterProductRow outer(int mask, int value, Ir64Op.SmeOuterProduct.Op op, Aarch64Feature extra,
+    private static OuterProductRow outer(int mask, int value, SmeOp64.OuterProduct.Op op, Aarch64Feature extra,
             boolean hasSubtract, boolean hasSecondVector) {
         return new OuterProductRow(mask, value, op, extra, hasSubtract, hasSecondVector);
     }
@@ -171,56 +172,56 @@ final class Aarch64SmeDecoder {
 
     /// Linha de `MOP4`/`TMOP`: máscara/valor de 32 bits + feature de formato EXTRA (a feature `MOP4`/`TMOP` em si é
     /// sempre exigida — `aa64_sme_mop4_*`/`aa64_sme_tmop_*` do QEMU são a conjunção das duas).
-    private record Mop4Row(int mask, int value, Ir64Op.SmeMop4.Op op, Aarch64Feature extra) {
+    private record Mop4Row(int mask, int value, SmeOp64.Mop4.Op op, Aarch64Feature extra) {
     }
 
-    private record TmopRow(int mask, int value, Ir64Op.SmeTmop.Op op, Aarch64Feature extra) {
+    private record TmopRow(int mask, int value, SmeOp64.Tmop.Op op, Aarch64Feature extra) {
     }
 
     // Gerada por script a partir de `target/isa-decode/sme.decode` linhas 1090-1134 — NÃO editar à mão.
     private static final Mop4Row[] MOP4_ROWS = {
-            mop4Row(0xFFE1FC2E, 0x81200008, Ir64Op.SmeMop4.Op.BFMOP4_HH, Aarch64Feature.SME_B16B16),
-            mop4Row(0xFFE1FC2E, 0x81000008, Ir64Op.SmeMop4.Op.FMOP4_HH, Aarch64Feature.SME_F16F16),
-            mop4Row(0xFFE1FC2C, 0x80000000, Ir64Op.SmeMop4.Op.FMOP4_SS, null),
-            mop4Row(0xFFE1FC28, 0x80C00008, Ir64Op.SmeMop4.Op.FMOP4_DD, Aarch64Feature.SME_F64F64),
-            mop4Row(0xFFE1FC2C, 0x81000000, Ir64Op.SmeMop4.Op.BFMOP4_SH, null),
-            mop4Row(0xFFE1FC2C, 0x81200000, Ir64Op.SmeMop4.Op.FMOP4_SH, null),
-            mop4Row(0xFFE1FC3C, 0x80200000, Ir64Op.SmeMop4.Op.FMOP4A_SB, Aarch64Feature.SME_F8F32),
-            mop4Row(0xFFE1FC3E, 0x80200008, Ir64Op.SmeMop4.Op.FMOP4A_HB, Aarch64Feature.SME_F8F16),
-            mop4Row(0xFFE1FC2C, 0x80008008, Ir64Op.SmeMop4.Op.SMOP4_SH, null),
-            mop4Row(0xFFE1FC2C, 0x81008008, Ir64Op.SmeMop4.Op.UMOP4_SH, null),
-            mop4Row(0xFFE1FC2C, 0x80008000, Ir64Op.SmeMop4.Op.SMOP4_SB, null),
-            mop4Row(0xFFE1FC28, 0xA0C00008, Ir64Op.SmeMop4.Op.SMOP4_DH, Aarch64Feature.SME_I16I64),
-            mop4Row(0xFFE1FC2C, 0x80208000, Ir64Op.SmeMop4.Op.SUMOP4_SB, null),
-            mop4Row(0xFFE1FC28, 0xA0E00008, Ir64Op.SmeMop4.Op.SUMOP4_DH, Aarch64Feature.SME_I16I64),
-            mop4Row(0xFFE1FC2C, 0x81208000, Ir64Op.SmeMop4.Op.UMOP4_SB, null),
-            mop4Row(0xFFE1FC28, 0xA1E00008, Ir64Op.SmeMop4.Op.UMOP4_DH, Aarch64Feature.SME_I16I64),
-            mop4Row(0xFFE1FC2C, 0x81008000, Ir64Op.SmeMop4.Op.USMOP4_SB, null),
-            mop4Row(0xFFE1FC28, 0xA1C00008, Ir64Op.SmeMop4.Op.USMOP4_DH, Aarch64Feature.SME_I16I64),
+            mop4Row(0xFFE1FC2E, 0x81200008, SmeOp64.Mop4.Op.BFMOP4_HH, Aarch64Feature.SME_B16B16),
+            mop4Row(0xFFE1FC2E, 0x81000008, SmeOp64.Mop4.Op.FMOP4_HH, Aarch64Feature.SME_F16F16),
+            mop4Row(0xFFE1FC2C, 0x80000000, SmeOp64.Mop4.Op.FMOP4_SS, null),
+            mop4Row(0xFFE1FC28, 0x80C00008, SmeOp64.Mop4.Op.FMOP4_DD, Aarch64Feature.SME_F64F64),
+            mop4Row(0xFFE1FC2C, 0x81000000, SmeOp64.Mop4.Op.BFMOP4_SH, null),
+            mop4Row(0xFFE1FC2C, 0x81200000, SmeOp64.Mop4.Op.FMOP4_SH, null),
+            mop4Row(0xFFE1FC3C, 0x80200000, SmeOp64.Mop4.Op.FMOP4A_SB, Aarch64Feature.SME_F8F32),
+            mop4Row(0xFFE1FC3E, 0x80200008, SmeOp64.Mop4.Op.FMOP4A_HB, Aarch64Feature.SME_F8F16),
+            mop4Row(0xFFE1FC2C, 0x80008008, SmeOp64.Mop4.Op.SMOP4_SH, null),
+            mop4Row(0xFFE1FC2C, 0x81008008, SmeOp64.Mop4.Op.UMOP4_SH, null),
+            mop4Row(0xFFE1FC2C, 0x80008000, SmeOp64.Mop4.Op.SMOP4_SB, null),
+            mop4Row(0xFFE1FC28, 0xA0C00008, SmeOp64.Mop4.Op.SMOP4_DH, Aarch64Feature.SME_I16I64),
+            mop4Row(0xFFE1FC2C, 0x80208000, SmeOp64.Mop4.Op.SUMOP4_SB, null),
+            mop4Row(0xFFE1FC28, 0xA0E00008, SmeOp64.Mop4.Op.SUMOP4_DH, Aarch64Feature.SME_I16I64),
+            mop4Row(0xFFE1FC2C, 0x81208000, SmeOp64.Mop4.Op.UMOP4_SB, null),
+            mop4Row(0xFFE1FC28, 0xA1E00008, SmeOp64.Mop4.Op.UMOP4_DH, Aarch64Feature.SME_I16I64),
+            mop4Row(0xFFE1FC2C, 0x81008000, SmeOp64.Mop4.Op.USMOP4_SB, null),
+            mop4Row(0xFFE1FC28, 0xA1C00008, SmeOp64.Mop4.Op.USMOP4_DH, Aarch64Feature.SME_I16I64),
     };
 
     // Gerada por script a partir de `target/isa-decode/sme.decode` linhas 1135-1161 — NÃO editar à mão.
     private static final TmopRow[] TMOP_ROWS = {
-            tmopRow(0xFFE0E00E, 0x81600008, Ir64Op.SmeTmop.Op.BFTMOPA_HH, Aarch64Feature.SME_B16B16),
-            tmopRow(0xFFE0E00E, 0x81400008, Ir64Op.SmeTmop.Op.FTMOPA_HH, Aarch64Feature.SME_F16F16),
-            tmopRow(0xFFE0E00C, 0x80400000, Ir64Op.SmeTmop.Op.FTMOPA_SS, null),
-            tmopRow(0xFFE0E00C, 0x81400000, Ir64Op.SmeTmop.Op.BFTMOPA_SH, null),
-            tmopRow(0xFFE0E00C, 0x81600000, Ir64Op.SmeTmop.Op.FTMOPA_SH, null),
-            tmopRow(0xFFE0E00E, 0x80600008, Ir64Op.SmeTmop.Op.FTMOPA_HB, Aarch64Feature.SME_F8F16),
-            tmopRow(0xFFE0E00C, 0x80600000, Ir64Op.SmeTmop.Op.FTMOPA_SB, Aarch64Feature.SME_F8F32),
-            tmopRow(0xFFE0E00C, 0x80408008, Ir64Op.SmeTmop.Op.STMOPA_SH, null),
-            tmopRow(0xFFE0E00C, 0x81408008, Ir64Op.SmeTmop.Op.UTMOPA_SH, null),
-            tmopRow(0xFFE0E00C, 0x80408000, Ir64Op.SmeTmop.Op.STMOPA_SB, null),
-            tmopRow(0xFFE0E00C, 0x80608000, Ir64Op.SmeTmop.Op.SUTMOPA_SB, null),
-            tmopRow(0xFFE0E00C, 0x81408000, Ir64Op.SmeTmop.Op.USTMOPA_SB, null),
-            tmopRow(0xFFE0E00C, 0x81608000, Ir64Op.SmeTmop.Op.UTMOPA_SB, null),
+            tmopRow(0xFFE0E00E, 0x81600008, SmeOp64.Tmop.Op.BFTMOPA_HH, Aarch64Feature.SME_B16B16),
+            tmopRow(0xFFE0E00E, 0x81400008, SmeOp64.Tmop.Op.FTMOPA_HH, Aarch64Feature.SME_F16F16),
+            tmopRow(0xFFE0E00C, 0x80400000, SmeOp64.Tmop.Op.FTMOPA_SS, null),
+            tmopRow(0xFFE0E00C, 0x81400000, SmeOp64.Tmop.Op.BFTMOPA_SH, null),
+            tmopRow(0xFFE0E00C, 0x81600000, SmeOp64.Tmop.Op.FTMOPA_SH, null),
+            tmopRow(0xFFE0E00E, 0x80600008, SmeOp64.Tmop.Op.FTMOPA_HB, Aarch64Feature.SME_F8F16),
+            tmopRow(0xFFE0E00C, 0x80600000, SmeOp64.Tmop.Op.FTMOPA_SB, Aarch64Feature.SME_F8F32),
+            tmopRow(0xFFE0E00C, 0x80408008, SmeOp64.Tmop.Op.STMOPA_SH, null),
+            tmopRow(0xFFE0E00C, 0x81408008, SmeOp64.Tmop.Op.UTMOPA_SH, null),
+            tmopRow(0xFFE0E00C, 0x80408000, SmeOp64.Tmop.Op.STMOPA_SB, null),
+            tmopRow(0xFFE0E00C, 0x80608000, SmeOp64.Tmop.Op.SUTMOPA_SB, null),
+            tmopRow(0xFFE0E00C, 0x81408000, SmeOp64.Tmop.Op.USTMOPA_SB, null),
+            tmopRow(0xFFE0E00C, 0x81608000, SmeOp64.Tmop.Op.UTMOPA_SB, null),
     };
 
-    private static Mop4Row mop4Row(int mask, int value, Ir64Op.SmeMop4.Op op, Aarch64Feature extra) {
+    private static Mop4Row mop4Row(int mask, int value, SmeOp64.Mop4.Op op, Aarch64Feature extra) {
         return new Mop4Row(mask, value, op, extra);
     }
 
-    private static TmopRow tmopRow(int mask, int value, Ir64Op.SmeTmop.Op op, Aarch64Feature extra) {
+    private static TmopRow tmopRow(int mask, int value, SmeOp64.Tmop.Op op, Aarch64Feature extra) {
         return new TmopRow(mask, value, op, extra);
     }
 
@@ -446,10 +447,10 @@ final class Aarch64SmeDecoder {
             return null;
         }
         if ((word & ZERO_MASK) == ZERO_VALUE) {
-            return new Ir64Op.SmeZero(word & ZERO_IMM_MASK, address);
+            return new SmeOp64.Zero(word & ZERO_IMM_MASK, address);
         }
         if ((word & ZERO_ZT0_MASK) == ZERO_ZT0_VALUE) {
-            return hasSme2() ? new Ir64Op.SmeZeroZt0(address) : null;
+            return hasSme2() ? new SmeOp64.ZeroZt0(address) : null;
         }
         Ir64Op memory = decodeMemory(word, address);
         if (memory != null) {
@@ -509,7 +510,7 @@ final class Aarch64SmeDecoder {
             int registerIndex = registerBase + ((word >>> RS_RV_FIELD_SHIFT) & RS_RV_FIELD_MASK);
             boolean vertical = !row.array() && ((word >>> V_BIT_SHIFT) & 1) != 0;
             boolean predicated = row.pgShift() >= 0;
-            return new Ir64Op.SmeMova(row.toVector(), row.zero(), predicated, row.pg(word), row.count(), row.esz(),
+            return new SmeOp64.Mova(row.toVector(), row.zero(), predicated, row.pg(word), row.count(), row.esz(),
                     row.array() ? -1 : row.tile(word), vertical, row.zr(word), registerIndex, row.off(word), address);
         }
         return null;
@@ -524,7 +525,7 @@ final class Aarch64SmeDecoder {
                     return null;
                 }
                 int rv = MOVA_RV_BASE + ((word >>> RS_RV_FIELD_SHIFT) & RS_RV_FIELD_MASK);
-                return new Ir64Op.SmeZeroArray(row.ngrp(), row.nvec(), rv, (word & row.offMask()) * row.offScale(),
+                return new SmeOp64.ZeroArray(row.ngrp(), row.nvec(), rv, (word & row.offMask()) * row.offScale(),
                         address);
             }
         }
@@ -532,13 +533,13 @@ final class Aarch64SmeDecoder {
             if (!hasSme2()) {
                 return null;
             }
-            Ir64Op.SmeMovt.Form form = (word & MOVT_RZT_MASK) == MOVT_RZT_VALUE ? Ir64Op.SmeMovt.Form.ZT_TO_X
-                    : Ir64Op.SmeMovt.Form.X_TO_ZT;
-            return new Ir64Op.SmeMovt(form, word & MOVT_RT_MASK, (word >>> MOVT_OFF_SHIFT) & MOVT_OFF_MASK, address);
+            SmeOp64.Movt.Form form = (word & MOVT_RZT_MASK) == MOVT_RZT_VALUE ? SmeOp64.Movt.Form.ZT_TO_X
+                    : SmeOp64.Movt.Form.X_TO_ZT;
+            return new SmeOp64.Movt(form, word & MOVT_RT_MASK, (word >>> MOVT_OFF_SHIFT) & MOVT_OFF_MASK, address);
         }
         if ((word & MOVT_ZTZ_MASK) == MOVT_ZTZ_VALUE) {
             return architecture.has(Aarch64Feature.SME_LUTV2)
-                    ? new Ir64Op.SmeMovt(Ir64Op.SmeMovt.Form.VECTOR_TO_ZT, word & MOVT_RT_MASK,
+                    ? new SmeOp64.Movt(SmeOp64.Movt.Form.VECTOR_TO_ZT, word & MOVT_RT_MASK,
                             (word >>> MOVT_OFF_SHIFT) & MOVT_VECTOR_OFF_MASK, address)
                     : null;
         }
@@ -575,7 +576,7 @@ final class Aarch64SmeDecoder {
             int idxBits = (row.fourBit() ? LUTI4_IDX_BITS : LUTI2_IDX_BITS) - countLog2;
             index = (word >>> (LUT_IDX_BASE_SHIFT + countLog2)) & ((1 << idxBits) - 1);
         }
-        return new Ir64Op.SmeLut(row.fourBit(), (word >>> LUT_ESZ_SHIFT) & LUT_ESZ_MASK, row.count(),
+        return new SmeOp64.Lut(row.fourBit(), (word >>> LUT_ESZ_SHIFT) & LUT_ESZ_MASK, row.count(),
                 row.strided(), zd, zn, index, address);
     }
 
@@ -612,20 +613,20 @@ final class Aarch64SmeDecoder {
             return null;
         }
         boolean unsigned = (word & MV_UNSIGNED_BIT) != 0;
-        Ir64Op.SmeMultiVectorSingle.Op op = switch ((word >>> MV_OPERATION_SHIFT) & MV_OPERATION_MASK) {
-            case MV_KEY_SMAX -> unsigned ? Ir64Op.SmeMultiVectorSingle.Op.UMAX : Ir64Op.SmeMultiVectorSingle.Op.SMAX;
-            case MV_KEY_SMIN -> unsigned ? Ir64Op.SmeMultiVectorSingle.Op.UMIN : Ir64Op.SmeMultiVectorSingle.Op.SMIN;
-            case MV_KEY_FMAX -> unsigned ? Ir64Op.SmeMultiVectorSingle.Op.FMIN : Ir64Op.SmeMultiVectorSingle.Op.FMAX;
+        SmeOp64.MultiVectorSingle.Op op = switch ((word >>> MV_OPERATION_SHIFT) & MV_OPERATION_MASK) {
+            case MV_KEY_SMAX -> unsigned ? SmeOp64.MultiVectorSingle.Op.UMAX : SmeOp64.MultiVectorSingle.Op.SMAX;
+            case MV_KEY_SMIN -> unsigned ? SmeOp64.MultiVectorSingle.Op.UMIN : SmeOp64.MultiVectorSingle.Op.SMIN;
+            case MV_KEY_FMAX -> unsigned ? SmeOp64.MultiVectorSingle.Op.FMIN : SmeOp64.MultiVectorSingle.Op.FMAX;
             case MV_KEY_FMAXNM ->
-                    unsigned ? Ir64Op.SmeMultiVectorSingle.Op.FMINNM : Ir64Op.SmeMultiVectorSingle.Op.FMAXNM;
+                    unsigned ? SmeOp64.MultiVectorSingle.Op.FMINNM : SmeOp64.MultiVectorSingle.Op.FMAXNM;
             case MV_KEY_SRSHL ->
-                    unsigned ? Ir64Op.SmeMultiVectorSingle.Op.URSHL : Ir64Op.SmeMultiVectorSingle.Op.SRSHL;
-            case MV_KEY_ADD -> unsigned || multipleVectors ? null : Ir64Op.SmeMultiVectorSingle.Op.ADD;
-            case MV_KEY_SQDMULH -> unsigned ? null : Ir64Op.SmeMultiVectorSingle.Op.SQDMULH;
+                    unsigned ? SmeOp64.MultiVectorSingle.Op.URSHL : SmeOp64.MultiVectorSingle.Op.SRSHL;
+            case MV_KEY_ADD -> unsigned || multipleVectors ? null : SmeOp64.MultiVectorSingle.Op.ADD;
+            case MV_KEY_SQDMULH -> unsigned ? null : SmeOp64.MultiVectorSingle.Op.SQDMULH;
             case MV_KEY_FSCALE -> unsigned || !architecture.has(Aarch64Feature.FP8) ? null
-                    : Ir64Op.SmeMultiVectorSingle.Op.FSCALE;
+                    : SmeOp64.MultiVectorSingle.Op.FSCALE;
             case MV_KEY_FAMAX -> !multipleVectors || !architecture.has(Aarch64Feature.FP_ABSOLUTE_MAX_MIN) ? null
-                    : unsigned ? Ir64Op.SmeMultiVectorSingle.Op.FAMIN : Ir64Op.SmeMultiVectorSingle.Op.FAMAX;
+                    : unsigned ? SmeOp64.MultiVectorSingle.Op.FAMIN : SmeOp64.MultiVectorSingle.Op.FAMAX;
             default -> null;
         };
         int esz = (word >>> MV_ESZ_SHIFT) & MV_ESZ_MASK;
@@ -636,7 +637,7 @@ final class Aarch64SmeDecoder {
         int zm = multipleVectors
                 ? groupBase(word, count == 2 ? MV_ZM_GROUP_X2_SHIFT : MV_ZM_GROUP_X4_SHIFT, count)
                 : (word >>> MV_ZM_SHIFT) & MV_ZM_MASK;
-        return new Ir64Op.SmeMultiVectorSingle(op, esz, count, zdn, zm, multipleVectors, address);
+        return new SmeOp64.MultiVectorSingle(op, esz, count, zdn, zm, multipleVectors, address);
     }
 
     /// As 107 linhas de "multiple and single, array vectors" (B18.9). `null` = a feature da linha está ausente
@@ -651,13 +652,13 @@ final class Aarch64SmeDecoder {
         int registerIndex = MOVA_RV_BASE + ((word >>> RS_RV_FIELD_SHIFT) & RS_RV_FIELD_MASK);
         int off = row.offset(word);
         return switch (row.form()) {
-            case SINGLE -> new Ir64Op.SmeArrayMultiVector(row.op(), row.count(), registerIndex, off,
+            case SINGLE -> new SmeOp64.ArrayMultiVector(row.op(), row.count(), registerIndex, off,
                     (word >>> ARRAY_VECTOR_ZN_SHIFT) & REGISTER_MASK,
                     (word >>> ARRAY_VECTOR_ZM_SHIFT) & ARRAY_VECTOR_ZM_MASK, address);
-            case MULTIPLE -> new Ir64Op.SmeArrayMultiVector(row.op(), row.count(), registerIndex, off,
+            case MULTIPLE -> new SmeOp64.ArrayMultiVector(row.op(), row.count(), registerIndex, off,
                     alignedGroup(word, row.count(), GROUP_ZN_SHIFT_X2, GROUP_ZN_SHIFT_X4),
                     alignedGroup(word, row.count(), GROUP_ZM_SHIFT_X2, GROUP_ZM_SHIFT_X4), address, true);
-            case ACCUMULATE -> new Ir64Op.SmeArrayMultiVector(row.op(), row.count(), registerIndex, off, 0,
+            case ACCUMULATE -> new SmeOp64.ArrayMultiVector(row.op(), row.count(), registerIndex, off, 0,
                     alignedGroup(word, row.count(), GROUP_ZN_SHIFT_X2, GROUP_ZN_SHIFT_X4), address, true);
         };
     }
@@ -665,7 +666,7 @@ final class Aarch64SmeDecoder {
     /// `FEAT_SME2` mais a capacidade EXTRA de cada operação (B18.9/B18.10/B18.11). `SVDOT_4h`/`UVDOT_4h` exigem
     /// `FEAT_SME_I16I64` e `FVDOT_sh`/`BFVDOT` exigem `FEAT_SME2` pelo manual (`IsFeatureImplemented` do decode de cada
     /// uma) — o `translate-sme.c` do QEMU as gateia só em `aa64_sme2`/`aa64_sme`, frouxo demais.
-    private boolean arrayVectorFeaturesPresent(Ir64Op.SmeArrayMultiVector.Op op) {
+    private boolean arrayVectorFeaturesPresent(SmeOp64.ArrayMultiVector.Op op) {
         if (!hasSme2()) {
             return false;
         }
@@ -686,7 +687,7 @@ final class Aarch64SmeDecoder {
             return false;
         }
         // `FADD_h`/`FSUB_h`: `aa64_sme_f16f16_or_f8f16` — QUALQUER uma das duas features basta.
-        return (op != Ir64Op.SmeArrayMultiVector.Op.FADD_H && op != Ir64Op.SmeArrayMultiVector.Op.FSUB_H)
+        return (op != SmeOp64.ArrayMultiVector.Op.FADD_H && op != SmeOp64.ArrayMultiVector.Op.FSUB_H)
                 || architecture.has(Aarch64Feature.SME_F16F16) || architecture.has(Aarch64Feature.SME_F8F16);
     }
 
@@ -695,7 +696,7 @@ final class Aarch64SmeDecoder {
         if (!arrayVectorFeaturesPresent(row.op())) {
             return null;
         }
-        return new Ir64Op.SmeArrayMultiVector(row.op(), row.count(), MOVA_RV_BASE
+        return new SmeOp64.ArrayMultiVector(row.op(), row.count(), MOVA_RV_BASE
                 + ((word >>> RS_RV_FIELD_SHIFT) & RS_RV_FIELD_MASK), row.offset(word), row.znBase(word),
                 (word >>> ARRAY_VECTOR_ZM_SHIFT) & ARRAY_VECTOR_ZM_MASK, address, false, row.index(word));
     }
@@ -804,7 +805,7 @@ final class Aarch64SmeDecoder {
                     pg = SEL_PG_BASE + ((word >>> SEL_PG_SHIFT) & SEL_PG_MASK);
                 }
             }
-            return new Ir64Op.SmeConstructive(row.op(), esz, row.sources(), row.destinations(), zd, zn, zm, shift, pg,
+            return new SmeOp64.Constructive(row.op(), esz, row.sources(), row.destinations(), zd, zn, zm, shift, pg,
                     address);
         }
         return null;
@@ -814,7 +815,7 @@ final class Aarch64SmeDecoder {
     /// `FEAT_FP8` (`aa64_sme2_f8cvt`); `*RSHRN_sh` `FEAT_SME2` OU `FEAT_SVE2p1`; `FCLAMP` com `esz = 0` (`bfloat16`)
     /// `FEAT_SVE_B16B16`; o resto `FEAT_SME2`.
     private boolean constructiveGate(SmeConstructiveRows.Row row, int esz) {
-        if (row.op() == Ir64Op.SmeConstructive.Op.FCLAMP && esz == ESZ_BFLOAT16
+        if (row.op() == SmeOp64.Constructive.Op.FCLAMP && esz == ESZ_BFLOAT16
                 && !architecture.has(Aarch64Feature.SVE_B16B16)) {
             return false;
         }
@@ -843,7 +844,7 @@ final class Aarch64SmeDecoder {
         int tile = word & ((1 << esz) - 1);
         int zm = row.hasSecondVector() ? (word >>> RM_SHIFT) & REGISTER_MASK : 0;
         boolean subtract = row.hasSubtract() && ((word >>> SUB_BIT_SHIFT) & 1) != 0;
-        return new Ir64Op.SmeOuterProduct(row.op(), tile, (word >>> RN_SHIFT) & REGISTER_MASK, zm,
+        return new SmeOp64.OuterProduct(row.op(), tile, (word >>> RN_SHIFT) & REGISTER_MASK, zm,
                 (word >>> PG_SHIFT) & PG_MASK, (word >>> PM_SHIFT) & PG_MASK, subtract, address);
     }
 
@@ -854,7 +855,7 @@ final class Aarch64SmeDecoder {
             return null;
         }
         int esz = row.op().accumulatorEsz();
-        return new Ir64Op.SmeMop4(row.op(), word & ((1 << esz) - 1),
+        return new SmeOp64.Mop4(row.op(), word & ((1 << esz) - 1),
                 ((word >>> MOP4_ZN_SHIFT) & MOP4_ZN_MASK) * PAIR_FACTOR,
                 ((word >>> MOP4_ZM_SHIFT) & MOP4_ZM_MASK) * PAIR_FACTOR + MOP4_ZM_BASE,
                 ((word >>> SUB_BIT_SHIFT) & 1) != 0, ((word >>> MOP4_N_SHIFT) & 1) != 0,
@@ -869,7 +870,7 @@ final class Aarch64SmeDecoder {
         int esz = row.op().accumulatorEsz();
         int rawZk = (word >>> TMOP_ZK_SHIFT) & TMOP_ZK_MASK;
         int zk = TMOP_ZK_BASE | ((rawZk & TMOP_ZK_HIGH_BIT) << 1) | (rawZk & TMOP_ZK_LOW_MASK);
-        return new Ir64Op.SmeTmop(row.op(), word & ((1 << esz) - 1),
+        return new SmeOp64.Tmop(row.op(), word & ((1 << esz) - 1),
                 ((word >>> TMOP_ZN_SHIFT) & TMOP_ZN_MASK) * PAIR_FACTOR, (word >>> RM_SHIFT) & REGISTER_MASK, zk,
                 (word >>> TMOP_IDX_SHIFT) & TMOP_IDX_MASK, address);
     }
@@ -881,10 +882,10 @@ final class Aarch64SmeDecoder {
         int rn = (word >>> RN_SHIFT) & REGISTER_MASK;
         int registerIndex = MOVA_RS_BASE + ((word >>> RS_RV_FIELD_SHIFT) & RS_RV_FIELD_MASK);
         if ((word & LDR_ZT0_MASK) == LDR_ZT0_VALUE) {
-            return hasSme2() ? new Ir64Op.SmeZt0LoadStore(store, rn, address) : null;
+            return hasSme2() ? new SmeOp64.Zt0LoadStore(store, rn, address) : null;
         }
         if ((word & LDR_ZA_MASK) == LDR_ZA_VALUE) {
-            return new Ir64Op.SmeArrayLoadStore(store, rn, registerIndex, word & LDR_ZA_IMM_MASK, address);
+            return new SmeOp64.ArrayLoadStore(store, rn, registerIndex, word & LDR_ZA_IMM_MASK, address);
         }
         int esz;
         if ((word & LDST1_Q_MASK) == LDST1_Q_VALUE) {
@@ -897,7 +898,7 @@ final class Aarch64SmeDecoder {
         int offsetWidth = LDST1_SPAN_BITS - esz;
         int tile = (word >>> offsetWidth) & ((1 << esz) - 1);
         int offset = word & ((1 << offsetWidth) - 1);
-        return new Ir64Op.SmeTileLoadStore(store, esz, tile, ((word >>> V_BIT_SHIFT) & 1) != 0,
+        return new SmeOp64.TileLoadStore(store, esz, tile, ((word >>> V_BIT_SHIFT) & 1) != 0,
                 (word >>> PG_SHIFT) & PG_MASK, rn, (word >>> RM_SHIFT) & REGISTER_MASK, registerIndex, offset,
                 address);
     }

@@ -7,15 +7,15 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import dev.vitorsilverio.armjitter.core64.Aarch64Core;
 import dev.vitorsilverio.armjitter.ir64.Aarch64AddressTranslateForm;
 import dev.vitorsilverio.armjitter.ir64.Aarch64SystemRegisterId;
-import dev.vitorsilverio.armjitter.ir64.Ir64Op;
 import dev.vitorsilverio.armjitter.ir64.Ir64SystemInstructionOp;
 import dev.vitorsilverio.armjitter.executor64.Ir64BlockExecutor;
+import dev.vitorsilverio.armjitter.ir64.SystemOp64;
 import dev.vitorsilverio.armjitter.memory.AddressSpace64;
 import dev.vitorsilverio.armjitter.support.TestAddressSpace;
 import org.junit.jupiter.api.Test;
 
 /// B6.6.3: liga `MRS`/`MSR (register)` (B6.6.1) e `TLBI VMALLE1`/`VMALLE1IS`
-/// (`Ir64Op.SystemInstruction`) ao {@link TranslatingAddressSpace64} (B6.6.2) — mesmas duas
+/// (`SystemOp64.SystemInstruction`) ao {@link TranslatingAddressSpace64} (B6.6.2) — mesmas duas
 /// camadas do precedente 32-bit ({@code Cp15VmsaCoprocessorTest}):
 /// - Unidade direta (`write`/`read` chamados sem {@link Aarch64Core}).
 /// - Integração via {@link Ir64BlockExecutor#step} executando a sequência real de habilitação de
@@ -269,19 +269,19 @@ class Aarch64VmsaSystemRegistersTest {
         Aarch64Core core = coreWithoutCode();
         core.setProgramCounter(0x40);
         Ir64BlockExecutor executor = new Ir64BlockExecutor();
-        boolean pcChanged = executor.executeOp(core, new Ir64Op.SystemInstruction(Ir64SystemInstructionOp.BARRIER));
+        boolean pcChanged = executor.executeOp(core, new SystemOp64.SystemInstruction(Ir64SystemInstructionOp.BARRIER));
         assertFalse(pcChanged);
         assertEquals(0x40, core.pc(), "barreira é NOP puro: não mexe no PC nem em nenhum registrador");
     }
 
     @Test
     void tlbiAllNoopWhenNoBusInstalled() {
-        // Ir64Op.SystemInstruction(TLBI_ALL) executado sem nenhum Aarch64SystemRegisterBus
+        // SystemOp64.SystemInstruction(TLBI_ALL) executado sem nenhum Aarch64SystemRegisterBus
         // instalado (default Aarch64SystemRegisterBus#none()) não deve lançar — invalidateTlbAll
         // tem default NOP, diferente de SystemRegister (que exige handles()==true).
         Aarch64Core core = coreWithoutCode();
         Ir64BlockExecutor executor = new Ir64BlockExecutor();
-        executor.executeOp(core, new Ir64Op.SystemInstruction(Ir64SystemInstructionOp.TLBI_ALL));
+        executor.executeOp(core, new SystemOp64.SystemInstruction(Ir64SystemInstructionOp.TLBI_ALL));
     }
 
     @Test
@@ -323,7 +323,7 @@ class Aarch64VmsaSystemRegistersTest {
         assertTrue(mmu.pageWalkCount() > walksBeforeAccess, "acesso pós-M=1 deve ter percorrido a tabela real");
     }
 
-    // ── B10.6: AT S1E1R/S1E1W/S1E0R/S1E0W (Ir64Op.AddressTranslate) ────────────────────────
+    // ── B10.6: AT S1E1R/S1E1W/S1E0R/S1E0W (SystemOp64.AddressTranslate) ────────────────────────
 
     /// Página de 4KiB identity-mapped em `PA=0`, `AP` configurável (índice L3 `0`).
     private static Aarch64Core coreWithMmuPageAtZero(int ap) {
@@ -346,7 +346,7 @@ class Aarch64VmsaSystemRegistersTest {
         core.setX(0, 0x100L); // VA dentro da página identity-mapped
         Ir64BlockExecutor executor = new Ir64BlockExecutor();
 
-        executor.executeOp(core, new Ir64Op.AddressTranslate(Aarch64AddressTranslateForm.S1E1R, 0));
+        executor.executeOp(core, new SystemOp64.AddressTranslate(Aarch64AddressTranslateForm.S1E1R, 0));
 
         long par = core.systemRegisterBus().read(Aarch64SystemRegisterId.PAR_EL1);
         assertEquals(0, par & F_BIT, "F=0: tradução bem-sucedida");
@@ -360,7 +360,7 @@ class Aarch64VmsaSystemRegistersTest {
         Ir64BlockExecutor executor = new Ir64BlockExecutor();
 
         // Não deve lançar: AT nunca gera abort para o guest, só reporta em PAR_EL1.
-        executor.executeOp(core, new Ir64Op.AddressTranslate(Aarch64AddressTranslateForm.S1E0R, 0));
+        executor.executeOp(core, new SystemOp64.AddressTranslate(Aarch64AddressTranslateForm.S1E0R, 0));
 
         long par = core.systemRegisterBus().read(Aarch64SystemRegisterId.PAR_EL1);
         assertEquals(1, par & F_BIT, "F=1: S1E0R numa página EL1-only deve falhar por permissão");
@@ -372,7 +372,7 @@ class Aarch64VmsaSystemRegistersTest {
         core.setX(0, 0x100L);
         Ir64BlockExecutor executor = new Ir64BlockExecutor();
 
-        executor.executeOp(core, new Ir64Op.AddressTranslate(Aarch64AddressTranslateForm.S1E1R, 0));
+        executor.executeOp(core, new SystemOp64.AddressTranslate(Aarch64AddressTranslateForm.S1E1R, 0));
 
         long par = core.systemRegisterBus().read(Aarch64SystemRegisterId.PAR_EL1);
         assertEquals(0, par & F_BIT, "S1E1R checa como EL1, que tem acesso à página EL1-only");
@@ -384,7 +384,7 @@ class Aarch64VmsaSystemRegistersTest {
         core.setX(0, 0x100L);
         Ir64BlockExecutor executor = new Ir64BlockExecutor();
 
-        executor.executeOp(core, new Ir64Op.AddressTranslate(Aarch64AddressTranslateForm.S1E1W, 0));
+        executor.executeOp(core, new SystemOp64.AddressTranslate(Aarch64AddressTranslateForm.S1E1W, 0));
 
         long par = core.systemRegisterBus().read(Aarch64SystemRegisterId.PAR_EL1);
         assertEquals(1, par & F_BIT, "S1E1W numa página só-leitura deve falhar por permissão");
@@ -396,7 +396,7 @@ class Aarch64VmsaSystemRegistersTest {
         core.setX(0, 1L << 30); // fora da única página mapeada (L0[0]->L1[0]->L2[0]->L3[0])
         Ir64BlockExecutor executor = new Ir64BlockExecutor();
 
-        executor.executeOp(core, new Ir64Op.AddressTranslate(Aarch64AddressTranslateForm.S1E1R, 0));
+        executor.executeOp(core, new SystemOp64.AddressTranslate(Aarch64AddressTranslateForm.S1E1R, 0));
 
         long par = core.systemRegisterBus().read(Aarch64SystemRegisterId.PAR_EL1);
         assertEquals(1, par & F_BIT, "F=1: sem descritor válido no caminho do walk");
@@ -407,7 +407,7 @@ class Aarch64VmsaSystemRegistersTest {
         Aarch64Core core = coreWithMmuPageAtZero(AP_FULL_ACCESS);
         Ir64BlockExecutor executor = new Ir64BlockExecutor();
 
-        executor.executeOp(core, new Ir64Op.AddressTranslate(Aarch64AddressTranslateForm.S1E1R, 31));
+        executor.executeOp(core, new SystemOp64.AddressTranslate(Aarch64AddressTranslateForm.S1E1R, 31));
 
         long par = core.systemRegisterBus().read(Aarch64SystemRegisterId.PAR_EL1);
         assertEquals(0, par & F_BIT);
@@ -457,7 +457,7 @@ class Aarch64VmsaSystemRegistersTest {
         core.setX(0, 0x100L);
         Ir64BlockExecutor executor = new Ir64BlockExecutor();
 
-        executor.executeOp(core, new Ir64Op.AddressTranslate(Aarch64AddressTranslateForm.S1E2R, 0));
+        executor.executeOp(core, new SystemOp64.AddressTranslate(Aarch64AddressTranslateForm.S1E2R, 0));
 
         long par = core.systemRegisterBus().read(Aarch64SystemRegisterId.PAR_EL1);
         assertEquals(0, par & F_BIT, "F=0: tradução bem-sucedida via TTBR0_EL2");
@@ -470,7 +470,7 @@ class Aarch64VmsaSystemRegistersTest {
         core.setX(0, 0x100L);
         Ir64BlockExecutor executor = new Ir64BlockExecutor();
 
-        executor.executeOp(core, new Ir64Op.AddressTranslate(Aarch64AddressTranslateForm.S1E2W, 0));
+        executor.executeOp(core, new SystemOp64.AddressTranslate(Aarch64AddressTranslateForm.S1E2W, 0));
 
         long par = core.systemRegisterBus().read(Aarch64SystemRegisterId.PAR_EL1);
         assertEquals(1, par & F_BIT, "S1E2W numa página só-leitura (AP[2]=1) deve falhar por permissão");
@@ -483,7 +483,7 @@ class Aarch64VmsaSystemRegistersTest {
         core.setX(0, 0x100L);
         Ir64BlockExecutor executor = new Ir64BlockExecutor();
 
-        executor.executeOp(core, new Ir64Op.AddressTranslate(Aarch64AddressTranslateForm.S1E2R, 0));
+        executor.executeOp(core, new SystemOp64.AddressTranslate(Aarch64AddressTranslateForm.S1E2R, 0));
 
         long par = core.systemRegisterBus().read(Aarch64SystemRegisterId.PAR_EL1);
         assertEquals(0, par & F_BIT, "XN não afeta leitura de dados, só fetch de instrução");
@@ -495,7 +495,7 @@ class Aarch64VmsaSystemRegistersTest {
         core.setX(0, 0x100L);
         Ir64BlockExecutor executor = new Ir64BlockExecutor();
 
-        executor.executeOp(core, new Ir64Op.AddressTranslate(Aarch64AddressTranslateForm.S1E3R, 0));
+        executor.executeOp(core, new SystemOp64.AddressTranslate(Aarch64AddressTranslateForm.S1E3R, 0));
 
         long par = core.systemRegisterBus().read(Aarch64SystemRegisterId.PAR_EL1);
         assertEquals(0, par & F_BIT, "F=0: tradução bem-sucedida via TTBR0_EL3");
@@ -508,7 +508,7 @@ class Aarch64VmsaSystemRegistersTest {
         core.setX(0, 0x100L);
         Ir64BlockExecutor executor = new Ir64BlockExecutor();
 
-        executor.executeOp(core, new Ir64Op.AddressTranslate(Aarch64AddressTranslateForm.S1E3W, 0));
+        executor.executeOp(core, new SystemOp64.AddressTranslate(Aarch64AddressTranslateForm.S1E3W, 0));
 
         long par = core.systemRegisterBus().read(Aarch64SystemRegisterId.PAR_EL1);
         assertEquals(1, par & F_BIT, "S1E3W numa página só-leitura (AP[2]=1) deve falhar por permissão");
@@ -537,11 +537,11 @@ class Aarch64VmsaSystemRegistersTest {
         core.setX(0, 0x100L);
         Ir64BlockExecutor executor = new Ir64BlockExecutor();
 
-        executor.executeOp(core, new Ir64Op.AddressTranslate(Aarch64AddressTranslateForm.S1E2W, 0));
+        executor.executeOp(core, new SystemOp64.AddressTranslate(Aarch64AddressTranslateForm.S1E2W, 0));
         assertEquals(1, core.systemRegisterBus().read(Aarch64SystemRegisterId.PAR_EL1) & F_BIT,
                 "EL2 é só-leitura");
 
-        executor.executeOp(core, new Ir64Op.AddressTranslate(Aarch64AddressTranslateForm.S1E3W, 0));
+        executor.executeOp(core, new SystemOp64.AddressTranslate(Aarch64AddressTranslateForm.S1E3W, 0));
         assertEquals(0, core.systemRegisterBus().read(Aarch64SystemRegisterId.PAR_EL1) & F_BIT,
                 "EL3 é full-access, tabela independente da de EL2");
     }
@@ -591,7 +591,7 @@ class Aarch64VmsaSystemRegistersTest {
         Aarch64Core core = coreWithStage1AndStage2(AP_FULL_ACCESS, S2AP_READ_WRITE);
         Ir64BlockExecutor executor = new Ir64BlockExecutor();
 
-        executor.executeOp(core, new Ir64Op.AddressTranslate(Aarch64AddressTranslateForm.S12E1R, 31));
+        executor.executeOp(core, new SystemOp64.AddressTranslate(Aarch64AddressTranslateForm.S12E1R, 31));
 
         long par = core.systemRegisterBus().read(Aarch64SystemRegisterId.PAR_EL1);
         assertEquals(0, par & F_BIT);
@@ -604,7 +604,7 @@ class Aarch64VmsaSystemRegistersTest {
         core.systemRegisterBus().write(Aarch64SystemRegisterId.HCR_EL2, 1L);
         Ir64BlockExecutor executor = new Ir64BlockExecutor();
 
-        executor.executeOp(core, new Ir64Op.AddressTranslate(Aarch64AddressTranslateForm.S12E1R, 31));
+        executor.executeOp(core, new SystemOp64.AddressTranslate(Aarch64AddressTranslateForm.S12E1R, 31));
 
         long par = core.systemRegisterBus().read(Aarch64SystemRegisterId.PAR_EL1);
         assertEquals(0, par & F_BIT);
@@ -618,7 +618,7 @@ class Aarch64VmsaSystemRegistersTest {
         core.systemRegisterBus().write(Aarch64SystemRegisterId.HCR_EL2, 1L);
         Ir64BlockExecutor executor = new Ir64BlockExecutor();
 
-        executor.executeOp(core, new Ir64Op.AddressTranslate(Aarch64AddressTranslateForm.S12E1R, 31));
+        executor.executeOp(core, new SystemOp64.AddressTranslate(Aarch64AddressTranslateForm.S12E1R, 31));
 
         long par = core.systemRegisterBus().read(Aarch64SystemRegisterId.PAR_EL1);
         assertEquals(1, par & F_BIT, "F=1: stage-2 nega o acesso (S2AP=00)");
@@ -633,7 +633,7 @@ class Aarch64VmsaSystemRegistersTest {
         core.systemRegisterBus().write(Aarch64SystemRegisterId.HCR_EL2, 1L);
         Ir64BlockExecutor executor = new Ir64BlockExecutor();
 
-        executor.executeOp(core, new Ir64Op.AddressTranslate(Aarch64AddressTranslateForm.S12E0R, 31));
+        executor.executeOp(core, new SystemOp64.AddressTranslate(Aarch64AddressTranslateForm.S12E0R, 31));
 
         long par = core.systemRegisterBus().read(Aarch64SystemRegisterId.PAR_EL1);
         assertEquals(1, par & F_BIT);
@@ -649,7 +649,7 @@ class Aarch64VmsaSystemRegistersTest {
         Ir64BlockExecutor executor = new Ir64BlockExecutor();
 
         boolean pcChanged = executor.executeOp(
-                core, new Ir64Op.SystemInstruction(Ir64SystemInstructionOp.CACHE_MAINTENANCE_NOP));
+                core, new SystemOp64.SystemInstruction(Ir64SystemInstructionOp.CACHE_MAINTENANCE_NOP));
 
         assertFalse(pcChanged);
         assertEquals(0x20, core.pc());

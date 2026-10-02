@@ -2,6 +2,7 @@ package dev.vitorsilverio.armjitter.decoder64;
 
 import dev.vitorsilverio.armjitter.ir64.Ir64AddressingMode;
 import dev.vitorsilverio.armjitter.ir64.Ir64Op;
+import dev.vitorsilverio.armjitter.ir64.MemoryOp64;
 import dev.vitorsilverio.armjitter.memory.AddressSpace64;
 import dev.vitorsilverio.armjitter.support.TestAddressSpace;
 import org.junit.jupiter.api.Test;
@@ -91,7 +92,7 @@ class Aarch64LoadStoreRegisterReservedSpaceDecoderTest {
     @Test
     void ldrLiteralStillDecodesWithBit24Clear() {
         // LDR (literal) w0, #0 — sz=00,V=0,imm19=0,rt=0
-        Ir64Op.LoadLiteral64 op = (Ir64Op.LoadLiteral64) decodeAt(0x1000, 0x18000000);
+        MemoryOp64.LoadLiteral64 op = (MemoryOp64.LoadLiteral64) decodeAt(0x1000, 0x18000000);
         assertEquals(0, op.rt());
         assertEquals(0x1000L, op.address());
     }
@@ -99,28 +100,28 @@ class Aarch64LoadStoreRegisterReservedSpaceDecoderTest {
     @Test
     void sturXStillDecodesWithBit21Clear() {
         // STUR x0, [x0] — idx=UNSCALED(00), bit21=0
-        Ir64Op.Store64 op = (Ir64Op.Store64) decodeAt(0, 0xF8000000);
+        MemoryOp64.Store64 op = (MemoryOp64.Store64) decodeAt(0, 0xF8000000);
         assertEquals(Ir64AddressingMode.OFFSET, op.addressingMode());
     }
 
     @Test
     void strXPostIndexStillDecodes() {
         // STR x0, [x0], #0 — idx=POST_INDEX(01), bit21=0
-        Ir64Op.Store64 op = (Ir64Op.Store64) decodeAt(0, 0xF8000400);
+        MemoryOp64.Store64 op = (MemoryOp64.Store64) decodeAt(0, 0xF8000400);
         assertEquals(Ir64AddressingMode.POST_INDEX, op.addressingMode());
     }
 
     @Test
     void strXPreIndexStillDecodes() {
         // STR x0, [x0, #0]! — idx=PRE_INDEX(11), bit21=0
-        Ir64Op.Store64 op = (Ir64Op.Store64) decodeAt(0, 0xF8000C00);
+        MemoryOp64.Store64 op = (MemoryOp64.Store64) decodeAt(0, 0xF8000C00);
         assertEquals(Ir64AddressingMode.PRE_INDEX, op.addressingMode());
     }
 
     @Test
     void strXRegisterOffsetStillDecodes() {
         // STR x0, [x0, x0] — idx=REGISTER_OFFSET(10), bit21=1 (caso legítimo pré-existente)
-        Ir64Op.Store64 op = (Ir64Op.Store64) decodeAt(0, 0xF8206800);
+        MemoryOp64.Store64 op = (MemoryOp64.Store64) decodeAt(0, 0xF8206800);
         assertEquals(Ir64AddressingMode.REGISTER_OFFSET, op.addressingMode());
     }
 }

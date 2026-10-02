@@ -1,6 +1,6 @@
 package dev.vitorsilverio.armjitter.ir64;
 
-/// Operação de {@link Ir64Op.VectorFpArithmeticThreeSame} (AdvSIMD "three same" de ponto
+/// Operação de {@link AdvSimdFpOp64.FpArithmeticThreeSame} (AdvSIMD "three same" de ponto
 /// flutuante, B8.9) — só as formas de precisão SIMPLES/DUPLA (`esz` `2`/`3`, "sd" no
 /// `a64.decode` real do QEMU); meia-precisão (`esz=1`, "h") é `FEAT_FP16`, fora do Cortex-A53 do
 /// `virtual-arm-box` — ver `docs/isa-nao-aplicavel.tsv`. Cobre a forma VETORIAL (B8.9) e a forma

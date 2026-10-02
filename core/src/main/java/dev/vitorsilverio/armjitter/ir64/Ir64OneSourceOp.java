@@ -1,8 +1,8 @@
 package dev.vitorsilverio.armjitter.ir64;
 
-/// Sub-operação de {@link Ir64Op.DataProcessing1Source} (B8.2, subgrupo "Data-processing
+/// Sub-operação de {@link IntegerOp64.DataProcessing1Source} (B8.2, subgrupo "Data-processing
 /// (1 source)" de "Data Processing — Register"). `ABS`/`PACIA`/`AUTIA`/etc do MESMO subgrupo NÃO
-/// entram aqui: `ABS` tem record próprio ({@link Ir64Op.AbsGeneral}), `PACIA`/`AUTIA` são
+/// entram aqui: `ABS` tem record próprio ({@link IntegerOp64.AbsGeneral}), `PACIA`/`AUTIA` são
 /// `FEAT_PAuth` (B19.15, ainda não implementada).
 public enum Ir64OneSourceOp {
     /// `RBIT` (`ARM DDI 0487 C6.2.240`): inverte a ordem dos BITS do registrador inteiro.

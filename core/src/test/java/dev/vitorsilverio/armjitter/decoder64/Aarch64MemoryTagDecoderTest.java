@@ -1,8 +1,10 @@
 package dev.vitorsilverio.armjitter.decoder64;
 
 import dev.vitorsilverio.armjitter.arch64.Aarch64Architecture;
+import dev.vitorsilverio.armjitter.ir64.IntegerOp64;
 import dev.vitorsilverio.armjitter.ir64.Ir64AddressingMode;
 import dev.vitorsilverio.armjitter.ir64.Ir64Op;
+import dev.vitorsilverio.armjitter.ir64.MemoryOp64;
 import dev.vitorsilverio.armjitter.memory.AddressSpace64;
 import dev.vitorsilverio.armjitter.support.TestAddressSpace;
 import org.junit.jupiter.api.Test;
@@ -62,8 +64,8 @@ class Aarch64MemoryTagDecoderTest {
 
     @Test
     void decodesStgOffsetPreAndPostIndex() {
-        Ir64Op.MemoryTag offset = (Ir64Op.MemoryTag) decode(MTE_DECODER, STG_OFFSET);
-        assertEquals(Ir64Op.Ir64MemoryTagOperation.STORE, offset.operation());
+        MemoryOp64.MemoryTag offset = (MemoryOp64.MemoryTag) decode(MTE_DECODER, STG_OFFSET);
+        assertEquals(MemoryOp64.Ir64MemoryTagOperation.STORE, offset.operation());
         assertEquals(false, offset.zeroData());
         assertEquals(1, offset.granules());
         assertEquals(0, offset.rt());
@@ -71,13 +73,13 @@ class Aarch64MemoryTagDecoderTest {
         assertEquals(Ir64AddressingMode.OFFSET, offset.addressingMode());
         assertEquals(0L, offset.immediate());
 
-        Ir64Op.MemoryTag pre = (Ir64Op.MemoryTag) decode(MTE_DECODER, STG_PRE);
+        MemoryOp64.MemoryTag pre = (MemoryOp64.MemoryTag) decode(MTE_DECODER, STG_PRE);
         assertEquals(2, pre.rt());
         assertEquals(3, pre.rn());
         assertEquals(Ir64AddressingMode.PRE_INDEX, pre.addressingMode());
         assertEquals(32L, pre.immediate());
 
-        Ir64Op.MemoryTag post = (Ir64Op.MemoryTag) decode(MTE_DECODER, STG_POST);
+        MemoryOp64.MemoryTag post = (MemoryOp64.MemoryTag) decode(MTE_DECODER, STG_POST);
         assertEquals(4, post.rt());
         assertEquals(5, post.rn());
         assertEquals(Ir64AddressingMode.POST_INDEX, post.addressingMode());
@@ -86,8 +88,8 @@ class Aarch64MemoryTagDecoderTest {
 
     @Test
     void decodesLdgAsSingleOffsetFormWithoutWriteback() {
-        Ir64Op.MemoryTag ldg = (Ir64Op.MemoryTag) decode(MTE_DECODER, LDG);
-        assertEquals(Ir64Op.Ir64MemoryTagOperation.LOAD, ldg.operation());
+        MemoryOp64.MemoryTag ldg = (MemoryOp64.MemoryTag) decode(MTE_DECODER, LDG);
+        assertEquals(MemoryOp64.Ir64MemoryTagOperation.LOAD, ldg.operation());
         assertEquals(false, ldg.zeroData());
         assertEquals(1, ldg.granules());
         assertEquals(6, ldg.rt());
@@ -98,78 +100,78 @@ class Aarch64MemoryTagDecoderTest {
 
     @Test
     void decodesStzgZeroingFlagAndAllAddressingModes() {
-        Ir64Op.MemoryTag offset = (Ir64Op.MemoryTag) decode(MTE_DECODER, STZG_OFFSET);
+        MemoryOp64.MemoryTag offset = (MemoryOp64.MemoryTag) decode(MTE_DECODER, STZG_OFFSET);
         assertEquals(true, offset.zeroData());
         assertEquals(1, offset.granules());
         assertEquals(8, offset.rt());
         assertEquals(9, offset.rn());
         assertEquals(Ir64AddressingMode.OFFSET, offset.addressingMode());
 
-        Ir64Op.MemoryTag pre = (Ir64Op.MemoryTag) decode(MTE_DECODER, STZG_PRE);
+        MemoryOp64.MemoryTag pre = (MemoryOp64.MemoryTag) decode(MTE_DECODER, STZG_PRE);
         assertEquals(Ir64AddressingMode.PRE_INDEX, pre.addressingMode());
         assertEquals(16L, pre.immediate());
 
-        Ir64Op.MemoryTag post = (Ir64Op.MemoryTag) decode(MTE_DECODER, STZG_POST);
+        MemoryOp64.MemoryTag post = (MemoryOp64.MemoryTag) decode(MTE_DECODER, STZG_POST);
         assertEquals(Ir64AddressingMode.POST_INDEX, post.addressingMode());
         assertEquals(-32L, post.immediate());
     }
 
     @Test
     void decodesSt2gAndStz2gAsTwoGranuleForms() {
-        Ir64Op.MemoryTag st2g = (Ir64Op.MemoryTag) decode(MTE_DECODER, ST2G_OFFSET);
+        MemoryOp64.MemoryTag st2g = (MemoryOp64.MemoryTag) decode(MTE_DECODER, ST2G_OFFSET);
         assertEquals(false, st2g.zeroData());
         assertEquals(2, st2g.granules());
         assertEquals(14, st2g.rt());
         assertEquals(15, st2g.rn());
 
-        assertEquals(Ir64AddressingMode.PRE_INDEX, ((Ir64Op.MemoryTag) decode(MTE_DECODER, ST2G_PRE)).addressingMode());
-        assertEquals(Ir64AddressingMode.POST_INDEX, ((Ir64Op.MemoryTag) decode(MTE_DECODER, ST2G_POST)).addressingMode());
+        assertEquals(Ir64AddressingMode.PRE_INDEX, ((MemoryOp64.MemoryTag) decode(MTE_DECODER, ST2G_PRE)).addressingMode());
+        assertEquals(Ir64AddressingMode.POST_INDEX, ((MemoryOp64.MemoryTag) decode(MTE_DECODER, ST2G_POST)).addressingMode());
 
-        Ir64Op.MemoryTag stz2g = (Ir64Op.MemoryTag) decode(MTE_DECODER, STZ2G_OFFSET);
+        MemoryOp64.MemoryTag stz2g = (MemoryOp64.MemoryTag) decode(MTE_DECODER, STZ2G_OFFSET);
         assertEquals(true, stz2g.zeroData());
         assertEquals(2, stz2g.granules());
         assertEquals(20, stz2g.rt());
         assertEquals(21, stz2g.rn());
 
-        assertEquals(Ir64AddressingMode.PRE_INDEX, ((Ir64Op.MemoryTag) decode(MTE_DECODER, STZ2G_PRE)).addressingMode());
-        assertEquals(Ir64AddressingMode.POST_INDEX, ((Ir64Op.MemoryTag) decode(MTE_DECODER, STZ2G_POST)).addressingMode());
+        assertEquals(Ir64AddressingMode.PRE_INDEX, ((MemoryOp64.MemoryTag) decode(MTE_DECODER, STZ2G_PRE)).addressingMode());
+        assertEquals(Ir64AddressingMode.POST_INDEX, ((MemoryOp64.MemoryTag) decode(MTE_DECODER, STZ2G_POST)).addressingMode());
     }
 
     @Test
     void decodesMultipleFormsStgmLdgmStzgm() {
-        Ir64Op.MemoryTagMultiple stgm = (Ir64Op.MemoryTagMultiple) decode(MTE_DECODER, STGM);
-        assertEquals(Ir64Op.Ir64MemoryTagMultipleOperation.STORE_TAGS, stgm.operation());
+        MemoryOp64.MemoryTagMultiple stgm = (MemoryOp64.MemoryTagMultiple) decode(MTE_DECODER, STGM);
+        assertEquals(MemoryOp64.Ir64MemoryTagMultipleOperation.STORE_TAGS, stgm.operation());
         assertEquals(0, stgm.rt());
         assertEquals(1, stgm.rn());
 
-        Ir64Op.MemoryTagMultiple ldgm = (Ir64Op.MemoryTagMultiple) decode(MTE_DECODER, LDGM);
-        assertEquals(Ir64Op.Ir64MemoryTagMultipleOperation.LOAD_TAGS, ldgm.operation());
+        MemoryOp64.MemoryTagMultiple ldgm = (MemoryOp64.MemoryTagMultiple) decode(MTE_DECODER, LDGM);
+        assertEquals(MemoryOp64.Ir64MemoryTagMultipleOperation.LOAD_TAGS, ldgm.operation());
         assertEquals(2, ldgm.rt());
         assertEquals(3, ldgm.rn());
 
-        Ir64Op.MemoryTagMultiple stzgm = (Ir64Op.MemoryTagMultiple) decode(MTE_DECODER, STZGM);
-        assertEquals(Ir64Op.Ir64MemoryTagMultipleOperation.STORE_ZERO_DATA_TAGS, stzgm.operation());
+        MemoryOp64.MemoryTagMultiple stzgm = (MemoryOp64.MemoryTagMultiple) decode(MTE_DECODER, STZGM);
+        assertEquals(MemoryOp64.Ir64MemoryTagMultipleOperation.STORE_ZERO_DATA_TAGS, stzgm.operation());
         assertEquals(4, stzgm.rt());
         assertEquals(5, stzgm.rn());
     }
 
     @Test
     void decodesStgpWithAllAddressingModes() {
-        Ir64Op.StorePairTag offset = (Ir64Op.StorePairTag) decode(MTE_DECODER, STGP_OFFSET);
+        MemoryOp64.StorePairTag offset = (MemoryOp64.StorePairTag) decode(MTE_DECODER, STGP_OFFSET);
         assertEquals(0, offset.rt());
         assertEquals(1, offset.rt2());
         assertEquals(2, offset.rn());
         assertEquals(Ir64AddressingMode.OFFSET, offset.addressingMode());
         assertEquals(0L, offset.immediate());
 
-        Ir64Op.StorePairTag pre = (Ir64Op.StorePairTag) decode(MTE_DECODER, STGP_PRE);
+        MemoryOp64.StorePairTag pre = (MemoryOp64.StorePairTag) decode(MTE_DECODER, STGP_PRE);
         assertEquals(3, pre.rt());
         assertEquals(4, pre.rt2());
         assertEquals(5, pre.rn());
         assertEquals(Ir64AddressingMode.PRE_INDEX, pre.addressingMode());
         assertEquals(32L, pre.immediate());
 
-        Ir64Op.StorePairTag post = (Ir64Op.StorePairTag) decode(MTE_DECODER, STGP_POST);
+        MemoryOp64.StorePairTag post = (MemoryOp64.StorePairTag) decode(MTE_DECODER, STGP_POST);
         assertEquals(6, post.rt());
         assertEquals(7, post.rt2());
         assertEquals(8, post.rn());
@@ -179,24 +181,24 @@ class Aarch64MemoryTagDecoderTest {
 
     @Test
     void decodesSubpSubpsIrgGmi() {
-        Ir64Op.SubtractPointer subp = (Ir64Op.SubtractPointer) decode(MTE_DECODER, SUBP);
+        IntegerOp64.SubtractPointer subp = (IntegerOp64.SubtractPointer) decode(MTE_DECODER, SUBP);
         assertEquals(false, subp.setFlags());
         assertEquals(0, subp.rd());
         assertEquals(1, subp.rn());
         assertEquals(2, subp.rm());
 
-        Ir64Op.SubtractPointer subps = (Ir64Op.SubtractPointer) decode(MTE_DECODER, SUBPS);
+        IntegerOp64.SubtractPointer subps = (IntegerOp64.SubtractPointer) decode(MTE_DECODER, SUBPS);
         assertEquals(true, subps.setFlags());
         assertEquals(3, subps.rd());
         assertEquals(4, subps.rn());
         assertEquals(5, subps.rm());
 
-        Ir64Op.InsertRandomTag irg = (Ir64Op.InsertRandomTag) decode(MTE_DECODER, IRG);
+        IntegerOp64.InsertRandomTag irg = (IntegerOp64.InsertRandomTag) decode(MTE_DECODER, IRG);
         assertEquals(0, irg.rd());
         assertEquals(1, irg.rn());
         assertEquals(2, irg.rm());
 
-        Ir64Op.TagMaskInsert gmi = (Ir64Op.TagMaskInsert) decode(MTE_DECODER, GMI);
+        IntegerOp64.TagMaskInsert gmi = (IntegerOp64.TagMaskInsert) decode(MTE_DECODER, GMI);
         assertEquals(0, gmi.rd());
         assertEquals(1, gmi.rn());
         assertEquals(2, gmi.rm());

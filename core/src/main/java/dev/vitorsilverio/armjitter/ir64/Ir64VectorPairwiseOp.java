@@ -1,6 +1,6 @@
 package dev.vitorsilverio.armjitter.ir64;
 
-/// Operação de {@link Ir64Op.VectorArithmeticPairwise} (`ADDP_v`/`SMAXP_v`/`SMINP_v`/`UMAXP_v`/
+/// Operação de {@link AdvSimdIntegerOp64.ArithmeticPairwise} (`ADDP_v`/`SMAXP_v`/`SMINP_v`/`UMAXP_v`/
 /// `UMINP_v`, B8.7) — concatena `Rn:Rm` (`Rn` primeiro) e combina pares de elementos ADJACENTES
 /// nessa sequência de `2 * elementos-por-registrador`, produzindo `elementos-por-registrador`
 /// resultados (metade de `Rn`, metade de `Rm`).

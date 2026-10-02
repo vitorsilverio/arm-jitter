@@ -2,7 +2,7 @@ package dev.vitorsilverio.armjitter.executor64;
 
 import dev.vitorsilverio.armjitter.core64.Aarch64Core;
 import dev.vitorsilverio.armjitter.core64.Aarch64ScalableRegisters;
-import dev.vitorsilverio.armjitter.ir64.Ir64Op;
+import dev.vitorsilverio.armjitter.ir64.SveFpOp64;
 
 /// Semântica de `FADDP`/`FMAXNMP`/`FMINNMP`/`FMAXP`/`FMINP` (B17.23) — soma/máximo/mínimo par a par dentro de
 /// cada segmento de 128 bits. Medido contra `DO_ZPZZ_PAIR_FP` do QEMU real: para cada par de posições `(p,
@@ -18,7 +18,7 @@ final class SveFpPairwiseOps {
     }
 
     /// Executa uma operação do grupo. `true` = a instrução já entrou numa exceção (acesso negado).
-    static boolean execute(Aarch64Core core, Ir64Op.SveFpPairwise op) {
+    static boolean execute(Aarch64Core core, SveFpOp64.FpPairwise op) {
         if (!SvePredicateOps.accessAllowed(core, op.instructionAddress())) {
             return true;
         }
@@ -45,7 +45,7 @@ final class SveFpPairwiseOps {
         return false;
     }
 
-    private static long combine(Ir64Op.SveFpPairwise.Op op, long a, long b, SveFloat.Env env) {
+    private static long combine(SveFpOp64.FpPairwise.Op op, long a, long b, SveFloat.Env env) {
         return switch (op) {
             case FADDP -> SveFloat.add(a, b, false, env);
             case FMAXNMP -> SveFloat.maxMinNumber(a, b, true, env);

@@ -3,6 +3,7 @@ package dev.vitorsilverio.armjitter.decoder64;
 import dev.vitorsilverio.armjitter.arch64.Aarch64Architecture;
 import dev.vitorsilverio.armjitter.arch64.Aarch64Feature;
 import dev.vitorsilverio.armjitter.ir64.Ir64Op;
+import dev.vitorsilverio.armjitter.ir64.SveFpOp64;
 
 /// Decoder SVE da comparação de ponto flutuante e das reduções de ponto flutuante da B17.15: no prefixo `0x65`, as sete
 /// `FCM*`/`FAC*` vetor×vetor, as seis `FCM*` com zero, as cinco reduções rápidas (`FADDV`/`FMAXNMV`/`FMINNMV`/`FMAXV`/
@@ -75,12 +76,12 @@ final class Aarch64SveFpCompareReduceDecoder {
             return decodeCompareZero(word, esz, address);
         }
         if ((word & FAST_REDUCTION_MASK) == FAST_REDUCTION_VALUE) {
-            Ir64Op.SveFpCompareReduce.Op op = switch ((word >>> REDUCTION_OPCODE_SHIFT) & OPCODE_MASK) {
-                case REDUCTION_ADD -> Ir64Op.SveFpCompareReduce.Op.FADDV;
-                case REDUCTION_MAXNM -> Ir64Op.SveFpCompareReduce.Op.FMAXNMV;
-                case REDUCTION_MINNM -> Ir64Op.SveFpCompareReduce.Op.FMINNMV;
-                case REDUCTION_MAX -> Ir64Op.SveFpCompareReduce.Op.FMAXV;
-                case REDUCTION_MIN -> Ir64Op.SveFpCompareReduce.Op.FMINV;
+            SveFpOp64.FpCompareReduce.Op op = switch ((word >>> REDUCTION_OPCODE_SHIFT) & OPCODE_MASK) {
+                case REDUCTION_ADD -> SveFpOp64.FpCompareReduce.Op.FADDV;
+                case REDUCTION_MAXNM -> SveFpOp64.FpCompareReduce.Op.FMAXNMV;
+                case REDUCTION_MINNM -> SveFpOp64.FpCompareReduce.Op.FMINNMV;
+                case REDUCTION_MAX -> SveFpOp64.FpCompareReduce.Op.FMAXV;
+                case REDUCTION_MIN -> SveFpOp64.FpCompareReduce.Op.FMINV;
                 default -> null;
             };
             return op == null ? null : reduction(op, word, esz, address);
@@ -88,7 +89,7 @@ final class Aarch64SveFpCompareReduceDecoder {
         if ((word & SERIAL_REDUCTION_MASK) == SERIAL_REDUCTION_VALUE) {
             // `@rdn_pg_rm`: `Vdn` (bits 4:0) é entrada e saída; `Zm` fica nos bits 9:5.
             int rd = word & REGISTER_MASK;
-            return new Ir64Op.SveFpCompareReduce(Ir64Op.SveFpCompareReduce.Op.FADDA, esz, rd, rd,
+            return new SveFpOp64.FpCompareReduce(SveFpOp64.FpCompareReduce.Op.FADDA, esz, rd, rd,
                     (word >>> RN_SHIFT) & REGISTER_MASK, (word >>> PG_SHIFT) & PREDICATE_MASK, false, address);
         }
         // Por último: os opcodes `000`/`001`/`100`/`101` do mesmo prefixo pertencem às reduções ou não são alocados.
@@ -102,51 +103,51 @@ final class Aarch64SveFpCompareReduceDecoder {
                 || !architecture.has(Aarch64Feature.SVE2_1) && !architecture.has(Aarch64Feature.SVE2_2)) {
             return null; // `aa64_sme2p1_or_sve2p1`; SVE2p2 implica SVE2p1
         }
-        Ir64Op.SveFpCompareReduce.Op op = switch ((word >>> REDUCTION_OPCODE_SHIFT) & OPCODE_MASK) {
-            case REDUCTION_ADD -> Ir64Op.SveFpCompareReduce.Op.FADDQV;
-            case REDUCTION_MAXNM -> Ir64Op.SveFpCompareReduce.Op.FMAXNMQV;
-            case REDUCTION_MINNM -> Ir64Op.SveFpCompareReduce.Op.FMINNMQV;
-            case REDUCTION_MAX -> Ir64Op.SveFpCompareReduce.Op.FMAXQV;
-            case REDUCTION_MIN -> Ir64Op.SveFpCompareReduce.Op.FMINQV;
+        SveFpOp64.FpCompareReduce.Op op = switch ((word >>> REDUCTION_OPCODE_SHIFT) & OPCODE_MASK) {
+            case REDUCTION_ADD -> SveFpOp64.FpCompareReduce.Op.FADDQV;
+            case REDUCTION_MAXNM -> SveFpOp64.FpCompareReduce.Op.FMAXNMQV;
+            case REDUCTION_MINNM -> SveFpOp64.FpCompareReduce.Op.FMINNMQV;
+            case REDUCTION_MAX -> SveFpOp64.FpCompareReduce.Op.FMAXQV;
+            case REDUCTION_MIN -> SveFpOp64.FpCompareReduce.Op.FMINQV;
             default -> null;
         };
         return op == null ? null : reduction(op, word, esz, address);
     }
 
-    private static Ir64Op reduction(Ir64Op.SveFpCompareReduce.Op op, int word, int esz, long address) {
-        return new Ir64Op.SveFpCompareReduce(op, esz, word & REGISTER_MASK, (word >>> RN_SHIFT) & REGISTER_MASK, 0,
+    private static Ir64Op reduction(SveFpOp64.FpCompareReduce.Op op, int word, int esz, long address) {
+        return new SveFpOp64.FpCompareReduce(op, esz, word & REGISTER_MASK, (word >>> RN_SHIFT) & REGISTER_MASK, 0,
                 (word >>> PG_SHIFT) & PREDICATE_MASK, false, address);
     }
 
     private static Ir64Op decodeCompare(int word, int esz, long address) {
         boolean bit4 = ((word >>> LOW_BIT) & 1) != 0;
-        Ir64Op.SveFpCompareReduce.Op op = switch ((word >>> OPCODE_SHIFT) & OPCODE_MASK) {
-            case COMPARE_GE_GT -> bit4 ? Ir64Op.SveFpCompareReduce.Op.FCMGT : Ir64Op.SveFpCompareReduce.Op.FCMGE;
-            case COMPARE_EQ_NE -> bit4 ? Ir64Op.SveFpCompareReduce.Op.FCMNE : Ir64Op.SveFpCompareReduce.Op.FCMEQ;
-            case COMPARE_UO_ACGE -> bit4 ? Ir64Op.SveFpCompareReduce.Op.FACGE : Ir64Op.SveFpCompareReduce.Op.FCMUO;
-            default -> bit4 ? Ir64Op.SveFpCompareReduce.Op.FACGT : null; // `111`; com bit 4 = 0: não alocado
+        SveFpOp64.FpCompareReduce.Op op = switch ((word >>> OPCODE_SHIFT) & OPCODE_MASK) {
+            case COMPARE_GE_GT -> bit4 ? SveFpOp64.FpCompareReduce.Op.FCMGT : SveFpOp64.FpCompareReduce.Op.FCMGE;
+            case COMPARE_EQ_NE -> bit4 ? SveFpOp64.FpCompareReduce.Op.FCMNE : SveFpOp64.FpCompareReduce.Op.FCMEQ;
+            case COMPARE_UO_ACGE -> bit4 ? SveFpOp64.FpCompareReduce.Op.FACGE : SveFpOp64.FpCompareReduce.Op.FCMUO;
+            default -> bit4 ? SveFpOp64.FpCompareReduce.Op.FACGT : null; // `111`; com bit 4 = 0: não alocado
             case 0b000, 0b001, 0b100, 0b101 -> null;
         };
         if (op == null) {
             return null;
         }
-        return new Ir64Op.SveFpCompareReduce(op, esz, word & PREDICATE_DESTINATION_MASK,
+        return new SveFpOp64.FpCompareReduce(op, esz, word & PREDICATE_DESTINATION_MASK,
                 (word >>> RN_SHIFT) & REGISTER_MASK, (word >>> RM_SHIFT) & REGISTER_MASK,
                 (word >>> PG_SHIFT) & PREDICATE_MASK, false, address);
     }
 
     private static Ir64Op decodeCompareZero(int word, int esz, long address) {
         boolean bit4 = ((word >>> LOW_BIT) & 1) != 0;
-        Ir64Op.SveFpCompareReduce.Op op = switch ((word >>> ZERO_SELECT_SHIFT) & ZERO_SELECT_MASK) {
-            case ZERO_GE_GT -> bit4 ? Ir64Op.SveFpCompareReduce.Op.FCMGT : Ir64Op.SveFpCompareReduce.Op.FCMGE;
-            case ZERO_LT_LE -> bit4 ? Ir64Op.SveFpCompareReduce.Op.FCMLE : Ir64Op.SveFpCompareReduce.Op.FCMLT;
-            case ZERO_EQ -> bit4 ? null : Ir64Op.SveFpCompareReduce.Op.FCMEQ; // `EQ` só tem `bit 4 = 0`
-            default -> bit4 ? null : Ir64Op.SveFpCompareReduce.Op.FCMNE; // `ZERO_NE`
+        SveFpOp64.FpCompareReduce.Op op = switch ((word >>> ZERO_SELECT_SHIFT) & ZERO_SELECT_MASK) {
+            case ZERO_GE_GT -> bit4 ? SveFpOp64.FpCompareReduce.Op.FCMGT : SveFpOp64.FpCompareReduce.Op.FCMGE;
+            case ZERO_LT_LE -> bit4 ? SveFpOp64.FpCompareReduce.Op.FCMLE : SveFpOp64.FpCompareReduce.Op.FCMLT;
+            case ZERO_EQ -> bit4 ? null : SveFpOp64.FpCompareReduce.Op.FCMEQ; // `EQ` só tem `bit 4 = 0`
+            default -> bit4 ? null : SveFpOp64.FpCompareReduce.Op.FCMNE; // `ZERO_NE`
         };
         if (op == null) {
             return null;
         }
-        return new Ir64Op.SveFpCompareReduce(op, esz, word & PREDICATE_DESTINATION_MASK,
+        return new SveFpOp64.FpCompareReduce(op, esz, word & PREDICATE_DESTINATION_MASK,
                 (word >>> RN_SHIFT) & REGISTER_MASK, 0, (word >>> PG_SHIFT) & PREDICATE_MASK, true, address);
     }
 }

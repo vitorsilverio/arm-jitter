@@ -1,6 +1,7 @@
 package dev.vitorsilverio.armjitter.decoder64;
 
 import dev.vitorsilverio.armjitter.arch64.Aarch64Architecture;
+import dev.vitorsilverio.armjitter.ir64.IntegerOp64;
 import dev.vitorsilverio.armjitter.ir64.Ir64MinMaxOp;
 import dev.vitorsilverio.armjitter.ir64.Ir64OneSourceOp;
 import dev.vitorsilverio.armjitter.ir64.Ir64Op;
@@ -48,8 +49,8 @@ class Aarch64Cssc2SourceResidualDecoderTest {
     @Test
     void ctzGatedByCsscSameAsAbs() {
         assertThrows(UnsupportedOperationException.class, () -> decode(DEFAULT_DECODER, CTZ_X0_X1));
-        Ir64Op.DataProcessing1Source op =
-                (Ir64Op.DataProcessing1Source) decode(CSSC_DECODER, CTZ_X0_X1);
+        IntegerOp64.DataProcessing1Source op =
+                (IntegerOp64.DataProcessing1Source) decode(CSSC_DECODER, CTZ_X0_X1);
         assertEquals(Ir64OneSourceOp.CTZ, op.opcode());
         assertEquals(0, op.dst());
         assertEquals(1, op.src());
@@ -58,8 +59,8 @@ class Aarch64Cssc2SourceResidualDecoderTest {
 
     @Test
     void ctzNarrowForm() {
-        Ir64Op.DataProcessing1Source op =
-                (Ir64Op.DataProcessing1Source) decode(CSSC_DECODER, CTZ_W0_W1);
+        IntegerOp64.DataProcessing1Source op =
+                (IntegerOp64.DataProcessing1Source) decode(CSSC_DECODER, CTZ_W0_W1);
         assertEquals(Ir64OneSourceOp.CTZ, op.opcode());
         assertFalse(op.wide());
     }
@@ -82,9 +83,9 @@ class Aarch64Cssc2SourceResidualDecoderTest {
         // (CTZ continua exigindo `opcode2==0`, nunca confunde as duas formas).
         int autdaShaped = (CTZ_X0_X1 & ~(0b1_1111 << 16)) | (1 << 16);
         Ir64Op op = decode(CSSC_DECODER, autdaShaped);
-        assertTrue(op instanceof Ir64Op.PointerAuthInPlace);
+        assertTrue(op instanceof IntegerOp64.PointerAuthInPlace);
         assertEquals(dev.vitorsilverio.armjitter.ir64.Ir64PointerAuthOp.AUTDA,
-                ((Ir64Op.PointerAuthInPlace) op).op());
+                ((IntegerOp64.PointerAuthInPlace) op).op());
     }
 
     // ── SMAX/SMIN/UMAX/UMIN ─────────────────────────────────────────────────────────────────────
@@ -99,26 +100,26 @@ class Aarch64Cssc2SourceResidualDecoderTest {
 
     @Test
     void decodesAllFourOperationsWithCorrectRegisters() {
-        Ir64Op.MinMaxGeneral smax = (Ir64Op.MinMaxGeneral) decode(CSSC_DECODER, SMAX_X0_X1_X2);
+        IntegerOp64.MinMaxGeneral smax = (IntegerOp64.MinMaxGeneral) decode(CSSC_DECODER, SMAX_X0_X1_X2);
         assertEquals(Ir64MinMaxOp.SMAX, smax.op());
         assertEquals(0, smax.dst());
         assertEquals(1, smax.src1());
         assertEquals(2, smax.src2());
         assertTrue(smax.wide());
 
-        Ir64Op.MinMaxGeneral umax = (Ir64Op.MinMaxGeneral) decode(CSSC_DECODER, UMAX_X0_X1_X2);
+        IntegerOp64.MinMaxGeneral umax = (IntegerOp64.MinMaxGeneral) decode(CSSC_DECODER, UMAX_X0_X1_X2);
         assertEquals(Ir64MinMaxOp.UMAX, umax.op());
 
-        Ir64Op.MinMaxGeneral smin = (Ir64Op.MinMaxGeneral) decode(CSSC_DECODER, SMIN_X0_X1_X2);
+        IntegerOp64.MinMaxGeneral smin = (IntegerOp64.MinMaxGeneral) decode(CSSC_DECODER, SMIN_X0_X1_X2);
         assertEquals(Ir64MinMaxOp.SMIN, smin.op());
 
-        Ir64Op.MinMaxGeneral umin = (Ir64Op.MinMaxGeneral) decode(CSSC_DECODER, UMIN_X0_X1_X2);
+        IntegerOp64.MinMaxGeneral umin = (IntegerOp64.MinMaxGeneral) decode(CSSC_DECODER, UMIN_X0_X1_X2);
         assertEquals(Ir64MinMaxOp.UMIN, umin.op());
     }
 
     @Test
     void minMaxNarrowForm() {
-        Ir64Op.MinMaxGeneral op = (Ir64Op.MinMaxGeneral) decode(CSSC_DECODER, SMAX_W0_W1_W2);
+        IntegerOp64.MinMaxGeneral op = (IntegerOp64.MinMaxGeneral) decode(CSSC_DECODER, SMAX_W0_W1_W2);
         assertEquals(Ir64MinMaxOp.SMAX, op.op());
         assertFalse(op.wide());
     }

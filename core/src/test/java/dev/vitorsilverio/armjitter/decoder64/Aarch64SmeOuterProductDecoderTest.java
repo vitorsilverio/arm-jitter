@@ -3,6 +3,7 @@ package dev.vitorsilverio.armjitter.decoder64;
 import dev.vitorsilverio.armjitter.arch64.Aarch64Architecture;
 import dev.vitorsilverio.armjitter.arch64.Aarch64Feature;
 import dev.vitorsilverio.armjitter.ir64.Ir64Op;
+import dev.vitorsilverio.armjitter.ir64.SmeOp64;
 import dev.vitorsilverio.armjitter.memory.AddressSpace64;
 import dev.vitorsilverio.armjitter.support.TestAddressSpace;
 import org.junit.jupiter.api.Test;
@@ -80,9 +81,9 @@ class Aarch64SmeOuterProductDecoderTest {
             "0xA183204B, UMOPA2_S, 3, 2, 3, 0, 1, false",
             "0xA1832058, UMOPA2_S, 0, 2, 3, 0, 1, true",
     })
-    void decodesEveryEncodingWithItsFields(String word, Ir64Op.SmeOuterProduct.Op expected, int tile, int zn, int zm,
+    void decodesEveryEncodingWithItsFields(String word, SmeOp64.OuterProduct.Op expected, int tile, int zn, int zm,
             int pn, int pm, boolean subtract) {
-        Ir64Op.SmeOuterProduct op = assertInstanceOf(Ir64Op.SmeOuterProduct.class,
+        SmeOp64.OuterProduct op = assertInstanceOf(SmeOp64.OuterProduct.class,
                 decode(ALL_DECODER, (int) Long.decode(word).longValue()));
         assertEquals(expected, op.op());
         assertEquals(tile, op.tile());
@@ -97,16 +98,16 @@ class Aarch64SmeOuterProductDecoderTest {
     @Test
     void theTileFieldWidthFollowsTheAccumulatorElementSize() {
         // `zad:1` (16 bits) = 2 tiles, `zad:2` (32 bits) = 4, `zad:3` (64 bits) = 8 — o tile 7 só existe em `.d`.
-        assertEquals(1, ((Ir64Op.SmeOuterProduct) decode(ALL_DECODER, 0x81844469)).tile());
-        assertEquals(3, ((Ir64Op.SmeOuterProduct) decode(ALL_DECODER, 0x80844463)).tile());
-        assertEquals(7, ((Ir64Op.SmeOuterProduct) decode(ALL_DECODER, 0x80C44467)).tile());
+        assertEquals(1, ((SmeOp64.OuterProduct) decode(ALL_DECODER, 0x81844469)).tile());
+        assertEquals(3, ((SmeOp64.OuterProduct) decode(ALL_DECODER, 0x80844463)).tile());
+        assertEquals(7, ((SmeOp64.OuterProduct) decode(ALL_DECODER, 0x80C44467)).tile());
     }
 
     @Test
     void onlyFeatSmeFormsDecodeOnAPlainSmePreset() {
         for (int word : new int[] {0xC0904460, 0xC091D7E3, 0x80844463, 0x81A44462, 0x81832041, 0xA0844462, 0xA0A44460,
                 0xA1844462, 0xA1A44460}) {
-            assertInstanceOf(Ir64Op.SmeOuterProduct.class, decode(SME_DECODER, word), Integer.toHexString(word));
+            assertInstanceOf(SmeOp64.OuterProduct.class, decode(SME_DECODER, word), Integer.toHexString(word));
         }
     }
 
@@ -125,7 +126,7 @@ class Aarch64SmeOuterProductDecoderTest {
         for (int word : gated) {
             assertThrows(UnsupportedOperationException.class, () -> decode(SME_DECODER, word),
                     Integer.toHexString(word));
-            assertInstanceOf(Ir64Op.SmeOuterProduct.class, decode(ALL_DECODER, word), Integer.toHexString(word));
+            assertInstanceOf(SmeOp64.OuterProduct.class, decode(ALL_DECODER, word), Integer.toHexString(word));
         }
     }
 
@@ -148,7 +149,7 @@ class Aarch64SmeOuterProductDecoderTest {
     private static void assertAccepts(Aarch64Feature feature, int word) {
         Aarch64Architecture architecture = Aarch64Architecture.extending(Aarch64Architecture.ARMV9_2_A,
                 "teste-op-dec-" + feature, feature);
-        assertInstanceOf(Ir64Op.SmeOuterProduct.class, decode(new Aarch64Decoder(architecture), word));
+        assertInstanceOf(SmeOp64.OuterProduct.class, decode(new Aarch64Decoder(architecture), word));
     }
 
     private static void assertRejects(Aarch64Feature feature, int word) {
@@ -181,7 +182,7 @@ class Aarch64SmeOuterProductDecoderTest {
 
     @Test
     void theTwoFp8FormsHaveNoSubtractBit() {
-        assertFalse(((Ir64Op.SmeOuterProduct) decode(ALL_DECODER, 0x80A44463)).subtract());
-        assertFalse(((Ir64Op.SmeOuterProduct) decode(ALL_DECODER, 0x80A44469)).subtract());
+        assertFalse(((SmeOp64.OuterProduct) decode(ALL_DECODER, 0x80A44463)).subtract());
+        assertFalse(((SmeOp64.OuterProduct) decode(ALL_DECODER, 0x80A44469)).subtract());
     }
 }

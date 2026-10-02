@@ -1,6 +1,7 @@
 package dev.vitorsilverio.armjitter.decoder64;
 
 import dev.vitorsilverio.armjitter.arch64.Aarch64Architecture;
+import dev.vitorsilverio.armjitter.ir64.FpOp64;
 import dev.vitorsilverio.armjitter.ir64.Ir64Op;
 import dev.vitorsilverio.armjitter.memory.AddressSpace64;
 import dev.vitorsilverio.armjitter.support.TestAddressSpace;
@@ -9,8 +10,8 @@ import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
-/// B19.26 — `FEAT_FP16` residual: `FMOV_hx`/`FMOV_xh` (`Fp64HalfPrecisionGeneralRegisterMove`) e
-/// `FCVT_s_hs`/`FCVT_s_hd`/`FCVT_s_sh`/`FCVT_s_dh` (`Fp64ConvertHalfPrecision`). Os 6 encodings
+/// B19.26 — `FEAT_FP16` residual: `FMOV_hx`/`FMOV_xh` (`FpOp64.HalfPrecisionGeneralRegisterMove`) e
+/// `FCVT_s_hs`/`FCVT_s_hd`/`FCVT_s_sh`/`FCVT_s_dh` (`FpOp64.ConvertHalfPrecision`). Os 6 encodings
 /// abaixo foram gerados e conferidos byte a byte contra `aarch64-linux-gnu-as -march=armv8.2-a+fp16`
 /// (WSL Ubuntu, binutils real): `fmov h0,x1`/`fmov x2,h3`/`fcvt h4,s5`/`fcvt h6,d7`/`fcvt s8,h9`/
 /// `fcvt d10,h11`.
@@ -52,8 +53,8 @@ class Aarch64Fp16ResidualDecoderTest {
     @Test
     void decodesFmovXToH() {
         // `fmov h0, x1`: Xn(gp) -> Hd(float), toFloat=true.
-        Ir64Op.Fp64HalfPrecisionGeneralRegisterMove op =
-                (Ir64Op.Fp64HalfPrecisionGeneralRegisterMove) decode(FP16_DECODER, FMOV_H0_X1);
+        FpOp64.HalfPrecisionGeneralRegisterMove op =
+                (FpOp64.HalfPrecisionGeneralRegisterMove) decode(FP16_DECODER, FMOV_H0_X1);
         assertEquals(true, op.toFloat());
         assertEquals(0, op.fpReg());
         assertEquals(1, op.gpReg());
@@ -62,8 +63,8 @@ class Aarch64Fp16ResidualDecoderTest {
     @Test
     void decodesFmovHToX() {
         // `fmov x2, h3`: Hn(float) -> Xd(gp), toFloat=false.
-        Ir64Op.Fp64HalfPrecisionGeneralRegisterMove op =
-                (Ir64Op.Fp64HalfPrecisionGeneralRegisterMove) decode(FP16_DECODER, FMOV_X2_H3);
+        FpOp64.HalfPrecisionGeneralRegisterMove op =
+                (FpOp64.HalfPrecisionGeneralRegisterMove) decode(FP16_DECODER, FMOV_X2_H3);
         assertEquals(false, op.toFloat());
         assertEquals(3, op.fpReg());
         assertEquals(2, op.gpReg());
@@ -75,8 +76,8 @@ class Aarch64Fp16ResidualDecoderTest {
         // sf=1 with identical results" — o record não carrega `sf`/`wide`, então forçar sf=0 (bit31)
         // deve decodificar exatamente igual.
         int narrowForm = FMOV_H0_X1 & ~(1 << 31);
-        Ir64Op.Fp64HalfPrecisionGeneralRegisterMove op =
-                (Ir64Op.Fp64HalfPrecisionGeneralRegisterMove) decode(FP16_DECODER, narrowForm);
+        FpOp64.HalfPrecisionGeneralRegisterMove op =
+                (FpOp64.HalfPrecisionGeneralRegisterMove) decode(FP16_DECODER, narrowForm);
         assertEquals(true, op.toFloat());
         assertEquals(0, op.fpReg());
         assertEquals(1, op.gpReg());
@@ -84,36 +85,36 @@ class Aarch64Fp16ResidualDecoderTest {
 
     @Test
     void decodesSingleToHalf() {
-        Ir64Op.Fp64ConvertHalfPrecision op =
-                (Ir64Op.Fp64ConvertHalfPrecision) decode(FP16_DECODER, FCVT_H4_S5);
-        assertEquals(Ir64Op.Fp64HalfPrecisionConversion.SINGLE_TO_HALF, op.conversion());
+        FpOp64.ConvertHalfPrecision op =
+                (FpOp64.ConvertHalfPrecision) decode(FP16_DECODER, FCVT_H4_S5);
+        assertEquals(FpOp64.Fp64HalfPrecisionConversion.SINGLE_TO_HALF, op.conversion());
         assertEquals(4, op.vd());
         assertEquals(5, op.vn());
     }
 
     @Test
     void decodesDoubleToHalf() {
-        Ir64Op.Fp64ConvertHalfPrecision op =
-                (Ir64Op.Fp64ConvertHalfPrecision) decode(FP16_DECODER, FCVT_H6_D7);
-        assertEquals(Ir64Op.Fp64HalfPrecisionConversion.DOUBLE_TO_HALF, op.conversion());
+        FpOp64.ConvertHalfPrecision op =
+                (FpOp64.ConvertHalfPrecision) decode(FP16_DECODER, FCVT_H6_D7);
+        assertEquals(FpOp64.Fp64HalfPrecisionConversion.DOUBLE_TO_HALF, op.conversion());
         assertEquals(6, op.vd());
         assertEquals(7, op.vn());
     }
 
     @Test
     void decodesHalfToSingle() {
-        Ir64Op.Fp64ConvertHalfPrecision op =
-                (Ir64Op.Fp64ConvertHalfPrecision) decode(FP16_DECODER, FCVT_S8_H9);
-        assertEquals(Ir64Op.Fp64HalfPrecisionConversion.HALF_TO_SINGLE, op.conversion());
+        FpOp64.ConvertHalfPrecision op =
+                (FpOp64.ConvertHalfPrecision) decode(FP16_DECODER, FCVT_S8_H9);
+        assertEquals(FpOp64.Fp64HalfPrecisionConversion.HALF_TO_SINGLE, op.conversion());
         assertEquals(8, op.vd());
         assertEquals(9, op.vn());
     }
 
     @Test
     void decodesHalfToDouble() {
-        Ir64Op.Fp64ConvertHalfPrecision op =
-                (Ir64Op.Fp64ConvertHalfPrecision) decode(FP16_DECODER, FCVT_D10_H11);
-        assertEquals(Ir64Op.Fp64HalfPrecisionConversion.HALF_TO_DOUBLE, op.conversion());
+        FpOp64.ConvertHalfPrecision op =
+                (FpOp64.ConvertHalfPrecision) decode(FP16_DECODER, FCVT_D10_H11);
+        assertEquals(FpOp64.Fp64HalfPrecisionConversion.HALF_TO_DOUBLE, op.conversion());
         assertEquals(10, op.vd());
         assertEquals(11, op.vn());
     }

@@ -3,6 +3,7 @@ package dev.vitorsilverio.armjitter.decoder64;
 import dev.vitorsilverio.armjitter.arch64.Aarch64Architecture;
 import dev.vitorsilverio.armjitter.arch64.Aarch64Feature;
 import dev.vitorsilverio.armjitter.ir64.Ir64Op;
+import dev.vitorsilverio.armjitter.ir64.SveFpOp64;
 
 /// Decoder SVE2 da B17.23: pairwise FP (`FADDP`/`FMAXNMP`/`FMINNMP`/`FMAXP`/`FMINP`) e matmul FP
 /// (`BFMMLA`/`FMMLA_s`/`FMMLA_d`/`FMMLA_sb`/`FMMLA_hb`), ambos no prefixo `0x64`. Padrões medidos contra
@@ -61,10 +62,10 @@ final class Aarch64SveFpMatrixDecoder {
         }
         int xy = field(word, PAIRWISE_XY_SHIFT, 0b11);
         boolean z = bit(word, PAIRWISE_Z_BIT);
-        Ir64Op.SveFpPairwise.Op op = switch (xy) {
-            case PAIRWISE_XY_ADD -> Ir64Op.SveFpPairwise.Op.FADDP;
-            case PAIRWISE_XY_NM -> z ? Ir64Op.SveFpPairwise.Op.FMINNMP : Ir64Op.SveFpPairwise.Op.FMAXNMP;
-            case PAIRWISE_XY_PLAIN -> z ? Ir64Op.SveFpPairwise.Op.FMINP : Ir64Op.SveFpPairwise.Op.FMAXP;
+        SveFpOp64.FpPairwise.Op op = switch (xy) {
+            case PAIRWISE_XY_ADD -> SveFpOp64.FpPairwise.Op.FADDP;
+            case PAIRWISE_XY_NM -> z ? SveFpOp64.FpPairwise.Op.FMINNMP : SveFpOp64.FpPairwise.Op.FMAXNMP;
+            case PAIRWISE_XY_PLAIN -> z ? SveFpOp64.FpPairwise.Op.FMINP : SveFpOp64.FpPairwise.Op.FMAXP;
             default -> null; // `01`: não alocado
         };
         if (op == null) {
@@ -73,7 +74,7 @@ final class Aarch64SveFpMatrixDecoder {
         int pg = field(word, PAIRWISE_PG_SHIFT, 0b111);
         int rm = field(word, 5, REGISTER_MASK);
         int rd = field(word, 0, REGISTER_MASK);
-        return new Ir64Op.SveFpPairwise(op, esz, rd, rm, pg, address);
+        return new SveFpOp64.FpPairwise(op, esz, rd, rm, pg, address);
     }
 
     private Ir64Op decodeMatrixMultiply(int word, long address) {
@@ -82,14 +83,14 @@ final class Aarch64SveFpMatrixDecoder {
         }
         int kind2 = field(word, MATMUL_KIND2_SHIFT, 0b11);
         int kind1 = field(word, MATMUL_KIND1_SHIFT, MATMUL_KIND1_MASK);
-        Ir64Op.SveFpMatrixMultiply.Op op;
+        SveFpOp64.FpMatrixMultiply.Op op;
         int esz;
         Aarch64Feature feature;
         if (kind1 == MATMUL_KIND1_BF_S_D) {
             op = switch (kind2) {
-                case 0b01 -> Ir64Op.SveFpMatrixMultiply.Op.BFMMLA;
-                case 0b10 -> Ir64Op.SveFpMatrixMultiply.Op.FMMLA_S;
-                case 0b11 -> Ir64Op.SveFpMatrixMultiply.Op.FMMLA_D;
+                case 0b01 -> SveFpOp64.FpMatrixMultiply.Op.BFMMLA;
+                case 0b10 -> SveFpOp64.FpMatrixMultiply.Op.FMMLA_S;
+                case 0b11 -> SveFpOp64.FpMatrixMultiply.Op.FMMLA_D;
                 default -> null; // `00`: não alocado
             };
             esz = switch (kind2) {
@@ -104,8 +105,8 @@ final class Aarch64SveFpMatrixDecoder {
             };
         } else if (kind1 == MATMUL_KIND1_FP8) {
             op = switch (kind2) {
-                case 0b00 -> Ir64Op.SveFpMatrixMultiply.Op.FMMLA_SB;
-                case 0b01 -> Ir64Op.SveFpMatrixMultiply.Op.FMMLA_HB;
+                case 0b00 -> SveFpOp64.FpMatrixMultiply.Op.FMMLA_SB;
+                case 0b01 -> SveFpOp64.FpMatrixMultiply.Op.FMMLA_HB;
                 default -> null; // `10`/`11`: não alocado
             };
             esz = kind2 == 0b00 ? 2 : 1;
@@ -119,7 +120,7 @@ final class Aarch64SveFpMatrixDecoder {
         int rm = field(word, MATMUL_RM_SHIFT, REGISTER_MASK);
         int rn = field(word, 5, REGISTER_MASK);
         int rd = field(word, 0, REGISTER_MASK);
-        return new Ir64Op.SveFpMatrixMultiply(op, esz, rd, rn, rm, address);
+        return new SveFpOp64.FpMatrixMultiply(op, esz, rd, rn, rm, address);
     }
 
     private static boolean bit(int word, int shift) {

@@ -3,7 +3,7 @@ package dev.vitorsilverio.armjitter.executor64;
 import dev.vitorsilverio.armjitter.advsimd.AdvSimdLanes;
 import dev.vitorsilverio.armjitter.core64.Aarch64Core;
 import dev.vitorsilverio.armjitter.core64.Aarch64FpRegisters;
-import dev.vitorsilverio.armjitter.ir64.Ir64Op;
+import dev.vitorsilverio.armjitter.ir64.AdvSimdIntegerOp64;
 import dev.vitorsilverio.armjitter.memory.AddressSpace64;
 import dev.vitorsilverio.armjitter.support.TestAddressSpace;
 import org.junit.jupiter.api.Test;
@@ -63,7 +63,7 @@ class Ir64VectorArithmeticExecutorI8mmTest {
         setByte(fp, 2, 0, 2); // Vm lane0 byte0 = 2 (com sinal, positivo)
         // dot = 1*2 = 2. Acumulador pré-existente perto do limite de `int32` -> soma estoura com WRAP.
         fp.setElement(0, 0, 2, 0x7FFF_FFFF);
-        EXECUTOR.executeOp(core, new Ir64Op.VectorIntegerDotProduct(true, false, true, 0, 1, 2));
+        EXECUTOR.executeOp(core, new AdvSimdIntegerOp64.IntegerDotProduct(true, false, true, 0, 1, 2));
         assertEquals(0x8000_0001L, fp.element(0, 0, 2), "wrap: 0x7FFFFFFF + 2 = 0x80000001, NUNCA satura");
     }
 
@@ -76,7 +76,7 @@ class Ir64VectorArithmeticExecutorI8mmTest {
         // Acumulador (lane baixa) LIMPO; só a metade ALTA fica suja, para provar que a escrita
         // destrutiva a zera (sem contaminar o resultado do acúmulo, que lê a lane baixa).
         fp.setQ(0, 0L, 0xFFFF_FFFF_FFFF_FFFFL);
-        EXECUTOR.executeOp(core, new Ir64Op.VectorIntegerDotProduct(false, false, true, 0, 1, 2));
+        EXECUTOR.executeOp(core, new AdvSimdIntegerOp64.IntegerDotProduct(false, false, true, 0, 1, 2));
         assertEquals(12L, fp.element(0, 0, 2));
         assertEquals(0L, fp.word(1), "q=false zera a metade alta de Vd");
     }
@@ -94,7 +94,7 @@ class Ir64VectorArithmeticExecutorI8mmTest {
         }
         // Vm: grupo fixo no índice 1 = [0x80,0,0,0] (só byte0 tem bit7 setado, com sinal -> -128).
         setByte(fp, 2, 4, 0x80);
-        EXECUTOR.executeOp(core, new Ir64Op.VectorIntegerDotProductByElement(true, false, true, 0, 1, 2, 1));
+        EXECUTOR.executeOp(core, new AdvSimdIntegerOp64.IntegerDotProductByElement(true, false, true, 0, 1, 2, 1));
         // lane0 = 1(sem sinal)*-128 = -128 ; lane1 = 2*-128 = -256
         assertEquals(-128, (int) fp.element(0, 0, 2));
         assertEquals(-256, (int) fp.element(0, 1, 2));
@@ -106,7 +106,7 @@ class Ir64VectorArithmeticExecutorI8mmTest {
         Aarch64FpRegisters fp = core.fp();
         setByte(fp, 1, 0, 0x80); // Vn lane0 byte0 = -128 (SUDOT: Rn COM sinal)
         setByte(fp, 2, 0, 2);    // Vm grupo0 byte0 = 2 (SUDOT: Rm SEM sinal)
-        EXECUTOR.executeOp(core, new Ir64Op.VectorIntegerDotProductByElement(true, true, false, 0, 1, 2, 0));
+        EXECUTOR.executeOp(core, new AdvSimdIntegerOp64.IntegerDotProductByElement(true, true, false, 0, 1, 2, 0));
         assertEquals(-256, (int) fp.element(0, 0, 2), "-128 * 2 = -256 (Rn assinado, Rm sem sinal)");
     }
 
@@ -125,7 +125,7 @@ class Ir64VectorArithmeticExecutorI8mmTest {
             setByte(fp, 2, i, cols[i]);
         }
         fp.setElement(0, 0, 2, 100); // Vd[0][0] pré-existente
-        EXECUTOR.executeOp(core, new Ir64Op.VectorIntegerMatrixMultiplyAccumulate(true, true, 0, 1, 2));
+        EXECUTOR.executeOp(core, new AdvSimdIntegerOp64.IntegerMatrixMultiplyAccumulate(true, true, 0, 1, 2));
         // dot(row0,col0) = 1*1 = 1 ; dot(row0,col1) = 2*1 + 8*2 = 18
         // dot(row1,col0) = 8*1 = 8 ; dot(row1,col1) = 7*1 + 1*2 = 9
         assertEquals(101, (int) fp.element(0, 0, 2), "100 (pré-existente) + dot(row0,col0)");
@@ -141,9 +141,9 @@ class Ir64VectorArithmeticExecutorI8mmTest {
         // Só byte0 de Vn/Vm não-zero, com bit7 setado nos dois -> sinal importa.
         setByte(fp, 1, 0, 0x80);
         setByte(fp, 2, 0, 0x80);
-        EXECUTOR.executeOp(core, new Ir64Op.VectorIntegerMatrixMultiplyAccumulate(true, true, 0, 1, 2)); // SMMLA
-        EXECUTOR.executeOp(core, new Ir64Op.VectorIntegerMatrixMultiplyAccumulate(false, false, 3, 1, 2)); // UMMLA
-        EXECUTOR.executeOp(core, new Ir64Op.VectorIntegerMatrixMultiplyAccumulate(false, true, 4, 1, 2)); // USMMLA
+        EXECUTOR.executeOp(core, new AdvSimdIntegerOp64.IntegerMatrixMultiplyAccumulate(true, true, 0, 1, 2)); // SMMLA
+        EXECUTOR.executeOp(core, new AdvSimdIntegerOp64.IntegerMatrixMultiplyAccumulate(false, false, 3, 1, 2)); // UMMLA
+        EXECUTOR.executeOp(core, new AdvSimdIntegerOp64.IntegerMatrixMultiplyAccumulate(false, true, 4, 1, 2)); // USMMLA
         long smmla = fp.element(0, 0, 2); // (-128)*(-128) = 16384
         long ummla = fp.element(3, 0, 2); // 128*128 = 16384
         long usmmla = fp.element(4, 0, 2); // 128*(-128) = -16384
@@ -161,7 +161,7 @@ class Ir64VectorArithmeticExecutorI8mmTest {
         setByte(fp, 1, 0, 2);
         setByte(fp, 2, 0, 3);
         fp.setElement(0, 0, 2, 0x7FFF_FFFF); // acumulador pré-existente perto do limite
-        EXECUTOR.executeOp(core, new Ir64Op.VectorIntegerMatrixMultiplyAccumulate(false, false, 0, 1, 2));
+        EXECUTOR.executeOp(core, new AdvSimdIntegerOp64.IntegerMatrixMultiplyAccumulate(false, false, 0, 1, 2));
         // dot(row0,col0) = 2*3 = 6 ; 0x7FFFFFFF + 6 = 0x80000005 (WRAP, nunca satura).
         assertEquals(0x8000_0005L, fp.element(0, 0, 2));
     }

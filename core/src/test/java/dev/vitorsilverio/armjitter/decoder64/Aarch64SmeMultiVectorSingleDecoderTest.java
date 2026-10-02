@@ -3,6 +3,7 @@ package dev.vitorsilverio.armjitter.decoder64;
 import dev.vitorsilverio.armjitter.arch64.Aarch64Architecture;
 import dev.vitorsilverio.armjitter.arch64.Aarch64Feature;
 import dev.vitorsilverio.armjitter.ir64.Ir64Op;
+import dev.vitorsilverio.armjitter.ir64.SmeOp64;
 import dev.vitorsilverio.armjitter.memory.AddressSpace64;
 import dev.vitorsilverio.armjitter.support.TestAddressSpace;
 import org.junit.jupiter.api.Test;
@@ -129,9 +130,9 @@ class Aarch64SmeMultiVectorSingleDecoderTest {
             "0xC1E4A182, FSCALE, 3, 2, 2, 4",   // fscale {z2.d-z3.d}, {z2.d-z3.d}, z4.d
             "0xC1EFA99C, FSCALE, 3, 4, 28, 15",   // fscale {z28.d-z31.d}, {z28.d-z31.d}, z15.d
     })
-    void decodesEveryEncodingFromTheAssembler(String hex, Ir64Op.SmeMultiVectorSingle.Op expectedOp, int esz, int count,
+    void decodesEveryEncodingFromTheAssembler(String hex, SmeOp64.MultiVectorSingle.Op expectedOp, int esz, int count,
             int zdn, int zm) {
-        Ir64Op.SmeMultiVectorSingle op = assertInstanceOf(Ir64Op.SmeMultiVectorSingle.class,
+        SmeOp64.MultiVectorSingle op = assertInstanceOf(SmeOp64.MultiVectorSingle.class,
                 decode(SME2_FP8, (int) Long.decode(hex).longValue()));
         assertEquals(expectedOp, op.op());
         assertEquals(esz, op.esz());
@@ -189,7 +190,7 @@ class Aarch64SmeMultiVectorSingleDecoderTest {
     @Test
     void fscaleAlsoNeedsFp8ButTheOtherTwelveDoNot() {
         assertThrows(UnsupportedOperationException.class, () -> decode(SME2, 0xC164A182));
-        assertInstanceOf(Ir64Op.SmeMultiVectorSingle.class, decode(SME2, 0xC164A102));
-        assertInstanceOf(Ir64Op.SmeMultiVectorSingle.class, decode(SME2_FP8, 0xC164A182));
+        assertInstanceOf(SmeOp64.MultiVectorSingle.class, decode(SME2, 0xC164A102));
+        assertInstanceOf(SmeOp64.MultiVectorSingle.class, decode(SME2_FP8, 0xC164A182));
     }
 }

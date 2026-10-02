@@ -9,6 +9,7 @@ import dev.vitorsilverio.armjitter.ir64.Aarch64SystemRegisterId;
 import dev.vitorsilverio.armjitter.ir64.Ir64Block;
 import dev.vitorsilverio.armjitter.ir64.Ir64Op;
 import dev.vitorsilverio.armjitter.ir64.StandardIr64BlockLifter;
+import dev.vitorsilverio.armjitter.ir64.SveFpOp64;
 import dev.vitorsilverio.armjitter.memory.AddressSpace64;
 import dev.vitorsilverio.armjitter.support.TestAddressSpace;
 import org.junit.jupiter.api.Test;
@@ -119,7 +120,7 @@ class Aarch64SveFpArithmeticTest {
 
     private static boolean decodes(Aarch64Architecture architecture, int word) {
         try {
-            return decode(architecture, word) instanceof Ir64Op.SveFpArithmetic;
+            return decode(architecture, word) instanceof SveFpOp64.FpArithmetic;
         } catch (UnsupportedOperationException refused) {
             return false;
         }
@@ -278,42 +279,42 @@ class Aarch64SveFpArithmeticTest {
 
     // ── Decode ───────────────────────────────────────────────────────────────────────────────────
 
-    private record Decoded(int word, Ir64Op.SveFpArithmetic.Op op, int esz, int rd, int rn, int rm, int pg,
+    private record Decoded(int word, SveFpOp64.FpArithmetic.Op op, int esz, int rd, int rn, int rm, int pg,
             boolean predicated, boolean reversed, boolean immediateForm, int immediate) {
     }
 
-    private static Decoded d(int word, Ir64Op.SveFpArithmetic.Op op, int esz, int rd, int rn, int rm, int pg,
+    private static Decoded d(int word, SveFpOp64.FpArithmetic.Op op, int esz, int rd, int rn, int rm, int pg,
             boolean predicated, boolean reversed, boolean immediateForm, int immediate) {
         return new Decoded(word, op, esz, rd, rn, rm, pg, predicated, reversed, immediateForm, immediate);
     }
 
     private static Stream<Decoded> decodeTable() {
-        var A = Ir64Op.SveFpArithmetic.Op.ADD;
-        var S = Ir64Op.SveFpArithmetic.Op.SUB;
-        var M = Ir64Op.SveFpArithmetic.Op.MUL;
-        var V = Ir64Op.SveFpArithmetic.Op.DIV;
+        var A = SveFpOp64.FpArithmetic.Op.ADD;
+        var S = SveFpOp64.FpArithmetic.Op.SUB;
+        var M = SveFpOp64.FpArithmetic.Op.MUL;
+        var V = SveFpOp64.FpArithmetic.Op.DIV;
         return Stream.of(
                 d(0x65430041, A, 1, 1, 2, 3, 0, false, false, false, 0),       // fadd z1.h, z2.h, z3.h
                 d(0x65c30041, A, 3, 1, 2, 3, 0, false, false, false, 0),       // fadd z1.d, z2.d, z3.d
                 d(0x658604a4, S, 2, 4, 5, 6, 0, false, false, false, 0),       // fsub z4.s, z5.s, z6.s
                 d(0x65c90907, M, 3, 7, 8, 9, 0, false, false, false, 0),       // fmul z7.d, z8.d, z9.d
-                d(0x65830c41, Ir64Op.SveFpArithmetic.Op.TSMUL, 2, 1, 2, 3, 0, false, false, false, 0),
-                d(0x65831841, Ir64Op.SveFpArithmetic.Op.RECPS, 2, 1, 2, 3, 0, false, false, false, 0),
-                d(0x65c31c41, Ir64Op.SveFpArithmetic.Op.RSQRTS, 3, 1, 2, 3, 0, false, false, false, 0),
-                d(0x658e3041, Ir64Op.SveFpArithmetic.Op.RECPE, 2, 1, 2, 0, 0, false, false, false, 0),
-                d(0x65cf3041, Ir64Op.SveFpArithmetic.Op.RSQRTE, 3, 1, 2, 0, 0, false, false, false, 0),
-                d(0x654e3083, Ir64Op.SveFpArithmetic.Op.RECPE, 1, 3, 4, 0, 0, false, false, false, 0),
+                d(0x65830c41, SveFpOp64.FpArithmetic.Op.TSMUL, 2, 1, 2, 3, 0, false, false, false, 0),
+                d(0x65831841, SveFpOp64.FpArithmetic.Op.RECPS, 2, 1, 2, 3, 0, false, false, false, 0),
+                d(0x65c31c41, SveFpOp64.FpArithmetic.Op.RSQRTS, 3, 1, 2, 3, 0, false, false, false, 0),
+                d(0x658e3041, SveFpOp64.FpArithmetic.Op.RECPE, 2, 1, 2, 0, 0, false, false, false, 0),
+                d(0x65cf3041, SveFpOp64.FpArithmetic.Op.RSQRTE, 3, 1, 2, 0, 0, false, false, false, 0),
+                d(0x654e3083, SveFpOp64.FpArithmetic.Op.RECPE, 1, 3, 4, 0, 0, false, false, false, 0),
                 d(0x65808c41, A, 2, 1, 1, 2, 3, true, false, false, 0),        // fadd z1.s, p3/m, z1.s, z2.s
                 d(0x65818c41, S, 2, 1, 1, 2, 3, true, false, false, 0),
                 d(0x65828c41, M, 2, 1, 1, 2, 3, true, false, false, 0),
                 d(0x65838c41, S, 2, 1, 1, 2, 3, true, true, false, 0),         // fsubr
-                d(0x65848c41, Ir64Op.SveFpArithmetic.Op.MAXNM, 2, 1, 1, 2, 3, true, false, false, 0),
-                d(0x65858c41, Ir64Op.SveFpArithmetic.Op.MINNM, 2, 1, 1, 2, 3, true, false, false, 0),
-                d(0x65868c41, Ir64Op.SveFpArithmetic.Op.MAX, 2, 1, 1, 2, 3, true, false, false, 0),
-                d(0x65878c41, Ir64Op.SveFpArithmetic.Op.MIN, 2, 1, 1, 2, 3, true, false, false, 0),
-                d(0x65888c41, Ir64Op.SveFpArithmetic.Op.ABD, 2, 1, 1, 2, 3, true, false, false, 0),
-                d(0x65898c41, Ir64Op.SveFpArithmetic.Op.SCALE, 2, 1, 1, 2, 3, true, false, false, 0),
-                d(0x658a8c41, Ir64Op.SveFpArithmetic.Op.MULX, 2, 1, 1, 2, 3, true, false, false, 0),
+                d(0x65848c41, SveFpOp64.FpArithmetic.Op.MAXNM, 2, 1, 1, 2, 3, true, false, false, 0),
+                d(0x65858c41, SveFpOp64.FpArithmetic.Op.MINNM, 2, 1, 1, 2, 3, true, false, false, 0),
+                d(0x65868c41, SveFpOp64.FpArithmetic.Op.MAX, 2, 1, 1, 2, 3, true, false, false, 0),
+                d(0x65878c41, SveFpOp64.FpArithmetic.Op.MIN, 2, 1, 1, 2, 3, true, false, false, 0),
+                d(0x65888c41, SveFpOp64.FpArithmetic.Op.ABD, 2, 1, 1, 2, 3, true, false, false, 0),
+                d(0x65898c41, SveFpOp64.FpArithmetic.Op.SCALE, 2, 1, 1, 2, 3, true, false, false, 0),
+                d(0x658a8c41, SveFpOp64.FpArithmetic.Op.MULX, 2, 1, 1, 2, 3, true, false, false, 0),
                 d(0x658c8c41, V, 2, 1, 1, 2, 3, true, true, false, 0),         // fdivr
                 d(0x658d8c41, V, 2, 1, 1, 2, 3, true, false, false, 0),
                 d(0x65409c41, A, 1, 1, 1, 2, 7, true, false, false, 0),        // fadd z1.h, p7/m
@@ -323,27 +324,27 @@ class Aarch64SveFpArithmeticTest {
                 d(0x65998c21, S, 2, 1, 1, 0, 3, true, false, true, 1),
                 d(0x659a8c21, M, 2, 1, 1, 0, 3, true, false, true, 1),         // fmul #2.0
                 d(0x659b8c01, S, 2, 1, 1, 0, 3, true, true, true, 0),          // fsubr #0.5
-                d(0x659c8c01, Ir64Op.SveFpArithmetic.Op.MAXNM, 2, 1, 1, 0, 3, true, false, true, 0),
-                d(0x659d8c21, Ir64Op.SveFpArithmetic.Op.MINNM, 2, 1, 1, 0, 3, true, false, true, 1),
-                d(0x659e8c01, Ir64Op.SveFpArithmetic.Op.MAX, 2, 1, 1, 0, 3, true, false, true, 0),
-                d(0x659f8c21, Ir64Op.SveFpArithmetic.Op.MIN, 2, 1, 1, 0, 3, true, false, true, 1),
+                d(0x659c8c01, SveFpOp64.FpArithmetic.Op.MAXNM, 2, 1, 1, 0, 3, true, false, true, 0),
+                d(0x659d8c21, SveFpOp64.FpArithmetic.Op.MINNM, 2, 1, 1, 0, 3, true, false, true, 1),
+                d(0x659e8c01, SveFpOp64.FpArithmetic.Op.MAX, 2, 1, 1, 0, 3, true, false, true, 0),
+                d(0x659f8c21, SveFpOp64.FpArithmetic.Op.MIN, 2, 1, 1, 0, 3, true, false, true, 1),
                 d(0x65d88c21, A, 3, 1, 1, 0, 3, true, false, true, 1),
-                d(0x65958041, Ir64Op.SveFpArithmetic.Op.TMAD, 2, 1, 1, 2, 0, false, false, false, 5),
-                d(0x65508041, Ir64Op.SveFpArithmetic.Op.TMAD, 1, 1, 1, 2, 0, false, false, false, 0),
-                d(0x65d78041, Ir64Op.SveFpArithmetic.Op.TMAD, 3, 1, 1, 2, 0, false, false, false, 7));
+                d(0x65958041, SveFpOp64.FpArithmetic.Op.TMAD, 2, 1, 1, 2, 0, false, false, false, 5),
+                d(0x65508041, SveFpOp64.FpArithmetic.Op.TMAD, 1, 1, 1, 2, 0, false, false, false, 0),
+                d(0x65d78041, SveFpOp64.FpArithmetic.Op.TMAD, 3, 1, 1, 2, 0, false, false, false, 7));
     }
 
     @ParameterizedTest
     @MethodSource("decodeTable")
     void theWordsMatchTheAssemblerAndDecodeToTheExpectedFields(Decoded expected) {
-        Ir64Op.SveFpArithmetic op = assertInstanceOf(Ir64Op.SveFpArithmetic.class, decode(FAMINMAX, expected.word()),
+        SveFpOp64.FpArithmetic op = assertInstanceOf(SveFpOp64.FpArithmetic.class, decode(FAMINMAX, expected.word()),
                 Integer.toHexString(expected.word()));
         assertEquals(expected.op(), op.op(), "op");
         assertEquals(expected.esz(), op.esz(), "esz");
         assertEquals(expected.rd(), op.rd(), "rd");
         assertEquals(expected.rn(), op.rn(), "rn");
-        if (!expected.immediateForm() && expected.op() != Ir64Op.SveFpArithmetic.Op.RECPE
-                && expected.op() != Ir64Op.SveFpArithmetic.Op.RSQRTE) {
+        if (!expected.immediateForm() && expected.op() != SveFpOp64.FpArithmetic.Op.RECPE
+                && expected.op() != SveFpOp64.FpArithmetic.Op.RSQRTE) {
             assertEquals(expected.rm(), op.rm(), "rm");
         }
         assertEquals(expected.predicated(), op.predicated(), "predicated");

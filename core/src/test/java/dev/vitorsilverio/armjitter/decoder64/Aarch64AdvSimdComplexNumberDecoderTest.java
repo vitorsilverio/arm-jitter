@@ -1,6 +1,7 @@
 package dev.vitorsilverio.armjitter.decoder64;
 
 import dev.vitorsilverio.armjitter.arch64.Aarch64Architecture;
+import dev.vitorsilverio.armjitter.ir64.AdvSimdFpOp64;
 import dev.vitorsilverio.armjitter.ir64.Ir64Op;
 import dev.vitorsilverio.armjitter.memory.AddressSpace64;
 import dev.vitorsilverio.armjitter.support.TestAddressSpace;
@@ -31,7 +32,7 @@ class Aarch64AdvSimdComplexNumberDecoderTest {
     @Test
     void fcadd90Halfword() {
         // 2e42e420: fcadd v0.4h, v1.4h, v2.4h, #90
-        Ir64Op.VectorFpComplexAdd op = (Ir64Op.VectorFpComplexAdd) decodeWord(0x2e42e420);
+        AdvSimdFpOp64.FpComplexAdd op = (AdvSimdFpOp64.FpComplexAdd) decodeWord(0x2e42e420);
         assertEquals(false, op.q());
         assertEquals(1, op.esz());
         assertEquals(90, op.rotation());
@@ -43,7 +44,7 @@ class Aarch64AdvSimdComplexNumberDecoderTest {
     @Test
     void fcadd270HalfwordQ() {
         // 6e45f483: fcadd v3.8h, v4.8h, v5.8h, #270
-        Ir64Op.VectorFpComplexAdd op = (Ir64Op.VectorFpComplexAdd) decodeWord(0x6e45f483);
+        AdvSimdFpOp64.FpComplexAdd op = (AdvSimdFpOp64.FpComplexAdd) decodeWord(0x6e45f483);
         assertEquals(true, op.q());
         assertEquals(1, op.esz());
         assertEquals(270, op.rotation());
@@ -55,7 +56,7 @@ class Aarch64AdvSimdComplexNumberDecoderTest {
     @Test
     void fcadd90Word() {
         // 2e88e4e6: fcadd v6.2s, v7.2s, v8.2s, #90
-        Ir64Op.VectorFpComplexAdd op = (Ir64Op.VectorFpComplexAdd) decodeWord(0x2e88e4e6);
+        AdvSimdFpOp64.FpComplexAdd op = (AdvSimdFpOp64.FpComplexAdd) decodeWord(0x2e88e4e6);
         assertEquals(false, op.q());
         assertEquals(2, op.esz());
         assertEquals(90, op.rotation());
@@ -64,7 +65,7 @@ class Aarch64AdvSimdComplexNumberDecoderTest {
     @Test
     void fcadd270WordQ() {
         // 6e8bf549: fcadd v9.4s, v10.4s, v11.4s, #270
-        Ir64Op.VectorFpComplexAdd op = (Ir64Op.VectorFpComplexAdd) decodeWord(0x6e8bf549);
+        AdvSimdFpOp64.FpComplexAdd op = (AdvSimdFpOp64.FpComplexAdd) decodeWord(0x6e8bf549);
         assertEquals(true, op.q());
         assertEquals(2, op.esz());
         assertEquals(270, op.rotation());
@@ -74,7 +75,7 @@ class Aarch64AdvSimdComplexNumberDecoderTest {
     void fcadd90DoublewordRequiresQ() {
         // 6ecee5ac: fcadd v12.2d, v13.2d, v14.2d, #90 — Q=1 SEMPRE (par complexo de dupla precisão
         // não cabe em 64 bits).
-        Ir64Op.VectorFpComplexAdd op = (Ir64Op.VectorFpComplexAdd) decodeWord(0x6ecee5ac);
+        AdvSimdFpOp64.FpComplexAdd op = (AdvSimdFpOp64.FpComplexAdd) decodeWord(0x6ecee5ac);
         assertEquals(true, op.q());
         assertEquals(3, op.esz());
         assertEquals(90, op.rotation());
@@ -103,8 +104,8 @@ class Aarch64AdvSimdComplexNumberDecoderTest {
     @Test
     void fcmlaRotation0Halfword() {
         // 2e42c420: fcmla v0.4h, v1.4h, v2.4h, #0
-        Ir64Op.VectorFpComplexMultiplyAccumulate op =
-                (Ir64Op.VectorFpComplexMultiplyAccumulate) decodeWord(0x2e42c420);
+        AdvSimdFpOp64.FpComplexMultiplyAccumulate op =
+                (AdvSimdFpOp64.FpComplexMultiplyAccumulate) decodeWord(0x2e42c420);
         assertEquals(false, op.q());
         assertEquals(1, op.esz());
         assertEquals(0, op.rotation());
@@ -116,26 +117,26 @@ class Aarch64AdvSimdComplexNumberDecoderTest {
     @Test
     void fcmlaRotation90Halfword() {
         // 2e42cc20: fcmla v0.4h, v1.4h, v2.4h, #90
-        assertEquals(90, ((Ir64Op.VectorFpComplexMultiplyAccumulate) decodeWord(0x2e42cc20)).rotation());
+        assertEquals(90, ((AdvSimdFpOp64.FpComplexMultiplyAccumulate) decodeWord(0x2e42cc20)).rotation());
     }
 
     @Test
     void fcmlaRotation180Halfword() {
         // 2e42d420: fcmla v0.4h, v1.4h, v2.4h, #180
-        assertEquals(180, ((Ir64Op.VectorFpComplexMultiplyAccumulate) decodeWord(0x2e42d420)).rotation());
+        assertEquals(180, ((AdvSimdFpOp64.FpComplexMultiplyAccumulate) decodeWord(0x2e42d420)).rotation());
     }
 
     @Test
     void fcmlaRotation270Halfword() {
         // 2e42dc20: fcmla v0.4h, v1.4h, v2.4h, #270
-        assertEquals(270, ((Ir64Op.VectorFpComplexMultiplyAccumulate) decodeWord(0x2e42dc20)).rotation());
+        assertEquals(270, ((AdvSimdFpOp64.FpComplexMultiplyAccumulate) decodeWord(0x2e42dc20)).rotation());
     }
 
     @Test
     void fcmlaHalfwordQ() {
         // 6e45c483: fcmla v3.8h, v4.8h, v5.8h, #0
-        Ir64Op.VectorFpComplexMultiplyAccumulate op =
-                (Ir64Op.VectorFpComplexMultiplyAccumulate) decodeWord(0x6e45c483);
+        AdvSimdFpOp64.FpComplexMultiplyAccumulate op =
+                (AdvSimdFpOp64.FpComplexMultiplyAccumulate) decodeWord(0x6e45c483);
         assertEquals(true, op.q());
         assertEquals(1, op.esz());
     }
@@ -143,8 +144,8 @@ class Aarch64AdvSimdComplexNumberDecoderTest {
     @Test
     void fcmlaWord() {
         // 2e88cce6: fcmla v6.2s, v7.2s, v8.2s, #90
-        Ir64Op.VectorFpComplexMultiplyAccumulate op =
-                (Ir64Op.VectorFpComplexMultiplyAccumulate) decodeWord(0x2e88cce6);
+        AdvSimdFpOp64.FpComplexMultiplyAccumulate op =
+                (AdvSimdFpOp64.FpComplexMultiplyAccumulate) decodeWord(0x2e88cce6);
         assertEquals(false, op.q());
         assertEquals(2, op.esz());
         assertEquals(90, op.rotation());
@@ -153,8 +154,8 @@ class Aarch64AdvSimdComplexNumberDecoderTest {
     @Test
     void fcmlaWordQ() {
         // 6e8bd549: fcmla v9.4s, v10.4s, v11.4s, #180
-        Ir64Op.VectorFpComplexMultiplyAccumulate op =
-                (Ir64Op.VectorFpComplexMultiplyAccumulate) decodeWord(0x6e8bd549);
+        AdvSimdFpOp64.FpComplexMultiplyAccumulate op =
+                (AdvSimdFpOp64.FpComplexMultiplyAccumulate) decodeWord(0x6e8bd549);
         assertEquals(true, op.q());
         assertEquals(2, op.esz());
         assertEquals(180, op.rotation());
@@ -163,8 +164,8 @@ class Aarch64AdvSimdComplexNumberDecoderTest {
     @Test
     void fcmlaDoublewordRequiresQ() {
         // 6eceddac: fcmla v12.2d, v13.2d, v14.2d, #270
-        Ir64Op.VectorFpComplexMultiplyAccumulate op =
-                (Ir64Op.VectorFpComplexMultiplyAccumulate) decodeWord(0x6eceddac);
+        AdvSimdFpOp64.FpComplexMultiplyAccumulate op =
+                (AdvSimdFpOp64.FpComplexMultiplyAccumulate) decodeWord(0x6eceddac);
         assertEquals(true, op.q());
         assertEquals(3, op.esz());
         assertEquals(270, op.rotation());
@@ -175,8 +176,8 @@ class Aarch64AdvSimdComplexNumberDecoderTest {
     @Test
     void fcmlaIndexedHalfwordIndex0Rotation0() {
         // 2f421020: fcmla v0.4h, v1.4h, v2.h[0], #0
-        Ir64Op.VectorFpComplexMultiplyAccumulateByElement op =
-                (Ir64Op.VectorFpComplexMultiplyAccumulateByElement) decodeWord(0x2f421020);
+        AdvSimdFpOp64.FpComplexMultiplyAccumulateByElement op =
+                (AdvSimdFpOp64.FpComplexMultiplyAccumulateByElement) decodeWord(0x2f421020);
         assertEquals(false, op.q());
         assertEquals(1, op.esz());
         assertEquals(0, op.rotation());
@@ -189,8 +190,8 @@ class Aarch64AdvSimdComplexNumberDecoderTest {
     @Test
     void fcmlaIndexedHalfwordIndex1Rotation90() {
         // 2f623020: fcmla v0.4h, v1.4h, v2.h[1], #90 (!q usa só `L` como índice)
-        Ir64Op.VectorFpComplexMultiplyAccumulateByElement op =
-                (Ir64Op.VectorFpComplexMultiplyAccumulateByElement) decodeWord(0x2f623020);
+        AdvSimdFpOp64.FpComplexMultiplyAccumulateByElement op =
+                (AdvSimdFpOp64.FpComplexMultiplyAccumulateByElement) decodeWord(0x2f623020);
         assertEquals(false, op.q());
         assertEquals(90, op.rotation());
         assertEquals(1, op.index());
@@ -199,8 +200,8 @@ class Aarch64AdvSimdComplexNumberDecoderTest {
     @Test
     void fcmlaIndexedHalfwordQIndex3Rotation180() {
         // 6f655883: fcmla v3.8h, v4.8h, v5.h[3], #180 (q usa `H:L`)
-        Ir64Op.VectorFpComplexMultiplyAccumulateByElement op =
-                (Ir64Op.VectorFpComplexMultiplyAccumulateByElement) decodeWord(0x6f655883);
+        AdvSimdFpOp64.FpComplexMultiplyAccumulateByElement op =
+                (AdvSimdFpOp64.FpComplexMultiplyAccumulateByElement) decodeWord(0x6f655883);
         assertEquals(true, op.q());
         assertEquals(1, op.esz());
         assertEquals(180, op.rotation());
@@ -213,8 +214,8 @@ class Aarch64AdvSimdComplexNumberDecoderTest {
     @Test
     void fcmlaIndexedWordIndex0Rotation270() {
         // 6f8870e6: fcmla v6.4s, v7.4s, v8.s[0], #270 — `S` indexado é SEMPRE Q=1.
-        Ir64Op.VectorFpComplexMultiplyAccumulateByElement op =
-                (Ir64Op.VectorFpComplexMultiplyAccumulateByElement) decodeWord(0x6f8870e6);
+        AdvSimdFpOp64.FpComplexMultiplyAccumulateByElement op =
+                (AdvSimdFpOp64.FpComplexMultiplyAccumulateByElement) decodeWord(0x6f8870e6);
         assertEquals(true, op.q());
         assertEquals(2, op.esz());
         assertEquals(270, op.rotation());
@@ -227,8 +228,8 @@ class Aarch64AdvSimdComplexNumberDecoderTest {
     @Test
     void fcmlaIndexedWordIndex1Rotation0() {
         // 6f8b1949: fcmla v9.4s, v10.4s, v11.s[1], #0
-        Ir64Op.VectorFpComplexMultiplyAccumulateByElement op =
-                (Ir64Op.VectorFpComplexMultiplyAccumulateByElement) decodeWord(0x6f8b1949);
+        AdvSimdFpOp64.FpComplexMultiplyAccumulateByElement op =
+                (AdvSimdFpOp64.FpComplexMultiplyAccumulateByElement) decodeWord(0x6f8b1949);
         assertEquals(0, op.rotation());
         assertEquals(1, op.index());
     }

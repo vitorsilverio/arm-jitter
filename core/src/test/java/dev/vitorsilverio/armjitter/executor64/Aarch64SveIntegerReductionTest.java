@@ -10,6 +10,7 @@ import dev.vitorsilverio.armjitter.ir64.Aarch64SystemRegisterId;
 import dev.vitorsilverio.armjitter.ir64.Ir64Block;
 import dev.vitorsilverio.armjitter.ir64.Ir64Op;
 import dev.vitorsilverio.armjitter.ir64.StandardIr64BlockLifter;
+import dev.vitorsilverio.armjitter.ir64.SveIntegerOp64;
 import dev.vitorsilverio.armjitter.memory.AddressSpace64;
 import dev.vitorsilverio.armjitter.support.TestAddressSpace;
 import org.junit.jupiter.api.Test;
@@ -239,21 +240,21 @@ class Aarch64SveIntegerReductionTest {
 
     static Stream<Arguments> scalarDecodeCases() {
         return Stream.of(
-                Arguments.of(0x04182860, Ir64Op.SveIntegerReduction.Op.ORV, 0),
-                Arguments.of(0x04592860, Ir64Op.SveIntegerReduction.Op.EORV, 1),
-                Arguments.of(0x049a2860, Ir64Op.SveIntegerReduction.Op.ANDV, 2),
-                Arguments.of(0x04012860, Ir64Op.SveIntegerReduction.Op.UADDV, 0),
-                Arguments.of(0x04802860, Ir64Op.SveIntegerReduction.Op.SADDV, 2),
-                Arguments.of(0x04082860, Ir64Op.SveIntegerReduction.Op.SMAXV, 0),
-                Arguments.of(0x04492860, Ir64Op.SveIntegerReduction.Op.UMAXV, 1),
-                Arguments.of(0x048a2860, Ir64Op.SveIntegerReduction.Op.SMINV, 2),
-                Arguments.of(0x04cb2860, Ir64Op.SveIntegerReduction.Op.UMINV, 3));
+                Arguments.of(0x04182860, SveIntegerOp64.IntegerReduction.Op.ORV, 0),
+                Arguments.of(0x04592860, SveIntegerOp64.IntegerReduction.Op.EORV, 1),
+                Arguments.of(0x049a2860, SveIntegerOp64.IntegerReduction.Op.ANDV, 2),
+                Arguments.of(0x04012860, SveIntegerOp64.IntegerReduction.Op.UADDV, 0),
+                Arguments.of(0x04802860, SveIntegerOp64.IntegerReduction.Op.SADDV, 2),
+                Arguments.of(0x04082860, SveIntegerOp64.IntegerReduction.Op.SMAXV, 0),
+                Arguments.of(0x04492860, SveIntegerOp64.IntegerReduction.Op.UMAXV, 1),
+                Arguments.of(0x048a2860, SveIntegerOp64.IntegerReduction.Op.SMINV, 2),
+                Arguments.of(0x04cb2860, SveIntegerOp64.IntegerReduction.Op.UMINV, 3));
     }
 
     @ParameterizedTest
     @MethodSource("scalarDecodeCases")
-    void scalarWordsFromTheAssemblerDecodeUnderPlainSve(int word, Ir64Op.SveIntegerReduction.Op expected, int esz) {
-        Ir64Op.SveIntegerReduction op = assertInstanceOf(Ir64Op.SveIntegerReduction.class, decode(SVE, word));
+    void scalarWordsFromTheAssemblerDecodeUnderPlainSve(int word, SveIntegerOp64.IntegerReduction.Op expected, int esz) {
+        SveIntegerOp64.IntegerReduction op = assertInstanceOf(SveIntegerOp64.IntegerReduction.class, decode(SVE, word));
         assertEquals(expected, op.op());
         assertEquals(esz, op.esz());
         assertEquals(V0, op.rd());
@@ -263,34 +264,34 @@ class Aarch64SveIntegerReductionTest {
 
     static Stream<Arguments> segmentDecodeCases() {
         return Stream.of(
-                Arguments.of(0x041c2860, Ir64Op.SveIntegerReduction.Op.ORQV),
-                Arguments.of(0x045d2860, Ir64Op.SveIntegerReduction.Op.EORQV),
-                Arguments.of(0x049e2860, Ir64Op.SveIntegerReduction.Op.ANDQV),
-                Arguments.of(0x04052860, Ir64Op.SveIntegerReduction.Op.ADDQV),
-                Arguments.of(0x044c2860, Ir64Op.SveIntegerReduction.Op.SMAXQV),
-                Arguments.of(0x048e2860, Ir64Op.SveIntegerReduction.Op.SMINQV),
-                Arguments.of(0x04cd2860, Ir64Op.SveIntegerReduction.Op.UMAXQV),
-                Arguments.of(0x040f2860, Ir64Op.SveIntegerReduction.Op.UMINQV));
+                Arguments.of(0x041c2860, SveIntegerOp64.IntegerReduction.Op.ORQV),
+                Arguments.of(0x045d2860, SveIntegerOp64.IntegerReduction.Op.EORQV),
+                Arguments.of(0x049e2860, SveIntegerOp64.IntegerReduction.Op.ANDQV),
+                Arguments.of(0x04052860, SveIntegerOp64.IntegerReduction.Op.ADDQV),
+                Arguments.of(0x044c2860, SveIntegerOp64.IntegerReduction.Op.SMAXQV),
+                Arguments.of(0x048e2860, SveIntegerOp64.IntegerReduction.Op.SMINQV),
+                Arguments.of(0x04cd2860, SveIntegerOp64.IntegerReduction.Op.UMAXQV),
+                Arguments.of(0x040f2860, SveIntegerOp64.IntegerReduction.Op.UMINQV));
     }
 
     @ParameterizedTest
     @MethodSource("segmentDecodeCases")
-    void segmentReductionsNeedSve2p1AndSve2p2ImpliesIt(int word, Ir64Op.SveIntegerReduction.Op expected) {
-        assertEquals(expected, assertInstanceOf(Ir64Op.SveIntegerReduction.class, decode(SVE2P1, word)).op());
-        assertEquals(expected, assertInstanceOf(Ir64Op.SveIntegerReduction.class, decode(SVE2P2, word)).op());
+    void segmentReductionsNeedSve2p1AndSve2p2ImpliesIt(int word, SveIntegerOp64.IntegerReduction.Op expected) {
+        assertEquals(expected, assertInstanceOf(SveIntegerOp64.IntegerReduction.class, decode(SVE2P1, word)).op());
+        assertEquals(expected, assertInstanceOf(SveIntegerOp64.IntegerReduction.class, decode(SVE2P2, word)).op());
         assertTrue(refused(SVE2, word), "SVE2 sem SVE2p1 recusa (Armadilha 3 da spec)");
         assertTrue(refused(SVE, word));
     }
 
     @Test
     void predicatedMovprfxDecodesToTheZdWritingRecordNotToAReduction() {
-        Ir64Op.SveIntegerPredicated zeroing = assertInstanceOf(Ir64Op.SveIntegerPredicated.class,
+        SveIntegerOp64.IntegerPredicated zeroing = assertInstanceOf(SveIntegerOp64.IntegerPredicated.class,
                 decode(SVE, 0x04102861)); // movprfx z1.b, p2/z, z3.b
-        Ir64Op.SveIntegerPredicated merging = assertInstanceOf(Ir64Op.SveIntegerPredicated.class,
+        SveIntegerOp64.IntegerPredicated merging = assertInstanceOf(SveIntegerOp64.IntegerPredicated.class,
                 decode(SVE, 0x04512861)); // movprfx z1.h, p2/m, z3.h
-        assertEquals(Ir64Op.SveIntegerPredicated.Op.MOVPRFX, zeroing.op());
+        assertEquals(SveIntegerOp64.IntegerPredicated.Op.MOVPRFX, zeroing.op());
         assertTrue(zeroing.zeroing());
-        assertEquals(Ir64Op.SveIntegerPredicated.Op.MOVPRFX, merging.op());
+        assertEquals(SveIntegerOp64.IntegerPredicated.Op.MOVPRFX, merging.op());
         assertEquals(false, merging.zeroing());
         assertEquals(1, merging.esz());
         assertEquals(Z1, merging.rd());
@@ -301,9 +302,9 @@ class Aarch64SveIntegerReductionTest {
     @Test
     void saddvWithDoublewordElementsIsRefusedAndUaddvIsNot() {
         assertTrue(refused(SVE, word(3, OP_SADDV)));
-        assertInstanceOf(Ir64Op.SveIntegerReduction.class, decode(SVE, word(3, OP_UADDV)));
+        assertInstanceOf(SveIntegerOp64.IntegerReduction.class, decode(SVE, word(3, OP_UADDV)));
         for (int esz = 0; esz < 3; esz++) {
-            assertInstanceOf(Ir64Op.SveIntegerReduction.class, decode(SVE, word(esz, OP_SADDV)));
+            assertInstanceOf(SveIntegerOp64.IntegerReduction.class, decode(SVE, word(esz, OP_SADDV)));
         }
     }
 

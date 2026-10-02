@@ -3,7 +3,7 @@ package dev.vitorsilverio.armjitter.executor64;
 import dev.vitorsilverio.armjitter.core64.Aarch64Core;
 import dev.vitorsilverio.armjitter.ir64.Ir64AtomicOp;
 import dev.vitorsilverio.armjitter.ir64.Ir64MemSize;
-import dev.vitorsilverio.armjitter.ir64.Ir64Op;
+import dev.vitorsilverio.armjitter.ir64.MemoryOp64;
 import dev.vitorsilverio.armjitter.memory.AddressSpace64;
 import dev.vitorsilverio.armjitter.support.TestAddressSpace;
 import org.junit.jupiter.api.Test;
@@ -11,7 +11,7 @@ import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
 /// B19.1 — semântica RMW dos atômicos `FEAT_LSE` direto no executor (interpretador = oráculo, G1).
-/// `LDAPR` não tem executor próprio (reaproveita {@link Ir64Op.Load64}, já coberto).
+/// `LDAPR` não tem executor próprio (reaproveita {@link MemoryOp64.Load64}, já coberto).
 class Ir64BlockExecutorB191Test {
     private static final Ir64BlockExecutor EXECUTOR = new Ir64BlockExecutor();
 
@@ -19,8 +19,8 @@ class Ir64BlockExecutorB191Test {
         return new Aarch64Core(AddressSpace64.wrapping(new TestAddressSpace(256)));
     }
 
-    private static Ir64Op.AtomicMemoryOp op(int rs, int rt, int rn, Ir64MemSize size, Ir64AtomicOp o) {
-        return new Ir64Op.AtomicMemoryOp(rs, rt, rn, size, o, false, false);
+    private static MemoryOp64.AtomicMemoryOp op(int rs, int rt, int rn, Ir64MemSize size, Ir64AtomicOp o) {
+        return new MemoryOp64.AtomicMemoryOp(rs, rt, rn, size, o, false, false);
     }
 
     // ── operações bit a bit ─────────────────────────────────────────────────────────────────────
@@ -151,9 +151,9 @@ class Ir64BlockExecutorB191Test {
         Aarch64Core core = newCore();
         core.setX(2, 0x40L);
         core.memory().write32(0x40L, 0);
-        EXECUTOR.executeOp(core, new Ir64Op.LoadExclusive(1, 2, Ir64MemSize.WORD, false));
+        EXECUTOR.executeOp(core, new MemoryOp64.LoadExclusive(1, 2, Ir64MemSize.WORD, false));
         EXECUTOR.executeOp(core, op(0, 3, 2, Ir64MemSize.WORD, Ir64AtomicOp.ADD));
-        EXECUTOR.executeOp(core, new Ir64Op.StoreExclusive(4, 5, 2, Ir64MemSize.WORD, false));
+        EXECUTOR.executeOp(core, new MemoryOp64.StoreExclusive(4, 5, 2, Ir64MemSize.WORD, false));
         assertEquals(1L, core.x(4), "reserva derrubada pelo notifyOrdinaryWrite do atomic op");
     }
 }

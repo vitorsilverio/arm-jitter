@@ -1405,12 +1405,12 @@ public final class Aarch64Core {
     private static final int MEMORY_TAG_NIBBLE_MASK = 0xF;
     /// Tamanho do bloco de tags de `STGM`/`LDGM` (B19.14) — `256` bytes/`16` granules, o único
     /// tamanho real (`GM_BLOCKSIZE=6`) em que a leitura/escrita não depende de um deslocamento
-    /// DENTRO do bloco (ver javadoc de {@link dev.vitorsilverio.armjitter.ir64.Ir64Op.MemoryTagMultiple}).
+    /// DENTRO do bloco (ver javadoc de {@link dev.vitorsilverio.armjitter.ir64.MemoryOp64.MemoryTagMultiple}).
     private static final int MEMORY_TAG_BLOCK_GRANULES = 16;
     private static final long MEMORY_TAG_BLOCK_ALIGN_MASK =
             ~((long) MEMORY_TAG_BLOCK_GRANULES * MEMORY_TAG_GRANULE_BYTES - 1L);
     /// Tamanho do bloco "DC ZVA" simulado para `STZGM` (B19.14) — `64` bytes/`4` granules, decisão
-    /// documentada (ver javadoc de {@link dev.vitorsilverio.armjitter.ir64.Ir64Op.MemoryTagMultiple}).
+    /// documentada (ver javadoc de {@link dev.vitorsilverio.armjitter.ir64.MemoryOp64.MemoryTagMultiple}).
     private static final int MEMORY_TAG_STZGM_BLOCK_GRANULES = 4;
     /// Tamanho em bytes do bloco "DC ZVA" simulado de {@link #stzgmBlockBaseAndSetTags} — o
     /// executor usa esta constante para saber quantos bytes de DADOS zerar a partir do endereço-

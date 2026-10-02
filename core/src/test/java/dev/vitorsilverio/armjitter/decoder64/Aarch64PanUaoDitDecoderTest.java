@@ -4,6 +4,7 @@ import dev.vitorsilverio.armjitter.arch64.Aarch64Architecture;
 import dev.vitorsilverio.armjitter.ir64.Aarch64SystemRegisterId;
 import dev.vitorsilverio.armjitter.ir64.Ir64Op;
 import dev.vitorsilverio.armjitter.ir64.Ir64SystemInstructionOp;
+import dev.vitorsilverio.armjitter.ir64.SystemOp64;
 import dev.vitorsilverio.armjitter.memory.AddressSpace64;
 import dev.vitorsilverio.armjitter.support.TestAddressSpace;
 import org.junit.jupiter.api.Test;
@@ -57,10 +58,10 @@ class Aarch64PanUaoDitDecoderTest {
 
     @Test
     void armv81AcceptsPanButRejectsUaoAndDit() {
-        Ir64Op.SystemInstruction imm = (Ir64Op.SystemInstruction) decodeWord(PAN_DECODER, MSR_I_PAN_WORD);
+        SystemOp64.SystemInstruction imm = (SystemOp64.SystemInstruction) decodeWord(PAN_DECODER, MSR_I_PAN_WORD);
         assertEquals(Ir64SystemInstructionOp.PSTATE_FIELD_NOP, imm.opcode());
-        assertEquals(Aarch64SystemRegisterId.PAN, ((Ir64Op.SystemRegister) decodeWord(PAN_DECODER, MRS_PAN_WORD)).register());
-        assertEquals(Aarch64SystemRegisterId.PAN, ((Ir64Op.SystemRegister) decodeWord(PAN_DECODER, MSR_REG_PAN_WORD)).register());
+        assertEquals(Aarch64SystemRegisterId.PAN, ((SystemOp64.SystemRegister) decodeWord(PAN_DECODER, MRS_PAN_WORD)).register());
+        assertEquals(Aarch64SystemRegisterId.PAN, ((SystemOp64.SystemRegister) decodeWord(PAN_DECODER, MSR_REG_PAN_WORD)).register());
 
         assertThrows(UnsupportedOperationException.class, () -> decodeWord(PAN_DECODER, MSR_I_UAO_WORD));
         assertThrows(UnsupportedOperationException.class, () -> decodeWord(PAN_DECODER, MRS_UAO_WORD));
@@ -70,12 +71,12 @@ class Aarch64PanUaoDitDecoderTest {
 
     @Test
     void armv82AcceptsPanAndUaoButRejectsDit() {
-        Ir64Op.SystemInstruction immPan = (Ir64Op.SystemInstruction) decodeWord(UAO_DECODER, MSR_I_PAN_WORD);
+        SystemOp64.SystemInstruction immPan = (SystemOp64.SystemInstruction) decodeWord(UAO_DECODER, MSR_I_PAN_WORD);
         assertEquals(Ir64SystemInstructionOp.PSTATE_FIELD_NOP, immPan.opcode());
-        Ir64Op.SystemInstruction immUao = (Ir64Op.SystemInstruction) decodeWord(UAO_DECODER, MSR_I_UAO_WORD);
+        SystemOp64.SystemInstruction immUao = (SystemOp64.SystemInstruction) decodeWord(UAO_DECODER, MSR_I_UAO_WORD);
         assertEquals(Ir64SystemInstructionOp.PSTATE_FIELD_NOP, immUao.opcode());
-        assertEquals(Aarch64SystemRegisterId.UAO, ((Ir64Op.SystemRegister) decodeWord(UAO_DECODER, MRS_UAO_WORD)).register());
-        assertEquals(Aarch64SystemRegisterId.UAO, ((Ir64Op.SystemRegister) decodeWord(UAO_DECODER, MSR_REG_UAO_WORD)).register());
+        assertEquals(Aarch64SystemRegisterId.UAO, ((SystemOp64.SystemRegister) decodeWord(UAO_DECODER, MRS_UAO_WORD)).register());
+        assertEquals(Aarch64SystemRegisterId.UAO, ((SystemOp64.SystemRegister) decodeWord(UAO_DECODER, MSR_REG_UAO_WORD)).register());
 
         assertThrows(UnsupportedOperationException.class, () -> decodeWord(UAO_DECODER, MSR_I_DIT_WORD));
         assertThrows(UnsupportedOperationException.class, () -> decodeWord(UAO_DECODER, MRS_DIT_WORD));
@@ -83,16 +84,16 @@ class Aarch64PanUaoDitDecoderTest {
 
     @Test
     void armv84AcceptsAllThree() {
-        Ir64Op.SystemInstruction immPan = (Ir64Op.SystemInstruction) decodeWord(DIT_DECODER, MSR_I_PAN_WORD);
+        SystemOp64.SystemInstruction immPan = (SystemOp64.SystemInstruction) decodeWord(DIT_DECODER, MSR_I_PAN_WORD);
         assertEquals(Ir64SystemInstructionOp.PSTATE_FIELD_NOP, immPan.opcode());
-        Ir64Op.SystemInstruction immUao = (Ir64Op.SystemInstruction) decodeWord(DIT_DECODER, MSR_I_UAO_WORD);
+        SystemOp64.SystemInstruction immUao = (SystemOp64.SystemInstruction) decodeWord(DIT_DECODER, MSR_I_UAO_WORD);
         assertEquals(Ir64SystemInstructionOp.PSTATE_FIELD_NOP, immUao.opcode());
-        Ir64Op.SystemInstruction immDit = (Ir64Op.SystemInstruction) decodeWord(DIT_DECODER, MSR_I_DIT_WORD);
+        SystemOp64.SystemInstruction immDit = (SystemOp64.SystemInstruction) decodeWord(DIT_DECODER, MSR_I_DIT_WORD);
         assertEquals(Ir64SystemInstructionOp.PSTATE_FIELD_NOP, immDit.opcode());
 
-        assertEquals(Aarch64SystemRegisterId.PAN, ((Ir64Op.SystemRegister) decodeWord(DIT_DECODER, MRS_PAN_WORD)).register());
-        assertEquals(Aarch64SystemRegisterId.UAO, ((Ir64Op.SystemRegister) decodeWord(DIT_DECODER, MRS_UAO_WORD)).register());
-        assertEquals(Aarch64SystemRegisterId.DIT, ((Ir64Op.SystemRegister) decodeWord(DIT_DECODER, MRS_DIT_WORD)).register());
-        assertEquals(Aarch64SystemRegisterId.DIT, ((Ir64Op.SystemRegister) decodeWord(DIT_DECODER, MSR_REG_DIT_WORD)).register());
+        assertEquals(Aarch64SystemRegisterId.PAN, ((SystemOp64.SystemRegister) decodeWord(DIT_DECODER, MRS_PAN_WORD)).register());
+        assertEquals(Aarch64SystemRegisterId.UAO, ((SystemOp64.SystemRegister) decodeWord(DIT_DECODER, MRS_UAO_WORD)).register());
+        assertEquals(Aarch64SystemRegisterId.DIT, ((SystemOp64.SystemRegister) decodeWord(DIT_DECODER, MRS_DIT_WORD)).register());
+        assertEquals(Aarch64SystemRegisterId.DIT, ((SystemOp64.SystemRegister) decodeWord(DIT_DECODER, MSR_REG_DIT_WORD)).register());
     }
 }

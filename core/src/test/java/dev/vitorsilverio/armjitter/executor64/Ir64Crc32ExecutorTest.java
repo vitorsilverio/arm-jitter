@@ -1,7 +1,7 @@
 package dev.vitorsilverio.armjitter.executor64;
 
 import dev.vitorsilverio.armjitter.core64.Aarch64Core;
-import dev.vitorsilverio.armjitter.ir64.Ir64Op;
+import dev.vitorsilverio.armjitter.ir64.IntegerOp64;
 import dev.vitorsilverio.armjitter.memory.AddressSpace64;
 import dev.vitorsilverio.armjitter.support.TestAddressSpace;
 import org.junit.jupiter.api.Test;
@@ -13,7 +13,7 @@ import static org.junit.jupiter.api.Assertions.assertNotEquals;
 
 /// B19.17 — semântica de `CRC32{B,H,W,X}`/`CRC32C{B,H,W,X}` (interpretador = oráculo, G1).
 ///
-/// A instrução em si NÃO complementa entrada/saída (ver javadoc de {@link Ir64Op.Crc32}); os
+/// A instrução em si NÃO complementa entrada/saída (ver javadoc de {@link IntegerOp64.Crc32}); os
 /// vetores de teste clássicos (RFC 3720 §12.1 para Castagnoli; o vetor "123456789" padrão de
 /// CRC-32/ISO-HDLC) assumem `init=0xFFFFFFFF` e complemento final por fora — reproduzidos aqui
 /// encadeando `CRC32B` byte a byte sobre `"123456789"`, iniciando `Wn=~0` e invertendo o `Wd`
@@ -34,7 +34,7 @@ class Ir64Crc32ExecutorTest {
         core.setX(0, 0xFFFF_FFFFL); // Wn = ~0 (init clássico)
         for (byte b : CHECK_VECTOR) {
             core.setX(2, b & 0xFFL);
-            EXECUTOR.executeOp(core, new Ir64Op.Crc32(0, 0, 2, 8, castagnoli));
+            EXECUTOR.executeOp(core, new IntegerOp64.Crc32(0, 0, 2, 8, castagnoli));
         }
         return (int) (~core.x(0) & 0xFFFF_FFFFL);
     }
@@ -66,13 +66,13 @@ class Ir64Crc32ExecutorTest {
             int value = (i + 1) * 7;
             packed |= (value & 0xFFL) << (i * 8);
             chained.setX(2, value & 0xFFL);
-            EXECUTOR.executeOp(chained, new Ir64Op.Crc32(0, 0, 2, 8, false));
+            EXECUTOR.executeOp(chained, new IntegerOp64.Crc32(0, 0, 2, 8, false));
         }
 
         Aarch64Core single = newCore();
         single.setX(0, 123L);
         single.setX(2, packed);
-        EXECUTOR.executeOp(single, new Ir64Op.Crc32(0, 0, 2, 64, false));
+        EXECUTOR.executeOp(single, new IntegerOp64.Crc32(0, 0, 2, 64, false));
 
         assertEquals(chained.x(0), single.x(0));
     }
@@ -82,13 +82,13 @@ class Ir64Crc32ExecutorTest {
         Aarch64Core core = newCore();
         core.setX(0, 0);
         core.setX(2, 0x1234L);
-        EXECUTOR.executeOp(core, new Ir64Op.Crc32(0, 0, 2, 8, false)); // só o byte 0x34
+        EXECUTOR.executeOp(core, new IntegerOp64.Crc32(0, 0, 2, 8, false)); // só o byte 0x34
         long crcAfterByte = core.x(0);
 
         Aarch64Core core2 = newCore();
         core2.setX(0, 0);
         core2.setX(2, 0x1234L);
-        EXECUTOR.executeOp(core2, new Ir64Op.Crc32(0, 0, 2, 16, false)); // 0x34 seguido de 0x12
+        EXECUTOR.executeOp(core2, new IntegerOp64.Crc32(0, 0, 2, 16, false)); // 0x34 seguido de 0x12
         assertNotEquals(crcAfterByte, core2.x(0), "CRC32H processa 2 bytes, não pode bater com CRC32B");
     }
 }

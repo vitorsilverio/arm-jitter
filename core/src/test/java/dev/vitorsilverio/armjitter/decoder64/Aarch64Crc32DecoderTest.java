@@ -1,6 +1,7 @@
 package dev.vitorsilverio.armjitter.decoder64;
 
 import dev.vitorsilverio.armjitter.arch64.Aarch64Architecture;
+import dev.vitorsilverio.armjitter.ir64.IntegerOp64;
 import dev.vitorsilverio.armjitter.ir64.Ir64Op;
 import dev.vitorsilverio.armjitter.memory.AddressSpace64;
 import dev.vitorsilverio.armjitter.support.TestAddressSpace;
@@ -41,38 +42,38 @@ class Aarch64Crc32DecoderTest {
 
     @Test
     void decodesRegistersAndWidthForEachSize() {
-        Ir64Op.Crc32 b = (Ir64Op.Crc32) decode(CRC32_DECODER, CRC32B_W0_W1_W2);
+        IntegerOp64.Crc32 b = (IntegerOp64.Crc32) decode(CRC32_DECODER, CRC32B_W0_W1_W2);
         assertEquals(0, b.rd());
         assertEquals(1, b.rn());
         assertEquals(2, b.rm());
         assertEquals(8, b.dataWidthBits());
         assertFalse(b.castagnoli());
 
-        Ir64Op.Crc32 h = (Ir64Op.Crc32) decode(CRC32_DECODER, CRC32H_W0_W1_W2);
+        IntegerOp64.Crc32 h = (IntegerOp64.Crc32) decode(CRC32_DECODER, CRC32H_W0_W1_W2);
         assertEquals(16, h.dataWidthBits());
 
-        Ir64Op.Crc32 w = (Ir64Op.Crc32) decode(CRC32_DECODER, CRC32W_W0_W1_W2);
+        IntegerOp64.Crc32 w = (IntegerOp64.Crc32) decode(CRC32_DECODER, CRC32W_W0_W1_W2);
         assertEquals(32, w.dataWidthBits());
 
-        Ir64Op.Crc32 x = (Ir64Op.Crc32) decode(CRC32_DECODER, CRC32X_W0_W1_X2);
+        IntegerOp64.Crc32 x = (IntegerOp64.Crc32) decode(CRC32_DECODER, CRC32X_W0_W1_X2);
         assertEquals(64, x.dataWidthBits());
     }
 
     @Test
     void castagnoliVariantSetsFlagButSameFields() {
-        Ir64Op.Crc32 cb = (Ir64Op.Crc32) decode(CRC32_DECODER, CRC32CB_W0_W1_W2);
+        IntegerOp64.Crc32 cb = (IntegerOp64.Crc32) decode(CRC32_DECODER, CRC32CB_W0_W1_W2);
         assertTrue(cb.castagnoli());
         assertEquals(8, cb.dataWidthBits());
 
-        Ir64Op.Crc32 ch = (Ir64Op.Crc32) decode(CRC32_DECODER, CRC32CH_W0_W1_W2);
+        IntegerOp64.Crc32 ch = (IntegerOp64.Crc32) decode(CRC32_DECODER, CRC32CH_W0_W1_W2);
         assertTrue(ch.castagnoli());
         assertEquals(16, ch.dataWidthBits());
 
-        Ir64Op.Crc32 cw = (Ir64Op.Crc32) decode(CRC32_DECODER, CRC32CW_W0_W1_W2);
+        IntegerOp64.Crc32 cw = (IntegerOp64.Crc32) decode(CRC32_DECODER, CRC32CW_W0_W1_W2);
         assertTrue(cw.castagnoli());
         assertEquals(32, cw.dataWidthBits());
 
-        Ir64Op.Crc32 cx = (Ir64Op.Crc32) decode(CRC32_DECODER, CRC32CX_W0_W1_X2);
+        IntegerOp64.Crc32 cx = (IntegerOp64.Crc32) decode(CRC32_DECODER, CRC32CX_W0_W1_X2);
         assertTrue(cx.castagnoli());
         assertEquals(64, cx.dataWidthBits());
     }

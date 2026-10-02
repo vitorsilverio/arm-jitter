@@ -5,6 +5,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import dev.vitorsilverio.armjitter.codegen.jvm.Jvm64BlockLoader;
 import dev.vitorsilverio.armjitter.core64.Aarch64Core;
+import dev.vitorsilverio.armjitter.ir64.FpOp64;
+import dev.vitorsilverio.armjitter.ir64.IntegerOp64;
 import dev.vitorsilverio.armjitter.ir64.Ir64AddressingMode;
 import dev.vitorsilverio.armjitter.ir64.Ir64Block;
 import dev.vitorsilverio.armjitter.ir64.Ir64FpMemSize;
@@ -19,7 +21,7 @@ import org.junit.jupiter.api.Test;
 /// C12.5, Armadilha 1: a op FP/SIMD emitida nativamente TEM que ficar DENTRO do range `try` do
 /// {@link Ir64BlockCompiler} e gravar `LOCAL_FAULT_PC` antes — a mesma classe de bug que a **E7**
 /// corrigiu para o lado inteiro (`Ir64BlockCompilerMemoryAbortTest`, F11). Este teste prova o
-/// equivalente para `FpLoad64` (o primeiro dos 7 `Kind` da C12.5): um bloco de DUAS instruções
+/// equivalente para `FpOp64.Load64` (o primeiro dos 7 `Kind` da C12.5): um bloco de DUAS instruções
 /// (`MOVZ` nativo, sem falta; `LDR D<t>,[X<n>]` nativo, com falta) sobre uma
 /// {@link TranslatingAddressSpace64} identity-mapped SÓ na página de código — o alvo do `LDR`
 /// fica DELIBERADAMENTE fora do mapeamento, então só a op FP falta, nunca o `Fetch`.
@@ -77,16 +79,16 @@ class Ir64BlockCompilerFpMemoryAbortTest {
         Ir64Block.Builder builder = Ir64Block.builder(0L);
         builder.add(new Ir64Op.Fetch(0x0L, 4));
         builder.add(new Ir64Op.Cycle(2));
-        builder.add(new Ir64Op.MoveWide(Ir64MoveWideOp.MOVZ, 1, MOVZ_IMMEDIATE16, MOVZ_SHIFT, true));
+        builder.add(new IntegerOp64.MoveWide(Ir64MoveWideOp.MOVZ, 1, MOVZ_IMMEDIATE16, MOVZ_SHIFT, true));
         builder.add(new Ir64Op.Fetch(0x4L, 4));
         builder.add(new Ir64Op.Cycle(3));
-        builder.add(new Ir64Op.FpLoad64(0, 1, Ir64FpMemSize.DOUBLE,
+        builder.add(new FpOp64.Load64(0, 1, Ir64FpMemSize.DOUBLE,
                 Ir64AddressingMode.OFFSET, 0L, -1, null, 0));
         builder.endPc(0x8L);
         Ir64Block block = builder.sealed();
 
         assertTrue(Ir64NativePolicy.supports(block),
-                "MOVZ + FpLoad64 (LDR D) devem ser nativamente suportados após a C12.5");
+                "MOVZ + FpOp64.Load64 (LDR D) devem ser nativamente suportados após a C12.5");
 
         byte[] bytecode = new Ir64BlockCompiler().compile(
                 "dev/vitorsilverio/armjitter/codegen/generated/Ir64BlockCompilerFpMemoryAbortTestBlock", block);

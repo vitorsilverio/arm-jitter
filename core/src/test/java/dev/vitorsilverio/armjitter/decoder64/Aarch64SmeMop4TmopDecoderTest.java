@@ -3,6 +3,7 @@ package dev.vitorsilverio.armjitter.decoder64;
 import dev.vitorsilverio.armjitter.arch64.Aarch64Architecture;
 import dev.vitorsilverio.armjitter.arch64.Aarch64Feature;
 import dev.vitorsilverio.armjitter.ir64.Ir64Op;
+import dev.vitorsilverio.armjitter.ir64.SmeOp64;
 import dev.vitorsilverio.armjitter.memory.AddressSpace64;
 import dev.vitorsilverio.armjitter.support.TestAddressSpace;
 import org.junit.jupiter.api.Test;
@@ -111,9 +112,9 @@ class Aarch64SmeMop4TmopDecoderTest {
             "0xA1CA029C, USMOP4_DH, 4, 4, 26, true, true, false",   // usmop4s za4.d, {z4.h-z5.h}, z26.h
             "0xA1DA009C, USMOP4_DH, 4, 4, 26, true, false, true",   // usmop4s za4.d, z4.h, {z26.h-z27.h}
     })
-    void decodesEveryMop4EncodingWithItsFields(String word, Ir64Op.SmeMop4.Op expected, int tile, int zn, int zm,
+    void decodesEveryMop4EncodingWithItsFields(String word, SmeOp64.Mop4.Op expected, int tile, int zn, int zm,
             boolean subtract, boolean n, boolean m) {
-        Ir64Op.SmeMop4 op = assertInstanceOf(Ir64Op.SmeMop4.class, decode(ALL_DECODER, word(word)));
+        SmeOp64.Mop4 op = assertInstanceOf(SmeOp64.Mop4.class, decode(ALL_DECODER, word(word)));
         assertEquals(expected, op.op());
         assertEquals(tile, op.tile());
         assertEquals(zn, op.zn());
@@ -154,9 +155,9 @@ class Aarch64SmeMop4TmopDecoderTest {
             "0x817F8141, UTMOPA_SB, 1, 10, 31, 20, 0",   // utmopa za1.s, {z10.b-z11.b}, z31.b, z20[0]
             "0x817D9061, UTMOPA_SB, 1, 2, 29, 28, 2",   // utmopa za1.s, {z2.b-z3.b}, z29.b, z28[2]
     })
-    void decodesEveryTmopEncodingWithItsFields(String word, Ir64Op.SmeTmop.Op expected, int tile, int zn, int zm,
+    void decodesEveryTmopEncodingWithItsFields(String word, SmeOp64.Tmop.Op expected, int tile, int zn, int zm,
             int zk, int idx) {
-        Ir64Op.SmeTmop op = assertInstanceOf(Ir64Op.SmeTmop.class, decode(ALL_DECODER, word(word)));
+        SmeOp64.Tmop op = assertInstanceOf(SmeOp64.Tmop.class, decode(ALL_DECODER, word(word)));
         assertEquals(expected, op.op());
         assertEquals(tile, op.tile());
         assertEquals(zn, op.zn());
@@ -210,7 +211,7 @@ class Aarch64SmeMop4TmopDecoderTest {
     }
 
     private static boolean isTmop(int word) {
-        return decode(ALL_DECODER, word) instanceof Ir64Op.SmeTmop;
+        return decode(ALL_DECODER, word) instanceof SmeOp64.Tmop;
     }
 
     @Test
@@ -246,8 +247,8 @@ class Aarch64SmeMop4TmopDecoderTest {
     void theTwoFp8Mop4FormsHaveNoSubtractBit() {
         int sb = word("0x802801C3");
         int hb = word("0x802E0008");
-        assertFalse(((Ir64Op.SmeMop4) decode(ALL_DECODER, sb)).subtract());
-        assertFalse(((Ir64Op.SmeMop4) decode(ALL_DECODER, hb)).subtract());
+        assertFalse(((SmeOp64.Mop4) decode(ALL_DECODER, sb)).subtract());
+        assertFalse(((SmeOp64.Mop4) decode(ALL_DECODER, hb)).subtract());
         // com o bit `s` (4) ligado: o `.decode` fixa `0` — recusa, nao troca por outra instrucao
         assertThrows(UnsupportedOperationException.class, () -> decode(ALL_DECODER, sb | 0x10));
         assertThrows(UnsupportedOperationException.class, () -> decode(ALL_DECODER, hb | 0x10));

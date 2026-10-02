@@ -3,6 +3,7 @@ package dev.vitorsilverio.armjitter.decoder64;
 import dev.vitorsilverio.armjitter.arch64.Aarch64Architecture;
 import dev.vitorsilverio.armjitter.ir64.Aarch64SystemRegisterId;
 import dev.vitorsilverio.armjitter.ir64.Ir64Op;
+import dev.vitorsilverio.armjitter.ir64.SystemOp64;
 import dev.vitorsilverio.armjitter.memory.AddressSpace64;
 import dev.vitorsilverio.armjitter.support.TestAddressSpace;
 import org.junit.jupiter.api.Test;
@@ -40,7 +41,7 @@ class Aarch64Fp8ModeRegisterDecoderTest {
 
     @Test
     void mrsFpmrDecodesWithFp8() {
-        Ir64Op.SystemRegister op = (Ir64Op.SystemRegister) decodeWord(FP8_DECODER, MRS_FPMR_X0_WORD);
+        SystemOp64.SystemRegister op = (SystemOp64.SystemRegister) decodeWord(FP8_DECODER, MRS_FPMR_X0_WORD);
         assertEquals(true, op.read());
         assertEquals(Aarch64SystemRegisterId.FPMR, op.register());
         assertEquals(0, op.rt());
@@ -48,7 +49,7 @@ class Aarch64Fp8ModeRegisterDecoderTest {
 
     @Test
     void msrFpmrDecodesWithFp8() {
-        Ir64Op.SystemRegister op = (Ir64Op.SystemRegister) decodeWord(FP8_DECODER, MSR_FPMR_X0_WORD);
+        SystemOp64.SystemRegister op = (SystemOp64.SystemRegister) decodeWord(FP8_DECODER, MSR_FPMR_X0_WORD);
         assertEquals(false, op.read());
         assertEquals(Aarch64SystemRegisterId.FPMR, op.register());
         assertEquals(0, op.rt());
@@ -56,14 +57,14 @@ class Aarch64Fp8ModeRegisterDecoderTest {
 
     @Test
     void mrsFpmrDecodesRtOne() {
-        Ir64Op.SystemRegister op = (Ir64Op.SystemRegister) decodeWord(FP8_DECODER, MRS_FPMR_X1_WORD);
+        SystemOp64.SystemRegister op = (SystemOp64.SystemRegister) decodeWord(FP8_DECODER, MRS_FPMR_X1_WORD);
         assertEquals(Aarch64SystemRegisterId.FPMR, op.register());
         assertEquals(1, op.rt());
     }
 
     @Test
     void msrFpmrDecodesRtOne() {
-        Ir64Op.SystemRegister op = (Ir64Op.SystemRegister) decodeWord(FP8_DECODER, MSR_FPMR_X1_WORD);
+        SystemOp64.SystemRegister op = (SystemOp64.SystemRegister) decodeWord(FP8_DECODER, MSR_FPMR_X1_WORD);
         assertEquals(Aarch64SystemRegisterId.FPMR, op.register());
         assertEquals(1, op.rt());
     }
@@ -73,8 +74,8 @@ class Aarch64Fp8ModeRegisterDecoderTest {
         // d53b4400: mrs x0, fpcr / d53b4420: mrs x0, fpsr — não podem ter sido afetados pelo
         // roteamento novo de op2 no mesmo CRm.
         assertEquals(Aarch64SystemRegisterId.FPCR,
-                ((Ir64Op.SystemRegister) decodeWord(FP8_DECODER, 0xd53b4400)).register());
+                ((SystemOp64.SystemRegister) decodeWord(FP8_DECODER, 0xd53b4400)).register());
         assertEquals(Aarch64SystemRegisterId.FPSR,
-                ((Ir64Op.SystemRegister) decodeWord(FP8_DECODER, 0xd53b4420)).register());
+                ((SystemOp64.SystemRegister) decodeWord(FP8_DECODER, 0xd53b4420)).register());
     }
 }

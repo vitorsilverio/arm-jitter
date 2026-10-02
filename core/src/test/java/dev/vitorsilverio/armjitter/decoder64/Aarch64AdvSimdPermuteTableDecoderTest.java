@@ -1,5 +1,7 @@
 package dev.vitorsilverio.armjitter.decoder64;
 
+import dev.vitorsilverio.armjitter.ir64.AdvSimdFpOp64;
+import dev.vitorsilverio.armjitter.ir64.AdvSimdMoveOp64;
 import dev.vitorsilverio.armjitter.ir64.Ir64Op;
 import dev.vitorsilverio.armjitter.ir64.Ir64VectorFpAcrossLanesOp;
 import dev.vitorsilverio.armjitter.ir64.Ir64VectorPermuteOp;
@@ -26,7 +28,7 @@ class Aarch64AdvSimdPermuteTableDecoderTest {
     @Test
     void extDForm() {
         // `ext v0.8b, v1.8b, v2.8b, #3`
-        Ir64Op.VectorExtract ext = (Ir64Op.VectorExtract) decodeWord(0x2e021820);
+        AdvSimdMoveOp64.Extract ext = (AdvSimdMoveOp64.Extract) decodeWord(0x2e021820);
         assertEquals(false, ext.q());
         assertEquals(3, ext.imm());
         assertEquals(0, ext.rd());
@@ -37,7 +39,7 @@ class Aarch64AdvSimdPermuteTableDecoderTest {
     @Test
     void extQForm() {
         // `ext v0.16b, v1.16b, v2.16b, #11`
-        Ir64Op.VectorExtract ext = (Ir64Op.VectorExtract) decodeWord(0x6e025820);
+        AdvSimdMoveOp64.Extract ext = (AdvSimdMoveOp64.Extract) decodeWord(0x6e025820);
         assertEquals(true, ext.q());
         assertEquals(11, ext.imm());
         assertEquals(0, ext.rd());
@@ -55,7 +57,7 @@ class Aarch64AdvSimdPermuteTableDecoderTest {
     @Test
     void uzp1() {
         // `uzp1 v0.8b, v1.8b, v2.8b`
-        Ir64Op.VectorPermute op = (Ir64Op.VectorPermute) decodeWord(0x0e021820);
+        AdvSimdMoveOp64.Permute op = (AdvSimdMoveOp64.Permute) decodeWord(0x0e021820);
         assertEquals(Ir64VectorPermuteOp.UZP1, op.op());
         assertEquals(false, op.q());
         assertEquals(0, op.esz());
@@ -64,7 +66,7 @@ class Aarch64AdvSimdPermuteTableDecoderTest {
         assertEquals(2, op.rm());
 
         // `uzp1 v0.16b, v1.16b, v2.16b`
-        Ir64Op.VectorPermute opQ = (Ir64Op.VectorPermute) decodeWord(0x4e021820);
+        AdvSimdMoveOp64.Permute opQ = (AdvSimdMoveOp64.Permute) decodeWord(0x4e021820);
         assertEquals(Ir64VectorPermuteOp.UZP1, opQ.op());
         assertEquals(true, opQ.q());
     }
@@ -72,7 +74,7 @@ class Aarch64AdvSimdPermuteTableDecoderTest {
     @Test
     void uzp2() {
         // `uzp2 v3.4h, v4.4h, v5.4h`
-        Ir64Op.VectorPermute op = (Ir64Op.VectorPermute) decodeWord(0x0e455883);
+        AdvSimdMoveOp64.Permute op = (AdvSimdMoveOp64.Permute) decodeWord(0x0e455883);
         assertEquals(Ir64VectorPermuteOp.UZP2, op.op());
         assertEquals(false, op.q());
         assertEquals(1, op.esz());
@@ -84,12 +86,12 @@ class Aarch64AdvSimdPermuteTableDecoderTest {
     @Test
     void trn1AndTrn2() {
         // `trn1 v0.4s, v1.4s, v2.4s`
-        Ir64Op.VectorPermute trn1 = (Ir64Op.VectorPermute) decodeWord(0x4e822820);
+        AdvSimdMoveOp64.Permute trn1 = (AdvSimdMoveOp64.Permute) decodeWord(0x4e822820);
         assertEquals(Ir64VectorPermuteOp.TRN1, trn1.op());
         assertEquals(2, trn1.esz());
 
         // `trn2 v0.2d, v1.2d, v2.2d`
-        Ir64Op.VectorPermute trn2 = (Ir64Op.VectorPermute) decodeWord(0x4ec26820);
+        AdvSimdMoveOp64.Permute trn2 = (AdvSimdMoveOp64.Permute) decodeWord(0x4ec26820);
         assertEquals(Ir64VectorPermuteOp.TRN2, trn2.op());
         assertEquals(3, trn2.esz());
     }
@@ -97,12 +99,12 @@ class Aarch64AdvSimdPermuteTableDecoderTest {
     @Test
     void zip1AndZip2() {
         // `zip1 v0.16b, v1.16b, v2.16b`
-        Ir64Op.VectorPermute zip1 = (Ir64Op.VectorPermute) decodeWord(0x4e023820);
+        AdvSimdMoveOp64.Permute zip1 = (AdvSimdMoveOp64.Permute) decodeWord(0x4e023820);
         assertEquals(Ir64VectorPermuteOp.ZIP1, zip1.op());
         assertEquals(0, zip1.esz());
 
         // `zip2 v6.4s, v7.4s, v8.4s`
-        Ir64Op.VectorPermute zip2 = (Ir64Op.VectorPermute) decodeWord(0x4e8878e6);
+        AdvSimdMoveOp64.Permute zip2 = (AdvSimdMoveOp64.Permute) decodeWord(0x4e8878e6);
         assertEquals(Ir64VectorPermuteOp.ZIP2, zip2.op());
         assertEquals(2, zip2.esz());
         assertEquals(6, zip2.rd());
@@ -113,7 +115,7 @@ class Aarch64AdvSimdPermuteTableDecoderTest {
     @Test
     void tblOneRegister() {
         // `tbl v0.16b, {v1.16b}, v2.16b`
-        Ir64Op.VectorTableLookup tbl = (Ir64Op.VectorTableLookup) decodeWord(0x4e020020);
+        AdvSimdMoveOp64.TableLookup tbl = (AdvSimdMoveOp64.TableLookup) decodeWord(0x4e020020);
         assertEquals(false, tbl.tbx());
         assertEquals(0, tbl.len());
         assertEquals(true, tbl.q());
@@ -125,7 +127,7 @@ class Aarch64AdvSimdPermuteTableDecoderTest {
     @Test
     void tblTwoRegisters8bArrangement() {
         // `tbl v0.8b, {v1.16b, v2.16b}, v3.8b`
-        Ir64Op.VectorTableLookup tbl = (Ir64Op.VectorTableLookup) decodeWord(0x0e032020);
+        AdvSimdMoveOp64.TableLookup tbl = (AdvSimdMoveOp64.TableLookup) decodeWord(0x0e032020);
         assertEquals(false, tbl.tbx());
         assertEquals(1, tbl.len());
         assertEquals(false, tbl.q());
@@ -135,7 +137,7 @@ class Aarch64AdvSimdPermuteTableDecoderTest {
     @Test
     void tbxThreeRegisters() {
         // `tbx v0.16b, {v1.16b, v2.16b, v3.16b}, v4.16b`
-        Ir64Op.VectorTableLookup tbx = (Ir64Op.VectorTableLookup) decodeWord(0x4e045020);
+        AdvSimdMoveOp64.TableLookup tbx = (AdvSimdMoveOp64.TableLookup) decodeWord(0x4e045020);
         assertEquals(true, tbx.tbx());
         assertEquals(2, tbx.len());
         assertEquals(4, tbx.rm());
@@ -144,7 +146,7 @@ class Aarch64AdvSimdPermuteTableDecoderTest {
     @Test
     void tblFourRegisters() {
         // `tbl v0.16b, {v1.16b, v2.16b, v3.16b, v4.16b}, v5.16b`
-        Ir64Op.VectorTableLookup tbl = (Ir64Op.VectorTableLookup) decodeWord(0x4e056020);
+        AdvSimdMoveOp64.TableLookup tbl = (AdvSimdMoveOp64.TableLookup) decodeWord(0x4e056020);
         assertEquals(false, tbl.tbx());
         assertEquals(3, tbl.len());
         assertEquals(5, tbl.rm());
@@ -153,20 +155,20 @@ class Aarch64AdvSimdPermuteTableDecoderTest {
     @Test
     void fpAcrossLanes() {
         // `fmaxnmv s0, v1.4s`
-        Ir64Op.VectorFpAcrossLanes maxnmv = (Ir64Op.VectorFpAcrossLanes) decodeWord(0x6e30c820);
+        AdvSimdFpOp64.FpAcrossLanes maxnmv = (AdvSimdFpOp64.FpAcrossLanes) decodeWord(0x6e30c820);
         assertEquals(Ir64VectorFpAcrossLanesOp.FMAXNMV, maxnmv.op());
         assertEquals(0, maxnmv.rd());
         assertEquals(1, maxnmv.rn());
 
         // `fminnmv s0, v1.4s`
         assertEquals(Ir64VectorFpAcrossLanesOp.FMINNMV,
-                ((Ir64Op.VectorFpAcrossLanes) decodeWord(0x6eb0c820)).op());
+                ((AdvSimdFpOp64.FpAcrossLanes) decodeWord(0x6eb0c820)).op());
         // `fmaxv s0, v1.4s`
         assertEquals(Ir64VectorFpAcrossLanesOp.FMAXV,
-                ((Ir64Op.VectorFpAcrossLanes) decodeWord(0x6e30f820)).op());
+                ((AdvSimdFpOp64.FpAcrossLanes) decodeWord(0x6e30f820)).op());
         // `fminv s0, v1.4s`
         assertEquals(Ir64VectorFpAcrossLanesOp.FMINV,
-                ((Ir64Op.VectorFpAcrossLanes) decodeWord(0x6eb0f820)).op());
+                ((AdvSimdFpOp64.FpAcrossLanes) decodeWord(0x6eb0f820)).op());
     }
 
     @Test
@@ -176,7 +178,7 @@ class Aarch64AdvSimdPermuteTableDecoderTest {
         // por B8.12 (ver `Aarch64AdvSimdCopyDecoderTest`) — este teste só confirma que o dispatch
         // deste método (`bit10=0`) segue intocado: as duas palavras agora decodificam para os
         // tipos novos, não mais `UnsupportedOperationException`.
-        assertEquals(Ir64Op.VectorDuplicateGeneral.class, decodeWord(0x4e040c20).getClass());
-        assertEquals(Ir64Op.VectorDuplicateElement.class, decodeWord(0x4e140420).getClass());
+        assertEquals(AdvSimdMoveOp64.DuplicateGeneral.class, decodeWord(0x4e040c20).getClass());
+        assertEquals(AdvSimdMoveOp64.DuplicateElement.class, decodeWord(0x4e140420).getClass());
     }
 }

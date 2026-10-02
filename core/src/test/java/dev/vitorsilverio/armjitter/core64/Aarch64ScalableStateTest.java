@@ -4,6 +4,7 @@ import dev.vitorsilverio.armjitter.arch64.Aarch64Architecture;
 import dev.vitorsilverio.armjitter.decoder64.Aarch64Decoder;
 import dev.vitorsilverio.armjitter.ir64.Aarch64SystemRegisterId;
 import dev.vitorsilverio.armjitter.ir64.Ir64Op;
+import dev.vitorsilverio.armjitter.ir64.SystemOp64;
 import dev.vitorsilverio.armjitter.memory.AddressSpace64;
 import dev.vitorsilverio.armjitter.support.TestAddressSpace;
 import org.junit.jupiter.api.Test;
@@ -203,16 +204,16 @@ class Aarch64ScalableStateTest {
     void zcrRegistersDecodeOnlyWithSve() {
         Aarch64Decoder sve = new Aarch64Decoder(Aarch64Architecture.ARMV9_0_A);
         Aarch64Decoder plain = new Aarch64Decoder(Aarch64Architecture.ARMV8_0_A);
-        Ir64Op.SystemRegister mrs = (Ir64Op.SystemRegister) decodeWord(sve, MRS_ZCR_EL1_X0);
+        SystemOp64.SystemRegister mrs = (SystemOp64.SystemRegister) decodeWord(sve, MRS_ZCR_EL1_X0);
         assertTrue(mrs.read());
         assertEquals(Aarch64SystemRegisterId.ZCR_EL1, mrs.register());
-        Ir64Op.SystemRegister msr = (Ir64Op.SystemRegister) decodeWord(sve, MSR_ZCR_EL1_X0);
+        SystemOp64.SystemRegister msr = (SystemOp64.SystemRegister) decodeWord(sve, MSR_ZCR_EL1_X0);
         assertFalse(msr.read());
         assertEquals(Aarch64SystemRegisterId.ZCR_EL1, msr.register());
         assertEquals(Aarch64SystemRegisterId.ZCR_EL2,
-                ((Ir64Op.SystemRegister) decodeWord(sve, MRS_ZCR_EL2_X0)).register());
+                ((SystemOp64.SystemRegister) decodeWord(sve, MRS_ZCR_EL2_X0)).register());
         assertEquals(Aarch64SystemRegisterId.ZCR_EL3,
-                ((Ir64Op.SystemRegister) decodeWord(sve, MRS_ZCR_EL3_X0)).register());
+                ((SystemOp64.SystemRegister) decodeWord(sve, MRS_ZCR_EL3_X0)).register());
         for (int word : new int[] {MRS_ZCR_EL1_X0, MSR_ZCR_EL1_X0, MRS_ZCR_EL2_X0, MRS_ZCR_EL3_X0}) {
             assertThrows(UnsupportedOperationException.class, () -> decodeWord(plain, word));
         }

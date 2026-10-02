@@ -6,6 +6,7 @@ import dev.vitorsilverio.armjitter.core64.Aarch64Core;
 import dev.vitorsilverio.armjitter.core64.Aarch64ExceptionLevel;
 import dev.vitorsilverio.armjitter.decoder64.Aarch64Decoder;
 import dev.vitorsilverio.armjitter.ir64.Ir64Op;
+import dev.vitorsilverio.armjitter.ir64.SveMemoryOp64;
 import dev.vitorsilverio.armjitter.memory.AddressSpace64;
 import dev.vitorsilverio.armjitter.memory.MemoryAccessType;
 import dev.vitorsilverio.armjitter.memory.mmu.FaultStatus64;
@@ -459,8 +460,8 @@ class Aarch64SveNonTemporalTest {
         for (Form form : FORMS) {
             Ir64Op op = decode(SVE2, form.word());
             if (form.store()) {
-                Ir64Op.SveStore store = assertInstanceOf(Ir64Op.SveStore.class, op, form.name());
-                assertEquals(Ir64Op.SveStore.Op.SCATTER_VECTOR_PLUS_SCALAR, store.op(), form.name());
+                SveMemoryOp64.Store store = assertInstanceOf(SveMemoryOp64.Store.class, op, form.name());
+                assertEquals(SveMemoryOp64.Store.Op.SCATTER_VECTOR_PLUS_SCALAR, store.op(), form.name());
                 assertEquals(form.msz(), store.msz(), form.name());
                 assertEquals(form.esz(), store.esz(), form.name());
                 assertEquals(Z0, store.rt(), form.name());
@@ -469,8 +470,8 @@ class Aarch64SveNonTemporalTest {
                 assertEquals(P1, store.pg(), form.name());
                 assertTrue(store.nonStreaming(), form.name());
             } else {
-                Ir64Op.SveGather gather = assertInstanceOf(Ir64Op.SveGather.class, op, form.name());
-                assertEquals(Ir64Op.SveGather.Op.VECTOR_PLUS_SCALAR, gather.op(), form.name());
+                SveMemoryOp64.Gather gather = assertInstanceOf(SveMemoryOp64.Gather.class, op, form.name());
+                assertEquals(SveMemoryOp64.Gather.Op.VECTOR_PLUS_SCALAR, gather.op(), form.name());
                 assertEquals(form.msz(), gather.msz(), form.name());
                 assertEquals(form.esz(), gather.esz(), form.name());
                 assertEquals(form.signed(), gather.signExtend(), form.name());
@@ -519,8 +520,8 @@ class Aarch64SveNonTemporalTest {
 
     private static boolean decodesAsGroup(Aarch64Architecture architecture, int word) {
         Ir64Op op = decode(architecture, word);
-        return op instanceof Ir64Op.SveGather gather && gather.op() == Ir64Op.SveGather.Op.VECTOR_PLUS_SCALAR
-                || op instanceof Ir64Op.SveStore store && store.op() == Ir64Op.SveStore.Op.SCATTER_VECTOR_PLUS_SCALAR;
+        return op instanceof SveMemoryOp64.Gather gather && gather.op() == SveMemoryOp64.Gather.Op.VECTOR_PLUS_SCALAR
+                || op instanceof SveMemoryOp64.Store store && store.op() == SveMemoryOp64.Store.Op.SCATTER_VECTOR_PLUS_SCALAR;
     }
 
     // ── Modo streaming e acesso ──────────────────────────────────────────────────────────────────

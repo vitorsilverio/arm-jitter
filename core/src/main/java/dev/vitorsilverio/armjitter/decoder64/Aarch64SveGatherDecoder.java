@@ -3,7 +3,8 @@ package dev.vitorsilverio.armjitter.decoder64;
 import dev.vitorsilverio.armjitter.arch64.Aarch64Architecture;
 import dev.vitorsilverio.armjitter.arch64.Aarch64Feature;
 import dev.vitorsilverio.armjitter.ir64.Ir64Op;
-import dev.vitorsilverio.armjitter.ir64.Ir64Op.SveGather.Op;
+import dev.vitorsilverio.armjitter.ir64.SveMemoryOp64.Gather.Op;
+import dev.vitorsilverio.armjitter.ir64.SveMemoryOp64;
 
 /// Decoder SVE dos gather loads da B17.19: o fim de `### SVE Memory - 32-bit Gather and Unsized Contiguous Group`
 /// (prefixos `0x84`/`0x85`) e `### SVE Memory 64-bit Gather Group` inteiro (`0xC4`/`0xC5`) do `sve.decode` do QEMU:
@@ -84,8 +85,8 @@ final class Aarch64SveGatherDecoder {
     /// vetor + imediato (`bits[22:21] = 01`).
     private Ir64Op decode32(int word, long address) {
         if (!bit(word, BIT_OFFSET_64_OR_IMMEDIATE)) {
-            return scalarPlusVector(word, ESZ_WORD, bit(word, BIT_XS) ? Ir64Op.SveGather.OFFSET_SXTW
-                    : Ir64Op.SveGather.OFFSET_UXTW, address);
+            return scalarPlusVector(word, ESZ_WORD, bit(word, BIT_XS) ? SveMemoryOp64.Gather.OFFSET_SXTW
+                    : SveMemoryOp64.Gather.OFFSET_UXTW, address);
         }
         int sel = (word >>> SEL_SHIFT) & SEL_MASK;
         if (sel == SEL_QUADWORD_OR_PREFETCH_VECTOR) {
@@ -102,8 +103,8 @@ final class Aarch64SveGatherDecoder {
             if (isUnpackedScaledPrefetch(word)) {
                 return prefetch(address);
             }
-            return scalarPlusVector(word, ESZ_DOUBLE, bit(word, BIT_XS) ? Ir64Op.SveGather.OFFSET_SXTW
-                    : Ir64Op.SveGather.OFFSET_UXTW, address);
+            return scalarPlusVector(word, ESZ_DOUBLE, bit(word, BIT_XS) ? SveMemoryOp64.Gather.OFFSET_SXTW
+                    : SveMemoryOp64.Gather.OFFSET_UXTW, address);
         }
         int sel = (word >>> SEL_SHIFT) & SEL_MASK;
         int opcode = (word >>> FIELD_PREFETCH_LOW) & FIELD_PREFETCH_MASK;
@@ -114,8 +115,8 @@ final class Aarch64SveGatherDecoder {
                     // `LDNT1_zprz` de 64 bits: `1 u 0` em `bits[15:13]` — o `u` é o bit 14 e o 13 é opcode (0).
                     : !bit(word, BIT_FIRST_FAULT) ? nonTemporal(word, ESZ_DOUBLE, bit(word, BIT_UNSIGNED), address) : null;
             case SEL_PREFETCH_SCALED_64 -> isScaledPrefetch(word) ? prefetch(address)
-                    : scalarPlusVector(word, ESZ_DOUBLE, Ir64Op.SveGather.OFFSET_64, address);
-            default -> scalarPlusVector(word, ESZ_DOUBLE, Ir64Op.SveGather.OFFSET_64, address); // `10`: bit 22 = 1
+                    : scalarPlusVector(word, ESZ_DOUBLE, SveMemoryOp64.Gather.OFFSET_64, address);
+            default -> scalarPlusVector(word, ESZ_DOUBLE, SveMemoryOp64.Gather.OFFSET_64, address); // `10`: bit 22 = 1
         };
     }
 
@@ -145,7 +146,7 @@ final class Aarch64SveGatherDecoder {
         if (!validSizes(msz, esz, bit(word, BIT_UNSIGNED)) || msz == MSZ_BYTE && scaled) {
             return null;
         }
-        return new Ir64Op.SveGather(Op.SCALAR_PLUS_VECTOR, msz, esz, !bit(word, BIT_UNSIGNED),
+        return new SveMemoryOp64.Gather(Op.SCALAR_PLUS_VECTOR, msz, esz, !bit(word, BIT_UNSIGNED),
                 bit(word, BIT_FIRST_FAULT), word & REGISTER_MASK, (word >>> RN_SHIFT) & REGISTER_MASK,
                 (word >>> RM_SHIFT) & REGISTER_MASK, 0, (word >>> PG_SHIFT) & PREDICATE_MASK, offsetExtend, scaled,
                 address);
@@ -157,7 +158,7 @@ final class Aarch64SveGatherDecoder {
         if (!validSizes(msz, esz, bit(word, BIT_UNSIGNED))) {
             return null;
         }
-        return new Ir64Op.SveGather(Op.VECTOR_PLUS_IMMEDIATE, msz, esz, !bit(word, BIT_UNSIGNED),
+        return new SveMemoryOp64.Gather(Op.VECTOR_PLUS_IMMEDIATE, msz, esz, !bit(word, BIT_UNSIGNED),
                 bit(word, BIT_FIRST_FAULT), word & REGISTER_MASK, (word >>> RN_SHIFT) & REGISTER_MASK, 0,
                 (word >>> RM_SHIFT) & IMM5_MASK, (word >>> PG_SHIFT) & PREDICATE_MASK, 0, false, address);
     }
@@ -168,7 +169,7 @@ final class Aarch64SveGatherDecoder {
         if (!architecture.has(Aarch64Feature.SVE2_1)) {
             return null;
         }
-        return new Ir64Op.SveGather(Op.LD1Q, MSZ_QUAD, ESZ_QUAD, false, false, word & REGISTER_MASK,
+        return new SveMemoryOp64.Gather(Op.LD1Q, MSZ_QUAD, ESZ_QUAD, false, false, word & REGISTER_MASK,
                 (word >>> RN_SHIFT) & REGISTER_MASK, (word >>> RM_SHIFT) & REGISTER_MASK, 0,
                 (word >>> PG_SHIFT) & PREDICATE_MASK, 0, false, address);
     }
@@ -181,14 +182,14 @@ final class Aarch64SveGatherDecoder {
         if (!architecture.has(Aarch64Feature.SVE2) || !validSizes(msz, esz, unsigned)) {
             return null;
         }
-        return new Ir64Op.SveGather(Op.VECTOR_PLUS_SCALAR, msz, esz, !unsigned, false, word & REGISTER_MASK,
+        return new SveMemoryOp64.Gather(Op.VECTOR_PLUS_SCALAR, msz, esz, !unsigned, false, word & REGISTER_MASK,
                 (word >>> RN_SHIFT) & REGISTER_MASK, (word >>> RM_SHIFT) & REGISTER_MASK, 0,
                 (word >>> PG_SHIFT) & PREDICATE_MASK, 0, false, address);
     }
 
     /// `PRF_ns` é hint: o IR só carrega a checagem de acesso e a de modo streaming (todo gather é ilegal nele).
     private static Ir64Op prefetch(long address) {
-        return new Ir64Op.SveLoad(Ir64Op.SveLoad.Op.PRF, 0, 0, false, 0, 0, 0, 0, false, 0, 0, true, address);
+        return new SveMemoryOp64.Load(SveMemoryOp64.Load.Op.PRF, 0, 0, false, 0, 0, 0, 0, false, 0, 0, true, address);
     }
 
     /// `msz <= esz`, e `msz == esz` fixa `u = 1` (não há o que estender).

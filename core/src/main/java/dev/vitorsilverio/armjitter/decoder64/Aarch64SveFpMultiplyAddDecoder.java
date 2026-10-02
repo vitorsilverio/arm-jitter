@@ -3,6 +3,7 @@ package dev.vitorsilverio.armjitter.decoder64;
 import dev.vitorsilverio.armjitter.arch64.Aarch64Architecture;
 import dev.vitorsilverio.armjitter.arch64.Aarch64Feature;
 import dev.vitorsilverio.armjitter.ir64.Ir64Op;
+import dev.vitorsilverio.armjitter.ir64.SveFpOp64;
 
 /// Decoder SVE do multiply-add de ponto flutuante da B17.14: `FMLA`/`FMLS`/`FNMLA`/`FNMLS` predicados (prefixo
 /// `0x65`, as oito linhas de `### SVE FP Multiply-Add Group`), e — no prefixo `0x64` — `FMLA`/`FMLS`/`FMUL` por elemento
@@ -105,11 +106,11 @@ final class Aarch64SveFpMultiplyAddDecoder {
             // demais nesta família).
             return null;
         }
-        Ir64Op.SveFpMultiplyAdd.Op op = switch (opcode & OPCODE_KIND_MASK) {
-            case 0b00 -> Ir64Op.SveFpMultiplyAdd.Op.FMLA;
-            case 0b01 -> Ir64Op.SveFpMultiplyAdd.Op.FMLS;
-            case 0b10 -> Ir64Op.SveFpMultiplyAdd.Op.FNMLA;
-            default -> Ir64Op.SveFpMultiplyAdd.Op.FNMLS;
+        SveFpOp64.FpMultiplyAdd.Op op = switch (opcode & OPCODE_KIND_MASK) {
+            case 0b00 -> SveFpOp64.FpMultiplyAdd.Op.FMLA;
+            case 0b01 -> SveFpOp64.FpMultiplyAdd.Op.FMLS;
+            case 0b10 -> SveFpOp64.FpMultiplyAdd.Op.FNMLA;
+            default -> SveFpOp64.FpMultiplyAdd.Op.FNMLS;
         };
         int rd = field(word, 0, REGISTER_MASK);
         int pg = field(word, PG_SHIFT, PREDICATE_MASK);
@@ -117,10 +118,10 @@ final class Aarch64SveFpMultiplyAddDecoder {
         int high = field(word, RM_SHIFT, REGISTER_MASK);
         if ((opcode & OPCODE_WRITES_MULTIPLICAND_BIT) != 0) {
             // `@rdn_pg_rm_ra`: escreve o multiplicando (`FMAD`/`FMSB`/`FNMAD`/`FNMSB`): rn = Zdn, rm = bits 9:5, ra = bits 20:16.
-            return new Ir64Op.SveFpMultiplyAdd(op, esz, rd, rd, low, high, pg, true, false, 0, 0, address);
+            return new SveFpOp64.FpMultiplyAdd(op, esz, rd, rd, low, high, pg, true, false, 0, 0, address);
         }
         // `@rda_pg_rn_rm`: escreve o acumulador: ra = Zda, rn = bits 9:5, rm = bits 20:16.
-        return new Ir64Op.SveFpMultiplyAdd(op, esz, rd, low, high, rd, pg, true, false, 0, 0, address);
+        return new SveFpOp64.FpMultiplyAdd(op, esz, rd, low, high, rd, pg, true, false, 0, 0, address);
     }
 
     /// Prefixo `0x64`: `FMLA`/`FMLS`/`FMUL` indexados, `FCADD`, `FCMLA` e `FCMLA` indexado. `null` = não é deste grupo.
@@ -146,7 +147,7 @@ final class Aarch64SveFpMultiplyAddDecoder {
             return null;
         }
         int rd = field(word, 0, REGISTER_MASK);
-        return new Ir64Op.SveFpMultiplyAdd(Ir64Op.SveFpMultiplyAdd.Op.FCADD, esz, rd, rd,
+        return new SveFpOp64.FpMultiplyAdd(SveFpOp64.FpMultiplyAdd.Op.FCADD, esz, rd, rd,
                 field(word, RN_SHIFT, REGISTER_MASK), 0, field(word, PG_SHIFT, PREDICATE_MASK), true, false, 0,
                 (word >>> FCADD_ROT_BIT) & 1, address);
     }
@@ -157,7 +158,7 @@ final class Aarch64SveFpMultiplyAddDecoder {
             return null;
         }
         int rd = field(word, 0, REGISTER_MASK);
-        return new Ir64Op.SveFpMultiplyAdd(Ir64Op.SveFpMultiplyAdd.Op.FCMLA, esz, rd,
+        return new SveFpOp64.FpMultiplyAdd(SveFpOp64.FpMultiplyAdd.Op.FCMLA, esz, rd,
                 field(word, RN_SHIFT, REGISTER_MASK), field(word, RM_SHIFT, REGISTER_MASK), rd,
                 field(word, PG_SHIFT, PREDICATE_MASK), true, false, 0,
                 field(word, FCMLA_PREDICATED_ROT_SHIFT, ROT_MASK), address);
@@ -169,12 +170,12 @@ final class Aarch64SveFpMultiplyAddDecoder {
         int rn = field(word, RN_SHIFT, REGISTER_MASK);
         int rot = field(word, ROT_SHIFT, ROT_MASK);
         if (size == ESZ_FIELD_HALF_INDEXED) {
-            return new Ir64Op.SveFpMultiplyAdd(Ir64Op.SveFpMultiplyAdd.Op.FCMLA, ESZ_HALF, rd, rn,
+            return new SveFpOp64.FpMultiplyAdd(SveFpOp64.FpMultiplyAdd.Op.FCMLA, ESZ_HALF, rd, rn,
                     field(word, RM_SHIFT, RM3_MASK), rd, 0, false, true, field(word, INDEX_LOW_SHIFT, INDEX_2_MASK),
                     rot, address);
         }
         if (size == ESZ_FIELD_DOUBLE) {
-            return new Ir64Op.SveFpMultiplyAdd(Ir64Op.SveFpMultiplyAdd.Op.FCMLA, ESZ_SINGLE, rd, rn,
+            return new SveFpOp64.FpMultiplyAdd(SveFpOp64.FpMultiplyAdd.Op.FCMLA, ESZ_SINGLE, rd, rn,
                     field(word, RM_SHIFT, RM4_MASK), rd, 0, false, true, field(word, INDEX_LOW_SHIFT + 1, 1), rot,
                     address);
         }
@@ -188,10 +189,10 @@ final class Aarch64SveFpMultiplyAddDecoder {
         if (bfloat16 && !architecture.has(Aarch64Feature.SVE_B16B16)) {
             return null; // BFMLA/BFMLS/BFMUL indexados: FEAT_SVE_B16B16 (B17.27)
         }
-        Ir64Op.SveFpMultiplyAdd.Op op = switch (opcodeField) {
-            case INDEXED_FMLA, INDEXED_FMLA_BFLOAT16 -> Ir64Op.SveFpMultiplyAdd.Op.FMLA;
-            case INDEXED_FMLS, INDEXED_FMLS_BFLOAT16 -> Ir64Op.SveFpMultiplyAdd.Op.FMLS;
-            case INDEXED_FMUL, INDEXED_FMUL_BFLOAT16 -> Ir64Op.SveFpMultiplyAdd.Op.FMUL;
+        SveFpOp64.FpMultiplyAdd.Op op = switch (opcodeField) {
+            case INDEXED_FMLA, INDEXED_FMLA_BFLOAT16 -> SveFpOp64.FpMultiplyAdd.Op.FMLA;
+            case INDEXED_FMLS, INDEXED_FMLS_BFLOAT16 -> SveFpOp64.FpMultiplyAdd.Op.FMLS;
+            case INDEXED_FMUL, INDEXED_FMUL_BFLOAT16 -> SveFpOp64.FpMultiplyAdd.Op.FMUL;
             default -> null;
         };
         if (op == null) {
@@ -199,16 +200,16 @@ final class Aarch64SveFpMultiplyAddDecoder {
         }
         int rd = field(word, 0, REGISTER_MASK);
         int rn = field(word, RN_SHIFT, REGISTER_MASK);
-        int ra = op == Ir64Op.SveFpMultiplyAdd.Op.FMUL ? 0 : rd;
+        int ra = op == SveFpOp64.FpMultiplyAdd.Op.FMUL ? 0 : rd;
         int halfLikeEsz = bfloat16 ? ESZ_BFLOAT16 : ESZ_HALF;
         return switch (field(word, ESZ_SHIFT, ESZ_MASK)) {
-            case 0b00, 0b01 -> new Ir64Op.SveFpMultiplyAdd(op, halfLikeEsz, rd, rn, field(word, RM_SHIFT, RM3_MASK),
+            case 0b00, 0b01 -> new SveFpOp64.FpMultiplyAdd(op, halfLikeEsz, rd, rn, field(word, RM_SHIFT, RM3_MASK),
                     ra, 0, false, true, (((word >>> INDEX_HIGH_BIT) & 1) << INDEX_2_BITS)
                             | field(word, INDEX_LOW_SHIFT, INDEX_2_MASK), 0, address);
-            case ESZ_FIELD_HALF_INDEXED -> new Ir64Op.SveFpMultiplyAdd(op, ESZ_SINGLE, rd, rn,
+            case ESZ_FIELD_HALF_INDEXED -> new SveFpOp64.FpMultiplyAdd(op, ESZ_SINGLE, rd, rn,
                     field(word, RM_SHIFT, RM3_MASK), ra, 0, false, true, field(word, INDEX_LOW_SHIFT, INDEX_2_MASK),
                     0, address);
-            default -> new Ir64Op.SveFpMultiplyAdd(op, ESZ_DOUBLE, rd, rn, field(word, RM_SHIFT, RM4_MASK), ra, 0,
+            default -> new SveFpOp64.FpMultiplyAdd(op, ESZ_DOUBLE, rd, rn, field(word, RM_SHIFT, RM4_MASK), ra, 0,
                     false, true, field(word, INDEX_LOW_SHIFT + 1, 1), 0, address);
         };
     }

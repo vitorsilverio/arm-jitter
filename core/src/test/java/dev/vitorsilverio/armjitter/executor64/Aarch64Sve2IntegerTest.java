@@ -7,6 +7,7 @@ import dev.vitorsilverio.armjitter.core64.Aarch64Core;
 import dev.vitorsilverio.armjitter.core64.Aarch64ExceptionLevel;
 import dev.vitorsilverio.armjitter.decoder64.Aarch64Decoder;
 import dev.vitorsilverio.armjitter.ir64.Ir64Op;
+import dev.vitorsilverio.armjitter.ir64.SveIntegerOp64;
 import dev.vitorsilverio.armjitter.memory.AddressSpace64;
 import dev.vitorsilverio.armjitter.support.TestAddressSpace;
 import org.junit.jupiter.api.Test;
@@ -191,25 +192,25 @@ class Aarch64Sve2IntegerTest {
 
     static Stream<Arguments> assemblerWords() {
         return Stream.of(
-                Arguments.of(0x04236041, Ir64Op.SveIntegerUnpredicated.Op.MUL),
-                Arguments.of(0x04e36041, Ir64Op.SveIntegerUnpredicated.Op.MUL),
-                Arguments.of(0x04636841, Ir64Op.SveIntegerUnpredicated.Op.SMULH),
-                Arguments.of(0x04a36c41, Ir64Op.SveIntegerUnpredicated.Op.UMULH),
-                Arguments.of(0x04236441, Ir64Op.SveIntegerUnpredicated.Op.PMUL),
-                Arguments.of(0x04a37041, Ir64Op.SveIntegerUnpredicated.Op.SQDMULH),
-                Arguments.of(0x04e37441, Ir64Op.SveIntegerUnpredicated.Op.SQRDMULH),
-                Arguments.of(0x4444a861, Ir64Op.SveIntegerPredicated.Op.SADALP),
-                Arguments.of(0x4485a861, Ir64Op.SveIntegerPredicated.Op.UADALP),
-                Arguments.of(0x44c5a861, Ir64Op.SveIntegerPredicated.Op.UADALP),
-                Arguments.of(0x4480a861, Ir64Op.SveIntegerPredicated.Op.URECPE),
-                Arguments.of(0x4481a861, Ir64Op.SveIntegerPredicated.Op.URSQRTE),
-                Arguments.of(0x4408a861, Ir64Op.SveIntegerPredicated.Op.SQABS),
-                Arguments.of(0x44c9a861, Ir64Op.SveIntegerPredicated.Op.SQNEG),
-                Arguments.of(0x4411a861, Ir64Op.SveIntegerPredicated.Op.ADDP),
-                Arguments.of(0x4454a861, Ir64Op.SveIntegerPredicated.Op.SMAXP),
-                Arguments.of(0x4495a861, Ir64Op.SveIntegerPredicated.Op.UMAXP),
-                Arguments.of(0x44d6a861, Ir64Op.SveIntegerPredicated.Op.SMINP),
-                Arguments.of(0x4417a861, Ir64Op.SveIntegerPredicated.Op.UMINP));
+                Arguments.of(0x04236041, SveIntegerOp64.IntegerUnpredicated.Op.MUL),
+                Arguments.of(0x04e36041, SveIntegerOp64.IntegerUnpredicated.Op.MUL),
+                Arguments.of(0x04636841, SveIntegerOp64.IntegerUnpredicated.Op.SMULH),
+                Arguments.of(0x04a36c41, SveIntegerOp64.IntegerUnpredicated.Op.UMULH),
+                Arguments.of(0x04236441, SveIntegerOp64.IntegerUnpredicated.Op.PMUL),
+                Arguments.of(0x04a37041, SveIntegerOp64.IntegerUnpredicated.Op.SQDMULH),
+                Arguments.of(0x04e37441, SveIntegerOp64.IntegerUnpredicated.Op.SQRDMULH),
+                Arguments.of(0x4444a861, SveIntegerOp64.IntegerPredicated.Op.SADALP),
+                Arguments.of(0x4485a861, SveIntegerOp64.IntegerPredicated.Op.UADALP),
+                Arguments.of(0x44c5a861, SveIntegerOp64.IntegerPredicated.Op.UADALP),
+                Arguments.of(0x4480a861, SveIntegerOp64.IntegerPredicated.Op.URECPE),
+                Arguments.of(0x4481a861, SveIntegerOp64.IntegerPredicated.Op.URSQRTE),
+                Arguments.of(0x4408a861, SveIntegerOp64.IntegerPredicated.Op.SQABS),
+                Arguments.of(0x44c9a861, SveIntegerOp64.IntegerPredicated.Op.SQNEG),
+                Arguments.of(0x4411a861, SveIntegerOp64.IntegerPredicated.Op.ADDP),
+                Arguments.of(0x4454a861, SveIntegerOp64.IntegerPredicated.Op.SMAXP),
+                Arguments.of(0x4495a861, SveIntegerOp64.IntegerPredicated.Op.UMAXP),
+                Arguments.of(0x44d6a861, SveIntegerOp64.IntegerPredicated.Op.SMINP),
+                Arguments.of(0x4417a861, SveIntegerOp64.IntegerPredicated.Op.UMINP));
     }
 
     @ParameterizedTest
@@ -217,24 +218,24 @@ class Aarch64Sve2IntegerTest {
     void assemblerWordsDecodeUnderSve2AndAreRefusedUnderPlainSve(int word, Enum<?> expected) {
         Ir64Op decoded = decodeOrNull(SVE2, word);
         assertTrue(decoded != null, "decodifica sob SVE2");
-        Enum<?> actual = decoded instanceof Ir64Op.SveIntegerUnpredicated u ? u.op()
-                : ((Ir64Op.SveIntegerPredicated) decoded).op();
+        Enum<?> actual = decoded instanceof SveIntegerOp64.IntegerUnpredicated u ? u.op()
+                : ((SveIntegerOp64.IntegerPredicated) decoded).op();
         assertEquals(expected, actual);
         assertEquals(null, decodeOrNull(SVE, word), "recusada sob SVE puro (G8)");
     }
 
     static Stream<Arguments> zeroingWords() {
         return Stream.of(
-                Arguments.of(0x4482a861, Ir64Op.SveIntegerPredicated.Op.URECPE),
-                Arguments.of(0x4483a861, Ir64Op.SveIntegerPredicated.Op.URSQRTE),
-                Arguments.of(0x440aa861, Ir64Op.SveIntegerPredicated.Op.SQABS),
-                Arguments.of(0x44cba861, Ir64Op.SveIntegerPredicated.Op.SQNEG));
+                Arguments.of(0x4482a861, SveIntegerOp64.IntegerPredicated.Op.URECPE),
+                Arguments.of(0x4483a861, SveIntegerOp64.IntegerPredicated.Op.URSQRTE),
+                Arguments.of(0x440aa861, SveIntegerOp64.IntegerPredicated.Op.SQABS),
+                Arguments.of(0x44cba861, SveIntegerOp64.IntegerPredicated.Op.SQNEG));
     }
 
     @ParameterizedTest
     @MethodSource("zeroingWords")
-    void zeroingFormsNeedSve2p2(int word, Ir64Op.SveIntegerPredicated.Op expected) {
-        Ir64Op.SveIntegerPredicated decoded = (Ir64Op.SveIntegerPredicated) decodeOrNull(SVE2P2, word);
+    void zeroingFormsNeedSve2p2(int word, SveIntegerOp64.IntegerPredicated.Op expected) {
+        SveIntegerOp64.IntegerPredicated decoded = (SveIntegerOp64.IntegerPredicated) decodeOrNull(SVE2P2, word);
         assertEquals(expected, decoded.op());
         assertTrue(decoded.zeroing());
         assertEquals(null, decodeOrNull(SVE2, word), "`_z` não é SVE2, é SVE2p2");
@@ -252,7 +253,7 @@ class Aarch64Sve2IntegerTest {
                 Ir64Op op = decodeOrNull(SVE2, unpredicatedWord(esz, opcode, Z1, Z2, Z3));
                 if (op != null) {
                     decoded++;
-                    assertTrue(op instanceof Ir64Op.SveIntegerUnpredicated, "opcode " + opcode);
+                    assertTrue(op instanceof SveIntegerOp64.IntegerUnpredicated, "opcode " + opcode);
                 }
                 assertEquals(null, decodeOrNull(SVE, unpredicatedWord(esz, opcode, Z1, Z2, Z3)));
             }
@@ -274,7 +275,7 @@ class Aarch64Sve2IntegerTest {
         for (int esz = 0; esz < 4; esz++) {
             for (int opcode = 0; opcode < 64; opcode++) {
                 Ir64Op op = decodeOrNull(architecture, predicatedWord(esz, opcode, Z1, Z3));
-                if (op instanceof Ir64Op.SveIntegerPredicated p && isNew(p.op())) {
+                if (op instanceof SveIntegerOp64.IntegerPredicated p && isNew(p.op())) {
                     count++;
                 }
             }
@@ -282,7 +283,7 @@ class Aarch64Sve2IntegerTest {
         return count;
     }
 
-    private static boolean isNew(Ir64Op.SveIntegerPredicated.Op op) {
+    private static boolean isNew(SveIntegerOp64.IntegerPredicated.Op op) {
         return switch (op) {
             case SQABS, SQNEG, URECPE, URSQRTE, SADALP, UADALP, ADDP, SMAXP, UMAXP, SMINP, UMINP -> true;
             default -> false;
@@ -298,7 +299,7 @@ class Aarch64Sve2IntegerTest {
                 int prefix04 = 0x04200000 | (esz << ESZ_SHIFT) | (opcode << OPCODE_SHIFT) | 0x41;
                 if (opcode >> 3 != 0b011) {
                     Ir64Op op = decodeOrNull(SVE2P2, prefix04);
-                    assertFalse(op instanceof Ir64Op.SveIntegerUnpredicated u && isNewMultiply(u.op()), "0x04 " + opcode);
+                    assertFalse(op instanceof SveIntegerOp64.IntegerUnpredicated u && isNewMultiply(u.op()), "0x04 " + opcode);
                 }
                 int prefix44 = 0x44000000 | (esz << ESZ_SHIFT) | (opcode << PREDICATED_OPCODE_SHIFT) | 0x0861;
                 for (int high = 0; high < 8; high++) {
@@ -306,13 +307,13 @@ class Aarch64Sve2IntegerTest {
                         continue;
                     }
                     Ir64Op op = decodeOrNull(SVE2P2, prefix44 | (high << 13));
-                    assertFalse(op instanceof Ir64Op.SveIntegerPredicated p && isNew(p.op()), "0x44 " + opcode + "/" + high);
+                    assertFalse(op instanceof SveIntegerOp64.IntegerPredicated p && isNew(p.op()), "0x44 " + opcode + "/" + high);
                 }
             }
         }
     }
 
-    private static boolean isNewMultiply(Ir64Op.SveIntegerUnpredicated.Op op) {
+    private static boolean isNewMultiply(SveIntegerOp64.IntegerUnpredicated.Op op) {
         return switch (op) {
             case MUL, SMULH, UMULH, PMUL, SQDMULH, SQRDMULH -> true;
             default -> false;
@@ -334,12 +335,12 @@ class Aarch64Sve2IntegerTest {
     /// Campos: `SADALP` acumula em `Zda` (`rm = rd`); a pairwise é destrutiva (`rn = rd`, `Zm` em `9:5`).
     @Test
     void operandsFollowTheFormats() {
-        Ir64Op.SveIntegerPredicated accumulate = (Ir64Op.SveIntegerPredicated) decodeOrNull(SVE2, 0x4444a861);
+        SveIntegerOp64.IntegerPredicated accumulate = (SveIntegerOp64.IntegerPredicated) decodeOrNull(SVE2, 0x4444a861);
         assertEquals(1, accumulate.rd());
         assertEquals(3, accumulate.rn());
         assertEquals(1, accumulate.rm());
         assertEquals(2, accumulate.pg());
-        Ir64Op.SveIntegerPredicated pairwise = (Ir64Op.SveIntegerPredicated) decodeOrNull(SVE2, 0x4411a861);
+        SveIntegerOp64.IntegerPredicated pairwise = (SveIntegerOp64.IntegerPredicated) decodeOrNull(SVE2, 0x4411a861);
         assertEquals(1, pairwise.rd());
         assertEquals(1, pairwise.rn());
         assertEquals(3, pairwise.rm());

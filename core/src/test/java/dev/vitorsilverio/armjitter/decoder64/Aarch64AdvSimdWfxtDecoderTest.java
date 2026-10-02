@@ -3,6 +3,7 @@ package dev.vitorsilverio.armjitter.decoder64;
 import dev.vitorsilverio.armjitter.arch64.Aarch64Architecture;
 import dev.vitorsilverio.armjitter.ir64.Ir64Op;
 import dev.vitorsilverio.armjitter.ir64.Ir64SystemInstructionOp;
+import dev.vitorsilverio.armjitter.ir64.SystemOp64;
 import dev.vitorsilverio.armjitter.memory.AddressSpace64;
 import dev.vitorsilverio.armjitter.support.TestAddressSpace;
 import org.junit.jupiter.api.Test;
@@ -38,13 +39,13 @@ class Aarch64AdvSimdWfxtDecoderTest {
 
     @Test
     void wfetDecodesAsNopHintWithWfxt() {
-        Ir64Op.SystemInstruction op = (Ir64Op.SystemInstruction) decodeWord(WFXT_DECODER, WFET_X0);
+        SystemOp64.SystemInstruction op = (SystemOp64.SystemInstruction) decodeWord(WFXT_DECODER, WFET_X0);
         assertEquals(Ir64SystemInstructionOp.NOP_HINT, op.opcode());
     }
 
     @Test
     void wfitDecodesAsWfiWithWfxt() {
-        Ir64Op.SystemInstruction op = (Ir64Op.SystemInstruction) decodeWord(WFXT_DECODER, WFIT_X1);
+        SystemOp64.SystemInstruction op = (SystemOp64.SystemInstruction) decodeWord(WFXT_DECODER, WFIT_X1);
         assertEquals(Ir64SystemInstructionOp.WFI, op.opcode());
     }
 }

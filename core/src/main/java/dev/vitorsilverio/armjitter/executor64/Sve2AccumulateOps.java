@@ -1,7 +1,7 @@
 package dev.vitorsilverio.armjitter.executor64;
 
 import dev.vitorsilverio.armjitter.core64.Aarch64ScalableRegisters;
-import dev.vitorsilverio.armjitter.ir64.Ir64Op;
+import dev.vitorsilverio.armjitter.ir64.SveIntegerOp64;
 
 /// Semântica das 18 operações SVE2 de `#### SVE2 Accumulate` (B17.21a). Todas leem `Zd` como acumulador — inclusive as
 /// seis (`SSRA`/`USRA`/`SRSRA`/`URSRA`/`SABA`/`UABA`) que o `sve.decode` descreve com o formato NÃO acumulativo (o `TODO`
@@ -16,7 +16,7 @@ final class Sve2AccumulateOps {
     private Sve2AccumulateOps() {
     }
 
-    static void execute(Aarch64ScalableRegisters regs, Ir64Op.SveIntegerUnpredicated op, int elements) {
+    static void execute(Aarch64ScalableRegisters regs, SveIntegerOp64.IntegerUnpredicated op, int elements) {
         switch (op.op()) {
             case CADD, SQCADD -> complexAdd(regs, op, elements);
             case SABAL, UABAL -> absoluteDifferenceLong(regs, op, elements);
@@ -29,9 +29,9 @@ final class Sve2AccumulateOps {
 
     /// `CADD`/`SQCADD`: `Zdn` mais `Zm` girado ±90° sobre pares `(real, imaginário)` = elementos `(2k, 2k+1)`.
     /// Rotação 90: `re = n.re - m.im`, `im = n.im + m.re`; rotação 270 (`imm = 1`): `re = n.re + m.im`, `im = n.im - m.re`.
-    private static void complexAdd(Aarch64ScalableRegisters regs, Ir64Op.SveIntegerUnpredicated op, int elements) {
+    private static void complexAdd(Aarch64ScalableRegisters regs, SveIntegerOp64.IntegerUnpredicated op, int elements) {
         int esz = op.esz();
-        boolean saturate = op.op() == Ir64Op.SveIntegerUnpredicated.Op.SQCADD;
+        boolean saturate = op.op() == SveIntegerOp64.IntegerUnpredicated.Op.SQCADD;
         boolean rotate270 = op.imm() != 0L;
         for (int e = 0; e < elements; e += PAIR) {
             long nr = SveIntegerOps.get(regs, op.rn(), e, esz);
@@ -47,11 +47,11 @@ final class Sve2AccumulateOps {
     }
 
     /// `SABAL*`/`UABAL*`: `Zda[e] += |Zn[2e+t] - Zm[2e+t]|`, com as fontes na METADE do tamanho do destino (`t = 1` em `*T`).
-    private static void absoluteDifferenceLong(Aarch64ScalableRegisters regs, Ir64Op.SveIntegerUnpredicated op,
+    private static void absoluteDifferenceLong(Aarch64ScalableRegisters regs, SveIntegerOp64.IntegerUnpredicated op,
             int elements) {
         int esz = op.esz();
         int sourceEsz = esz - 1;
-        boolean signed = op.op() == Ir64Op.SveIntegerUnpredicated.Op.SABAL;
+        boolean signed = op.op() == SveIntegerOp64.IntegerUnpredicated.Op.SABAL;
         int top = (int) op.imm();
         for (int e = 0; e < elements; e++) {
             long n = SveIntegerOps.get(regs, op.rn(), PAIR * e + top, sourceEsz);
@@ -66,10 +66,10 @@ final class Sve2AccumulateOps {
     /// `ADCL*`/`SBCL*` (`esz` = 2 ou 3 = tamanho do elemento): para cada PAR `(2k, 2k+1)`,
     /// `soma = Zda[2k] + (Zn[2k+t] ou ~Zn[2k+t] em SBCL) + Zm[2k+1]<0>` — a soma tem `esize + 1` bits: os `esize` baixos vão
     /// para `Zda[2k]` e o vai-um (0 ou 1) para `Zda[2k+1]`.
-    private static void addWithCarryLong(Aarch64ScalableRegisters regs, Ir64Op.SveIntegerUnpredicated op,
+    private static void addWithCarryLong(Aarch64ScalableRegisters regs, SveIntegerOp64.IntegerUnpredicated op,
             int elements) {
         int esz = op.esz();
-        boolean subtract = op.op() == Ir64Op.SveIntegerUnpredicated.Op.SBCL;
+        boolean subtract = op.op() == SveIntegerOp64.IntegerUnpredicated.Op.SBCL;
         int top = (int) op.imm();
         for (int e = 0; e < elements; e += PAIR) {
             long accumulator = SveIntegerOps.get(regs, op.rd(), e, esz);
@@ -93,14 +93,14 @@ final class Sve2AccumulateOps {
     }
 
     /// `SSRA`/`USRA`/`SRSRA`/`URSRA`: `Zda += Zn >> imm` (aritmético/lógico; `SR*` arredondam).
-    private static void shiftRightAccumulate(Aarch64ScalableRegisters regs, Ir64Op.SveIntegerUnpredicated op,
+    private static void shiftRightAccumulate(Aarch64ScalableRegisters regs, SveIntegerOp64.IntegerUnpredicated op,
             int elements) {
         int esz = op.esz();
-        Ir64Op.SveIntegerPredicated.Op shift = switch (op.op()) {
-            case SSRA -> Ir64Op.SveIntegerPredicated.Op.ASR_IMM;
-            case USRA -> Ir64Op.SveIntegerPredicated.Op.LSR_IMM;
-            case SRSRA -> Ir64Op.SveIntegerPredicated.Op.SRSHR;
-            default -> Ir64Op.SveIntegerPredicated.Op.URSHR; // URSRA
+        SveIntegerOp64.IntegerPredicated.Op shift = switch (op.op()) {
+            case SSRA -> SveIntegerOp64.IntegerPredicated.Op.ASR_IMM;
+            case USRA -> SveIntegerOp64.IntegerPredicated.Op.LSR_IMM;
+            case SRSRA -> SveIntegerOp64.IntegerPredicated.Op.SRSHR;
+            default -> SveIntegerOp64.IntegerPredicated.Op.URSHR; // URSRA
         };
         for (int e = 0; e < elements; e++) {
             long shifted = SveIntegerPredicatedOps.immediateShift(shift, SveIntegerOps.get(regs, op.rn(), e, esz),
@@ -111,12 +111,12 @@ final class Sve2AccumulateOps {
 
     /// `SRI`: `Zd = (Zd & bits altos preservados) | (Zn >> imm)`; `SLI`: `Zd = (Zd & bits baixos preservados) | (Zn << imm)`.
     /// Os bits que o shift não alcança ficam como estavam em `Zd`.
-    private static void shiftInsert(Aarch64ScalableRegisters regs, Ir64Op.SveIntegerUnpredicated op, int elements) {
+    private static void shiftInsert(Aarch64ScalableRegisters regs, SveIntegerOp64.IntegerUnpredicated op, int elements) {
         int esz = op.esz();
         int bits = SveIntegerOps.elementBits(esz);
         long all = SveIntegerOps.elementMask(esz);
         int amount = (int) op.imm();
-        boolean left = op.op() == Ir64Op.SveIntegerUnpredicated.Op.SLI;
+        boolean left = op.op() == SveIntegerOp64.IntegerUnpredicated.Op.SLI;
         for (int e = 0; e < elements; e++) {
             long source = SveIntegerOps.get(regs, op.rn(), e, esz);
             long destination = SveIntegerOps.get(regs, op.rd(), e, esz);
@@ -134,9 +134,9 @@ final class Sve2AccumulateOps {
 
     /// `SABA`/`UABA`: `Zda += |Zn - Zm|`.
     private static void absoluteDifferenceAccumulate(Aarch64ScalableRegisters regs,
-            Ir64Op.SveIntegerUnpredicated op, int elements) {
+            SveIntegerOp64.IntegerUnpredicated op, int elements) {
         int esz = op.esz();
-        boolean signed = op.op() == Ir64Op.SveIntegerUnpredicated.Op.SABA;
+        boolean signed = op.op() == SveIntegerOp64.IntegerUnpredicated.Op.SABA;
         for (int e = 0; e < elements; e++) {
             long n = SveIntegerOps.get(regs, op.rn(), e, esz);
             long m = SveIntegerOps.get(regs, op.rm(), e, esz);

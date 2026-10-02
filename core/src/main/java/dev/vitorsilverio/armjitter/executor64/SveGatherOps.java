@@ -2,7 +2,7 @@ package dev.vitorsilverio.armjitter.executor64;
 
 import dev.vitorsilverio.armjitter.core64.Aarch64Core;
 import dev.vitorsilverio.armjitter.core64.Aarch64ScalableRegisters;
-import dev.vitorsilverio.armjitter.ir64.Ir64Op;
+import dev.vitorsilverio.armjitter.ir64.SveMemoryOp64;
 import dev.vitorsilverio.armjitter.memory.AddressSpace64;
 import dev.vitorsilverio.armjitter.memory.mmu.MemoryTranslationException64;
 
@@ -34,12 +34,12 @@ final class SveGatherOps {
     }
 
     /// Executa uma instrução do grupo. `true` = a instrução já entrou numa exceção (acesso negado).
-    static boolean execute(Aarch64Core core, Ir64Op.SveGather op) {
+    static boolean execute(Aarch64Core core, SveMemoryOp64.Gather op) {
         SvePredicateOps.requireNonStreaming(core);
         if (!SvePredicateOps.accessAllowed(core, op.instructionAddress())) {
             return true;
         }
-        if (op.op() == Ir64Op.SveGather.Op.LD1Q) {
+        if (op.op() == SveMemoryOp64.Gather.Op.LD1Q) {
             gatherQuadword(core, op);
         } else {
             gatherElements(core, op);
@@ -49,7 +49,7 @@ final class SveGatherOps {
 
     // ── LD1_zprz / LD1_zpiz ──────────────────────────────────────────────────────────────────────
 
-    private static void gatherElements(Aarch64Core core, Ir64Op.SveGather op) {
+    private static void gatherElements(Aarch64Core core, SveMemoryOp64.Gather op) {
         Aarch64ScalableRegisters regs = core.scalable();
         AddressSpace64 memory = core.memory();
         int elements = core.vectorLengthBytes() >> op.esz();
@@ -79,7 +79,7 @@ final class SveGatherOps {
     }
 
     /// Lê UM elemento (`msz`/extensão da instrução) do endereço que a forma de endereçamento dá para `element`.
-    private static void loadElement(Aarch64Core core, AddressSpace64 memory, Ir64Op.SveGather op,
+    private static void loadElement(Aarch64Core core, AddressSpace64 memory, SveMemoryOp64.Gather op,
             Aarch64ScalableRegisters regs, long[] result, int element) {
         long value = SveLoadOps.readMemory(memory, address(core, op, regs, element), op.msz());
         SveLoadOps.putElement(result, element, op.esz(), op.signExtend() ? SveLoadOps.signExtend(value, op.msz()) : value);
@@ -88,17 +88,17 @@ final class SveGatherOps {
     /// `SCALAR_PLUS_VECTOR`: `Xn|SP + (Zm[e] estendido << (scaled ? msz : 0))`. Com `esz = 3` e `xs` = `UXTW`/`SXTW` só os
     /// 32 bits baixos de cada elemento de 64 bits são o deslocamento (`SveStoreOps.element` já devolve os 32 bits baixos
     /// quando `esz = 2`). `VECTOR_PLUS_IMMEDIATE`: `Zn[e]` (zero-estendido em 32 bits quando `esz = 2`) `+ (imm5 << msz)`. `VECTOR_PLUS_SCALAR` (`LDNT1_zprz`): `Zn[e]` (idem) `+ Xm` (`XZR` se `31`).
-    private static long address(Aarch64Core core, Ir64Op.SveGather op, Aarch64ScalableRegisters regs, int element) {
-        if (op.op() == Ir64Op.SveGather.Op.VECTOR_PLUS_IMMEDIATE) {
+    private static long address(Aarch64Core core, SveMemoryOp64.Gather op, Aarch64ScalableRegisters regs, int element) {
+        if (op.op() == SveMemoryOp64.Gather.Op.VECTOR_PLUS_IMMEDIATE) {
             return SveStoreOps.element(regs, op.rn(), element, op.esz()) + (op.immediate() << op.msz());
         }
-        if (op.op() == Ir64Op.SveGather.Op.VECTOR_PLUS_SCALAR) {
+        if (op.op() == SveMemoryOp64.Gather.Op.VECTOR_PLUS_SCALAR) {
             return SveStoreOps.element(regs, op.rn(), element, op.esz()) + core.x(op.rm());
         }
         long offset = SveStoreOps.element(regs, op.rm(), element, op.esz());
         offset = switch (op.offsetExtend()) {
-            case Ir64Op.SveGather.OFFSET_UXTW -> offset & WORD_OFFSET_MASK;
-            case Ir64Op.SveGather.OFFSET_SXTW -> (long) (int) offset;
+            case SveMemoryOp64.Gather.OFFSET_UXTW -> offset & WORD_OFFSET_MASK;
+            case SveMemoryOp64.Gather.OFFSET_SXTW -> (long) (int) offset;
             default -> offset;
         };
         return base(core, op.rn()) + (offset << (op.scaled() ? op.msz() : 0));
@@ -112,7 +112,7 @@ final class SveGatherOps {
 
     /// `LD1Q`: um quadword por segmento de 128 bits; o predicado usa o bit de índice `16 × segmento`, o endereço é o
     /// `D[0]` do segmento de `Zn` mais `Xm` (`XZR` se `31`), e o segmento inativo vira zero.
-    private static void gatherQuadword(Aarch64Core core, Ir64Op.SveGather op) {
+    private static void gatherQuadword(Aarch64Core core, SveMemoryOp64.Gather op) {
         Aarch64ScalableRegisters regs = core.scalable();
         AddressSpace64 memory = core.memory();
         int segments = core.vectorLengthBytes() / QUADWORD_BYTES;

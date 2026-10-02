@@ -1,7 +1,7 @@
 package dev.vitorsilverio.armjitter.executor64;
 
 import dev.vitorsilverio.armjitter.core64.Aarch64ScalableRegisters;
-import dev.vitorsilverio.armjitter.ir64.Ir64Op;
+import dev.vitorsilverio.armjitter.ir64.SveIntegerOp64;
 
 /// Semântica das 33 operações SVE2 de `#### SVE2 Narrowing` (B17.21b): extract narrow, shift right narrow, add/sub narrow
 /// high part e as três conversões de par (`SQCVTN`/`UQCVTN`/`SQCVTUN`).
@@ -20,7 +20,7 @@ final class Sve2NarrowingOps {
     private Sve2NarrowingOps() {
     }
 
-    static void execute(Aarch64ScalableRegisters regs, Ir64Op.SveIntegerUnpredicated op, int elements) {
+    static void execute(Aarch64ScalableRegisters regs, SveIntegerOp64.IntegerUnpredicated op, int elements) {
         switch (op.op()) {
             case SQCVTN, UQCVTN, SQCVTUN -> convertPair(regs, op, elements);
             case ADDHN, RADDHN, SUBHN, RSUBHN -> addSubHighPart(regs, op, elements);
@@ -31,7 +31,7 @@ final class Sve2NarrowingOps {
 
     /// Escreve o resultado estreito do elemento largo `e`: `top` = elemento ímpar do par (preserva o par), senão o slot largo
     /// inteiro (resultado zero-estendido, zerando o ímpar).
-    private static void store(Aarch64ScalableRegisters regs, Ir64Op.SveIntegerUnpredicated op, int e, boolean top,
+    private static void store(Aarch64ScalableRegisters regs, SveIntegerOp64.IntegerUnpredicated op, int e, boolean top,
             long narrow) {
         int esz = op.esz();
         if (top) {
@@ -42,7 +42,7 @@ final class Sve2NarrowingOps {
     }
 
     /// `SQXTN*`/`UQXTN*`/`SQXTUN*`: satura o elemento largo ao intervalo estreito (com/sem sinal na origem e no destino).
-    private static void extractNarrow(Aarch64ScalableRegisters regs, Ir64Op.SveIntegerUnpredicated op, int elements) {
+    private static void extractNarrow(Aarch64ScalableRegisters regs, SveIntegerOp64.IntegerUnpredicated op, int elements) {
         int esz = op.esz();
         int narrowEsz = esz - 1;
         boolean top = op.imm() != 0L;
@@ -58,15 +58,15 @@ final class Sve2NarrowingOps {
     }
 
     /// `*SHRN*`/`*RSHRN*`/`SQ*SHRUN*`: desloca à direita (`imm`), com ou sem arredondamento, e satura/trunca ao estreito.
-    private static void shiftRightNarrow(Aarch64ScalableRegisters regs, Ir64Op.SveIntegerUnpredicated op, int elements) {
+    private static void shiftRightNarrow(Aarch64ScalableRegisters regs, SveIntegerOp64.IntegerUnpredicated op, int elements) {
         int esz = op.esz();
         int narrowEsz = esz - 1;
         boolean top = op.imm2() != 0L;
-        Ir64Op.SveIntegerPredicated.Op shift = switch (op.op()) {
-            case SHRN, UQSHRN -> Ir64Op.SveIntegerPredicated.Op.LSR_IMM;
-            case RSHRN, UQRSHRN -> Ir64Op.SveIntegerPredicated.Op.URSHR;
-            case SQSHRN, SQSHRUN -> Ir64Op.SveIntegerPredicated.Op.ASR_IMM;
-            default -> Ir64Op.SveIntegerPredicated.Op.SRSHR; // SQRSHRN/SQRSHRUN
+        SveIntegerOp64.IntegerPredicated.Op shift = switch (op.op()) {
+            case SHRN, UQSHRN -> SveIntegerOp64.IntegerPredicated.Op.LSR_IMM;
+            case RSHRN, UQRSHRN -> SveIntegerOp64.IntegerPredicated.Op.URSHR;
+            case SQSHRN, SQSHRUN -> SveIntegerOp64.IntegerPredicated.Op.ASR_IMM;
+            default -> SveIntegerOp64.IntegerPredicated.Op.SRSHR; // SQRSHRN/SQRSHRUN
         };
         for (int e = 0; e < elements; e++) {
             long shifted = SveIntegerPredicatedOps.immediateShift(shift, SveIntegerOps.get(regs, op.rn(), e, esz),
@@ -82,14 +82,14 @@ final class Sve2NarrowingOps {
     }
 
     /// `ADDHN*`/`RADDHN*`/`SUBHN*`/`RSUBHN*`: os `esize/2` bits ALTOS de `Zn ± Zm` (`R*` soma antes `1 << (esize/2 - 1)`).
-    private static void addSubHighPart(Aarch64ScalableRegisters regs, Ir64Op.SveIntegerUnpredicated op, int elements) {
+    private static void addSubHighPart(Aarch64ScalableRegisters regs, SveIntegerOp64.IntegerUnpredicated op, int elements) {
         int esz = op.esz();
         int halfBits = SveIntegerOps.elementBits(esz) / 2;
         boolean top = op.imm() != 0L;
-        boolean subtract = op.op() == Ir64Op.SveIntegerUnpredicated.Op.SUBHN
-                || op.op() == Ir64Op.SveIntegerUnpredicated.Op.RSUBHN;
-        boolean rounding = op.op() == Ir64Op.SveIntegerUnpredicated.Op.RADDHN
-                || op.op() == Ir64Op.SveIntegerUnpredicated.Op.RSUBHN;
+        boolean subtract = op.op() == SveIntegerOp64.IntegerUnpredicated.Op.SUBHN
+                || op.op() == SveIntegerOp64.IntegerUnpredicated.Op.RSUBHN;
+        boolean rounding = op.op() == SveIntegerOp64.IntegerUnpredicated.Op.RADDHN
+                || op.op() == SveIntegerOp64.IntegerUnpredicated.Op.RSUBHN;
         for (int e = 0; e < elements; e++) {
             long n = SveIntegerOps.get(regs, op.rn(), e, esz);
             long m = SveIntegerOps.get(regs, op.rm(), e, esz);
@@ -103,7 +103,7 @@ final class Sve2NarrowingOps {
 
     /// `SQCVTN`/`UQCVTN`/`SQCVTUN` (`.H` de um par de `.S`): `Zd[2i] = sat(Zn[i])`, `Zd[2i+1] = sat(Zn+1[i])`. Os dois
     /// registradores-fonte são lidos por inteiro antes de escrever (o destino pode ser um deles).
-    private static void convertPair(Aarch64ScalableRegisters regs, Ir64Op.SveIntegerUnpredicated op, int elements) {
+    private static void convertPair(Aarch64ScalableRegisters regs, SveIntegerOp64.IntegerUnpredicated op, int elements) {
         long[] result = new long[PAIR * elements];
         for (int i = 0; i < elements; i++) {
             for (int half = 0; half < PAIR; half++) {

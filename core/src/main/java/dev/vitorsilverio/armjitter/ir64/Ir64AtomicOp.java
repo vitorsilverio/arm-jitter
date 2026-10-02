@@ -2,7 +2,7 @@ package dev.vitorsilverio.armjitter.ir64;
 
 /// Operação de leitura-modificação-escrita atômica de uma instrução `LDADD`/`LDCLR`/`LDEOR`/
 /// `LDSET`/`LDSMAX`/`LDSMIN`/`LDUMAX`/`LDUMIN`/`SWP` da extensão LSE (`FEAT_LSE`, ARMv8.1-A;
-/// `ARM DDI 0487 C6.2.{LDADD…SWP}`, B19.1). Campo semântico de {@link Ir64Op.AtomicMemoryOp} —
+/// `ARM DDI 0487 C6.2.{LDADD…SWP}`, B19.1). Campo semântico de {@link MemoryOp64.AtomicMemoryOp} —
 /// o executor lê `[Rn]`, calcula `<operação>(old, Rs)`, escreve o resultado de volta e devolve
 /// `old` (zero-estendido) em `Rt`.
 public enum Ir64AtomicOp {

@@ -2,7 +2,7 @@ package dev.vitorsilverio.armjitter.executor64;
 
 import dev.vitorsilverio.armjitter.core64.Aarch64Core;
 import dev.vitorsilverio.armjitter.core64.Aarch64ScalableRegisters;
-import dev.vitorsilverio.armjitter.ir64.Ir64Op;
+import dev.vitorsilverio.armjitter.ir64.SveIntegerOp64;
 
 /// Semântica das operações SVE com imediato (B17.8): bitmask (`AND`/`ORR`/`EOR`/`DUPM`), cópia predicada
 /// (`CPY`/`FCPY`), broadcast (`DUP`/`FDUP`), aritmética com imediato de 8 bits (`ADD`/`SUB`/`SUBR`/`SQADD`/
@@ -22,7 +22,7 @@ final class SveImmediateOps {
     }
 
     /// Executa uma operação do grupo. `true` = a instrução já entrou numa exceção (acesso negado).
-    static boolean execute(Aarch64Core core, Ir64Op.SveImmediate op) {
+    static boolean execute(Aarch64Core core, SveIntegerOp64.Immediate op) {
         if (!SvePredicateOps.accessAllowed(core, op.instructionAddress())) {
             return true;
         }
@@ -30,11 +30,11 @@ final class SveImmediateOps {
         int esz = op.esz();
         int elements = core.vectorLengthBytes() >> esz;
         long imm = op.imm();
-        boolean predicated = op.op() == Ir64Op.SveImmediate.Op.CPY_MERGING
-                || op.op() == Ir64Op.SveImmediate.Op.CPY_ZEROING || op.op() == Ir64Op.SveImmediate.Op.FCPY;
+        boolean predicated = op.op() == SveIntegerOp64.Immediate.Op.CPY_MERGING
+                || op.op() == SveIntegerOp64.Immediate.Op.CPY_ZEROING || op.op() == SveIntegerOp64.Immediate.Op.FCPY;
         for (int e = 0; e < elements; e++) {
             if (predicated && !active(regs, op.pg(), e, esz)) {
-                if (op.op() == Ir64Op.SveImmediate.Op.CPY_ZEROING) {
+                if (op.op() == SveIntegerOp64.Immediate.Op.CPY_ZEROING) {
                     SveIntegerOps.set(regs, op.rd(), e, esz, 0L);
                 }
                 continue;
@@ -50,7 +50,7 @@ final class SveImmediateOps {
         return ((regs.pWord(pg, bit >>> WORD_INDEX_SHIFT) >>> (bit & WORD_BIT_MASK)) & 1L) != 0L;
     }
 
-    private static long result(Ir64Op.SveImmediate.Op kind, long n, long imm, int esz) {
+    private static long result(SveIntegerOp64.Immediate.Op kind, long n, long imm, int esz) {
         long sn = SveIntegerOps.signExtend(n, esz);
         long mask = SveIntegerOps.elementMask(esz);
         long unsignedImm = imm & mask;

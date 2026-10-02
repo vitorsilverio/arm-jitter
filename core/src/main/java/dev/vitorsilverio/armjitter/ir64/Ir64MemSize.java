@@ -1,8 +1,8 @@
 package dev.vitorsilverio.armjitter.ir64;
 
 /// Tamanho de transferência de uma instrução de load/store de registrador geral A64
-/// (`ARM DDI 0487 C4.1.3`, campo `size`/`opc`). Usado por {@link Ir64Op.Load64}/
-/// {@link Ir64Op.Store64}/{@link Ir64Op.LoadStorePair} para saber quantos bytes ler/escrever da
+/// (`ARM DDI 0487 C4.1.3`, campo `size`/`opc`). Usado por {@link MemoryOp64.Load64}/
+/// {@link MemoryOp64.Store64}/{@link MemoryOp64.LoadStorePair} para saber quantos bytes ler/escrever da
 /// memória — a largura do REGISTRADOR (`W`/`X`) é um campo separado (`wide`), já que as duas coisas
 /// divergem nas formas com sinal (`LDRSB`/`LDRSH`/`LDRSW`: tamanho de memória menor que o registro).
 public enum Ir64MemSize {

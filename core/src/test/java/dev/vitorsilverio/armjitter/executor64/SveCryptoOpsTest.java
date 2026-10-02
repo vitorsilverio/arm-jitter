@@ -7,9 +7,11 @@ import dev.vitorsilverio.armjitter.core64.Aarch64ExceptionLevel;
 import dev.vitorsilverio.armjitter.core64.Aarch64SystemRegisterBus;
 import dev.vitorsilverio.armjitter.decoder64.Aarch64Decoder;
 import dev.vitorsilverio.armjitter.ir64.Aarch64SystemRegisterId;
+import dev.vitorsilverio.armjitter.ir64.CryptoOp64;
 import dev.vitorsilverio.armjitter.ir64.Ir64CryptoAesOp;
 import dev.vitorsilverio.armjitter.ir64.Ir64CryptoSha3Op;
 import dev.vitorsilverio.armjitter.ir64.Ir64Op;
+import dev.vitorsilverio.armjitter.ir64.SveIntegerOp64;
 import dev.vitorsilverio.armjitter.memory.AddressSpace64;
 import dev.vitorsilverio.armjitter.support.TestAddressSpace;
 import org.junit.jupiter.api.Test;
@@ -138,12 +140,12 @@ class SveCryptoOpsTest {
         Aarch64Core sve = core(SVE_AES, 128);
         setZQ(sve, Z0, 0x1122334455667788L, 0x99AABBCCDDEEFF00L);
         setZQ(sve, Z1, 0x0F0F0F0F0F0F0F0FL, 0xF0F0F0F0F0F0F0F0L);
-        new Ir64BlockExecutor().executeOp(sve, new Ir64Op.SveCryptoAes(Ir64CryptoAesOp.AESE, Z0, Z1, 0));
+        new Ir64BlockExecutor().executeOp(sve, new SveIntegerOp64.CryptoAes(Ir64CryptoAesOp.AESE, Z0, Z1, 0));
 
         Aarch64Core scalar = core(SVE_AES, 128);
         scalar.fp().setQ(Z2, 0x1122334455667788L, 0x99AABBCCDDEEFF00L);
         scalar.fp().setQ(Z3, 0x0F0F0F0F0F0F0F0FL, 0xF0F0F0F0F0F0F0F0L);
-        new Ir64BlockExecutor().executeOp(scalar, new Ir64Op.CryptoAes(Ir64CryptoAesOp.AESE, Z2, Z3));
+        new Ir64BlockExecutor().executeOp(scalar, new CryptoOp64.Aes(Ir64CryptoAesOp.AESE, Z2, Z3));
 
         assertEquals(scalar.fp().low64(Z2), sve.fp().low64(Z0));
         assertEquals(scalar.fp().high64(Z2), sve.fp().high64(Z0));
@@ -154,12 +156,12 @@ class SveCryptoOpsTest {
         Aarch64Core sve = core(SVE_AES, 128);
         setZQ(sve, Z0, 0x1122334455667788L, 0x99AABBCCDDEEFF00L);
         setZQ(sve, Z1, 0x0F0F0F0F0F0F0F0FL, 0xF0F0F0F0F0F0F0F0L);
-        new Ir64BlockExecutor().executeOp(sve, new Ir64Op.SveCryptoAes(Ir64CryptoAesOp.AESD, Z0, Z1, 0));
+        new Ir64BlockExecutor().executeOp(sve, new SveIntegerOp64.CryptoAes(Ir64CryptoAesOp.AESD, Z0, Z1, 0));
 
         Aarch64Core scalar = core(SVE_AES, 128);
         scalar.fp().setQ(Z2, 0x1122334455667788L, 0x99AABBCCDDEEFF00L);
         scalar.fp().setQ(Z3, 0x0F0F0F0F0F0F0F0FL, 0xF0F0F0F0F0F0F0F0L);
-        new Ir64BlockExecutor().executeOp(scalar, new Ir64Op.CryptoAes(Ir64CryptoAesOp.AESD, Z2, Z3));
+        new Ir64BlockExecutor().executeOp(scalar, new CryptoOp64.Aes(Ir64CryptoAesOp.AESD, Z2, Z3));
 
         assertEquals(scalar.fp().low64(Z2), sve.fp().low64(Z0));
         assertEquals(scalar.fp().high64(Z2), sve.fp().high64(Z0));
@@ -172,11 +174,11 @@ class SveCryptoOpsTest {
     void aesmcHasNoSeparateSourceOperand() {
         Aarch64Core sve = core(SVE_AES, 128);
         setZQ(sve, Z0, 0x1122334455667788L, 0x99AABBCCDDEEFF00L);
-        new Ir64BlockExecutor().executeOp(sve, new Ir64Op.SveCryptoAes(Ir64CryptoAesOp.AESMC, Z0, Z0, 0));
+        new Ir64BlockExecutor().executeOp(sve, new SveIntegerOp64.CryptoAes(Ir64CryptoAesOp.AESMC, Z0, Z0, 0));
 
         Aarch64Core scalar = core(SVE_AES, 128);
         scalar.fp().setQ(Z2, 0x1122334455667788L, 0x99AABBCCDDEEFF00L);
-        new Ir64BlockExecutor().executeOp(scalar, new Ir64Op.CryptoAes(Ir64CryptoAesOp.AESMC, Z2, Z2));
+        new Ir64BlockExecutor().executeOp(scalar, new CryptoOp64.Aes(Ir64CryptoAesOp.AESMC, Z2, Z2));
 
         assertEquals(scalar.fp().low64(Z2), sve.fp().low64(Z0));
         assertEquals(scalar.fp().high64(Z2), sve.fp().high64(Z0));
@@ -186,11 +188,11 @@ class SveCryptoOpsTest {
     void aesimcMatchesScalarA64AtVl128() {
         Aarch64Core sve = core(SVE_AES, 128);
         setZQ(sve, Z0, 0x1122334455667788L, 0x99AABBCCDDEEFF00L);
-        new Ir64BlockExecutor().executeOp(sve, new Ir64Op.SveCryptoAes(Ir64CryptoAesOp.AESIMC, Z0, Z0, 0));
+        new Ir64BlockExecutor().executeOp(sve, new SveIntegerOp64.CryptoAes(Ir64CryptoAesOp.AESIMC, Z0, Z0, 0));
 
         Aarch64Core scalar = core(SVE_AES, 128);
         scalar.fp().setQ(Z2, 0x1122334455667788L, 0x99AABBCCDDEEFF00L);
-        new Ir64BlockExecutor().executeOp(scalar, new Ir64Op.CryptoAes(Ir64CryptoAesOp.AESIMC, Z2, Z2));
+        new Ir64BlockExecutor().executeOp(scalar, new CryptoOp64.Aes(Ir64CryptoAesOp.AESIMC, Z2, Z2));
 
         assertEquals(scalar.fp().low64(Z2), sve.fp().low64(Z0));
         assertEquals(scalar.fp().high64(Z2), sve.fp().high64(Z0));
@@ -201,12 +203,12 @@ class SveCryptoOpsTest {
         Aarch64Core sve = core(SVE_SM4, 128);
         setZQ(sve, Z0, 0x1122334455667788L, 0x99AABBCCDDEEFF00L);
         setZQ(sve, Z1, 0x0102030405060708L, 0x090A0B0C0D0E0F10L);
-        new Ir64BlockExecutor().executeOp(sve, new Ir64Op.SveCryptoSm4Encrypt(Z0, Z1, 0));
+        new Ir64BlockExecutor().executeOp(sve, new SveIntegerOp64.CryptoSm4Encrypt(Z0, Z1, 0));
 
         Aarch64Core scalar = core(SVE_SM4, 128);
         scalar.fp().setQ(Z2, 0x1122334455667788L, 0x99AABBCCDDEEFF00L);
         scalar.fp().setQ(Z3, 0x0102030405060708L, 0x090A0B0C0D0E0F10L);
-        new Ir64BlockExecutor().executeOp(scalar, new Ir64Op.CryptoSm4Encrypt(Z2, Z3));
+        new Ir64BlockExecutor().executeOp(scalar, new CryptoOp64.Sm4Encrypt(Z2, Z3));
 
         assertEquals(scalar.fp().low64(Z2), sve.fp().low64(Z0));
         assertEquals(scalar.fp().high64(Z2), sve.fp().high64(Z0));
@@ -217,12 +219,12 @@ class SveCryptoOpsTest {
         Aarch64Core sve = core(SVE_SM4, 128);
         setZQ(sve, Z0, 0x1122334455667788L, 0x99AABBCCDDEEFF00L);
         setZQ(sve, Z1, 0x0102030405060708L, 0x090A0B0C0D0E0F10L);
-        new Ir64BlockExecutor().executeOp(sve, new Ir64Op.SveCryptoSm4KeyUpdate(Z2, Z0, Z1, 0));
+        new Ir64BlockExecutor().executeOp(sve, new SveIntegerOp64.CryptoSm4KeyUpdate(Z2, Z0, Z1, 0));
 
         Aarch64Core scalar = core(SVE_SM4, 128);
         scalar.fp().setQ(Z0, 0x1122334455667788L, 0x99AABBCCDDEEFF00L);
         scalar.fp().setQ(Z1, 0x0102030405060708L, 0x090A0B0C0D0E0F10L);
-        new Ir64BlockExecutor().executeOp(scalar, new Ir64Op.CryptoSm4KeyUpdate(Z2, Z0, Z1));
+        new Ir64BlockExecutor().executeOp(scalar, new CryptoOp64.Sm4KeyUpdate(Z2, Z0, Z1));
 
         assertEquals(scalar.fp().low64(Z2), sve.fp().low64(Z2));
         assertEquals(scalar.fp().high64(Z2), sve.fp().high64(Z2));
@@ -233,13 +235,13 @@ class SveCryptoOpsTest {
         Aarch64Core sve = core(SVE_SHA3, 128);
         setZQ(sve, Z0, 0x1111111111111111L, 0x2222222222222222L);
         setZQ(sve, Z1, 0x3333333333333333L, 0x4444444444444444L);
-        new Ir64BlockExecutor().executeOp(sve, new Ir64Op.SveCryptoRax1(Z2, Z0, Z1, 0));
+        new Ir64BlockExecutor().executeOp(sve, new SveIntegerOp64.CryptoRax1(Z2, Z0, Z1, 0));
 
         Aarch64Core scalar = core(SVE_SHA3, 128);
         scalar.fp().setQ(Z0, 0x1111111111111111L, 0x2222222222222222L);
         scalar.fp().setQ(Z1, 0x3333333333333333L, 0x4444444444444444L);
         new Ir64BlockExecutor().executeOp(scalar,
-                new Ir64Op.CryptoSha3TwoSourceRotate(Ir64CryptoSha3Op.RAX1, Z2, Z0, Z1, 0));
+                new CryptoOp64.Sha3TwoSourceRotate(Ir64CryptoSha3Op.RAX1, Z2, Z0, Z1, 0));
 
         assertEquals(scalar.fp().low64(Z2), sve.fp().low64(Z2));
         assertEquals(scalar.fp().high64(Z2), sve.fp().high64(Z2));
@@ -264,17 +266,17 @@ class SveCryptoOpsTest {
         sve.scalable().setZWord(Z1, 1, keyHi);
         sve.scalable().setZWord(Z1, 2, keyLo);
         sve.scalable().setZWord(Z1, 3, keyHi);
-        new Ir64BlockExecutor().executeOp(sve, new Ir64Op.SveCryptoAes(Ir64CryptoAesOp.AESE, Z0, Z1, 0));
+        new Ir64BlockExecutor().executeOp(sve, new SveIntegerOp64.CryptoAes(Ir64CryptoAesOp.AESE, Z0, Z1, 0));
 
         Aarch64Core scalarBlock1 = core(SVE_AES, 128);
         scalarBlock1.fp().setQ(Z2, block1Lo, block1Hi);
         scalarBlock1.fp().setQ(Z3, keyLo, keyHi);
-        new Ir64BlockExecutor().executeOp(scalarBlock1, new Ir64Op.CryptoAes(Ir64CryptoAesOp.AESE, Z2, Z3));
+        new Ir64BlockExecutor().executeOp(scalarBlock1, new CryptoOp64.Aes(Ir64CryptoAesOp.AESE, Z2, Z3));
 
         Aarch64Core scalarBlock2 = core(SVE_AES, 128);
         scalarBlock2.fp().setQ(Z2, block2Lo, block2Hi);
         scalarBlock2.fp().setQ(Z3, keyLo, keyHi);
-        new Ir64BlockExecutor().executeOp(scalarBlock2, new Ir64Op.CryptoAes(Ir64CryptoAesOp.AESE, Z2, Z3));
+        new Ir64BlockExecutor().executeOp(scalarBlock2, new CryptoOp64.Aes(Ir64CryptoAesOp.AESE, Z2, Z3));
 
         assertEquals(scalarBlock1.fp().low64(Z2), sve.scalable().zWord(Z0, 0));
         assertEquals(scalarBlock1.fp().high64(Z2), sve.scalable().zWord(Z0, 1));
@@ -299,17 +301,17 @@ class SveCryptoOpsTest {
         sve.scalable().setZWord(Z1, 1, keyHi);
         sve.scalable().setZWord(Z1, 2, keyLo);
         sve.scalable().setZWord(Z1, 3, keyHi);
-        new Ir64BlockExecutor().executeOp(sve, new Ir64Op.SveCryptoSm4Encrypt(Z0, Z1, 0));
+        new Ir64BlockExecutor().executeOp(sve, new SveIntegerOp64.CryptoSm4Encrypt(Z0, Z1, 0));
 
         Aarch64Core scalarBlock1 = core(SVE_SM4, 128);
         scalarBlock1.fp().setQ(Z2, block1Lo, block1Hi);
         scalarBlock1.fp().setQ(Z3, keyLo, keyHi);
-        new Ir64BlockExecutor().executeOp(scalarBlock1, new Ir64Op.CryptoSm4Encrypt(Z2, Z3));
+        new Ir64BlockExecutor().executeOp(scalarBlock1, new CryptoOp64.Sm4Encrypt(Z2, Z3));
 
         Aarch64Core scalarBlock2 = core(SVE_SM4, 128);
         scalarBlock2.fp().setQ(Z2, block2Lo, block2Hi);
         scalarBlock2.fp().setQ(Z3, keyLo, keyHi);
-        new Ir64BlockExecutor().executeOp(scalarBlock2, new Ir64Op.CryptoSm4Encrypt(Z2, Z3));
+        new Ir64BlockExecutor().executeOp(scalarBlock2, new CryptoOp64.Sm4Encrypt(Z2, Z3));
 
         assertEquals(scalarBlock1.fp().low64(Z2), sve.scalable().zWord(Z0, 0));
         assertEquals(scalarBlock1.fp().high64(Z2), sve.scalable().zWord(Z0, 1));
@@ -329,7 +331,7 @@ class SveCryptoOpsTest {
             sve.scalable().setZWord(Z0, i, n[i]);
             sve.scalable().setZWord(Z1, i, m[i]);
         }
-        new Ir64BlockExecutor().executeOp(sve, new Ir64Op.SveCryptoRax1(Z2, Z0, Z1, 0));
+        new Ir64BlockExecutor().executeOp(sve, new SveIntegerOp64.CryptoRax1(Z2, Z0, Z1, 0));
 
         for (int i = 0; i < 4; i++) {
             long expected = n[i] ^ Long.rotateLeft(m[i], 1);
@@ -343,7 +345,7 @@ class SveCryptoOpsTest {
     void aesTrapsWithSveAccessExceptionWhenCpacrDeniesIt() {
         Aarch64Core sve = core(SVE_AES, 128);
         sve.setSystemRegisterBus(new DenyingCpacr());
-        boolean trapped = new Ir64BlockExecutor().executeOp(sve, new Ir64Op.SveCryptoAes(Ir64CryptoAesOp.AESE, Z0, Z1, 0));
+        boolean trapped = new Ir64BlockExecutor().executeOp(sve, new SveIntegerOp64.CryptoAes(Ir64CryptoAesOp.AESE, Z0, Z1, 0));
         assertTrue(trapped);
     }
 
@@ -351,7 +353,7 @@ class SveCryptoOpsTest {
     void sm4eTrapsWithSveAccessExceptionWhenCpacrDeniesIt() {
         Aarch64Core sve = core(SVE_SM4, 128);
         sve.setSystemRegisterBus(new DenyingCpacr());
-        boolean trapped = new Ir64BlockExecutor().executeOp(sve, new Ir64Op.SveCryptoSm4Encrypt(Z0, Z1, 0));
+        boolean trapped = new Ir64BlockExecutor().executeOp(sve, new SveIntegerOp64.CryptoSm4Encrypt(Z0, Z1, 0));
         assertTrue(trapped);
     }
 
@@ -360,7 +362,7 @@ class SveCryptoOpsTest {
         Aarch64Core sve = core(SVE_SM4, 128);
         sve.setSystemRegisterBus(new DenyingCpacr());
         boolean trapped =
-                new Ir64BlockExecutor().executeOp(sve, new Ir64Op.SveCryptoSm4KeyUpdate(Z2, Z0, Z1, 0));
+                new Ir64BlockExecutor().executeOp(sve, new SveIntegerOp64.CryptoSm4KeyUpdate(Z2, Z0, Z1, 0));
         assertTrue(trapped);
     }
 
@@ -368,7 +370,7 @@ class SveCryptoOpsTest {
     void rax1TrapsWithSveAccessExceptionWhenCpacrDeniesIt() {
         Aarch64Core sve = core(SVE_SHA3, 128);
         sve.setSystemRegisterBus(new DenyingCpacr());
-        boolean trapped = new Ir64BlockExecutor().executeOp(sve, new Ir64Op.SveCryptoRax1(Z2, Z0, Z1, 0));
+        boolean trapped = new Ir64BlockExecutor().executeOp(sve, new SveIntegerOp64.CryptoRax1(Z2, Z0, Z1, 0));
         assertTrue(trapped);
     }
 
@@ -382,6 +384,6 @@ class SveCryptoOpsTest {
         setZQ(sve, Z1, 1L, 1L);
         org.junit.jupiter.api.Assertions.assertThrows(
                 dev.vitorsilverio.armjitter.core64.Aarch64UndefinedInstructionException.class,
-                () -> new Ir64BlockExecutor().executeOp(sve, new Ir64Op.SveCryptoAes(Ir64CryptoAesOp.AESE, Z0, Z1, 0)));
+                () -> new Ir64BlockExecutor().executeOp(sve, new SveIntegerOp64.CryptoAes(Ir64CryptoAesOp.AESE, Z0, Z1, 0)));
     }
 }

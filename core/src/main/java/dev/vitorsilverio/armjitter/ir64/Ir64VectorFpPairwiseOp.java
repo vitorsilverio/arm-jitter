@@ -1,6 +1,6 @@
 package dev.vitorsilverio.armjitter.ir64;
 
-/// Operação de {@link Ir64Op.VectorFpArithmeticPairwise} (AdvSIMD "three same" de ponto
+/// Operação de {@link AdvSimdFpOp64.FpArithmeticPairwise} (AdvSIMD "three same" de ponto
 /// flutuante, pareado, B8.9) — concatena `Rn:Rm` e combina pares adjacentes, mesmo esquema de
 /// {@link Ir64VectorPairwiseOp} (inteiro), só precisão simples/dupla. Cobre também a forma ESCALAR
 /// (`FADDP_s`/`FMAXP_s`/`FMINP_s`/`FMAXNMP_s`/`FMINNMP_s`, B19.2 — `scalar=true` no record: reduz

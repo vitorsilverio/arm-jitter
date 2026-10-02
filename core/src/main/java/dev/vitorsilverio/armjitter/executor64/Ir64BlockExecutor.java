@@ -14,6 +14,13 @@ import dev.vitorsilverio.armjitter.core64.Aarch64SecureMonitorCallException;
 import dev.vitorsilverio.armjitter.core64.Aarch64SystemRegisterBus;
 import dev.vitorsilverio.armjitter.core64.Aarch64UndefinedInstructionException;
 import dev.vitorsilverio.armjitter.decoder64.Aarch64Decoder;
+import dev.vitorsilverio.armjitter.ir64.AdvSimdFpOp64;
+import dev.vitorsilverio.armjitter.ir64.AdvSimdIntegerOp64;
+import dev.vitorsilverio.armjitter.ir64.AdvSimdMoveOp64;
+import dev.vitorsilverio.armjitter.ir64.BranchOp64;
+import dev.vitorsilverio.armjitter.ir64.CryptoOp64;
+import dev.vitorsilverio.armjitter.ir64.FpOp64;
+import dev.vitorsilverio.armjitter.ir64.IntegerOp64;
 import dev.vitorsilverio.armjitter.ir64.Ir64AddressingMode;
 import dev.vitorsilverio.armjitter.ir64.Ir64AluExtendType;
 import dev.vitorsilverio.armjitter.ir64.Ir64AluOp;
@@ -25,6 +32,13 @@ import dev.vitorsilverio.armjitter.ir64.Ir64LogicalShiftType;
 import dev.vitorsilverio.armjitter.ir64.Ir64MemSize;
 import dev.vitorsilverio.armjitter.ir64.Ir64Op;
 import dev.vitorsilverio.armjitter.ir64.Ir64ShiftType;
+import dev.vitorsilverio.armjitter.ir64.MemoryOp64;
+import dev.vitorsilverio.armjitter.ir64.SmeOp64;
+import dev.vitorsilverio.armjitter.ir64.SveFpOp64;
+import dev.vitorsilverio.armjitter.ir64.SveIntegerOp64;
+import dev.vitorsilverio.armjitter.ir64.SveMemoryOp64;
+import dev.vitorsilverio.armjitter.ir64.SvePredicateOp64;
+import dev.vitorsilverio.armjitter.ir64.SystemOp64;
 import dev.vitorsilverio.armjitter.memory.MemoryAccessType;
 import dev.vitorsilverio.armjitter.memory.mmu.MemoryTranslationException64;
 
@@ -49,17 +63,17 @@ public final class Ir64BlockExecutor {
     /// Bit `I` dentro do `imm4` de `DAIFSet`/`DAIFClr` (`ARM DDI 0487`, ordem `D:A:I:F` — `I` é a
     /// posição `1`, MESMA convenção de `PstateRegister#irqDisabled` para máscara de IRQ). Único
     /// bit deste grupo com efeito observável neste emulador (B8.3, ver
-    /// {@link dev.vitorsilverio.armjitter.ir64.Ir64Op.InterruptMask}).
+    /// {@link dev.vitorsilverio.armjitter.ir64.SystemOp64.InterruptMask}).
     private static final int DAIF_MASK_BIT_I = 1 << 1;
     /// Índice de encoding (`Rn`=`31`) do registrador BASE de qualquer load/store — sempre `SP`,
     /// nunca `XZR` (convenção arquitetural do A64, resolvida aqui e não no decoder — ver
-    /// {@link Ir64Op.Load64#rn} javadoc).
+    /// {@link MemoryOp64.Load64#rn} javadoc).
     private static final int BASE_REGISTER_SP_ENCODING = 31;
     /// Deslocamento em bytes entre os dois slots de um `LDP`/`STP` de 64 bits.
     private static final int PAIR_DOUBLEWORD_STRIDE_BYTES = 8;
     /// Deslocamento em bytes entre os dois slots de um `LDP`/`STP` de 32 bits.
     private static final int PAIR_WORD_STRIDE_BYTES = 4;
-    /// Índice de encoding (`31`) que designa `SP` em {@link Ir64Op.AluExtendedRegister} — mesmo
+    /// Índice de encoding (`31`) que designa `SP` em {@link IntegerOp64.AluExtendedRegister} — mesmo
     /// valor de {@link #BASE_REGISTER_SP_ENCODING}, nomeado separadamente porque aparece num
     /// contexto de ALU (não endereçamento de memória). A resolução SEMPRE checa o índice (`==
     /// 31`), nunca só a flag booleira do op (ver {@link #executeAluExtendedRegister} e a
@@ -69,7 +83,7 @@ public final class Ir64BlockExecutor {
     /// executor (`W` sempre zero-estende para os 64 bits altos).
     private static final long LOW_32_BITS_MASK = 0xFFFF_FFFFL;
     /// Largura em bits de uma operação `X` (64 bits) — usada por {@link #executeBitfield} para
-    /// calcular `pos`/`len` conforme {@link Ir64Op.Bitfield#wide()} (B6.3.2).
+    /// calcular `pos`/`len` conforme {@link IntegerOp64.Bitfield#wide()} (B6.3.2).
     private static final int BITFIELD_WIDE_BITSIZE = 64;
     /// Largura em bits de uma operação `W` (32 bits) — ver {@link #BITFIELD_WIDE_BITSIZE}.
     private static final int BITFIELD_NARROW_BITSIZE = 32;
@@ -260,383 +274,383 @@ public final class Ir64BlockExecutor {
 
     private boolean execute(Aarch64Core core, Ir64Op op) {
         return switch (op.kind()) {
-            case Ir64Op.Kind.ALU64 -> executeAlu(core, (Ir64Op.Alu64) op);
-            case Ir64Op.Kind.MOVE_WIDE -> executeMoveWide(core, (Ir64Op.MoveWide) op);
-            case Ir64Op.Kind.PC_RELATIVE -> executePcRelative(core, (Ir64Op.PcRelative) op);
-            case Ir64Op.Kind.BRANCH64 -> executeBranch(core, (Ir64Op.Branch64) op);
-            case Ir64Op.Kind.COMPARE_BRANCH64 -> executeCompareBranch(core, (Ir64Op.CompareBranch64) op);
-            case Ir64Op.Kind.SVC -> executeSvc(core, (Ir64Op.Svc) op);
-            case Ir64Op.Kind.LOAD64 -> executeLoad(core, (Ir64Op.Load64) op);
-            case Ir64Op.Kind.STORE64 -> executeStore(core, (Ir64Op.Store64) op);
-            case Ir64Op.Kind.LOAD_STORE_PAIR -> executeLoadStorePair(core, (Ir64Op.LoadStorePair) op);
-            case Ir64Op.Kind.LOAD_LITERAL64 -> executeLoadLiteral(core, (Ir64Op.LoadLiteral64) op);
-            case Ir64Op.Kind.FP_LOAD64 -> executeFpLoad(core, (Ir64Op.FpLoad64) op);
-            case Ir64Op.Kind.FP_STORE64 -> executeFpStore(core, (Ir64Op.FpStore64) op);
-            case Ir64Op.Kind.FP_LOAD_STORE_PAIR -> executeFpLoadStorePair(core, (Ir64Op.FpLoadStorePair) op);
-            case Ir64Op.Kind.FP_LOAD_LITERAL64 -> executeFpLoadLiteral(core, (Ir64Op.FpLoadLiteral64) op);
+            case Ir64Op.Kind.ALU64 -> executeAlu(core, (IntegerOp64.Alu64) op);
+            case Ir64Op.Kind.MOVE_WIDE -> executeMoveWide(core, (IntegerOp64.MoveWide) op);
+            case Ir64Op.Kind.PC_RELATIVE -> executePcRelative(core, (IntegerOp64.PcRelative) op);
+            case Ir64Op.Kind.BRANCH64 -> executeBranch(core, (BranchOp64.Branch64) op);
+            case Ir64Op.Kind.COMPARE_BRANCH64 -> executeCompareBranch(core, (BranchOp64.CompareBranch64) op);
+            case Ir64Op.Kind.SVC -> executeSvc(core, (SystemOp64.Svc) op);
+            case Ir64Op.Kind.LOAD64 -> executeLoad(core, (MemoryOp64.Load64) op);
+            case Ir64Op.Kind.STORE64 -> executeStore(core, (MemoryOp64.Store64) op);
+            case Ir64Op.Kind.LOAD_STORE_PAIR -> executeLoadStorePair(core, (MemoryOp64.LoadStorePair) op);
+            case Ir64Op.Kind.LOAD_LITERAL64 -> executeLoadLiteral(core, (MemoryOp64.LoadLiteral64) op);
+            case Ir64Op.Kind.FP_LOAD64 -> executeFpLoad(core, (FpOp64.Load64) op);
+            case Ir64Op.Kind.FP_STORE64 -> executeFpStore(core, (FpOp64.Store64) op);
+            case Ir64Op.Kind.FP_LOAD_STORE_PAIR -> executeFpLoadStorePair(core, (FpOp64.LoadStorePair) op);
+            case Ir64Op.Kind.FP_LOAD_LITERAL64 -> executeFpLoadLiteral(core, (FpOp64.LoadLiteral64) op);
             case Ir64Op.Kind.ALU_SHIFTED_REGISTER ->
-                    executeAluShiftedRegister(core, (Ir64Op.AluShiftedRegister) op);
+                    executeAluShiftedRegister(core, (IntegerOp64.AluShiftedRegister) op);
             case Ir64Op.Kind.ALU_EXTENDED_REGISTER ->
-                    executeAluExtendedRegister(core, (Ir64Op.AluExtendedRegister) op);
+                    executeAluExtendedRegister(core, (IntegerOp64.AluExtendedRegister) op);
             case Ir64Op.Kind.CONDITIONAL_SELECT ->
-                    executeConditionalSelect(core, (Ir64Op.ConditionalSelect) op);
+                    executeConditionalSelect(core, (IntegerOp64.ConditionalSelect) op);
             case Ir64Op.Kind.CONDITIONAL_COMPARE ->
-                    executeConditionalCompare(core, (Ir64Op.ConditionalCompare) op);
+                    executeConditionalCompare(core, (IntegerOp64.ConditionalCompare) op);
             case Ir64Op.Kind.LOGICAL_SHIFTED_REGISTER ->
-                    executeLogicalShiftedRegister(core, (Ir64Op.LogicalShiftedRegister) op);
+                    executeLogicalShiftedRegister(core, (IntegerOp64.LogicalShiftedRegister) op);
             case Ir64Op.Kind.SHIFT_VARIABLE ->
-                    executeShiftVariable(core, (Ir64Op.ShiftVariable) op);
-            case Ir64Op.Kind.BITFIELD -> executeBitfield(core, (Ir64Op.Bitfield) op);
+                    executeShiftVariable(core, (IntegerOp64.ShiftVariable) op);
+            case Ir64Op.Kind.BITFIELD -> executeBitfield(core, (IntegerOp64.Bitfield) op);
             case Ir64Op.Kind.MULTIPLY_ACCUMULATE ->
-                    executeMultiplyAccumulate(core, (Ir64Op.MultiplyAccumulate) op);
-            case Ir64Op.Kind.DIVIDE -> executeDivide(core, (Ir64Op.Divide) op);
-            case Ir64Op.Kind.LOAD_EXCLUSIVE -> executeLoadExclusive(core, (Ir64Op.LoadExclusive) op);
-            case Ir64Op.Kind.STORE_EXCLUSIVE -> executeStoreExclusive(core, (Ir64Op.StoreExclusive) op);
+                    executeMultiplyAccumulate(core, (IntegerOp64.MultiplyAccumulate) op);
+            case Ir64Op.Kind.DIVIDE -> executeDivide(core, (IntegerOp64.Divide) op);
+            case Ir64Op.Kind.LOAD_EXCLUSIVE -> executeLoadExclusive(core, (MemoryOp64.LoadExclusive) op);
+            case Ir64Op.Kind.STORE_EXCLUSIVE -> executeStoreExclusive(core, (MemoryOp64.StoreExclusive) op);
             case Ir64Op.Kind.LOAD_EXCLUSIVE_PAIR ->
-                    executeLoadExclusivePair(core, (Ir64Op.LoadExclusivePair) op);
+                    executeLoadExclusivePair(core, (MemoryOp64.LoadExclusivePair) op);
             case Ir64Op.Kind.STORE_EXCLUSIVE_PAIR ->
-                    executeStoreExclusivePair(core, (Ir64Op.StoreExclusivePair) op);
+                    executeStoreExclusivePair(core, (MemoryOp64.StoreExclusivePair) op);
             case Ir64Op.Kind.COMPARE_AND_SWAP ->
-                    executeCompareAndSwap(core, (Ir64Op.CompareAndSwap) op);
+                    executeCompareAndSwap(core, (MemoryOp64.CompareAndSwap) op);
             case Ir64Op.Kind.COMPARE_AND_SWAP_PAIR ->
-                    executeCompareAndSwapPair(core, (Ir64Op.CompareAndSwapPair) op);
+                    executeCompareAndSwapPair(core, (MemoryOp64.CompareAndSwapPair) op);
             case Ir64Op.Kind.ATOMIC_MEMORY_OP ->
-                    executeAtomicMemoryOp(core, (Ir64Op.AtomicMemoryOp) op);
+                    executeAtomicMemoryOp(core, (MemoryOp64.AtomicMemoryOp) op);
             case Ir64Op.Kind.ATOMIC_MEMORY_OP_PAIR ->
-                    executeAtomicMemoryOpPair(core, (Ir64Op.AtomicMemoryOpPair) op);
-            case Ir64Op.Kind.SYSTEM_REGISTER -> executeSystemRegister(core, (Ir64Op.SystemRegister) op);
+                    executeAtomicMemoryOpPair(core, (MemoryOp64.AtomicMemoryOpPair) op);
+            case Ir64Op.Kind.SYSTEM_REGISTER -> executeSystemRegister(core, (SystemOp64.SystemRegister) op);
             case Ir64Op.Kind.SYSTEM_INSTRUCTION ->
-                    executeSystemInstruction(core, (Ir64Op.SystemInstruction) op);
+                    executeSystemInstruction(core, (SystemOp64.SystemInstruction) op);
             case Ir64Op.Kind.EXCEPTION_RETURN ->
-                    executeExceptionReturn(core, (Ir64Op.ExceptionReturn) op);
-            case Ir64Op.Kind.FP64_ALU -> Ir64FpExecutor.executeFpAlu(core, (Ir64Op.Fp64Alu) op);
+                    executeExceptionReturn(core, (SystemOp64.ExceptionReturn) op);
+            case Ir64Op.Kind.FP64_ALU -> Ir64FpExecutor.executeFpAlu(core, (FpOp64.Alu) op);
             case Ir64Op.Kind.FP64_MOVE_IMMEDIATE ->
-                    Ir64FpExecutor.executeFpMoveImmediate(core, (Ir64Op.Fp64MoveImmediate) op);
+                    Ir64FpExecutor.executeFpMoveImmediate(core, (FpOp64.MoveImmediate) op);
             case Ir64Op.Kind.FP64_COMPARE ->
-                    Ir64FpExecutor.executeFpCompare(core, (Ir64Op.Fp64Compare) op);
+                    Ir64FpExecutor.executeFpCompare(core, (FpOp64.Compare) op);
             case Ir64Op.Kind.FP64_CONVERT ->
-                    Ir64FpExecutor.executeFpConvert(core, (Ir64Op.Fp64Convert) op);
+                    Ir64FpExecutor.executeFpConvert(core, (FpOp64.Convert) op);
             case Ir64Op.Kind.PRIVILEGED_CALL ->
-                    executePrivilegedCall((Ir64Op.PrivilegedCall) op);
-            case Ir64Op.Kind.ALU_WITH_CARRY -> executeAluWithCarry(core, (Ir64Op.AluWithCarry) op);
-            case Ir64Op.Kind.EXTRACT -> executeExtract(core, (Ir64Op.Extract) op);
+                    executePrivilegedCall((SystemOp64.PrivilegedCall) op);
+            case Ir64Op.Kind.ALU_WITH_CARRY -> executeAluWithCarry(core, (IntegerOp64.AluWithCarry) op);
+            case Ir64Op.Kind.EXTRACT -> executeExtract(core, (IntegerOp64.Extract) op);
             case Ir64Op.Kind.DATA_PROCESSING_1_SOURCE ->
-                    executeDataProcessing1Source(core, (Ir64Op.DataProcessing1Source) op);
+                    executeDataProcessing1Source(core, (IntegerOp64.DataProcessing1Source) op);
             case Ir64Op.Kind.MULTIPLY_ACCUMULATE_LONG ->
-                    executeMultiplyAccumulateLong(core, (Ir64Op.MultiplyAccumulateLong) op);
-            case Ir64Op.Kind.MULTIPLY_HIGH -> executeMultiplyHigh(core, (Ir64Op.MultiplyHigh) op);
+                    executeMultiplyAccumulateLong(core, (IntegerOp64.MultiplyAccumulateLong) op);
+            case Ir64Op.Kind.MULTIPLY_HIGH -> executeMultiplyHigh(core, (IntegerOp64.MultiplyHigh) op);
             case Ir64Op.Kind.EVALUATE_INTO_FLAGS ->
-                    executeEvaluateIntoFlags(core, (Ir64Op.EvaluateIntoFlags) op);
+                    executeEvaluateIntoFlags(core, (IntegerOp64.EvaluateIntoFlags) op);
             case Ir64Op.Kind.ROTATE_INTO_FLAGS ->
-                    executeRotateIntoFlags(core, (Ir64Op.RotateIntoFlags) op);
-            case Ir64Op.Kind.CONVERT_FLAGS -> executeConvertFlags(core, (Ir64Op.ConvertFlags) op);
-            case Ir64Op.Kind.INTERRUPT_MASK -> executeInterruptMask(core, (Ir64Op.InterruptMask) op);
+                    executeRotateIntoFlags(core, (IntegerOp64.RotateIntoFlags) op);
+            case Ir64Op.Kind.CONVERT_FLAGS -> executeConvertFlags(core, (IntegerOp64.ConvertFlags) op);
+            case Ir64Op.Kind.INTERRUPT_MASK -> executeInterruptMask(core, (SystemOp64.InterruptMask) op);
             case Ir64Op.Kind.STREAMING_MODE_CONTROL ->
-                    executeStreamingModeControl(core, (Ir64Op.StreamingModeControl) op);
+                    executeStreamingModeControl(core, (SystemOp64.StreamingModeControl) op);
             case Ir64Op.Kind.SVE_PREDICATE_LOGICAL ->
-                    SvePredicateOps.executeLogical(core, (Ir64Op.SvePredicateLogical) op);
+                    SvePredicateOps.executeLogical(core, (SvePredicateOp64.PredicateLogical) op);
             case Ir64Op.Kind.SVE_PREDICATE_MISC ->
-                    SvePredicateOps.executeMisc(core, (Ir64Op.SvePredicateMisc) op);
+                    SvePredicateOps.executeMisc(core, (SvePredicateOp64.PredicateMisc) op);
             case Ir64Op.Kind.SVE_PARTITION_BREAK ->
-                    SvePredicateOps.executePartitionBreak(core, (Ir64Op.SvePartitionBreak) op);
+                    SvePredicateOps.executePartitionBreak(core, (SvePredicateOp64.PartitionBreak) op);
             case Ir64Op.Kind.SVE_PREDICATE_COUNT ->
-                    SvePredicateOps.executePredicateCount(core, (Ir64Op.SvePredicateCount) op);
+                    SvePredicateOps.executePredicateCount(core, (SvePredicateOp64.PredicateCount) op);
             case Ir64Op.Kind.SVE_INTEGER_UNPREDICATED ->
-                    SveIntegerOps.execute(core, (Ir64Op.SveIntegerUnpredicated) op);
+                    SveIntegerOps.execute(core, (SveIntegerOp64.IntegerUnpredicated) op);
             case Ir64Op.Kind.SVE_INTEGER_PREDICATED ->
-                    SveIntegerPredicatedOps.execute(core, (Ir64Op.SveIntegerPredicated) op);
+                    SveIntegerPredicatedOps.execute(core, (SveIntegerOp64.IntegerPredicated) op);
             case Ir64Op.Kind.SVE_INTEGER_REDUCTION ->
-                    SveIntegerReductionOps.execute(core, (Ir64Op.SveIntegerReduction) op);
-            case Ir64Op.Kind.SVE_IMMEDIATE -> SveImmediateOps.execute(core, (Ir64Op.SveImmediate) op);
+                    SveIntegerReductionOps.execute(core, (SveIntegerOp64.IntegerReduction) op);
+            case Ir64Op.Kind.SVE_IMMEDIATE -> SveImmediateOps.execute(core, (SveIntegerOp64.Immediate) op);
             case Ir64Op.Kind.SVE_MULTIPLY_INDEXED ->
-                    SveMultiplyIndexedOps.execute(core, (Ir64Op.SveMultiplyIndexed) op);
-            case Ir64Op.Kind.SVE_ADDRESS -> SveAddressOps.execute(core, (Ir64Op.SveAddress) op);
-            case Ir64Op.Kind.SVE_PERMUTE -> SvePermuteOps.execute(core, (Ir64Op.SvePermute) op);
-            case Ir64Op.Kind.SVE_COMPARE -> SveCompareOps.execute(core, (Ir64Op.SveCompare) op);
-            case Ir64Op.Kind.SVE_SCALAR_COMPARE -> SveCompareOps.execute(core, (Ir64Op.SveScalarCompare) op);
+                    SveMultiplyIndexedOps.execute(core, (SveIntegerOp64.MultiplyIndexed) op);
+            case Ir64Op.Kind.SVE_ADDRESS -> SveAddressOps.execute(core, (SveIntegerOp64.Address) op);
+            case Ir64Op.Kind.SVE_PERMUTE -> SvePermuteOps.execute(core, (SveIntegerOp64.Permute) op);
+            case Ir64Op.Kind.SVE_COMPARE -> SveCompareOps.execute(core, (SvePredicateOp64.Compare) op);
+            case Ir64Op.Kind.SVE_SCALAR_COMPARE -> SveCompareOps.execute(core, (SvePredicateOp64.ScalarCompare) op);
             case Ir64Op.Kind.SVE_PERMUTE_PREDICATED ->
-                    SvePermutePredicatedOps.execute(core, (Ir64Op.SvePermutePredicated) op);
-            case Ir64Op.Kind.SVE_FP_ARITHMETIC -> SveFpArithmeticOps.execute(core, (Ir64Op.SveFpArithmetic) op);
-            case Ir64Op.Kind.SVE_FP_MULTIPLY_ADD -> SveFpMultiplyAddOps.execute(core, (Ir64Op.SveFpMultiplyAdd) op);
-            case Ir64Op.Kind.SVE_FP_COMPARE_REDUCE -> SveFpCompareReduceOps.execute(core, (Ir64Op.SveFpCompareReduce) op);
-            case Ir64Op.Kind.SVE_FP_UNARY -> SveFpUnaryOps.execute(core, (Ir64Op.SveFpUnary) op);
-            case Ir64Op.Kind.SVE_LOAD -> SveLoadOps.execute(core, (Ir64Op.SveLoad) op);
-            case Ir64Op.Kind.SVE_STORE -> SveStoreOps.execute(core, (Ir64Op.SveStore) op);
-            case Ir64Op.Kind.SVE_GATHER -> SveGatherOps.execute(core, (Ir64Op.SveGather) op);
+                    SvePermutePredicatedOps.execute(core, (SveIntegerOp64.PermutePredicated) op);
+            case Ir64Op.Kind.SVE_FP_ARITHMETIC -> SveFpArithmeticOps.execute(core, (SveFpOp64.FpArithmetic) op);
+            case Ir64Op.Kind.SVE_FP_MULTIPLY_ADD -> SveFpMultiplyAddOps.execute(core, (SveFpOp64.FpMultiplyAdd) op);
+            case Ir64Op.Kind.SVE_FP_COMPARE_REDUCE -> SveFpCompareReduceOps.execute(core, (SveFpOp64.FpCompareReduce) op);
+            case Ir64Op.Kind.SVE_FP_UNARY -> SveFpUnaryOps.execute(core, (SveFpOp64.FpUnary) op);
+            case Ir64Op.Kind.SVE_LOAD -> SveLoadOps.execute(core, (SveMemoryOp64.Load) op);
+            case Ir64Op.Kind.SVE_STORE -> SveStoreOps.execute(core, (SveMemoryOp64.Store) op);
+            case Ir64Op.Kind.SVE_GATHER -> SveGatherOps.execute(core, (SveMemoryOp64.Gather) op);
             case Ir64Op.Kind.SVE_COUNTER_PREDICATE ->
-                    SveCounterOps.execute(core, (Ir64Op.SveCounterPredicate) op);
+                    SveCounterOps.execute(core, (SvePredicateOp64.CounterPredicate) op);
             case Ir64Op.Kind.SVE_MULTI_VECTOR_MEMORY ->
-                    SveCounterOps.execute(core, (Ir64Op.SveMultiVectorMemory) op);
+                    SveCounterOps.execute(core, (SveMemoryOp64.MultiVectorMemory) op);
             case Ir64Op.Kind.SVE_ELEMENT_COUNT ->
-                    SvePredicateOps.executeElementCount(core, (Ir64Op.SveElementCount) op);
-            case Ir64Op.Kind.SVE_MATCH -> SveMiscOps.executeMatch(core, (Ir64Op.SveMatch) op);
-            case Ir64Op.Kind.SVE_HISTOGRAM -> SveMiscOps.executeHistogram(core, (Ir64Op.SveHistogram) op);
-            case Ir64Op.Kind.SVE_LOOKUP_TABLE -> SveMiscOps.executeLookupTable(core, (Ir64Op.SveLookupTable) op);
+                    SvePredicateOps.executeElementCount(core, (SveIntegerOp64.ElementCount) op);
+            case Ir64Op.Kind.SVE_MATCH -> SveMiscOps.executeMatch(core, (SvePredicateOp64.Match) op);
+            case Ir64Op.Kind.SVE_HISTOGRAM -> SveMiscOps.executeHistogram(core, (SveIntegerOp64.Histogram) op);
+            case Ir64Op.Kind.SVE_LOOKUP_TABLE -> SveMiscOps.executeLookupTable(core, (SveIntegerOp64.LookupTable) op);
             case Ir64Op.Kind.SVE_PREDICATE_SELECT ->
-                    SveMiscOps.executePredicateSelect(core, (Ir64Op.SvePredicateSelect) op);
-            case Ir64Op.Kind.SVE_CLAMP -> SveMiscOps.executeClamp(core, (Ir64Op.SveClamp) op);
-            case Ir64Op.Kind.SVE_FP_CONVERT_FP8 -> SveFpConvertFp8Ops.executeWiden(core, (Ir64Op.SveFpConvertFp8) op);
+                    SveMiscOps.executePredicateSelect(core, (SvePredicateOp64.PredicateSelect) op);
+            case Ir64Op.Kind.SVE_CLAMP -> SveMiscOps.executeClamp(core, (SveIntegerOp64.Clamp) op);
+            case Ir64Op.Kind.SVE_FP_CONVERT_FP8 -> SveFpConvertFp8Ops.executeWiden(core, (SveFpOp64.FpConvertFp8) op);
             case Ir64Op.Kind.SVE_FP_CONVERT_TO_FP8 ->
-                    SveFpConvertFp8Ops.executeNarrow(core, (Ir64Op.SveFpConvertToFp8) op);
-            case Ir64Op.Kind.SVE_FP_PAIRWISE -> SveFpPairwiseOps.execute(core, (Ir64Op.SveFpPairwise) op);
+                    SveFpConvertFp8Ops.executeNarrow(core, (SveFpOp64.FpConvertToFp8) op);
+            case Ir64Op.Kind.SVE_FP_PAIRWISE -> SveFpPairwiseOps.execute(core, (SveFpOp64.FpPairwise) op);
             case Ir64Op.Kind.SVE_FP_MATRIX_MULTIPLY ->
-                    SveFpMatrixMultiplyOps.execute(core, (Ir64Op.SveFpMatrixMultiply) op);
+                    SveFpMatrixMultiplyOps.execute(core, (SveFpOp64.FpMatrixMultiply) op);
             case Ir64Op.Kind.SVE_FP_CONVERT_ODD_ELEMENTS ->
-                    SveFpConvertOddElementsOps.execute(core, (Ir64Op.SveFpConvertOddElements) op);
-            case Ir64Op.Kind.SVE_FP_LOGB -> SveFpLogBOps.execute(core, (Ir64Op.SveFpLogB) op);
+                    SveFpConvertOddElementsOps.execute(core, (SveFpOp64.FpConvertOddElements) op);
+            case Ir64Op.Kind.SVE_FP_LOGB -> SveFpLogBOps.execute(core, (SveFpOp64.FpLogB) op);
             case Ir64Op.Kind.SVE_FP8_FUSED_MULTIPLY_ADD_LONG ->
-                    SveFp8MultiplyOps.executeFusedMultiplyAdd(core, (Ir64Op.SveFp8FusedMultiplyAddLong) op);
+                    SveFp8MultiplyOps.executeFusedMultiplyAdd(core, (SveFpOp64.Fp8FusedMultiplyAddLong) op);
             case Ir64Op.Kind.SVE_FP8_DOT_PRODUCT ->
-                    SveFp8MultiplyOps.executeDotProduct(core, (Ir64Op.SveFp8DotProduct) op);
+                    SveFp8MultiplyOps.executeDotProduct(core, (SveFpOp64.Fp8DotProduct) op);
             case Ir64Op.Kind.SVE_FP_MULTIPLY_ADD_LONG_WIDEN ->
-                    SveFpWidenOps.executeMultiplyAddLong(core, (Ir64Op.SveFpMultiplyAddLongWiden) op);
+                    SveFpWidenOps.executeMultiplyAddLong(core, (SveFpOp64.FpMultiplyAddLongWiden) op);
             case Ir64Op.Kind.SVE_FP_MULTIPLY_ADD_LONG_WIDEN_BFLOAT16 -> SveFpWidenOps.executeMultiplyAddLongBFloat16(
-                    core, (Ir64Op.SveFpMultiplyAddLongWidenBFloat16) op);
+                    core, (SveFpOp64.FpMultiplyAddLongWidenBFloat16) op);
             case Ir64Op.Kind.SVE_FP_DOT_PRODUCT_WIDEN ->
-                    SveFpWidenOps.executeDotProduct(core, (Ir64Op.SveFpDotProductWiden) op);
+                    SveFpWidenOps.executeDotProduct(core, (SveFpOp64.FpDotProductWiden) op);
             case Ir64Op.Kind.SVE_FP_DOT_PRODUCT_WIDEN_BFLOAT16 ->
-                    SveFpWidenOps.executeDotProductBFloat16(core, (Ir64Op.SveFpDotProductWidenBFloat16) op);
-            case Ir64Op.Kind.SVE_CRYPTO_AES -> SveCryptoOps.executeAes(core, (Ir64Op.SveCryptoAes) op);
+                    SveFpWidenOps.executeDotProductBFloat16(core, (SveFpOp64.FpDotProductWidenBFloat16) op);
+            case Ir64Op.Kind.SVE_CRYPTO_AES -> SveCryptoOps.executeAes(core, (SveIntegerOp64.CryptoAes) op);
             case Ir64Op.Kind.SVE_CRYPTO_SM4_ENCRYPT ->
-                    SveCryptoOps.executeSm4Encrypt(core, (Ir64Op.SveCryptoSm4Encrypt) op);
+                    SveCryptoOps.executeSm4Encrypt(core, (SveIntegerOp64.CryptoSm4Encrypt) op);
             case Ir64Op.Kind.SVE_CRYPTO_SM4_KEY_UPDATE ->
-                    SveCryptoOps.executeSm4KeyUpdate(core, (Ir64Op.SveCryptoSm4KeyUpdate) op);
-            case Ir64Op.Kind.SVE_CRYPTO_RAX1 -> SveCryptoOps.executeRax1(core, (Ir64Op.SveCryptoRax1) op);
-            case Ir64Op.Kind.SME_ZERO -> SmeMovaOps.execute(core, (Ir64Op.SmeZero) op);
-            case Ir64Op.Kind.SME_ZERO_ZT0 -> SmeMovaOps.execute(core, (Ir64Op.SmeZeroZt0) op);
-            case Ir64Op.Kind.SME_MOVA -> SmeMovaOps.execute(core, (Ir64Op.SmeMova) op);
-            case Ir64Op.Kind.SME_TILE_LOAD_STORE -> SmeMemoryOps.execute(core, (Ir64Op.SmeTileLoadStore) op);
-            case Ir64Op.Kind.SME_ARRAY_LOAD_STORE -> SmeMemoryOps.execute(core, (Ir64Op.SmeArrayLoadStore) op);
-            case Ir64Op.Kind.SME_ZT0_LOAD_STORE -> SmeMemoryOps.execute(core, (Ir64Op.SmeZt0LoadStore) op);
-            case Ir64Op.Kind.SME_OUTER_PRODUCT -> SmeOuterProductOps.execute(core, (Ir64Op.SmeOuterProduct) op);
-            case Ir64Op.Kind.SME_MOP4 -> SmeMop4Ops.execute(core, (Ir64Op.SmeMop4) op);
-            case Ir64Op.Kind.SME_TMOP -> SmeMop4Ops.execute(core, (Ir64Op.SmeTmop) op);
-            case Ir64Op.Kind.SME_ZERO_ARRAY -> SmeZt0Ops.execute(core, (Ir64Op.SmeZeroArray) op);
-            case Ir64Op.Kind.SME_MOVT -> SmeZt0Ops.execute(core, (Ir64Op.SmeMovt) op);
-            case Ir64Op.Kind.SME_LUT -> SmeZt0Ops.execute(core, (Ir64Op.SmeLut) op);
+                    SveCryptoOps.executeSm4KeyUpdate(core, (SveIntegerOp64.CryptoSm4KeyUpdate) op);
+            case Ir64Op.Kind.SVE_CRYPTO_RAX1 -> SveCryptoOps.executeRax1(core, (SveIntegerOp64.CryptoRax1) op);
+            case Ir64Op.Kind.SME_ZERO -> SmeMovaOps.execute(core, (SmeOp64.Zero) op);
+            case Ir64Op.Kind.SME_ZERO_ZT0 -> SmeMovaOps.execute(core, (SmeOp64.ZeroZt0) op);
+            case Ir64Op.Kind.SME_MOVA -> SmeMovaOps.execute(core, (SmeOp64.Mova) op);
+            case Ir64Op.Kind.SME_TILE_LOAD_STORE -> SmeMemoryOps.execute(core, (SmeOp64.TileLoadStore) op);
+            case Ir64Op.Kind.SME_ARRAY_LOAD_STORE -> SmeMemoryOps.execute(core, (SmeOp64.ArrayLoadStore) op);
+            case Ir64Op.Kind.SME_ZT0_LOAD_STORE -> SmeMemoryOps.execute(core, (SmeOp64.Zt0LoadStore) op);
+            case Ir64Op.Kind.SME_OUTER_PRODUCT -> SmeOuterProductOps.execute(core, (SmeOp64.OuterProduct) op);
+            case Ir64Op.Kind.SME_MOP4 -> SmeMop4Ops.execute(core, (SmeOp64.Mop4) op);
+            case Ir64Op.Kind.SME_TMOP -> SmeMop4Ops.execute(core, (SmeOp64.Tmop) op);
+            case Ir64Op.Kind.SME_ZERO_ARRAY -> SmeZt0Ops.execute(core, (SmeOp64.ZeroArray) op);
+            case Ir64Op.Kind.SME_MOVT -> SmeZt0Ops.execute(core, (SmeOp64.Movt) op);
+            case Ir64Op.Kind.SME_LUT -> SmeZt0Ops.execute(core, (SmeOp64.Lut) op);
             case Ir64Op.Kind.SME_MULTI_VECTOR_SINGLE ->
-                    SmeMultiVectorOps.execute(core, (Ir64Op.SmeMultiVectorSingle) op);
+                    SmeMultiVectorOps.execute(core, (SmeOp64.MultiVectorSingle) op);
             case Ir64Op.Kind.SME_CONSTRUCTIVE ->
-                    SmeConstructiveOps.execute(core, (Ir64Op.SmeConstructive) op);
+                    SmeConstructiveOps.execute(core, (SmeOp64.Constructive) op);
             case Ir64Op.Kind.SME_ARRAY_MULTI_VECTOR ->
-                    SmeArrayMultiVectorOps.execute(core, (Ir64Op.SmeArrayMultiVector) op);
+                    SmeArrayMultiVectorOps.execute(core, (SmeOp64.ArrayMultiVector) op);
             case Ir64Op.Kind.STREAMING_RESTRICTED -> {
                 if (core.streamingRestrictionApplies()) {
                     throw new Aarch64UndefinedInstructionException();
                 }
                 yield execute(core, ((Ir64Op.StreamingRestricted) op).inner());
             }
-            case Ir64Op.Kind.BREAKPOINT -> executeBreakpoint((Ir64Op.Breakpoint) op);
+            case Ir64Op.Kind.BREAKPOINT -> executeBreakpoint((SystemOp64.Breakpoint) op);
             case Ir64Op.Kind.UNDEFINED_INSTRUCTION_TRAP -> executeUndefinedInstructionTrap();
             case Ir64Op.Kind.ADDRESS_TRANSLATE ->
-                    executeAddressTranslate(core, (Ir64Op.AddressTranslate) op);
+                    executeAddressTranslate(core, (SystemOp64.AddressTranslate) op);
             case Ir64Op.Kind.FP64_MULTIPLY_ADD ->
-                    Ir64FpExecutor.executeFpMultiplyAdd(core, (Ir64Op.Fp64MultiplyAdd) op);
+                    Ir64FpExecutor.executeFpMultiplyAdd(core, (FpOp64.MultiplyAdd) op);
             case Ir64Op.Kind.FP64_CONDITIONAL_SELECT ->
-                    Ir64FpExecutor.executeFpConditionalSelect(core, (Ir64Op.Fp64ConditionalSelect) op);
+                    Ir64FpExecutor.executeFpConditionalSelect(core, (FpOp64.ConditionalSelect) op);
             case Ir64Op.Kind.FP64_CONDITIONAL_COMPARE ->
-                    Ir64FpExecutor.executeFpConditionalCompare(core, (Ir64Op.Fp64ConditionalCompare) op);
-            case Ir64Op.Kind.FP64_ROUND -> Ir64FpExecutor.executeFpRound(core, (Ir64Op.Fp64Round) op);
+                    Ir64FpExecutor.executeFpConditionalCompare(core, (FpOp64.ConditionalCompare) op);
+            case Ir64Op.Kind.FP64_ROUND -> Ir64FpExecutor.executeFpRound(core, (FpOp64.Round) op);
             case Ir64Op.Kind.FP64_INTEGER_CONVERT ->
-                    Ir64FpExecutor.executeFpIntegerConvert(core, (Ir64Op.Fp64IntegerConvert) op);
+                    Ir64FpExecutor.executeFpIntegerConvert(core, (FpOp64.IntegerConvert) op);
             case Ir64Op.Kind.FP64_GENERAL_REGISTER_MOVE ->
-                    Ir64FpExecutor.executeFpGeneralRegisterMove(core, (Ir64Op.Fp64GeneralRegisterMove) op);
+                    Ir64FpExecutor.executeFpGeneralRegisterMove(core, (FpOp64.GeneralRegisterMove) op);
             case Ir64Op.Kind.FP64_HALF_PRECISION_GENERAL_REGISTER_MOVE ->
                     Ir64FpExecutor.executeFpHalfPrecisionGeneralRegisterMove(
-                            core, (Ir64Op.Fp64HalfPrecisionGeneralRegisterMove) op);
+                            core, (FpOp64.HalfPrecisionGeneralRegisterMove) op);
             case Ir64Op.Kind.FP64_CONVERT_HALF_PRECISION ->
-                    Ir64FpExecutor.executeFpConvertHalfPrecision(core, (Ir64Op.Fp64ConvertHalfPrecision) op);
+                    Ir64FpExecutor.executeFpConvertHalfPrecision(core, (FpOp64.ConvertHalfPrecision) op);
             case Ir64Op.Kind.FP64_JAVASCRIPT_CONVERT ->
-                    Ir64FpExecutor.executeFpJavascriptConvert(core, (Ir64Op.Fp64JavascriptConvert) op);
+                    Ir64FpExecutor.executeFpJavascriptConvert(core, (FpOp64.JavascriptConvert) op);
             case Ir64Op.Kind.VECTOR_LOAD_STORE_MULTIPLE ->
-                    executeVectorLoadStoreMultiple(core, (Ir64Op.VectorLoadStoreMultiple) op);
+                    executeVectorLoadStoreMultiple(core, (AdvSimdMoveOp64.LoadStoreMultiple) op);
             case Ir64Op.Kind.VECTOR_LOAD_STORE_SINGLE ->
-                    executeVectorLoadStoreSingle(core, (Ir64Op.VectorLoadStoreSingle) op);
+                    executeVectorLoadStoreSingle(core, (AdvSimdMoveOp64.LoadStoreSingle) op);
             case Ir64Op.Kind.VECTOR_LOAD_SINGLE_REPLICATE ->
-                    executeVectorLoadSingleReplicate(core, (Ir64Op.VectorLoadSingleReplicate) op);
+                    executeVectorLoadSingleReplicate(core, (AdvSimdMoveOp64.LoadSingleReplicate) op);
             case Ir64Op.Kind.VECTOR_ARITHMETIC_THREE_SAME ->
-                    Ir64VectorArithmeticExecutor.executeThreeSame(core, (Ir64Op.VectorArithmeticThreeSame) op);
+                    Ir64VectorArithmeticExecutor.executeThreeSame(core, (AdvSimdIntegerOp64.ArithmeticThreeSame) op);
             case Ir64Op.Kind.VECTOR_ARITHMETIC_PAIRWISE ->
-                    Ir64VectorArithmeticExecutor.executePairwise(core, (Ir64Op.VectorArithmeticPairwise) op);
+                    Ir64VectorArithmeticExecutor.executePairwise(core, (AdvSimdIntegerOp64.ArithmeticPairwise) op);
             case Ir64Op.Kind.VECTOR_ARITHMETIC_WIDENING ->
-                    Ir64VectorArithmeticExecutor.executeWidening(core, (Ir64Op.VectorArithmeticWidening) op);
+                    Ir64VectorArithmeticExecutor.executeWidening(core, (AdvSimdIntegerOp64.ArithmeticWidening) op);
             case Ir64Op.Kind.VECTOR_ARITHMETIC_WIDE ->
-                    Ir64VectorArithmeticExecutor.executeWide(core, (Ir64Op.VectorArithmeticWide) op);
+                    Ir64VectorArithmeticExecutor.executeWide(core, (AdvSimdIntegerOp64.ArithmeticWide) op);
             case Ir64Op.Kind.VECTOR_ARITHMETIC_NARROW ->
-                    Ir64VectorArithmeticExecutor.executeNarrow(core, (Ir64Op.VectorArithmeticNarrow) op);
+                    Ir64VectorArithmeticExecutor.executeNarrow(core, (AdvSimdIntegerOp64.ArithmeticNarrow) op);
             case Ir64Op.Kind.VECTOR_ACROSS_LANES ->
-                    Ir64VectorArithmeticExecutor.executeAcrossLanes(core, (Ir64Op.VectorAcrossLanes) op);
+                    Ir64VectorArithmeticExecutor.executeAcrossLanes(core, (AdvSimdIntegerOp64.AcrossLanes) op);
             case Ir64Op.Kind.VECTOR_ARITHMETIC_UNARY ->
-                    Ir64VectorArithmeticExecutor.executeUnary(core, (Ir64Op.VectorArithmeticUnary) op);
+                    Ir64VectorArithmeticExecutor.executeUnary(core, (AdvSimdIntegerOp64.ArithmeticUnary) op);
             case Ir64Op.Kind.VECTOR_SCALAR_PAIRWISE_ADD ->
-                    Ir64VectorArithmeticExecutor.executeScalarPairwiseAdd(core, (Ir64Op.VectorScalarPairwiseAdd) op);
+                    Ir64VectorArithmeticExecutor.executeScalarPairwiseAdd(core, (AdvSimdIntegerOp64.ScalarPairwiseAdd) op);
             case Ir64Op.Kind.VECTOR_ARITHMETIC_NARROW_UNARY ->
-                    Ir64VectorArithmeticExecutor.executeNarrowUnary(core, (Ir64Op.VectorArithmeticNarrowUnary) op);
+                    Ir64VectorArithmeticExecutor.executeNarrowUnary(core, (AdvSimdIntegerOp64.ArithmeticNarrowUnary) op);
             case Ir64Op.Kind.VECTOR_SHIFT_IMMEDIATE ->
-                    Ir64VectorArithmeticExecutor.executeShiftImmediate(core, (Ir64Op.VectorShiftImmediate) op);
+                    Ir64VectorArithmeticExecutor.executeShiftImmediate(core, (AdvSimdIntegerOp64.ShiftImmediate) op);
             case Ir64Op.Kind.VECTOR_SHIFT_NARROW_IMMEDIATE ->
-                    Ir64VectorArithmeticExecutor.executeShiftNarrowImmediate(core, (Ir64Op.VectorShiftNarrowImmediate) op);
+                    Ir64VectorArithmeticExecutor.executeShiftNarrowImmediate(core, (AdvSimdIntegerOp64.ShiftNarrowImmediate) op);
             case Ir64Op.Kind.VECTOR_SHIFT_WIDEN_IMMEDIATE ->
-                    Ir64VectorArithmeticExecutor.executeShiftWidenImmediate(core, (Ir64Op.VectorShiftWidenImmediate) op);
+                    Ir64VectorArithmeticExecutor.executeShiftWidenImmediate(core, (AdvSimdIntegerOp64.ShiftWidenImmediate) op);
             case Ir64Op.Kind.VECTOR_FP_ARITHMETIC_THREE_SAME ->
-                    Ir64VectorFpArithmeticExecutor.executeThreeSame(core, (Ir64Op.VectorFpArithmeticThreeSame) op);
+                    Ir64VectorFpArithmeticExecutor.executeThreeSame(core, (AdvSimdFpOp64.FpArithmeticThreeSame) op);
             case Ir64Op.Kind.VECTOR_FP_ARITHMETIC_PAIRWISE ->
-                    Ir64VectorFpArithmeticExecutor.executePairwise(core, (Ir64Op.VectorFpArithmeticPairwise) op);
+                    Ir64VectorFpArithmeticExecutor.executePairwise(core, (AdvSimdFpOp64.FpArithmeticPairwise) op);
             case Ir64Op.Kind.VECTOR_FP_ARITHMETIC_UNARY ->
-                    Ir64VectorFpArithmeticExecutor.executeUnary(core, (Ir64Op.VectorFpArithmeticUnary) op);
+                    Ir64VectorFpArithmeticExecutor.executeUnary(core, (AdvSimdFpOp64.FpArithmeticUnary) op);
             case Ir64Op.Kind.VECTOR_FP_CONVERT_FIXED_POINT ->
-                    Ir64VectorFpArithmeticExecutor.executeConvertFixedPoint(core, (Ir64Op.VectorFpConvertFixedPoint) op);
+                    Ir64VectorFpArithmeticExecutor.executeConvertFixedPoint(core, (AdvSimdFpOp64.FpConvertFixedPoint) op);
             case Ir64Op.Kind.VECTOR_FP_CONVERT_PRECISION ->
-                    Ir64VectorFpArithmeticExecutor.executeConvertPrecision(core, (Ir64Op.VectorFpConvertPrecision) op);
+                    Ir64VectorFpArithmeticExecutor.executeConvertPrecision(core, (AdvSimdFpOp64.FpConvertPrecision) op);
             case Ir64Op.Kind.VECTOR_FP_CONVERT_TO_FP8 ->
-                    Ir64VectorFpArithmeticExecutor.executeConvertToFp8(core, (Ir64Op.VectorFpConvertToFp8) op);
+                    Ir64VectorFpArithmeticExecutor.executeConvertToFp8(core, (AdvSimdFpOp64.FpConvertToFp8) op);
             case Ir64Op.Kind.VECTOR_FP_CONVERT_FROM_FP8 ->
-                    Ir64VectorFpArithmeticExecutor.executeConvertFromFp8(core, (Ir64Op.VectorFpConvertFromFp8) op);
+                    Ir64VectorFpArithmeticExecutor.executeConvertFromFp8(core, (AdvSimdFpOp64.FpConvertFromFp8) op);
             case Ir64Op.Kind.VECTOR_EXTRACT ->
-                    Ir64VectorArithmeticExecutor.executeExtract(core, (Ir64Op.VectorExtract) op);
+                    Ir64VectorArithmeticExecutor.executeExtract(core, (AdvSimdMoveOp64.Extract) op);
             case Ir64Op.Kind.VECTOR_PERMUTE ->
-                    Ir64VectorArithmeticExecutor.executePermute(core, (Ir64Op.VectorPermute) op);
+                    Ir64VectorArithmeticExecutor.executePermute(core, (AdvSimdMoveOp64.Permute) op);
             case Ir64Op.Kind.VECTOR_TABLE_LOOKUP ->
-                    Ir64VectorArithmeticExecutor.executeTableLookup(core, (Ir64Op.VectorTableLookup) op);
+                    Ir64VectorArithmeticExecutor.executeTableLookup(core, (AdvSimdMoveOp64.TableLookup) op);
             case Ir64Op.Kind.VECTOR_FP_ACROSS_LANES ->
-                    Ir64VectorFpArithmeticExecutor.executeFpAcrossLanes(core, (Ir64Op.VectorFpAcrossLanes) op);
-            case Ir64Op.Kind.CRYPTO_AES -> Ir64CryptoExecutor.executeAes(core, (Ir64Op.CryptoAes) op);
+                    Ir64VectorFpArithmeticExecutor.executeFpAcrossLanes(core, (AdvSimdFpOp64.FpAcrossLanes) op);
+            case Ir64Op.Kind.CRYPTO_AES -> Ir64CryptoExecutor.executeAes(core, (CryptoOp64.Aes) op);
             case Ir64Op.Kind.VECTOR_POLYNOMIAL_MULTIPLY_LONG ->
-                    Ir64VectorArithmeticExecutor.executePolynomialMultiplyLong(core, (Ir64Op.VectorPolynomialMultiplyLong) op);
+                    Ir64VectorArithmeticExecutor.executePolynomialMultiplyLong(core, (AdvSimdIntegerOp64.PolynomialMultiplyLong) op);
             case Ir64Op.Kind.CRYPTO_SHA_THREE_REGISTER ->
-                    Ir64CryptoExecutor.executeShaThreeRegister(core, (Ir64Op.CryptoShaThreeRegister) op);
+                    Ir64CryptoExecutor.executeShaThreeRegister(core, (CryptoOp64.ShaThreeRegister) op);
             case Ir64Op.Kind.CRYPTO_SHA_TWO_REGISTER ->
-                    Ir64CryptoExecutor.executeShaTwoRegister(core, (Ir64Op.CryptoShaTwoRegister) op);
+                    Ir64CryptoExecutor.executeShaTwoRegister(core, (CryptoOp64.ShaTwoRegister) op);
             case Ir64Op.Kind.VECTOR_DUPLICATE_ELEMENT ->
-                    Ir64VectorArithmeticExecutor.executeDuplicateElement(core, (Ir64Op.VectorDuplicateElement) op);
+                    Ir64VectorArithmeticExecutor.executeDuplicateElement(core, (AdvSimdMoveOp64.DuplicateElement) op);
             case Ir64Op.Kind.VECTOR_DUPLICATE_GENERAL ->
-                    Ir64VectorArithmeticExecutor.executeDuplicateGeneral(core, (Ir64Op.VectorDuplicateGeneral) op);
+                    Ir64VectorArithmeticExecutor.executeDuplicateGeneral(core, (AdvSimdMoveOp64.DuplicateGeneral) op);
             case Ir64Op.Kind.VECTOR_INSERT_GENERAL ->
-                    Ir64VectorArithmeticExecutor.executeInsertGeneral(core, (Ir64Op.VectorInsertGeneral) op);
+                    Ir64VectorArithmeticExecutor.executeInsertGeneral(core, (AdvSimdMoveOp64.InsertGeneral) op);
             case Ir64Op.Kind.VECTOR_INSERT_ELEMENT ->
-                    Ir64VectorArithmeticExecutor.executeInsertElement(core, (Ir64Op.VectorInsertElement) op);
+                    Ir64VectorArithmeticExecutor.executeInsertElement(core, (AdvSimdMoveOp64.InsertElement) op);
             case Ir64Op.Kind.VECTOR_MOVE_ELEMENT ->
-                    Ir64VectorArithmeticExecutor.executeMoveElement(core, (Ir64Op.VectorMoveElement) op);
+                    Ir64VectorArithmeticExecutor.executeMoveElement(core, (AdvSimdMoveOp64.MoveElement) op);
             case Ir64Op.Kind.VECTOR_ARITHMETIC_THREE_SAME_BY_ELEMENT ->
                     Ir64VectorArithmeticExecutor.executeThreeSameByElement(
-                            core, (Ir64Op.VectorArithmeticThreeSameByElement) op);
+                            core, (AdvSimdIntegerOp64.ArithmeticThreeSameByElement) op);
             case Ir64Op.Kind.VECTOR_ARITHMETIC_WIDENING_BY_ELEMENT ->
                     Ir64VectorArithmeticExecutor.executeWideningByElement(
-                            core, (Ir64Op.VectorArithmeticWideningByElement) op);
+                            core, (AdvSimdIntegerOp64.ArithmeticWideningByElement) op);
             case Ir64Op.Kind.VECTOR_FP_ARITHMETIC_THREE_SAME_BY_ELEMENT ->
                     Ir64VectorFpArithmeticExecutor.executeThreeSameByElement(
-                            core, (Ir64Op.VectorFpArithmeticThreeSameByElement) op);
+                            core, (AdvSimdFpOp64.FpArithmeticThreeSameByElement) op);
             case Ir64Op.Kind.CRYPTO_SHA3_FOUR_REGISTER ->
-                    Ir64CryptoExecutor.executeSha3FourRegister(core, (Ir64Op.CryptoSha3FourRegister) op);
+                    Ir64CryptoExecutor.executeSha3FourRegister(core, (CryptoOp64.Sha3FourRegister) op);
             case Ir64Op.Kind.CRYPTO_SHA3_TWO_SOURCE_ROTATE ->
-                    Ir64CryptoExecutor.executeSha3TwoSourceRotate(core, (Ir64Op.CryptoSha3TwoSourceRotate) op);
+                    Ir64CryptoExecutor.executeSha3TwoSourceRotate(core, (CryptoOp64.Sha3TwoSourceRotate) op);
             case Ir64Op.Kind.CYCLE, Ir64Op.Kind.FETCH ->
                     throw new IllegalStateException("Cycle/Fetch não são decodificados como instrução");
             case Ir64Op.Kind.POINTER_AUTH_GENERIC ->
-                    executePointerAuthGeneric(core, (Ir64Op.PointerAuthGeneric) op);
+                    executePointerAuthGeneric(core, (IntegerOp64.PointerAuthGeneric) op);
             case Ir64Op.Kind.POINTER_AUTH_IN_PLACE ->
-                    executePointerAuthInPlace(core, (Ir64Op.PointerAuthInPlace) op);
-            case Ir64Op.Kind.ABS_GENERAL -> executeAbsGeneral(core, (Ir64Op.AbsGeneral) op);
-            case Ir64Op.Kind.CRC32 -> executeCrc32(core, (Ir64Op.Crc32) op);
-            case Ir64Op.Kind.MEMORY_SET -> executeMemorySet(core, (Ir64Op.MemorySet) op);
-            case Ir64Op.Kind.MEMORY_COPY -> executeMemoryCopy(core, (Ir64Op.MemoryCopy) op);
-            case Ir64Op.Kind.MEMORY_TAG -> executeMemoryTag(core, (Ir64Op.MemoryTag) op);
+                    executePointerAuthInPlace(core, (IntegerOp64.PointerAuthInPlace) op);
+            case Ir64Op.Kind.ABS_GENERAL -> executeAbsGeneral(core, (IntegerOp64.AbsGeneral) op);
+            case Ir64Op.Kind.CRC32 -> executeCrc32(core, (IntegerOp64.Crc32) op);
+            case Ir64Op.Kind.MEMORY_SET -> executeMemorySet(core, (MemoryOp64.MemorySet) op);
+            case Ir64Op.Kind.MEMORY_COPY -> executeMemoryCopy(core, (MemoryOp64.MemoryCopy) op);
+            case Ir64Op.Kind.MEMORY_TAG -> executeMemoryTag(core, (MemoryOp64.MemoryTag) op);
             case Ir64Op.Kind.MEMORY_TAG_MULTIPLE ->
-                    executeMemoryTagMultiple(core, (Ir64Op.MemoryTagMultiple) op);
-            case Ir64Op.Kind.STORE_PAIR_TAG -> executeStorePairTag(core, (Ir64Op.StorePairTag) op);
-            case Ir64Op.Kind.SUBTRACT_POINTER -> executeSubtractPointer(core, (Ir64Op.SubtractPointer) op);
-            case Ir64Op.Kind.INSERT_RANDOM_TAG -> executeInsertRandomTag(core, (Ir64Op.InsertRandomTag) op);
-            case Ir64Op.Kind.TAG_MASK_INSERT -> executeTagMaskInsert(core, (Ir64Op.TagMaskInsert) op);
+                    executeMemoryTagMultiple(core, (MemoryOp64.MemoryTagMultiple) op);
+            case Ir64Op.Kind.STORE_PAIR_TAG -> executeStorePairTag(core, (MemoryOp64.StorePairTag) op);
+            case Ir64Op.Kind.SUBTRACT_POINTER -> executeSubtractPointer(core, (IntegerOp64.SubtractPointer) op);
+            case Ir64Op.Kind.INSERT_RANDOM_TAG -> executeInsertRandomTag(core, (IntegerOp64.InsertRandomTag) op);
+            case Ir64Op.Kind.TAG_MASK_INSERT -> executeTagMaskInsert(core, (IntegerOp64.TagMaskInsert) op);
             case Ir64Op.Kind.MEMORY_SET_TAGGED ->
-                    executeMemorySetTagged(core, (Ir64Op.MemorySetTagged) op);
-            case Ir64Op.Kind.MIN_MAX_GENERAL -> executeMinMaxGeneral(core, (Ir64Op.MinMaxGeneral) op);
+                    executeMemorySetTagged(core, (MemoryOp64.MemorySetTagged) op);
+            case Ir64Op.Kind.MIN_MAX_GENERAL -> executeMinMaxGeneral(core, (IntegerOp64.MinMaxGeneral) op);
             case Ir64Op.Kind.VECTOR_DUPLICATE_ELEMENT_SCALAR ->
-                    executeDuplicateElementScalar(core, (Ir64Op.VectorDuplicateElementScalar) op);
-            case Ir64Op.Kind.FP64_HIGH_HALF_MOVE -> executeFpHighHalfMove(core, (Ir64Op.Fp64HighHalfMove) op);
+                    executeDuplicateElementScalar(core, (AdvSimdMoveOp64.DuplicateElementScalar) op);
+            case Ir64Op.Kind.FP64_HIGH_HALF_MOVE -> executeFpHighHalfMove(core, (FpOp64.HighHalfMove) op);
             case Ir64Op.Kind.ADV_SIMD_MODIFIED_IMMEDIATE_64 ->
-                    executeAdvSimdModifiedImmediate64(core, (Ir64Op.AdvSimdModifiedImmediate64) op);
+                    executeAdvSimdModifiedImmediate64(core, (AdvSimdMoveOp64.ModifiedImmediate64) op);
             case Ir64Op.Kind.VECTOR_LOOKUP_TABLE ->
-                    Ir64VectorArithmeticExecutor.executeLookupTable(core, (Ir64Op.VectorLookupTable) op);
+                    Ir64VectorArithmeticExecutor.executeLookupTable(core, (AdvSimdMoveOp64.LookupTable) op);
             case Ir64Op.Kind.FP64_CONVERT_TO_BF16 ->
-                    Ir64VectorFpArithmeticExecutor.executeConvertToBf16(core, (Ir64Op.Fp64ConvertToBf16) op);
+                    Ir64VectorFpArithmeticExecutor.executeConvertToBf16(core, (FpOp64.ConvertToBf16) op);
             case Ir64Op.Kind.VECTOR_FP_DOT_PRODUCT_BFLOAT16 ->
                     Ir64VectorFpArithmeticExecutor.executeFpDotProductBFloat16(
-                            core, (Ir64Op.VectorFpDotProductBFloat16) op);
+                            core, (AdvSimdFpOp64.FpDotProductBFloat16) op);
             case Ir64Op.Kind.VECTOR_FP_DOT_PRODUCT_BFLOAT16_BY_ELEMENT ->
                     Ir64VectorFpArithmeticExecutor.executeFpDotProductBFloat16ByElement(
-                            core, (Ir64Op.VectorFpDotProductBFloat16ByElement) op);
+                            core, (AdvSimdFpOp64.FpDotProductBFloat16ByElement) op);
             case Ir64Op.Kind.VECTOR_FP_MULTIPLY_ADD_LONG_BFLOAT16 ->
                     Ir64VectorFpArithmeticExecutor.executeFpMultiplyAddLongBFloat16(
-                            core, (Ir64Op.VectorFpMultiplyAddLongBFloat16) op);
+                            core, (AdvSimdFpOp64.FpMultiplyAddLongBFloat16) op);
             case Ir64Op.Kind.VECTOR_FP_MULTIPLY_ADD_LONG_BFLOAT16_BY_ELEMENT ->
                     Ir64VectorFpArithmeticExecutor.executeFpMultiplyAddLongBFloat16ByElement(
-                            core, (Ir64Op.VectorFpMultiplyAddLongBFloat16ByElement) op);
+                            core, (AdvSimdFpOp64.FpMultiplyAddLongBFloat16ByElement) op);
             case Ir64Op.Kind.VECTOR_FP_MATRIX_MULTIPLY_ACCUMULATE_BFLOAT16 ->
                     Ir64VectorFpArithmeticExecutor.executeFpMatrixMultiplyAccumulateBFloat16(
-                            core, (Ir64Op.VectorFpMatrixMultiplyAccumulateBFloat16) op);
+                            core, (AdvSimdFpOp64.FpMatrixMultiplyAccumulateBFloat16) op);
             case Ir64Op.Kind.VECTOR_INTEGER_DOT_PRODUCT ->
                     Ir64VectorArithmeticExecutor.executeIntegerDotProduct(
-                            core, (Ir64Op.VectorIntegerDotProduct) op);
+                            core, (AdvSimdIntegerOp64.IntegerDotProduct) op);
             case Ir64Op.Kind.VECTOR_INTEGER_DOT_PRODUCT_BY_ELEMENT ->
                     Ir64VectorArithmeticExecutor.executeIntegerDotProductByElement(
-                            core, (Ir64Op.VectorIntegerDotProductByElement) op);
+                            core, (AdvSimdIntegerOp64.IntegerDotProductByElement) op);
             case Ir64Op.Kind.VECTOR_INTEGER_MATRIX_MULTIPLY_ACCUMULATE ->
                     Ir64VectorArithmeticExecutor.executeIntegerMatrixMultiplyAccumulate(
-                            core, (Ir64Op.VectorIntegerMatrixMultiplyAccumulate) op);
+                            core, (AdvSimdIntegerOp64.IntegerMatrixMultiplyAccumulate) op);
             case Ir64Op.Kind.CRYPTO_SHA512_THREE_REGISTER ->
-                    Ir64CryptoExecutor.executeSha512ThreeRegister(core, (Ir64Op.CryptoSha512ThreeRegister) op);
+                    Ir64CryptoExecutor.executeSha512ThreeRegister(core, (CryptoOp64.Sha512ThreeRegister) op);
             case Ir64Op.Kind.CRYPTO_SHA512_TWO_REGISTER ->
-                    Ir64CryptoExecutor.executeSha512TwoRegister(core, (Ir64Op.CryptoSha512TwoRegister) op);
+                    Ir64CryptoExecutor.executeSha512TwoRegister(core, (CryptoOp64.Sha512TwoRegister) op);
             case Ir64Op.Kind.CRYPTO_SM3_THREE_REGISTER ->
-                    Ir64CryptoExecutor.executeSm3ThreeRegister(core, (Ir64Op.CryptoSm3ThreeRegister) op);
+                    Ir64CryptoExecutor.executeSm3ThreeRegister(core, (CryptoOp64.Sm3ThreeRegister) op);
             case Ir64Op.Kind.CRYPTO_SM3_FOUR_REGISTER ->
-                    Ir64CryptoExecutor.executeSm3FourRegister(core, (Ir64Op.CryptoSm3FourRegister) op);
+                    Ir64CryptoExecutor.executeSm3FourRegister(core, (CryptoOp64.Sm3FourRegister) op);
             case Ir64Op.Kind.CRYPTO_SM3_THREE_REGISTER_IMM2 ->
-                    Ir64CryptoExecutor.executeSm3ThreeRegisterImm2(core, (Ir64Op.CryptoSm3ThreeRegisterImm2) op);
+                    Ir64CryptoExecutor.executeSm3ThreeRegisterImm2(core, (CryptoOp64.Sm3ThreeRegisterImm2) op);
             case Ir64Op.Kind.CRYPTO_SM4_ENCRYPT ->
-                    Ir64CryptoExecutor.executeSm4Encrypt(core, (Ir64Op.CryptoSm4Encrypt) op);
+                    Ir64CryptoExecutor.executeSm4Encrypt(core, (CryptoOp64.Sm4Encrypt) op);
             case Ir64Op.Kind.CRYPTO_SM4_KEY_UPDATE ->
-                    Ir64CryptoExecutor.executeSm4KeyUpdate(core, (Ir64Op.CryptoSm4KeyUpdate) op);
+                    Ir64CryptoExecutor.executeSm4KeyUpdate(core, (CryptoOp64.Sm4KeyUpdate) op);
             case Ir64Op.Kind.VECTOR_FP_MULTIPLY_ADD_LONG ->
                     Ir64VectorFpArithmeticExecutor.executeFpMultiplyAddLong(
-                            core, (Ir64Op.VectorFpMultiplyAddLong) op);
+                            core, (AdvSimdFpOp64.FpMultiplyAddLong) op);
             case Ir64Op.Kind.VECTOR_FP_MULTIPLY_ADD_LONG_BY_ELEMENT ->
                     Ir64VectorFpArithmeticExecutor.executeFpMultiplyAddLongByElement(
-                            core, (Ir64Op.VectorFpMultiplyAddLongByElement) op);
+                            core, (AdvSimdFpOp64.FpMultiplyAddLongByElement) op);
             case Ir64Op.Kind.VECTOR_FP_COMPLEX_ADD ->
-                    Ir64VectorFpArithmeticExecutor.executeComplexAdd(core, (Ir64Op.VectorFpComplexAdd) op);
+                    Ir64VectorFpArithmeticExecutor.executeComplexAdd(core, (AdvSimdFpOp64.FpComplexAdd) op);
             case Ir64Op.Kind.VECTOR_FP_COMPLEX_MULTIPLY_ACCUMULATE ->
                     Ir64VectorFpArithmeticExecutor.executeComplexMultiplyAccumulate(
-                            core, (Ir64Op.VectorFpComplexMultiplyAccumulate) op);
+                            core, (AdvSimdFpOp64.FpComplexMultiplyAccumulate) op);
             case Ir64Op.Kind.VECTOR_FP_COMPLEX_MULTIPLY_ACCUMULATE_BY_ELEMENT ->
                     Ir64VectorFpArithmeticExecutor.executeComplexMultiplyAccumulateByElement(
-                            core, (Ir64Op.VectorFpComplexMultiplyAccumulateByElement) op);
+                            core, (AdvSimdFpOp64.FpComplexMultiplyAccumulateByElement) op);
             case Ir64Op.Kind.FP64_ROUND_RANGE_LIMITED ->
-                    Ir64FpExecutor.executeFpRoundRangeLimited(core, (Ir64Op.Fp64RoundRangeLimited) op);
+                    Ir64FpExecutor.executeFpRoundRangeLimited(core, (FpOp64.RoundRangeLimited) op);
             case Ir64Op.Kind.VECTOR_FP_SCALE_BY_INT ->
-                    Ir64VectorFpArithmeticExecutor.executeScaleByInt(core, (Ir64Op.VectorFpScaleByInt) op);
+                    Ir64VectorFpArithmeticExecutor.executeScaleByInt(core, (AdvSimdFpOp64.FpScaleByInt) op);
             case Ir64Op.Kind.VECTOR_FP_ABSOLUTE_MAX_MIN ->
-                    Ir64VectorFpArithmeticExecutor.executeAbsoluteMaxMin(core, (Ir64Op.VectorFpAbsoluteMaxMin) op);
+                    Ir64VectorFpArithmeticExecutor.executeAbsoluteMaxMin(core, (AdvSimdFpOp64.FpAbsoluteMaxMin) op);
             case Ir64Op.Kind.VECTOR_FP8_FUSED_MULTIPLY_ADD_LONG ->
                     Ir64VectorFpArithmeticExecutor.executeFp8FusedMultiplyAddLong(
-                            core, (Ir64Op.VectorFp8FusedMultiplyAddLong) op);
+                            core, (AdvSimdFpOp64.Fp8FusedMultiplyAddLong) op);
             case Ir64Op.Kind.VECTOR_FP8_FUSED_MULTIPLY_ADD_LONG_BY_ELEMENT ->
                     Ir64VectorFpArithmeticExecutor.executeFp8FusedMultiplyAddLongByElement(
-                            core, (Ir64Op.VectorFp8FusedMultiplyAddLongByElement) op);
+                            core, (AdvSimdFpOp64.Fp8FusedMultiplyAddLongByElement) op);
             case Ir64Op.Kind.VECTOR_FP8_DOT_PRODUCT ->
-                    Ir64VectorFpArithmeticExecutor.executeFp8DotProduct(core, (Ir64Op.VectorFp8DotProduct) op);
+                    Ir64VectorFpArithmeticExecutor.executeFp8DotProduct(core, (AdvSimdFpOp64.Fp8DotProduct) op);
             case Ir64Op.Kind.VECTOR_FP8_DOT_PRODUCT_BY_ELEMENT ->
                     Ir64VectorFpArithmeticExecutor.executeFp8DotProductByElement(
-                            core, (Ir64Op.VectorFp8DotProductByElement) op);
+                            core, (AdvSimdFpOp64.Fp8DotProductByElement) op);
             case Ir64Op.Kind.COMPARE_AND_BRANCH_REGISTER ->
-                    executeCompareAndBranchRegister(core, (Ir64Op.CompareAndBranchRegister) op);
+                    executeCompareAndBranchRegister(core, (BranchOp64.CompareAndBranchRegister) op);
             case Ir64Op.Kind.COMPARE_AND_BRANCH_IMMEDIATE ->
-                    executeCompareAndBranchImmediate(core, (Ir64Op.CompareAndBranchImmediate) op);
+                    executeCompareAndBranchImmediate(core, (BranchOp64.CompareAndBranchImmediate) op);
             default -> throw new IllegalStateException("Ir64Op.kind desconhecido: " + op.kind());
         };
     }
 
-    private boolean executeAlu(Aarch64Core core, Ir64Op.Alu64 op) {
+    private boolean executeAlu(Aarch64Core core, IntegerOp64.Alu64 op) {
         // B6.14: `dstIsStackPointer`/`src1IsStackPointer` marcam a CLASSE do campo no encoding
         // (Rd|SP / Rn|SP), não que o operando SEJA SP — só é SP quando o índice também é `31`
         // (`ALU_STACK_POINTER_ENCODING`), mesma checagem dupla que `executeAluExtendedRegister`
@@ -668,7 +682,7 @@ public final class Ir64BlockExecutor {
     /// `SP` nesta forma (índice `31` é sempre `XZR`, resolvido normalmente por
     /// {@link Aarch64Core#xForWidth}/{@link Aarch64Core#setXForWidth}, sem nenhuma checagem de
     /// `SP` — ao contrário de {@link #executeAluExtendedRegister}).
-    private boolean executeAluShiftedRegister(Aarch64Core core, Ir64Op.AluShiftedRegister op) {
+    private boolean executeAluShiftedRegister(Aarch64Core core, IntegerOp64.AluShiftedRegister op) {
         long operand1 = core.xForWidth(op.src1(), op.wide());
         long rawOperand2 = core.xForWidth(op.src2(), op.wide());
         long operand2 = applyShift(rawOperand2, op.shiftType(), op.shiftAmount(), op.wide());
@@ -690,7 +704,7 @@ public final class Ir64BlockExecutor {
     /// B6.1), que resolve incondicionalmente pela flag; esta é a mesma disciplina já usada por
     /// {@link #readBaseRegister}/{@link #writeBaseRegister} (load/store) neste mesmo arquivo.
     /// `Rm` nunca é `SP` (sempre lido por índice normal antes de estender).
-    private boolean executeAluExtendedRegister(Aarch64Core core, Ir64Op.AluExtendedRegister op) {
+    private boolean executeAluExtendedRegister(Aarch64Core core, IntegerOp64.AluExtendedRegister op) {
         long operand1 = readAluOperandOrStackPointer(core, op.src1(), op.wide());
         long extended = extendAluOperand(core.x(op.src2()), op.extendType());
         long operand2 = extended << op.shiftAmount();
@@ -717,7 +731,7 @@ public final class Ir64BlockExecutor {
         return core.xForWidth(index, wide);
     }
 
-    /// Aplica o deslocamento de {@link Ir64Op.AluShiftedRegister} respeitando a largura da
+    /// Aplica o deslocamento de {@link IntegerOp64.AluShiftedRegister} respeitando a largura da
     /// operação — `LSR`/`ASR` em `W` operam sobre os 32 bits baixos (não os 64 completos), por
     /// isso o cálculo é feito em `int` quando `!wide`, não só mascarado depois.
     private static long applyShift(long value, Ir64ShiftType shiftType, int amount, boolean wide) {
@@ -739,11 +753,11 @@ public final class Ir64BlockExecutor {
 
     /// `AND`/`ORR`/`EOR`/`ANDS`/`BIC`/`ORN`/`EON`/`BICS` na forma "shifted register" (B6.9) —
     /// `Rm` é deslocado (`shiftType`/`shiftAmount`, os 4 tipos incl. `ROR`), depois OPCIONALMENTE
-    /// invertido bit a bit ({@link Ir64Op.LogicalShiftedRegister#invert}) ANTES de combinar com
+    /// invertido bit a bit ({@link IntegerOp64.LogicalShiftedRegister#invert}) ANTES de combinar com
     /// `Rn` (inversão sempre acontece antes da operação lógica, nunca depois — `bic rd,rn,rm` =
     /// `rn AND (NOT rm)`, não `NOT(rn AND rm)`). Flags reaproveitam {@link #logicalWithFlags}
     /// (mesmo padrão de {@link #executeAlu}, D2 da task B6.3.1: `C=0,V=0` sempre).
-    private boolean executeLogicalShiftedRegister(Aarch64Core core, Ir64Op.LogicalShiftedRegister op) {
+    private boolean executeLogicalShiftedRegister(Aarch64Core core, IntegerOp64.LogicalShiftedRegister op) {
         long operand1 = core.xForWidth(op.src1(), op.wide());
         long rawOperand2 = core.xForWidth(op.src2(), op.wide());
         long shifted = applyLogicalShift(rawOperand2, op.shiftType(), op.shiftAmount(), op.wide());
@@ -765,9 +779,9 @@ public final class Ir64BlockExecutor {
 
     /// `LSLV`/`LSRV`/`ASRV`/`RORV` (B6.11) — mesma tabela de deslocamento de
     /// {@link #executeLogicalShiftedRegister} ({@link #applyLogicalShift}), mas a quantidade vem
-    /// de {@link Ir64Op.ShiftVariable#src2} EM TEMPO DE EXECUÇÃO (`mod` largura), não de um campo
+    /// de {@link IntegerOp64.ShiftVariable#src2} EM TEMPO DE EXECUÇÃO (`mod` largura), não de um campo
     /// já resolvido pelo decoder. Nunca afeta `NZCV`.
-    private boolean executeShiftVariable(Aarch64Core core, Ir64Op.ShiftVariable op) {
+    private boolean executeShiftVariable(Aarch64Core core, IntegerOp64.ShiftVariable op) {
         long operand = core.xForWidth(op.src1(), op.wide());
         long rawAmount = core.xForWidth(op.src2(), op.wide());
         int amount = (int) (rawAmount & (op.wide() ? 63L : 31L));
@@ -776,7 +790,7 @@ public final class Ir64BlockExecutor {
         return false;
     }
 
-    /// Aplica o deslocamento de {@link Ir64Op.LogicalShiftedRegister}, incluindo `ROR` (válido
+    /// Aplica o deslocamento de {@link IntegerOp64.LogicalShiftedRegister}, incluindo `ROR` (válido
     /// só aqui — `AluShiftedRegister`/{@link #applyShift} não tem esse caso, ver
     /// {@link dev.vitorsilverio.armjitter.ir64.Ir64LogicalShiftType}).
     private static long applyLogicalShift(
@@ -800,7 +814,7 @@ public final class Ir64BlockExecutor {
     }
 
     /// Estende `Rm` (fatia de tamanho/sinal dados por {@code extendType}) para 64 bits, ANTES do
-    /// deslocamento de {@link Ir64Op.AluExtendedRegister#shiftAmount()} — mesmo helper conceitual
+    /// deslocamento de {@link IntegerOp64.AluExtendedRegister#shiftAmount()} — mesmo helper conceitual
     /// de `ext_and_shift_reg` (`translate-a64.c`), citado nos Fatos de referência #5 da task.
     private static long extendAluOperand(long rawRegisterValue, Ir64AluExtendType extendType) {
         return switch (extendType) {
@@ -820,7 +834,7 @@ public final class Ir64BlockExecutor {
     /// `f(src2)`; NUNCA os atualiza (diferente de `executeAlu*`/`setFlags`). Sem atalho para
     /// `CSET`/`CSETM`/`CINC`/`CINV`/`CNEG` (Armadilhas da task) — o caminho geral com
     /// `src1==src2==XZR` já produz o resultado correto.
-    private boolean executeConditionalSelect(Aarch64Core core, Ir64Op.ConditionalSelect op) {
+    private boolean executeConditionalSelect(Aarch64Core core, IntegerOp64.ConditionalSelect op) {
         long result;
         if (core.pstate().evalCond(op.condition())) {
             result = core.xForWidth(op.src1(), op.wide());
@@ -839,12 +853,12 @@ public final class Ir64BlockExecutor {
 
     /// `CCMP`/`CCMN` (B6.8) — D2 da task: reaproveita {@link #addWithFlags}/{@link
     /// #subWithFlags}, o MESMO cálculo já usado por {@link #executeAluShiftedRegister}, em vez de
-    /// duplicar a lógica de carry/overflow. Quando {@link Ir64Op.ConditionalCompare#condition} é
+    /// duplicar a lógica de carry/overflow. Quando {@link IntegerOp64.ConditionalCompare#condition} é
     /// falsa, `NZCV` recebe os 4 bits CRUS do encoding (`core.pstate().setNzcv(int)`) e {@link
-    /// Ir64Op.ConditionalCompare#rn}/{@link Ir64Op.ConditionalCompare#rm} NUNCA são lidos — prova
+    /// IntegerOp64.ConditionalCompare#rn}/{@link IntegerOp64.ConditionalCompare#rm} NUNCA são lidos — prova
     /// de que a implementação de fato ramifica em vez de sempre calcular e descartar (Armadilhas
     /// da task, Testes mínimos #2). Nunca escreve registrador (só `NZCV`, ver Javadoc do record).
-    private boolean executeConditionalCompare(Aarch64Core core, Ir64Op.ConditionalCompare op) {
+    private boolean executeConditionalCompare(Aarch64Core core, IntegerOp64.ConditionalCompare op) {
         if (core.pstate().evalCond(op.condition())) {
             long operand1 = core.xForWidth(op.rn(), op.wide());
             long operand2 = op.immediateForm() ? op.immediate() : core.xForWidth(op.rm(), op.wide());
@@ -862,7 +876,7 @@ public final class Ir64BlockExecutor {
     /// {@link #executeAlu}/{@link #executeAluShiftedRegister}, que nunca leem `C` como entrada).
     /// `SBC` é `AddWithCarry(a, NOT(b), C)` (`ARM DDI 0487` pseudocódigo de `SBC`) — reaproveita
     /// {@link #addWithCarryFlags} invertendo `b` bit a bit em vez de duplicar o cálculo.
-    private boolean executeAluWithCarry(Aarch64Core core, Ir64Op.AluWithCarry op) {
+    private boolean executeAluWithCarry(Aarch64Core core, IntegerOp64.AluWithCarry op) {
         long operand1 = core.xForWidth(op.src1(), op.wide());
         long rawOperand2 = core.xForWidth(op.src2(), op.wide());
         long operand2 = op.subtract() ? ~rawOperand2 : rawOperand2;
@@ -879,11 +893,11 @@ public final class Ir64BlockExecutor {
         return false;
     }
 
-    /// `EXTR` (B8.2) — concatena {@link Ir64Op.Extract#src1}`:`{@link Ir64Op.Extract#src2} (`Rn`
+    /// `EXTR` (B8.2) — concatena {@link IntegerOp64.Extract#src1}`:`{@link IntegerOp64.Extract#src2} (`Rn`
     /// na metade ALTA) e extrai uma janela do tamanho da operação a partir do bit
-    /// {@link Ir64Op.Extract#lsb}. `lsb=0` é um caso especial explícito (evita deslocamento por
+    /// {@link IntegerOp64.Extract#lsb}. `lsb=0` é um caso especial explícito (evita deslocamento por
     /// `64`/`32`, que em Java é UB — `x << 64` não é zero, é `x << 0`, mod-largura do shift).
-    private boolean executeExtract(Aarch64Core core, Ir64Op.Extract op) {
+    private boolean executeExtract(Aarch64Core core, IntegerOp64.Extract op) {
         long high = core.xForWidth(op.src1(), op.wide());
         long low = core.xForWidth(op.src2(), op.wide());
         int lsb = op.lsb();
@@ -904,7 +918,7 @@ public final class Ir64BlockExecutor {
 
     /// `RBIT`/`REV16`/`REV`(`W`)/`REV32`(`X`)/`REV64`/`CLZ`/`CLS`/`CNT` (B8.2). Nenhuma forma
     /// afeta `NZCV`.
-    private boolean executeDataProcessing1Source(Aarch64Core core, Ir64Op.DataProcessing1Source op) {
+    private boolean executeDataProcessing1Source(Aarch64Core core, IntegerOp64.DataProcessing1Source op) {
         long src = core.xForWidth(op.src(), op.wide());
         long result = switch (op.opcode()) {
             case RBIT -> op.wide()
@@ -967,7 +981,7 @@ public final class Ir64BlockExecutor {
     /// `SMADDL`/`SMSUBL`/`UMADDL`/`UMSUBL` (B8.2) — multiplicação 32×32→64 (sempre exata em
     /// `long`, o produto de dois valores de magnitude `<=2^32` nunca ultrapassa os 63 bits úteis
     /// de um `long` assinado) com acumulador de 64.
-    private boolean executeMultiplyAccumulateLong(Aarch64Core core, Ir64Op.MultiplyAccumulateLong op) {
+    private boolean executeMultiplyAccumulateLong(Aarch64Core core, IntegerOp64.MultiplyAccumulateLong op) {
         long n = op.signed() ? (long) (int) core.x(op.src1()) : core.x(op.src1()) & LOW_32_BITS_MASK;
         long m = op.signed() ? (long) (int) core.x(op.src2()) : core.x(op.src2()) & LOW_32_BITS_MASK;
         long product = n * m;
@@ -980,7 +994,7 @@ public final class Ir64BlockExecutor {
     /// `SMULH`/`UMULH` (B8.2) — os 64 bits ALTOS do produto de 128 bits de dois `X`. `Math`
     /// carrega os dois intrínsecos prontos desde o Java 18 (`multiplyHigh`/`unsignedMultiplyHigh`)
     /// — sem necessidade de decompor em meias-palavras manualmente.
-    private boolean executeMultiplyHigh(Aarch64Core core, Ir64Op.MultiplyHigh op) {
+    private boolean executeMultiplyHigh(Aarch64Core core, IntegerOp64.MultiplyHigh op) {
         long a = core.x(op.src1());
         long b = core.x(op.src2());
         long result = op.signed() ? Math.multiplyHigh(a, b) : Math.unsignedMultiplyHigh(a, b);
@@ -989,11 +1003,11 @@ public final class Ir64BlockExecutor {
     }
 
     /// `SETF8`/`SETF16` (B8.2, "Evaluate into flags") — avalia o campo BAIXO de {@link
-    /// Ir64Op.EvaluateIntoFlags#rn} como se fosse o resultado de uma soma: `N`=bit de sinal do
+    /// IntegerOp64.EvaluateIntoFlags#rn} como se fosse o resultado de uma soma: `N`=bit de sinal do
     /// campo, `Z`=campo zero, `V`=bit de sinal XOR o bit logo abaixo (`ARM DDI 0487`
     /// pseudocódigo de `SETF8`/`SETF16`). `C` NUNCA muda — por isso {@link
     /// dev.vitorsilverio.armjitter.core64.PstateRegister#carry()} é relido e devolvido como está.
-    private boolean executeEvaluateIntoFlags(Aarch64Core core, Ir64Op.EvaluateIntoFlags op) {
+    private boolean executeEvaluateIntoFlags(Aarch64Core core, IntegerOp64.EvaluateIntoFlags op) {
         long full = core.x(op.rn());
         int sizeBits = op.sizeBits();
         long fieldMask = (1L << sizeBits) - 1;
@@ -1007,13 +1021,13 @@ public final class Ir64BlockExecutor {
         return false;
     }
 
-    /// `RMIF` (B8.2, "Rotate right into flags") — rotaciona {@link Ir64Op.RotateIntoFlags#rn}
-    /// para a direita por {@link Ir64Op.RotateIntoFlags#shift} bits e atualiza só os flags cujo
-    /// bit correspondente está setado em {@link Ir64Op.RotateIntoFlags#mask} — os 4 bits baixos
+    /// `RMIF` (B8.2, "Rotate right into flags") — rotaciona {@link IntegerOp64.RotateIntoFlags#rn}
+    /// para a direita por {@link IntegerOp64.RotateIntoFlags#shift} bits e atualiza só os flags cujo
+    /// bit correspondente está setado em {@link IntegerOp64.RotateIntoFlags#mask} — os 4 bits baixos
     /// do valor rotacionado usam a MESMA ordem `N:Z:C:V` do formato bruto de
     /// {@link dev.vitorsilverio.armjitter.core64.PstateRegister#nzcv()}, então nenhuma
     /// reordenação de bit é necessária entre "candidato" e "máscara".
-    private boolean executeRotateIntoFlags(Aarch64Core core, Ir64Op.RotateIntoFlags op) {
+    private boolean executeRotateIntoFlags(Aarch64Core core, IntegerOp64.RotateIntoFlags op) {
         long source = core.x(op.rn());
         int candidate = (int) (Long.rotateRight(source, op.shift()) & NZCV_FIELD_MASK);
         int mask = op.mask();
@@ -1026,7 +1040,7 @@ public final class Ir64BlockExecutor {
     /// `CFINV`/`XAFLAG`/`AXFLAG` (B8.2, `FEAT_FlagM2`) — `XAFLAG`/`AXFLAG` seguem o pseudocódigo
     /// do `ARM DDI 0487` para conversão de flags "eXternal"↔"Arm" (usadas por sequências
     /// vetoriais de comparação lane-a-lane reduzidas a um resultado escalar).
-    private boolean executeConvertFlags(Aarch64Core core, Ir64Op.ConvertFlags op) {
+    private boolean executeConvertFlags(Aarch64Core core, IntegerOp64.ConvertFlags op) {
         var pstate = core.pstate();
         switch (op.opcode()) {
             case INVERT_CARRY ->
@@ -1051,7 +1065,7 @@ public final class Ir64BlockExecutor {
     /// política de preenchimento dos bits FORA do campo copiado muda: `SBFM` estende o sinal do
     /// bit mais alto do campo, `UBFM` zera, `BFM` preserva o `Rd` existente (Armadilhas da task —
     /// erro mais fácil de trocar entre os três).
-    private boolean executeBitfield(Aarch64Core core, Ir64Op.Bitfield op) {
+    private boolean executeBitfield(Aarch64Core core, IntegerOp64.Bitfield op) {
         int bitsize = op.wide() ? BITFIELD_WIDE_BITSIZE : BITFIELD_NARROW_BITSIZE;
         long src = core.xForWidth(op.src(), op.wide());
         int immr = op.immr();
@@ -1109,7 +1123,7 @@ public final class Ir64BlockExecutor {
     /// overflow silencioso de `long*long`/`long+long` de Java já é módulo `2^64`, exatamente a
     /// truncagem exigida pela arquitetura; {@link Aarch64Core#setXForWidth} aplica a
     /// zero-extensão final quando `!wide`.
-    private boolean executeMultiplyAccumulate(Aarch64Core core, Ir64Op.MultiplyAccumulate op) {
+    private boolean executeMultiplyAccumulate(Aarch64Core core, IntegerOp64.MultiplyAccumulate op) {
         long operand1 = core.xForWidth(op.src1(), op.wide());
         long operand2 = core.xForWidth(op.src2(), op.wide());
         long accumulator = core.xForWidth(op.accumulator(), op.wide());
@@ -1124,7 +1138,7 @@ public final class Ir64BlockExecutor {
     /// `ArithmeticException`, que não existe na arquitetura). `SDIV`/`Long.MIN_VALUE / -1` (ou o
     /// equivalente de 32 bits) truncam para o próprio `MIN_VALUE` sem lançar — mesma convenção de
     /// complemento-de-dois que a divisão inteira de Java já produz (só lança para divisor `0`).
-    private boolean executeDivide(Aarch64Core core, Ir64Op.Divide op) {
+    private boolean executeDivide(Aarch64Core core, IntegerOp64.Divide op) {
         long dividend = readDivideOperand(core, op.src1(), op.signed(), op.wide());
         long divisor = readDivideOperand(core, op.src2(), op.signed(), op.wide());
         long quotient;
@@ -1152,7 +1166,7 @@ public final class Ir64BlockExecutor {
         return core.xForWidth(index, wide);
     }
 
-    private boolean executeMoveWide(Aarch64Core core, Ir64Op.MoveWide op) {
+    private boolean executeMoveWide(Aarch64Core core, IntegerOp64.MoveWide op) {
         long shiftedImmediate = ((long) op.immediate16() & 0xFFFFL) << op.shift();
         long result = switch (op.opcode()) {
             case MOVZ -> shiftedImmediate;
@@ -1167,13 +1181,13 @@ public final class Ir64BlockExecutor {
         return false;
     }
 
-    private boolean executePcRelative(Aarch64Core core, Ir64Op.PcRelative op) {
+    private boolean executePcRelative(Aarch64Core core, IntegerOp64.PcRelative op) {
         long base = op.page() ? (op.instructionAddress() & ~0xFFFL) : op.instructionAddress();
         core.setX(op.dst(), base + op.immediate());
         return false;
     }
 
-    private boolean executeBranch(Aarch64Core core, Ir64Op.Branch64 op) {
+    private boolean executeBranch(Aarch64Core core, BranchOp64.Branch64 op) {
         if (!core.pstate().evalCond(op.condition())) {
             return false;
         }
@@ -1188,7 +1202,7 @@ public final class Ir64BlockExecutor {
         return true;
     }
 
-    private boolean executeCompareBranch(Aarch64Core core, Ir64Op.CompareBranch64 op) {
+    private boolean executeCompareBranch(Aarch64Core core, BranchOp64.CompareBranch64 op) {
         boolean conditionMet = switch (op.form()) {
             case CBZ_CBNZ -> {
                 long value = core.xForWidth(op.rn(), op.wide());
@@ -1211,7 +1225,7 @@ public final class Ir64BlockExecutor {
     /// {@link Ir64MemSize#DOUBLEWORD}, dispensando um caso especial de 64 bits aqui) para estender
     /// os operandos conforme a assinatura da condição — só `GT`/`GE` são com sinal
     /// ({@link Ir64CompareBranchCondition#isSigned}).
-    private boolean executeCompareAndBranchRegister(Aarch64Core core, Ir64Op.CompareAndBranchRegister op) {
+    private boolean executeCompareAndBranchRegister(Aarch64Core core, BranchOp64.CompareAndBranchRegister op) {
         long rawT = core.x(op.rt());
         long rawM = core.x(op.rm());
         long t = op.condition().isSigned()
@@ -1227,7 +1241,7 @@ public final class Ir64BlockExecutor {
 
     /// `CB_cond_imm` (`FEAT_CMPBR`, B19.22) — compara `Rt` contra o imediato `UInt(imm6)` sem tocar
     /// `NZCV`.
-    private boolean executeCompareAndBranchImmediate(Aarch64Core core, Ir64Op.CompareAndBranchImmediate op) {
+    private boolean executeCompareAndBranchImmediate(Aarch64Core core, BranchOp64.CompareAndBranchImmediate op) {
         long rawT = core.x(op.rt());
         long t = op.wide()
                 ? rawT
@@ -1253,12 +1267,12 @@ public final class Ir64BlockExecutor {
         };
     }
 
-    private boolean executeSvc(Aarch64Core core, Ir64Op.Svc op) {
+    private boolean executeSvc(Aarch64Core core, SystemOp64.Svc op) {
         core.svcHandler().handle(core, op.immediate());
         return false;
     }
 
-    private boolean executeLoad(Aarch64Core core, Ir64Op.Load64 op) {
+    private boolean executeLoad(Aarch64Core core, MemoryOp64.Load64 op) {
         long base = readBaseRegister(core, op.rn());
         long address = transferAddress(core, base, op.addressingMode(), op.immediate(),
                 op.rm(), op.extendType(), op.shiftAmount());
@@ -1269,7 +1283,7 @@ public final class Ir64BlockExecutor {
         return false;
     }
 
-    private boolean executeStore(Aarch64Core core, Ir64Op.Store64 op) {
+    private boolean executeStore(Aarch64Core core, MemoryOp64.Store64 op) {
         long base = readBaseRegister(core, op.rn());
         long address = transferAddress(core, base, op.addressingMode(), op.immediate(),
                 op.rm(), op.extendType(), op.shiftAmount());
@@ -1285,9 +1299,9 @@ public final class Ir64BlockExecutor {
 
     /// `LDXR`/`LDAXR` (B6.3.4): lê a memória em `rn`+0 (sem deslocamento — a forma exclusiva não
     /// tem imediato) e marca o monitor de exclusividade com `(endereço, size.bytes())`.
-    /// `acquireRelease` é NOP observável no interpretador (ver {@link Ir64Op.LoadExclusive}
+    /// `acquireRelease` é NOP observável no interpretador (ver {@link MemoryOp64.LoadExclusive}
     /// javadoc) — carregado no IR só para um futuro emissor nativo.
-    private boolean executeLoadExclusive(Aarch64Core core, Ir64Op.LoadExclusive op) {
+    private boolean executeLoadExclusive(Aarch64Core core, MemoryOp64.LoadExclusive op) {
         long address = readBaseRegister(core, op.rn());
         long value = readMemory(core, address, op.size());
         core.markExclusiveMonitor(address, op.size().bytes());
@@ -1299,8 +1313,8 @@ public final class Ir64BlockExecutor {
     /// espelhada de `STREX` (B1.4): um `STXR`/`STLXR` que falha NÃO pode ter efeito colateral de
     /// memória. Sucesso escreve `rt`, grava `0` em `rs` e consome a reserva; falha grava `1` em
     /// `rs` com a memória intacta. `acquireRelease` é NOP observável (ver
-    /// {@link Ir64Op.StoreExclusive} javadoc).
-    private boolean executeStoreExclusive(Aarch64Core core, Ir64Op.StoreExclusive op) {
+    /// {@link MemoryOp64.StoreExclusive} javadoc).
+    private boolean executeStoreExclusive(Aarch64Core core, MemoryOp64.StoreExclusive op) {
         long address = readBaseRegister(core, op.rn());
         if (!core.exclusiveMonitorCovers(address, op.size().bytes())) {
             core.setXForWidth(op.rs(), 1L, false);
@@ -1314,8 +1328,8 @@ public final class Ir64BlockExecutor {
 
     /// `LDXP`/`LDAXP` (B8.1): mesmo espírito de {@link #executeLoadExclusive}, mas marca o
     /// monitor cobrindo os DOIS slots (`2 × size.bytes()`, `size` = `WORD`/`DOUBLEWORD` conforme
-    /// {@link Ir64Op.LoadExclusivePair#wide}).
-    private boolean executeLoadExclusivePair(Aarch64Core core, Ir64Op.LoadExclusivePair op) {
+    /// {@link MemoryOp64.LoadExclusivePair#wide}).
+    private boolean executeLoadExclusivePair(Aarch64Core core, MemoryOp64.LoadExclusivePair op) {
         long address = readBaseRegister(core, op.rn());
         Ir64MemSize size = op.wide() ? Ir64MemSize.DOUBLEWORD : Ir64MemSize.WORD;
         int stride = size.bytes();
@@ -1329,7 +1343,7 @@ public final class Ir64BlockExecutor {
 
     /// `STXP`/`STLXP` (B8.1): consulta o monitor ANTES de qualquer escrita — mesma armadilha
     /// crítica de {@link #executeStoreExclusive}, aplicada aos DOIS slots do par.
-    private boolean executeStoreExclusivePair(Aarch64Core core, Ir64Op.StoreExclusivePair op) {
+    private boolean executeStoreExclusivePair(Aarch64Core core, MemoryOp64.StoreExclusivePair op) {
         long address = readBaseRegister(core, op.rn());
         Ir64MemSize size = op.wide() ? Ir64MemSize.DOUBLEWORD : Ir64MemSize.WORD;
         int stride = size.bytes();
@@ -1346,8 +1360,8 @@ public final class Ir64BlockExecutor {
     /// `CAS`/`CASA`/`CASL`/`CASAL` (B8.1) — semântica de `CMPXCHG`: lê `[Rn]`, compara com `Rs`
     /// (truncado para {@code size}); se igual, escreve `Rt`; SEMPRE grava o valor antigo lido em
     /// `Rs` (zero-estendido). Interpretador single-thread por construção — não precisa de CAS
-    /// real de host (ver javadoc de {@link Ir64Op.CompareAndSwap}).
-    private boolean executeCompareAndSwap(Aarch64Core core, Ir64Op.CompareAndSwap op) {
+    /// real de host (ver javadoc de {@link MemoryOp64.CompareAndSwap}).
+    private boolean executeCompareAndSwap(Aarch64Core core, MemoryOp64.CompareAndSwap op) {
         long address = readBaseRegister(core, op.rn());
         boolean wide = op.size() == Ir64MemSize.DOUBLEWORD;
         long current = readMemory(core, address, op.size());
@@ -1363,8 +1377,8 @@ public final class Ir64BlockExecutor {
     /// `CASP`/`CASPA`/`CASPL`/`CASPAL` (B8.1) — versão em par de {@link #executeCompareAndSwap}:
     /// compara `(Rs,Rs+1)` contra `[Rn]`/`[Rn+size]`; se AMBOS baterem, escreve `(Rt,Rt+1)`;
     /// sempre grava o par antigo lido em `(Rs,Rs+1)`. O companheiro é `rs|1`/`rt|1` (não `+1` —
-    /// ver javadoc de {@link Ir64Op.CompareAndSwapPair}).
-    private boolean executeCompareAndSwapPair(Aarch64Core core, Ir64Op.CompareAndSwapPair op) {
+    /// ver javadoc de {@link MemoryOp64.CompareAndSwapPair}).
+    private boolean executeCompareAndSwapPair(Aarch64Core core, MemoryOp64.CompareAndSwapPair op) {
         long address = readBaseRegister(core, op.rn());
         Ir64MemSize size = op.wide() ? Ir64MemSize.DOUBLEWORD : Ir64MemSize.WORD;
         int stride = size.bytes();
@@ -1387,14 +1401,14 @@ public final class Ir64BlockExecutor {
 
     /// `LDADD`/`LDCLR`/`LDEOR`/`LDSET`/`LDSMAX`/`LDSMIN`/`LDUMAX`/`LDUMIN`/`SWP` (`FEAT_LSE`,
     /// B19.1) — RMW atômico do ponto de vista do guest (interpretador single-thread, não precisa
-    /// de RMW real de host, ver javadoc de {@link Ir64Op.AtomicMemoryOp}): lê `[Rn]`, calcula
+    /// de RMW real de host, ver javadoc de {@link MemoryOp64.AtomicMemoryOp}): lê `[Rn]`, calcula
     /// `<operation>(old, Rs)`, escreve de volta e grava `old` (zero-estendido) em `Rt`. Ao
     /// contrário de `CAS` (store condicional), o store aqui é INCONDICIONAL — por isso o
     /// {@link Aarch64Core#notifyOrdinaryWrite} SEMPRE dispara (derruba reserva `LDXR`/`LDAXR`
     /// pendente e invalida bloco de JIT em código automodificável). O monitor de exclusividade
     /// não é setado nem checado (LSE atômico não é exclusivo). `Rt==31` (`XZR`) é o alias
     /// `ST<op>`: RMW acontece, só a escrita em `X[31]` vira no-op. `acquire`/`release` NOP.
-    private boolean executeAtomicMemoryOp(Aarch64Core core, Ir64Op.AtomicMemoryOp op) {
+    private boolean executeAtomicMemoryOp(Aarch64Core core, MemoryOp64.AtomicMemoryOp op) {
         long address = readBaseRegister(core, op.rn());
         boolean wide = op.size() == Ir64MemSize.DOUBLEWORD;
         long old = readMemory(core, address, op.size()); // já zero-truncado a size
@@ -1421,7 +1435,7 @@ public final class Ir64BlockExecutor {
     /// `LDCLRP`/`LDSETP`/`SWPP` (`FEAT_LSE128`, B19.25) — versão em PAR de
     /// {@link #executeAtomicMemoryOp} (128 bits, `(lo,hi)` little-endian em `[Rn]`/`[Rn+8]`): lê o
     /// par, aplica `CLR`/`SET`/`SWP` usando o PRÓPRIO par `(Rt,Rt2)` como operando (ver javadoc de
-    /// {@link Ir64Op.AtomicMemoryOpPair} — semântica in-place, diferente de {@link
+    /// {@link MemoryOp64.AtomicMemoryOpPair} — semântica in-place, diferente de {@link
     /// #executeAtomicMemoryOp}, que separa `Rs`=operando de `Rt`=destino), escreve o par novo de
     /// volta e SÓ DEPOIS sobrescreve `(Rt,Rt2)` com o par antigo lido (a ordem importa: `Rt`/`Rt2`
     /// são lidos como operando ANTES de virarem destino). Store incondicional: `notifyOrdinaryWrite`
@@ -1429,7 +1443,7 @@ public final class Ir64BlockExecutor {
     /// B19. `Rt`/`Rt2` nunca são `XZR` nem iguais (decoder já recusa, ver
     /// {@link dev.vitorsilverio.armjitter.decoder64.Aarch64Decoder}), então não há alias `ST<op>`
     /// aqui, ao contrário de {@link #executeAtomicMemoryOp}.
-    private boolean executeAtomicMemoryOpPair(Aarch64Core core, Ir64Op.AtomicMemoryOpPair op) {
+    private boolean executeAtomicMemoryOpPair(Aarch64Core core, MemoryOp64.AtomicMemoryOpPair op) {
         long address = readBaseRegister(core, op.rn());
         long lo = core.x(op.rt());
         long hi = core.x(op.rt2());
@@ -1461,10 +1475,10 @@ public final class Ir64BlockExecutor {
     /// devolve `false` lança {@link UnsupportedOperationException} aqui mesmo (mesmo padrão de
     /// "sem hospedeiro" de {@link Aarch64SystemRegisterBus#none()} — checado explicitamente antes
     /// de chamar `read`/`write`, não só confiando na exceção default deles). Não existe forma
-    /// `W` (ver {@link Ir64Op.SystemRegister} javadoc): `MRS` sempre grava `X` completo via
+    /// `W` (ver {@link SystemOp64.SystemRegister} javadoc): `MRS` sempre grava `X` completo via
     /// {@link Aarch64Core#setX}; `MSR` sempre lê `X` completo via {@link Aarch64Core#x} (que já
     /// devolve `0` para `rt == 31`, `XZR`).
-    private boolean executeSystemRegister(Aarch64Core core, Ir64Op.SystemRegister op) {
+    private boolean executeSystemRegister(Aarch64Core core, SystemOp64.SystemRegister op) {
         // B6.6.7: identidades da CPU (CurrentEL/MPIDR_EL1/MIDR_EL1/ID_AA64*/TPIDR_EL1) são
         // resolvidas DIRETO pelo core, sem passar pelo `Aarch64SystemRegisterBus` — checado
         // primeiro, mesmo quando um hospedeiro real está instalado (essas identidades nunca são
@@ -1495,9 +1509,9 @@ public final class Ir64BlockExecutor {
     /// {@link Aarch64SystemRegisterBus#handles} — o método nem checa isso, ao contrário de
     /// {@link #executeSystemRegister}) lança {@link UnsupportedOperationException} direto do default
     /// de {@link Aarch64SystemRegisterBus#addressTranslate}. `rt=31` (`XZR`) lê `0` via
-    /// {@link Aarch64Core#x}, mesma convenção de {@link Ir64Op.SystemRegister}. Sem escrita em
+    /// {@link Aarch64Core#x}, mesma convenção de {@link SystemOp64.SystemRegister}. Sem escrita em
     /// registrador geral: o resultado vai só para `PAR_EL1`, dentro do bus.
-    private boolean executeAddressTranslate(Aarch64Core core, Ir64Op.AddressTranslate op) {
+    private boolean executeAddressTranslate(Aarch64Core core, SystemOp64.AddressTranslate op) {
         long va = core.x(op.rt());
         core.systemRegisterBus().addressTranslate(op.form(), va);
         return false;
@@ -1508,7 +1522,7 @@ public final class Ir64BlockExecutor {
     /// {@link Aarch64SystemRegisterBus#handles} (diferente de {@link #executeSystemRegister}),
     /// já que o método tem default NOP no barramento vazio (mesma disciplina "sem hospedeiro =
     /// sem TLB para invalidar", não uma falta arquitetural).
-    private boolean executeSystemInstruction(Aarch64Core core, Ir64Op.SystemInstruction op) {
+    private boolean executeSystemInstruction(Aarch64Core core, SystemOp64.SystemInstruction op) {
         switch (op.opcode()) {
             case TLBI_ALL -> core.systemRegisterBus().invalidateTlbAll();
             case BARRIER, NOP_HINT, CACHE_MAINTENANCE_NOP, PSTATE_FIELD_NOP, MAINTENANCE_UNMODELED_NOP -> {
@@ -1524,26 +1538,26 @@ public final class Ir64BlockExecutor {
     }
 
     /// `PACGA` (B19.6 bloco C) — este emulador não modela autenticação de ponteiro de verdade (ver
-    /// javadoc de {@link Ir64Op.PointerAuthGeneric}); resultado placeholder determinístico `Xd = 0`
+    /// javadoc de {@link IntegerOp64.PointerAuthGeneric}); resultado placeholder determinístico `Xd = 0`
     /// (decisão registrada na task: nenhum consumidor verifica o resultado, então qualquer valor
     /// fixo e documentado é seguro).
-    private boolean executePointerAuthGeneric(Aarch64Core core, Ir64Op.PointerAuthGeneric op) {
+    private boolean executePointerAuthGeneric(Aarch64Core core, IntegerOp64.PointerAuthGeneric op) {
         core.setX(op.rd(), 0L);
         return false;
     }
 
     /// `PACIA`/`PACIB`/`PACDA`/`PACDB`/`AUTIA`/`AUTIB`/`AUTDA`/`AUTDB`/`XPACI`/`XPACD` (B19.15) —
-    /// rota (b) registrada na task (ver javadoc de {@link Ir64Op.PointerAuthInPlace}): identidade.
+    /// rota (b) registrada na task (ver javadoc de {@link IntegerOp64.PointerAuthInPlace}): identidade.
     /// `Xd` já contém o valor "autenticado"/"assinado" (o operando é lido E escrito no hardware
     /// real, mas nada muda aqui) — nenhuma escrita de registrador é necessária.
-    private boolean executePointerAuthInPlace(Aarch64Core core, Ir64Op.PointerAuthInPlace op) {
+    private boolean executePointerAuthInPlace(Aarch64Core core, IntegerOp64.PointerAuthInPlace op) {
         return false;
     }
 
     /// `ABS Xd, Xn` (B19.6 bloco D) — `Math.abs` de `long`/`int` já satura `MIN_VALUE` para o
     /// próprio `MIN_VALUE` (mesma convenção de complemento de dois documentada no javadoc de
-    /// {@link Ir64Op.AbsGeneral}), sem checagem extra.
-    private boolean executeAbsGeneral(Aarch64Core core, Ir64Op.AbsGeneral op) {
+    /// {@link IntegerOp64.AbsGeneral}), sem checagem extra.
+    private boolean executeAbsGeneral(Aarch64Core core, IntegerOp64.AbsGeneral op) {
         long value = core.xForWidth(op.rn(), op.wide());
         long result = op.wide() ? Math.abs(value) : (int) Math.abs((int) value);
         core.setXForWidth(op.rd(), result, op.wide());
@@ -1553,7 +1567,7 @@ public final class Ir64BlockExecutor {
     /// `SMAX`/`SMIN`/`UMAX`/`UMIN` (B19.21) — MESMA técnica de leitura de operando com/sem sinal
     /// de {@code readDivideOperand} (`SDIV` em `W` exige sign-extend explícito dos 32 bits baixos;
     /// as demais combinações já vêm zero-estendidas "de graça" via {@link Aarch64Core#xForWidth}).
-    private boolean executeMinMaxGeneral(Aarch64Core core, Ir64Op.MinMaxGeneral op) {
+    private boolean executeMinMaxGeneral(Aarch64Core core, IntegerOp64.MinMaxGeneral op) {
         boolean signed = switch (op.op()) {
             case SMAX, SMIN -> true;
             case UMAX, UMIN -> false;
@@ -1582,8 +1596,8 @@ public final class Ir64BlockExecutor {
     /// que o reusa do lado A32/T32 — zero-diff comprovado pelos testes de B19.17 sem alteração), sem
     /// a complementação de entrada/saída que `zlib`/Ethernet/iSCSI aplicam por cima, consumindo o
     /// dado byte a byte do menos para o mais significativo (ordem little-endian do valor do
-    /// registrador — ver javadoc de {@link Ir64Op.Crc32}).
-    private boolean executeCrc32(Aarch64Core core, Ir64Op.Crc32 op) {
+    /// registrador — ver javadoc de {@link IntegerOp64.Crc32}).
+    private boolean executeCrc32(Aarch64Core core, IntegerOp64.Crc32 op) {
         int crc = (int) core.xForWidth(op.rn(), false);
         long data = core.xForWidth(op.rm(), op.dataWidthBits() == Long.SIZE);
         int result = Crc32Checksum.compute(crc, data, op.dataWidthBits(), op.castagnoli());
@@ -1599,11 +1613,11 @@ public final class Ir64BlockExecutor {
     private static final int MOPS_COMPLETED_FORWARD_NZCV = 0b0010;
     private static final int MOPS_COMPLETED_BACKWARD_NZCV = 0b1010;
 
-    /// `SETP`/`SETM`/`SETE` (B19.16) — ver javadoc de {@link Ir64Op.MemorySet}: a fase que
-    /// encontra {@link Ir64Op.MemorySet#rn} diferente de zero preenche tudo de uma vez; as
+    /// `SETP`/`SETM`/`SETE` (B19.16) — ver javadoc de {@link MemoryOp64.MemorySet}: a fase que
+    /// encontra {@link MemoryOp64.MemorySet#rn} diferente de zero preenche tudo de uma vez; as
     /// demais (contador já zerado) são NOP funcional — mesma disciplina caso alguma delas seja
     /// executada sozinha, fora de sequência.
-    private boolean executeMemorySet(Aarch64Core core, Ir64Op.MemorySet op) {
+    private boolean executeMemorySet(Aarch64Core core, MemoryOp64.MemorySet op) {
         long count = core.x(op.rn());
         if (count == 0) {
             return false;
@@ -1624,12 +1638,12 @@ public final class Ir64BlockExecutor {
     }
 
     /// `CPYFP`/`CPYFM`/`CPYFE`/`CPYP`/`CPYM`/`CPYE` (B19.16) — mesma disciplina de
-    /// {@link #executeMemorySet}: a fase que encontra {@link Ir64Op.MemoryCopy#rn} diferente de
-    /// zero copia tudo (byte a byte); {@link Ir64Op.MemoryCopy#forwardOnly}==`false` (`CPYP`/
+    /// {@link #executeMemorySet}: a fase que encontra {@link MemoryOp64.MemoryCopy#rn} diferente de
+    /// zero copia tudo (byte a byte); {@link MemoryOp64.MemoryCopy#forwardOnly}==`false` (`CPYP`/
     /// `CPYM`/`CPYE`) escolhe a direção do loop pela MESMA regra de `memmove`: se a origem vem
     /// antes do destino e as regiões se sobrepõem, copiar de trás para frente evita que a escrita
     /// destrua bytes de origem ainda não lidos.
-    private boolean executeMemoryCopy(Aarch64Core core, Ir64Op.MemoryCopy op) {
+    private boolean executeMemoryCopy(Aarch64Core core, MemoryOp64.MemoryCopy op) {
         long count = core.x(op.rn());
         if (count == 0) {
             return false;
@@ -1657,12 +1671,12 @@ public final class Ir64BlockExecutor {
         return false;
     }
 
-    /// `STG`/`LDG`/`STZG`/`ST2G`/`STZ2G` (`FEAT_MTE2`, B19.14) — ver Javadoc de {@link Ir64Op.MemoryTag}.
-    private boolean executeMemoryTag(Aarch64Core core, Ir64Op.MemoryTag op) {
+    /// `STG`/`LDG`/`STZG`/`ST2G`/`STZ2G` (`FEAT_MTE2`, B19.14) — ver Javadoc de {@link MemoryOp64.MemoryTag}.
+    private boolean executeMemoryTag(Aarch64Core core, MemoryOp64.MemoryTag op) {
         long base = readBaseRegister(core, op.rn());
         long addr = transferAddress(core, base, op.addressingMode(), op.immediate(), -1, null, 0);
         long granuleAddress = addr & ~(Aarch64Core.MEMORY_TAG_GRANULE_BYTES - 1L);
-        if (op.operation() == Ir64Op.Ir64MemoryTagOperation.LOAD) {
+        if (op.operation() == MemoryOp64.Ir64MemoryTagOperation.LOAD) {
             int tag = core.memoryTag(granuleAddress);
             core.setX(op.rt(), Aarch64Core.withAllocationTag(core.x(op.rt()), tag));
         } else {
@@ -1684,8 +1698,8 @@ public final class Ir64BlockExecutor {
         return false;
     }
 
-    /// `STGM`/`LDGM`/`STZGM` (`FEAT_MTE2`, B19.14) — ver Javadoc de {@link Ir64Op.MemoryTagMultiple}.
-    private boolean executeMemoryTagMultiple(Aarch64Core core, Ir64Op.MemoryTagMultiple op) {
+    /// `STGM`/`LDGM`/`STZGM` (`FEAT_MTE2`, B19.14) — ver Javadoc de {@link MemoryOp64.MemoryTagMultiple}.
+    private boolean executeMemoryTagMultiple(Aarch64Core core, MemoryOp64.MemoryTagMultiple op) {
         long addr = readBaseRegister(core, op.rn());
         switch (op.operation()) {
             case LOAD_TAGS -> core.setX(op.rt(), core.memoryTagBlock(addr));
@@ -1702,9 +1716,9 @@ public final class Ir64BlockExecutor {
         return false;
     }
 
-    /// `STGP` (`FEAT_MTE2`, B19.14) — ver Javadoc de {@link Ir64Op.StorePairTag}: a tag gravada vem
-    /// do PRÓPRIO endereço de destino, não de {@link Ir64Op.StorePairTag#rt}/{@link Ir64Op.StorePairTag#rt2}.
-    private boolean executeStorePairTag(Aarch64Core core, Ir64Op.StorePairTag op) {
+    /// `STGP` (`FEAT_MTE2`, B19.14) — ver Javadoc de {@link MemoryOp64.StorePairTag}: a tag gravada vem
+    /// do PRÓPRIO endereço de destino, não de {@link MemoryOp64.StorePairTag#rt}/{@link MemoryOp64.StorePairTag#rt2}.
+    private boolean executeStorePairTag(Aarch64Core core, MemoryOp64.StorePairTag op) {
         long base = readBaseRegister(core, op.rn());
         long addr = transferAddress(core, base, op.addressingMode(), op.immediate(), -1, null, 0);
         long dataAddress = Aarch64Core.physicalMemoryTagAddress(addr);
@@ -1718,10 +1732,10 @@ public final class Ir64BlockExecutor {
     }
 
     /// `SUBP`/`SUBPS` (`FEAT_MTE2`, B19.14) — cada operando é sign-extended a partir dos 56 bits
-    /// baixos ANTES da subtração (achado real, ver Javadoc de {@link Ir64Op.SubtractPointer}).
+    /// baixos ANTES da subtração (achado real, ver Javadoc de {@link IntegerOp64.SubtractPointer}).
     private static final int SUBTRACT_POINTER_SIGN_EXTEND_BITS = 56;
 
-    private boolean executeSubtractPointer(Aarch64Core core, Ir64Op.SubtractPointer op) {
+    private boolean executeSubtractPointer(Aarch64Core core, IntegerOp64.SubtractPointer op) {
         long n = signExtendBitfield(
                 readBaseRegister(core, op.rn()) & maskOfBitfieldWidth(SUBTRACT_POINTER_SIGN_EXTEND_BITS),
                 SUBTRACT_POINTER_SIGN_EXTEND_BITS);
@@ -1737,7 +1751,7 @@ public final class Ir64BlockExecutor {
     }
 
     /// `IRG` (`FEAT_MTE2`, B19.14) — ver {@link Aarch64Core#insertRandomTag}.
-    private boolean executeInsertRandomTag(Aarch64Core core, Ir64Op.InsertRandomTag op) {
+    private boolean executeInsertRandomTag(Aarch64Core core, IntegerOp64.InsertRandomTag op) {
         long rn = readBaseRegister(core, op.rn());
         long rmExclude = core.x(op.rm());
         long result = core.insertRandomTag(rn, rmExclude);
@@ -1745,8 +1759,8 @@ public final class Ir64BlockExecutor {
         return false;
     }
 
-    /// `GMI` (`FEAT_MTE2`, B19.14) — ver Javadoc de {@link Ir64Op.TagMaskInsert}.
-    private boolean executeTagMaskInsert(Aarch64Core core, Ir64Op.TagMaskInsert op) {
+    /// `GMI` (`FEAT_MTE2`, B19.14) — ver Javadoc de {@link IntegerOp64.TagMaskInsert}.
+    private boolean executeTagMaskInsert(Aarch64Core core, IntegerOp64.TagMaskInsert op) {
         long rn = readBaseRegister(core, op.rn());
         int tag = Aarch64Core.allocationTagFromAddress(rn);
         long mask = core.x(op.rm());
@@ -1755,9 +1769,9 @@ public final class Ir64BlockExecutor {
     }
 
     /// `SETGP`/`SETGM`/`SETGE` (`FEAT_MTE2`+`FEAT_MOPS`, B19.14) — mesma disciplina de
-    /// {@link #executeMemorySet}, mas também grava a tag de {@link Ir64Op.MemorySetTagged#rd} em
+    /// {@link #executeMemorySet}, mas também grava a tag de {@link MemoryOp64.MemorySetTagged#rd} em
     /// cada granule de 16 bytes tocado pelo preenchimento.
-    private boolean executeMemorySetTagged(Aarch64Core core, Ir64Op.MemorySetTagged op) {
+    private boolean executeMemorySetTagged(Aarch64Core core, MemoryOp64.MemorySetTagged op) {
         long count = core.x(op.rn());
         if (count == 0) {
             return false;
@@ -1784,10 +1798,10 @@ public final class Ir64BlockExecutor {
         return false;
     }
 
-    /// `DUP` escalar (B19.6 bloco E) — grava só o elemento no lane `0` de {@link Ir64Op.VectorDuplicateElementScalar#rd}
+    /// `DUP` escalar (B19.6 bloco E) — grava só o elemento no lane `0` de {@link AdvSimdMoveOp64.DuplicateElementScalar#rd}
     /// e ZERA o resto do registrador de 128 bits ({@link Aarch64FpRegisters#setQ} com `hi=0` e `lo`
     /// mascarado ao tamanho do elemento).
-    private boolean executeDuplicateElementScalar(Aarch64Core core, Ir64Op.VectorDuplicateElementScalar op) {
+    private boolean executeDuplicateElementScalar(Aarch64Core core, AdvSimdMoveOp64.DuplicateElementScalar op) {
         Aarch64FpRegisters fp = core.fp();
         long value = fp.element(op.rn(), op.index(), op.esz());
         int elementBits = 8 << op.esz();
@@ -1797,9 +1811,9 @@ public final class Ir64BlockExecutor {
     }
 
     /// `FMOV Xd, Vn.D[1]` / `FMOV Vd.D[1], Xn` (B19.6 bloco F) — ver javadoc de
-    /// {@link Ir64Op.Fp64HighHalfMove}: sentido GPR→FP PRESERVA a metade baixa (exceção à escrita
+    /// {@link FpOp64.HighHalfMove}: sentido GPR→FP PRESERVA a metade baixa (exceção à escrita
     /// destrutiva normal de A64).
-    private boolean executeFpHighHalfMove(Aarch64Core core, Ir64Op.Fp64HighHalfMove op) {
+    private boolean executeFpHighHalfMove(Aarch64Core core, FpOp64.HighHalfMove op) {
         Aarch64FpRegisters fp = core.fp();
         if (op.toFloat()) {
             fp.setQ(op.fpReg(), fp.word(op.fpReg() * 2), core.x(op.gpReg()));
@@ -1811,9 +1825,9 @@ public final class Ir64BlockExecutor {
 
     /// `MOVI`/`MVNI`/`ORR`/`BIC`/`FMOV` imediato AdvSIMD de 64 bits (B19.6 bloco G) — `imm64` já
     /// vem EXPANDIDO do decoder (núcleo compartilhado {@code AdvSimdModifiedImmediate}, ver javadoc
-    /// de {@link Ir64Op.AdvSimdModifiedImmediate64}). Aplica a MESMA operação a cada metade de 64
+    /// de {@link AdvSimdMoveOp64.ModifiedImmediate64}). Aplica a MESMA operação a cada metade de 64
     /// bits independentemente; `!q` zera a metade alta (escrita destrutiva normal de A64).
-    private boolean executeAdvSimdModifiedImmediate64(Aarch64Core core, Ir64Op.AdvSimdModifiedImmediate64 op) {
+    private boolean executeAdvSimdModifiedImmediate64(Aarch64Core core, AdvSimdMoveOp64.ModifiedImmediate64 op) {
         Aarch64FpRegisters fp = core.fp();
         long currentLo = fp.word(op.rd() * 2);
         long currentHi = op.q() ? fp.word(op.rd() * 2 + 1) : 0L;
@@ -1834,8 +1848,8 @@ public final class Ir64BlockExecutor {
     }
 
     /// `MSR (immediate) DAIFSet`/`DAIFClr` (B8.3) — só o bit `I` de `DAIF` tem efeito neste
-    /// emulador (`D`/`A`/`F` ignorados, ver javadoc de {@link Ir64Op.InterruptMask}).
-    private boolean executeInterruptMask(Aarch64Core core, Ir64Op.InterruptMask op) {
+    /// emulador (`D`/`A`/`F` ignorados, ver javadoc de {@link SystemOp64.InterruptMask}).
+    private boolean executeInterruptMask(Aarch64Core core, SystemOp64.InterruptMask op) {
         if ((op.mask() & DAIF_MASK_BIT_I) != 0) {
             core.pstate().setIrqDisabled(op.set());
         }
@@ -1846,7 +1860,7 @@ public final class Ir64BlockExecutor {
     /// permissão a instrução trapa (`EC=0x1D`, `SMTC=0`) em vez de executar, e o PC já é o do vetor.
     /// Depois liga/desliga os bits pedidos por {@link Aarch64Core#setSvcr}, o único ponto que aplica
     /// os efeitos destrutivos. O bit não citado pelo alias (ex.: `ZA` em `SVCRSM`) fica como está.
-    private boolean executeStreamingModeControl(Aarch64Core core, Ir64Op.StreamingModeControl op) {
+    private boolean executeStreamingModeControl(Aarch64Core core, SystemOp64.StreamingModeControl op) {
         if (!core.smeEnabledCheck(op.instructionAddress())) {
             return true;
         }
@@ -1858,7 +1872,7 @@ public final class Ir64BlockExecutor {
 
     /// `BRK` (B8.3) — sempre lança, capturado por {@link #step}/{@link #executeBlock} no MESMO
     /// ponto que {@link MemoryTranslationException64} (ver os `catch` ali).
-    private boolean executeBreakpoint(Ir64Op.Breakpoint op) {
+    private boolean executeBreakpoint(SystemOp64.Breakpoint op) {
         throw new Aarch64BreakpointException(op.immediate());
     }
 
@@ -1874,7 +1888,7 @@ public final class Ir64BlockExecutor {
     /// foi REMOVIDO — `SMC` agora entra em EL3 de verdade via
     /// {@link Aarch64Core#enterSecureMonitorCall}, mesmo mecanismo de `HVC`/
     /// {@link Aarch64Core#enterHypervisorCall}.
-    private boolean executePrivilegedCall(Ir64Op.PrivilegedCall op) {
+    private boolean executePrivilegedCall(SystemOp64.PrivilegedCall op) {
         if (op.isHvc()) {
             throw new Aarch64HypervisorCallException();
         }
@@ -1889,7 +1903,7 @@ public final class Ir64BlockExecutor {
     /// ordem do precedente 32-bit (`SUBS PC,LR,#8` equivalente, mas automático aqui: A64 não
     /// precisa de subtração porque `ELR_ELx` já é o endereço exato de retomada, sem o viés `+4`/
     /// `+8` do LR bancado do ARM32).
-    private boolean executeExceptionReturn(Aarch64Core core, Ir64Op.ExceptionReturn op) {
+    private boolean executeExceptionReturn(Aarch64Core core, SystemOp64.ExceptionReturn op) {
         Aarch64ExceptionState exceptionState = core.exceptionState();
         Aarch64ExceptionLevel source = exceptionState.currentEl();
         long returnAddress = exceptionState.elr(source);
@@ -1902,8 +1916,8 @@ public final class Ir64BlockExecutor {
     }
 
     /// `LD1`-`LD4`/`ST1`-`ST4` (AdvSIMD load/store MULTIPLE structures, B8.6) — semântica conferida
-    /// contra `trans_LD_mult`/`trans_ST_mult` reais do QEMU, ver {@link Ir64Op.VectorLoadStoreMultiple}.
-    private boolean executeVectorLoadStoreMultiple(Aarch64Core core, Ir64Op.VectorLoadStoreMultiple op) {
+    /// contra `trans_LD_mult`/`trans_ST_mult` reais do QEMU, ver {@link AdvSimdMoveOp64.LoadStoreMultiple}.
+    private boolean executeVectorLoadStoreMultiple(Aarch64Core core, AdvSimdMoveOp64.LoadStoreMultiple op) {
         long base = readBaseRegister(core, op.rn());
         long address = base;
         Ir64MemSize size = memSizeForElementLog2(op.elementSizeLog2());
@@ -1944,8 +1958,8 @@ public final class Ir64BlockExecutor {
 
     /// `LD1`-`LD4`/`ST1`-`ST4` (AdvSIMD load/store SINGLE structure, sem replicar, B8.6) —
     /// semântica conferida contra `trans_LD_single`/`trans_ST_single` reais do QEMU, ver
-    /// {@link Ir64Op.VectorLoadStoreSingle}.
-    private boolean executeVectorLoadStoreSingle(Aarch64Core core, Ir64Op.VectorLoadStoreSingle op) {
+    /// {@link AdvSimdMoveOp64.LoadStoreSingle}.
+    private boolean executeVectorLoadStoreSingle(Aarch64Core core, AdvSimdMoveOp64.LoadStoreSingle op) {
         long base = readBaseRegister(core, op.rn());
         long address = base;
         Ir64MemSize size = memSizeForElementLog2(op.elementSizeLog2());
@@ -1967,8 +1981,8 @@ public final class Ir64BlockExecutor {
     }
 
     /// `LD1R`-`LD4R` (AdvSIMD load single structure and replicate, B8.6) — semântica conferida
-    /// contra `trans_LD_single_repl` real do QEMU, ver {@link Ir64Op.VectorLoadSingleReplicate}.
-    private boolean executeVectorLoadSingleReplicate(Aarch64Core core, Ir64Op.VectorLoadSingleReplicate op) {
+    /// contra `trans_LD_single_repl` real do QEMU, ver {@link AdvSimdMoveOp64.LoadSingleReplicate}.
+    private boolean executeVectorLoadSingleReplicate(Aarch64Core core, AdvSimdMoveOp64.LoadSingleReplicate op) {
         long base = readBaseRegister(core, op.rn());
         long address = base;
         Ir64MemSize size = memSizeForElementLog2(op.elementSizeLog2());
@@ -2006,12 +2020,12 @@ public final class Ir64BlockExecutor {
         };
     }
 
-    private boolean executeLoadStorePair(Aarch64Core core, Ir64Op.LoadStorePair op) {
+    private boolean executeLoadStorePair(Aarch64Core core, MemoryOp64.LoadStorePair op) {
         long base = readBaseRegister(core, op.rn());
         long address = op.addressingMode() == Ir64AddressingMode.POST_INDEX
                 ? base : base + op.immediate();
         // LDPSW (B8.1): sempre transfere pares de WORD, mesmo escrevendo em X — ver javadoc de
-        // Ir64Op.LoadStorePair#signExtend.
+        // MemoryOp64.LoadStorePair#signExtend.
         int stride = (op.wide() && !op.signExtend()) ? PAIR_DOUBLEWORD_STRIDE_BYTES : PAIR_WORD_STRIDE_BYTES;
         Ir64MemSize size = (op.wide() && !op.signExtend()) ? Ir64MemSize.DOUBLEWORD : Ir64MemSize.WORD;
         if (op.load()) {
@@ -2044,7 +2058,7 @@ public final class Ir64BlockExecutor {
     /// {@link #executeLoad}; `Q` (128 bits) usa {@link Aarch64FpRegisters#setQ} direto (2 leituras
     /// de 64 bits), os demais tamanhos usam {@link Aarch64FpRegisters#setScalar} (escrita
     /// destrutiva — zera o resto do registro, comportamento arquitetural real).
-    private boolean executeFpLoad(Aarch64Core core, Ir64Op.FpLoad64 op) {
+    private boolean executeFpLoad(Aarch64Core core, FpOp64.Load64 op) {
         long base = readBaseRegister(core, op.rn());
         long address = transferAddress(core, base, op.addressingMode(), op.immediate(),
                 op.rm(), op.extendType(), op.shiftAmount());
@@ -2059,7 +2073,7 @@ public final class Ir64BlockExecutor {
     }
 
     /// `STR` SIMD&FP registrador-imediato (B8.13) — espelho de {@link #executeFpLoad}.
-    private boolean executeFpStore(Aarch64Core core, Ir64Op.FpStore64 op) {
+    private boolean executeFpStore(Aarch64Core core, FpOp64.Store64 op) {
         long base = readBaseRegister(core, op.rn());
         long address = transferAddress(core, base, op.addressingMode(), op.immediate(),
                 op.rm(), op.extendType(), op.shiftAmount());
@@ -2077,7 +2091,7 @@ public final class Ir64BlockExecutor {
 
     /// `LDP`/`STP` SIMD&FP (B8.13) — mesma resolução de endereço/writeback de
     /// {@link #executeLoadStorePair}, sem forma com sinal (SIMD&FP não tem `LDPSW`).
-    private boolean executeFpLoadStorePair(Aarch64Core core, Ir64Op.FpLoadStorePair op) {
+    private boolean executeFpLoadStorePair(Aarch64Core core, FpOp64.LoadStorePair op) {
         long base = readBaseRegister(core, op.rn());
         long address = op.addressingMode() == Ir64AddressingMode.POST_INDEX
                 ? base : base + op.immediate();
@@ -2114,7 +2128,7 @@ public final class Ir64BlockExecutor {
 
     /// `LDR (literal)` SIMD&FP (B8.13) — mesma convenção de endereço já resolvido de
     /// {@link #executeLoadLiteral}.
-    private boolean executeFpLoadLiteral(Aarch64Core core, Ir64Op.FpLoadLiteral64 op) {
+    private boolean executeFpLoadLiteral(Aarch64Core core, FpOp64.LoadLiteral64 op) {
         Aarch64FpRegisters fp = core.fp();
         if (op.size() == Ir64FpMemSize.QUAD) {
             fp.setQ(op.vt(), core.memory().read64(op.address()), core.memory().read64(op.address() + Long.BYTES));
@@ -2124,7 +2138,7 @@ public final class Ir64BlockExecutor {
         return false;
     }
 
-    private boolean executeLoadLiteral(Aarch64Core core, Ir64Op.LoadLiteral64 op) {
+    private boolean executeLoadLiteral(Aarch64Core core, MemoryOp64.LoadLiteral64 op) {
         long value;
         if (op.signExtend()) {
             // LDRSW (literal): única forma com sinal — sempre lê 32 bits e estende para X.
@@ -2139,7 +2153,7 @@ public final class Ir64BlockExecutor {
     }
 
     /// Lê o registrador BASE de um load/store — sempre `SP` quando o campo de encoding é `31`
-    /// (nunca `XZR`, ver {@link Ir64Op.Load64#rn}).
+    /// (nunca `XZR`, ver {@link MemoryOp64.Load64#rn}).
     private static long readBaseRegister(Aarch64Core core, int rn) {
         return rn == BASE_REGISTER_SP_ENCODING ? core.sp() : core.x(rn);
     }

@@ -1,6 +1,6 @@
 package dev.vitorsilverio.armjitter.ir64;
 
-/// Operação de {@link Ir64Op.CryptoShaTwoRegister} ("Cryptographic two-register SHA", B8.11b —
+/// Operação de {@link CryptoOp64.ShaTwoRegister} ("Cryptographic two-register SHA", B8.11b —
 /// mesma ARMv8-A Cryptographic Extension de {@link Ir64CryptoAesOp}).
 public enum Ir64CryptoShaTwoRegisterOp {
     /// `SHA1H`: função de rotação de estado SHA1 (`ROR` de 2 bits na palavra 0 de {@code rn}) — pura

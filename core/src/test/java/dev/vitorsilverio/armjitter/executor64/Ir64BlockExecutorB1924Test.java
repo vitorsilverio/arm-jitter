@@ -2,7 +2,7 @@ package dev.vitorsilverio.armjitter.executor64;
 
 import dev.vitorsilverio.armjitter.core64.Aarch64Core;
 import dev.vitorsilverio.armjitter.core64.Aarch64FpRegisters;
-import dev.vitorsilverio.armjitter.ir64.Ir64Op;
+import dev.vitorsilverio.armjitter.ir64.AdvSimdFpOp64;
 import dev.vitorsilverio.armjitter.memory.AddressSpace64;
 import dev.vitorsilverio.armjitter.support.TestAddressSpace;
 import org.junit.jupiter.api.Test;
@@ -33,7 +33,7 @@ class Ir64BlockExecutorB1924Test {
         fp.setElement(1, 0, ESZ_SINGLE, Float.floatToRawIntBits(-5.0f) & 0xFFFF_FFFFL);
         fp.setElement(2, 0, ESZ_SINGLE, Float.floatToRawIntBits(3.0f) & 0xFFFF_FFFFL);
 
-        EXECUTOR.executeOp(core, new Ir64Op.VectorFpAbsoluteMaxMin(true, false, ESZ_SINGLE, 0, 1, 2));
+        EXECUTOR.executeOp(core, new AdvSimdFpOp64.FpAbsoluteMaxMin(true, false, ESZ_SINGLE, 0, 1, 2));
 
         // |-5.0| > |3.0| ⇒ vencedor é `Vn` (-5.0), NÃO `5.0` (prova de que a comparação é por
         // magnitude, mas o valor devolvido é o operando original com sinal).
@@ -47,7 +47,7 @@ class Ir64BlockExecutorB1924Test {
         fp.setElement(1, 0, ESZ_SINGLE, Float.floatToRawIntBits(-5.0f) & 0xFFFF_FFFFL);
         fp.setElement(2, 0, ESZ_SINGLE, Float.floatToRawIntBits(3.0f) & 0xFFFF_FFFFL);
 
-        EXECUTOR.executeOp(core, new Ir64Op.VectorFpAbsoluteMaxMin(false, false, ESZ_SINGLE, 0, 1, 2));
+        EXECUTOR.executeOp(core, new AdvSimdFpOp64.FpAbsoluteMaxMin(false, false, ESZ_SINGLE, 0, 1, 2));
 
         // |3.0| < |-5.0| ⇒ vencedor (mínimo) é `Vm` (3.0).
         assertEquals(3.0f, Float.intBitsToFloat((int) fp.element(0, 0, ESZ_SINGLE)));
@@ -60,7 +60,7 @@ class Ir64BlockExecutorB1924Test {
         fp.setElement(1, 0, ESZ_SINGLE, Float.floatToRawIntBits(-9.0f) & 0xFFFF_FFFFL);
         fp.setElement(2, 0, ESZ_SINGLE, Float.floatToRawIntBits(2.0f) & 0xFFFF_FFFFL);
 
-        EXECUTOR.executeOp(core, new Ir64Op.VectorFpAbsoluteMaxMin(true, false, ESZ_SINGLE, 0, 1, 2));
+        EXECUTOR.executeOp(core, new AdvSimdFpOp64.FpAbsoluteMaxMin(true, false, ESZ_SINGLE, 0, 1, 2));
 
         float result = Float.intBitsToFloat((int) fp.element(0, 0, ESZ_SINGLE));
         assertEquals(-9.0f, result, "FAMAX compara por |valor| mas devolve o operando ORIGINAL, não abs(vencedor)");
@@ -75,7 +75,7 @@ class Ir64BlockExecutorB1924Test {
         fp.setElement(1, 0, ESZ_DOUBLE, Double.doubleToRawLongBits(1.5));
         fp.setElement(2, 0, ESZ_DOUBLE, Double.doubleToRawLongBits(-4.5));
 
-        EXECUTOR.executeOp(core, new Ir64Op.VectorFpAbsoluteMaxMin(true, true, ESZ_DOUBLE, 0, 1, 2));
+        EXECUTOR.executeOp(core, new AdvSimdFpOp64.FpAbsoluteMaxMin(true, true, ESZ_DOUBLE, 0, 1, 2));
 
         assertEquals(-4.5, Double.longBitsToDouble(fp.element(0, 0, ESZ_DOUBLE)));
     }
@@ -87,7 +87,7 @@ class Ir64BlockExecutorB1924Test {
         fp.setElement(1, 0, ESZ_DOUBLE, Double.doubleToRawLongBits(1.5));
         fp.setElement(2, 0, ESZ_DOUBLE, Double.doubleToRawLongBits(-4.5));
 
-        EXECUTOR.executeOp(core, new Ir64Op.VectorFpAbsoluteMaxMin(false, true, ESZ_DOUBLE, 0, 1, 2));
+        EXECUTOR.executeOp(core, new AdvSimdFpOp64.FpAbsoluteMaxMin(false, true, ESZ_DOUBLE, 0, 1, 2));
 
         assertEquals(1.5, Double.longBitsToDouble(fp.element(0, 0, ESZ_DOUBLE)));
     }
@@ -101,7 +101,7 @@ class Ir64BlockExecutorB1924Test {
         fp.setElement(1, 0, ESZ_SINGLE, Float.floatToRawIntBits(Float.NaN) & 0xFFFF_FFFFL);
         fp.setElement(2, 0, ESZ_SINGLE, Float.floatToRawIntBits(3.0f) & 0xFFFF_FFFFL);
 
-        EXECUTOR.executeOp(core, new Ir64Op.VectorFpAbsoluteMaxMin(true, false, ESZ_SINGLE, 0, 1, 2));
+        EXECUTOR.executeOp(core, new AdvSimdFpOp64.FpAbsoluteMaxMin(true, false, ESZ_SINGLE, 0, 1, 2));
 
         assertTrue(Float.isNaN(Float.intBitsToFloat((int) fp.element(0, 0, ESZ_SINGLE))));
     }
@@ -116,7 +116,7 @@ class Ir64BlockExecutorB1924Test {
         fp.setElement(1, 0, ESZ_SINGLE, Float.floatToRawIntBits(1.0f) & 0xFFFF_FFFFL);
         fp.setElement(2, 0, ESZ_SINGLE, Float.floatToRawIntBits(2.0f) & 0xFFFF_FFFFL);
 
-        EXECUTOR.executeOp(core, new Ir64Op.VectorFpAbsoluteMaxMin(true, false, ESZ_SINGLE, 0, 1, 2));
+        EXECUTOR.executeOp(core, new AdvSimdFpOp64.FpAbsoluteMaxMin(true, false, ESZ_SINGLE, 0, 1, 2));
 
         assertEquals(0L, fp.high64(0), "escrita SIMD&FP destrutiva: bits[127:64] zerados quando !q");
     }
@@ -130,7 +130,7 @@ class Ir64BlockExecutorB1924Test {
         fp.setElement(1, 0, ESZ_HALF, Float.floatToFloat16(-6.0f) & 0xFFFFL);
         fp.setElement(2, 0, ESZ_HALF, Float.floatToFloat16(2.0f) & 0xFFFFL);
 
-        EXECUTOR.executeOp(core, new Ir64Op.VectorFpAbsoluteMaxMin(true, true, ESZ_HALF, 0, 1, 2));
+        EXECUTOR.executeOp(core, new AdvSimdFpOp64.FpAbsoluteMaxMin(true, true, ESZ_HALF, 0, 1, 2));
 
         assertEquals(-6.0f, Float.float16ToFloat((short) fp.element(0, 0, ESZ_HALF)));
     }

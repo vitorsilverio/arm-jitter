@@ -2,7 +2,7 @@ package dev.vitorsilverio.armjitter.executor64;
 
 import dev.vitorsilverio.armjitter.core64.Aarch64Core;
 import dev.vitorsilverio.armjitter.core64.Aarch64FpRegisters;
-import dev.vitorsilverio.armjitter.ir64.Ir64Op;
+import dev.vitorsilverio.armjitter.ir64.AdvSimdIntegerOp64;
 import dev.vitorsilverio.armjitter.memory.AddressSpace64;
 import dev.vitorsilverio.armjitter.support.TestAddressSpace;
 import org.junit.jupiter.api.Test;
@@ -40,7 +40,7 @@ class Ir64VectorArithmeticExecutorDotProductResidualTest {
             setByte(fp, 1, i, n[i]);
             setByte(fp, 2, i, m[i]);
         }
-        EXECUTOR.executeOp(core, new Ir64Op.VectorIntegerDotProduct(true, true, true, 0, 1, 2));
+        EXECUTOR.executeOp(core, new AdvSimdIntegerOp64.IntegerDotProduct(true, true, true, 0, 1, 2));
         assertEquals(70, (int) fp.element(0, 0, 2));
     }
 
@@ -52,19 +52,19 @@ class Ir64VectorArithmeticExecutorDotProductResidualTest {
         setByte(fp, 1, 0, 0x80);
         setByte(fp, 2, 0, 0x80);
 
-        EXECUTOR.executeOp(core, new Ir64Op.VectorIntegerDotProduct(true, true, true, 3, 1, 2));
+        EXECUTOR.executeOp(core, new AdvSimdIntegerOp64.IntegerDotProduct(true, true, true, 3, 1, 2));
         // SDOT: -128 * -128 = 16384.
         assertEquals(16384, (int) fp.element(3, 0, 2));
 
-        EXECUTOR.executeOp(core, new Ir64Op.VectorIntegerDotProduct(true, false, false, 4, 1, 2));
+        EXECUTOR.executeOp(core, new AdvSimdIntegerOp64.IntegerDotProduct(true, false, false, 4, 1, 2));
         // UDOT: 128 * 128 = 16384 -- mesmo valor absoluto aqui, então também comparamos um caso
         // onde só um operando tem o bit alto setado (assimetria real de sinal).
         assertEquals(16384, (int) fp.element(4, 0, 2));
 
         setByte(fp, 1, 4, 0x80); // lane1 byte0 = 0x80
         setByte(fp, 2, 4, 1);    // lane1 byte0 do Vm = 1 (positivo nos dois sentidos)
-        EXECUTOR.executeOp(core, new Ir64Op.VectorIntegerDotProduct(true, true, true, 5, 1, 2));
-        EXECUTOR.executeOp(core, new Ir64Op.VectorIntegerDotProduct(true, false, false, 6, 1, 2));
+        EXECUTOR.executeOp(core, new AdvSimdIntegerOp64.IntegerDotProduct(true, true, true, 5, 1, 2));
+        EXECUTOR.executeOp(core, new AdvSimdIntegerOp64.IntegerDotProduct(true, false, false, 6, 1, 2));
         // SDOT lane1: -128*1 = -128 (contribui negativo); UDOT lane1: 128*1 = 128 (positivo).
         assertNotEquals(fp.element(5, 1, 2), fp.element(6, 1, 2), "SDOT != UDOT quando o sinal importa");
     }
@@ -76,7 +76,7 @@ class Ir64VectorArithmeticExecutorDotProductResidualTest {
         setByte(fp, 1, 0, 1);
         setByte(fp, 2, 0, 2);
         fp.setElement(0, 0, 2, 0x7FFF_FFFF);
-        EXECUTOR.executeOp(core, new Ir64Op.VectorIntegerDotProduct(true, false, false, 0, 1, 2));
+        EXECUTOR.executeOp(core, new AdvSimdIntegerOp64.IntegerDotProduct(true, false, false, 0, 1, 2));
         assertEquals(0x8000_0001L, fp.element(0, 0, 2), "wrap: 0x7FFFFFFF + 2 = 0x80000001, NUNCA satura");
     }
 
@@ -87,7 +87,7 @@ class Ir64VectorArithmeticExecutorDotProductResidualTest {
         setByte(fp, 1, 0, 3);
         setByte(fp, 2, 0, 4);
         fp.setQ(0, 0L, 0xFFFF_FFFF_FFFF_FFFFL);
-        EXECUTOR.executeOp(core, new Ir64Op.VectorIntegerDotProduct(false, true, true, 0, 1, 2));
+        EXECUTOR.executeOp(core, new AdvSimdIntegerOp64.IntegerDotProduct(false, true, true, 0, 1, 2));
         assertEquals(12L, fp.element(0, 0, 2));
         assertEquals(0L, fp.word(1), "q=false zera a metade alta de Vd");
     }
@@ -104,7 +104,7 @@ class Ir64VectorArithmeticExecutorDotProductResidualTest {
         }
         // Grupo fixo (índice 1) do Vm: byte0 = 0x80 (-128 com sinal).
         setByte(fp, 2, 4, 0x80);
-        EXECUTOR.executeOp(core, new Ir64Op.VectorIntegerDotProductByElement(true, true, true, 0, 1, 2, 1));
+        EXECUTOR.executeOp(core, new AdvSimdIntegerOp64.IntegerDotProductByElement(true, true, true, 0, 1, 2, 1));
         // lane0 = 1(com sinal)*-128 = -128 ; lane1 = 2*-128 = -256
         assertEquals(-128, (int) fp.element(0, 0, 2));
         assertEquals(-256, (int) fp.element(0, 1, 2));
@@ -116,7 +116,7 @@ class Ir64VectorArithmeticExecutorDotProductResidualTest {
         Aarch64FpRegisters fp = core.fp();
         setByte(fp, 1, 0, 1);
         setByte(fp, 2, 0, 0x80); // grupo0 byte0 = 128 sem sinal
-        EXECUTOR.executeOp(core, new Ir64Op.VectorIntegerDotProductByElement(true, false, false, 0, 1, 2, 0));
+        EXECUTOR.executeOp(core, new AdvSimdIntegerOp64.IntegerDotProductByElement(true, false, false, 0, 1, 2, 0));
         assertEquals(128, (int) fp.element(0, 0, 2), "UDOT_vi: 1 * 128 = 128 (sem sinal)");
     }
 }

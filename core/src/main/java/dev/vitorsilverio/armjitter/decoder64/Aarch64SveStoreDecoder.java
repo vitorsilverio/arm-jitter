@@ -3,7 +3,8 @@ package dev.vitorsilverio.armjitter.decoder64;
 import dev.vitorsilverio.armjitter.arch64.Aarch64Architecture;
 import dev.vitorsilverio.armjitter.arch64.Aarch64Feature;
 import dev.vitorsilverio.armjitter.ir64.Ir64Op;
-import dev.vitorsilverio.armjitter.ir64.Ir64Op.SveStore.Op;
+import dev.vitorsilverio.armjitter.ir64.SveMemoryOp64.Store.Op;
+import dev.vitorsilverio.armjitter.ir64.SveMemoryOp64;
 
 /// Decoder SVE dos stores da B17.18, nos prefixos `0xE4`/`0xE5` (`### SVE Memory Store Group` inteiro do `sve.decode`
 /// do QEMU: `STR` de vetor e de predicado, `ST1`/`STNT1` contíguos, `ST[234]`, `ST[234]Q` e o scatter `ST1_zprz`/
@@ -97,8 +98,8 @@ final class Aarch64SveStoreDecoder {
             case OP_STORE_REGISTER -> decodeOpcode010(word, address);
             case OP_STRUCTURE_REGISTER -> structure(word, true, address);
             case OP_STORE_IMMEDIATE -> decodeOpcode111(word, address);
-            case OP_SCATTER_UNSIGNED_OFFSET -> scatterIndex(word, Ir64Op.SveStore.OFFSET_UXTW, address);
-            case OP_SCATTER_SIGNED_OFFSET -> scatterIndex(word, Ir64Op.SveStore.OFFSET_SXTW, address);
+            case OP_SCATTER_UNSIGNED_OFFSET -> scatterIndex(word, SveMemoryOp64.Store.OFFSET_UXTW, address);
+            case OP_SCATTER_SIGNED_OFFSET -> scatterIndex(word, SveMemoryOp64.Store.OFFSET_SXTW, address);
             default -> decodeOpcode101(word, address); // OP_SCATTER_64_OR_IMMEDIATE
         };
     }
@@ -134,7 +135,7 @@ final class Aarch64SveStoreDecoder {
         int high = (word >>> STR_IMM_HIGH_SHIFT) & STR_IMM_HIGH_MASK;
         int low = (word >>> STR_IMM_LOW_SHIFT) & STR_IMM_LOW_MASK;
         long immediate = signExtend(high << STR_IMM_LOW_BITS | low, STR_IMMEDIATE_BITS);
-        return new Ir64Op.SveStore(op, 0, 0, 0, rt, (word >>> RN_SHIFT) & REGISTER_MASK, 0, false, immediate, 0, 0,
+        return new SveMemoryOp64.Store(op, 0, 0, 0, rt, (word >>> RN_SHIFT) & REGISTER_MASK, 0, false, immediate, 0, 0,
                 false, false, address);
     }
 
@@ -200,7 +201,7 @@ final class Aarch64SveStoreDecoder {
             return null;
         }
         long immediate = registerOffset ? 0 : signExtend((word >>> RM_SHIFT) & IMM4_MASK, SIGNED_IMMEDIATE_BITS);
-        return new Ir64Op.SveStore(op, msz, esz, nreg, word & REGISTER_MASK, (word >>> RN_SHIFT) & REGISTER_MASK, rm,
+        return new SveMemoryOp64.Store(op, msz, esz, nreg, word & REGISTER_MASK, (word >>> RN_SHIFT) & REGISTER_MASK, rm,
                 registerOffset, immediate, (word >>> PG_SHIFT) & PREDICATE_MASK, 0, false, nonStreaming, address);
     }
 
@@ -221,7 +222,7 @@ final class Aarch64SveStoreDecoder {
         int field = (word >>> LOW_FIELD_SHIFT) & FIELD_MASK;
         return switch (field) {
             case 0b00, 0b01 -> scatter(Op.SCATTER_VECTOR_INDEX, ESZ_DOUBLE, field == 0b01,
-                    Ir64Op.SveStore.OFFSET_64, word, address);
+                    SveMemoryOp64.Store.OFFSET_64, word, address);
             case 0b10 -> scatterImmediate(ESZ_DOUBLE, word, address);
             default -> scatterImmediate(ESZ_WORD, word, address);
         };
@@ -233,7 +234,7 @@ final class Aarch64SveStoreDecoder {
         if (msz > esz || msz == MSZ_BYTE && scaled) {
             return null;
         }
-        return new Ir64Op.SveStore(op, msz, esz, 0, word & REGISTER_MASK, (word >>> RN_SHIFT) & REGISTER_MASK,
+        return new SveMemoryOp64.Store(op, msz, esz, 0, word & REGISTER_MASK, (word >>> RN_SHIFT) & REGISTER_MASK,
                 (word >>> RM_SHIFT) & REGISTER_MASK, false, 0, (word >>> PG_SHIFT) & PREDICATE_MASK, offsetExtend,
                 scaled, true, address);
     }
@@ -244,7 +245,7 @@ final class Aarch64SveStoreDecoder {
         if (msz > esz) {
             return null;
         }
-        return new Ir64Op.SveStore(Op.SCATTER_VECTOR_BASE, msz, esz, 0, word & REGISTER_MASK,
+        return new SveMemoryOp64.Store(Op.SCATTER_VECTOR_BASE, msz, esz, 0, word & REGISTER_MASK,
                 (word >>> RN_SHIFT) & REGISTER_MASK, 0, false, (word >>> RM_SHIFT) & IMM5_MASK,
                 (word >>> PG_SHIFT) & PREDICATE_MASK, 0, false, true, address);
     }
@@ -269,7 +270,7 @@ final class Aarch64SveStoreDecoder {
         if (!architecture.has(Aarch64Feature.SVE2) || msz > esz) {
             return null;
         }
-        return new Ir64Op.SveStore(Op.SCATTER_VECTOR_PLUS_SCALAR, msz, esz, 0, word & REGISTER_MASK,
+        return new SveMemoryOp64.Store(Op.SCATTER_VECTOR_PLUS_SCALAR, msz, esz, 0, word & REGISTER_MASK,
                 (word >>> RN_SHIFT) & REGISTER_MASK, (word >>> RM_SHIFT) & REGISTER_MASK, false, 0,
                 (word >>> PG_SHIFT) & PREDICATE_MASK, 0, false, true, address);
     }
@@ -280,7 +281,7 @@ final class Aarch64SveStoreDecoder {
         if (!architecture.has(Aarch64Feature.SVE2_1)) {
             return null;
         }
-        return new Ir64Op.SveStore(Op.ST1Q, MSZ_QUAD, ESZ_QUAD, 0, word & REGISTER_MASK,
+        return new SveMemoryOp64.Store(Op.ST1Q, MSZ_QUAD, ESZ_QUAD, 0, word & REGISTER_MASK,
                 (word >>> RN_SHIFT) & REGISTER_MASK, (word >>> RM_SHIFT) & REGISTER_MASK, false, 0,
                 (word >>> PG_SHIFT) & PREDICATE_MASK, 0, false, true, address);
     }

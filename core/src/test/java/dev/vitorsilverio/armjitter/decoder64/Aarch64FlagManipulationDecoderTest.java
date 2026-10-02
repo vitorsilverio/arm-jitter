@@ -1,6 +1,7 @@
 package dev.vitorsilverio.armjitter.decoder64;
 
 import dev.vitorsilverio.armjitter.arch64.Aarch64Architecture;
+import dev.vitorsilverio.armjitter.ir64.IntegerOp64;
 import dev.vitorsilverio.armjitter.ir64.Ir64Op;
 import dev.vitorsilverio.armjitter.memory.AddressSpace64;
 import dev.vitorsilverio.armjitter.support.TestAddressSpace;
@@ -40,7 +41,7 @@ class Aarch64FlagManipulationDecoderTest {
 
     @Test
     void rmifDecodesWithFlagM() {
-        Ir64Op.RotateIntoFlags op = (Ir64Op.RotateIntoFlags) decodeWord(FLAGM_DECODER, RMIF_WORD);
+        IntegerOp64.RotateIntoFlags op = (IntegerOp64.RotateIntoFlags) decodeWord(FLAGM_DECODER, RMIF_WORD);
         assertEquals(0, op.rn());
         assertEquals(4, op.shift());
         assertEquals(5, op.mask());
@@ -48,14 +49,14 @@ class Aarch64FlagManipulationDecoderTest {
 
     @Test
     void setf8DecodesWithFlagM() {
-        Ir64Op.EvaluateIntoFlags op = (Ir64Op.EvaluateIntoFlags) decodeWord(FLAGM_DECODER, SETF8_WORD);
+        IntegerOp64.EvaluateIntoFlags op = (IntegerOp64.EvaluateIntoFlags) decodeWord(FLAGM_DECODER, SETF8_WORD);
         assertEquals(1, op.rn());
         assertEquals(8, op.sizeBits());
     }
 
     @Test
     void setf16DecodesWithFlagM() {
-        Ir64Op.EvaluateIntoFlags op = (Ir64Op.EvaluateIntoFlags) decodeWord(FLAGM_DECODER, SETF16_WORD);
+        IntegerOp64.EvaluateIntoFlags op = (IntegerOp64.EvaluateIntoFlags) decodeWord(FLAGM_DECODER, SETF16_WORD);
         assertEquals(2, op.rn());
         assertEquals(16, op.sizeBits());
     }

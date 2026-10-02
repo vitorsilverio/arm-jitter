@@ -2,7 +2,8 @@ package dev.vitorsilverio.armjitter.executor64;
 
 import dev.vitorsilverio.armjitter.core64.Aarch64Core;
 import dev.vitorsilverio.armjitter.core64.Aarch64ScalableRegisters;
-import dev.vitorsilverio.armjitter.ir64.Ir64Op;
+import dev.vitorsilverio.armjitter.ir64.SmeOp64;
+import dev.vitorsilverio.armjitter.ir64.SveIntegerOp64;
 
 import java.util.Arrays;
 
@@ -26,7 +27,7 @@ final class SmeMultiVectorOps {
     }
 
     /// @return `true` = a instrução já entrou numa exceção (acesso negado)
-    static boolean execute(Aarch64Core core, Ir64Op.SmeMultiVectorSingle op) {
+    static boolean execute(Aarch64Core core, SmeOp64.MultiVectorSingle op) {
         if (!core.smeStreamingEnabledCheck(op.instructionAddress())) {
             return true;
         }
@@ -59,14 +60,14 @@ final class SmeMultiVectorOps {
         return false;
     }
 
-    private static long compute(Ir64Op.SmeMultiVectorSingle op, long n, long m, SveFloat.Env env) {
+    private static long compute(SmeOp64.MultiVectorSingle op, long n, long m, SveFloat.Env env) {
         int esz = op.esz();
         return switch (op.op()) {
-            case SMAX -> SveIntegerPredicatedOps.binary(Ir64Op.SveIntegerPredicated.Op.SMAX, n, m, esz);
-            case UMAX -> SveIntegerPredicatedOps.binary(Ir64Op.SveIntegerPredicated.Op.UMAX, n, m, esz);
-            case SMIN -> SveIntegerPredicatedOps.binary(Ir64Op.SveIntegerPredicated.Op.SMIN, n, m, esz);
-            case UMIN -> SveIntegerPredicatedOps.binary(Ir64Op.SveIntegerPredicated.Op.UMIN, n, m, esz);
-            case ADD -> SveIntegerPredicatedOps.binary(Ir64Op.SveIntegerPredicated.Op.ADD, n, m, esz);
+            case SMAX -> SveIntegerPredicatedOps.binary(SveIntegerOp64.IntegerPredicated.Op.SMAX, n, m, esz);
+            case UMAX -> SveIntegerPredicatedOps.binary(SveIntegerOp64.IntegerPredicated.Op.UMAX, n, m, esz);
+            case SMIN -> SveIntegerPredicatedOps.binary(SveIntegerOp64.IntegerPredicated.Op.SMIN, n, m, esz);
+            case UMIN -> SveIntegerPredicatedOps.binary(SveIntegerOp64.IntegerPredicated.Op.UMIN, n, m, esz);
+            case ADD -> SveIntegerPredicatedOps.binary(SveIntegerOp64.IntegerPredicated.Op.ADD, n, m, esz);
             case SRSHL -> Sve2VectorOps.roundingShiftByElement(n, m, esz, true);
             case URSHL -> Sve2VectorOps.roundingShiftByElement(n, m, esz, false);
             case SQDMULH -> SveMultiplyIndexedOps.sqrdmlah(SveIntegerOps.signExtend(n, esz),

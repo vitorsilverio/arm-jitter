@@ -6,6 +6,13 @@ import dev.vitorsilverio.armjitter.arch64.Aarch64Architecture;
 import dev.vitorsilverio.armjitter.arch64.Aarch64Feature;
 import dev.vitorsilverio.armjitter.ir64.Aarch64AddressTranslateForm;
 import dev.vitorsilverio.armjitter.ir64.Aarch64SystemRegisterId;
+import dev.vitorsilverio.armjitter.ir64.AdvSimdFpOp64;
+import dev.vitorsilverio.armjitter.ir64.AdvSimdIntegerOp64;
+import dev.vitorsilverio.armjitter.ir64.AdvSimdMoveOp64;
+import dev.vitorsilverio.armjitter.ir64.BranchOp64;
+import dev.vitorsilverio.armjitter.ir64.CryptoOp64;
+import dev.vitorsilverio.armjitter.ir64.FpOp64;
+import dev.vitorsilverio.armjitter.ir64.IntegerOp64;
 import dev.vitorsilverio.armjitter.ir64.Ir64AddressingMode;
 import dev.vitorsilverio.armjitter.ir64.Ir64AluExtendType;
 import dev.vitorsilverio.armjitter.ir64.Ir64AtomicOp;
@@ -52,6 +59,8 @@ import dev.vitorsilverio.armjitter.ir64.Ir64VectorUnaryOp;
 import dev.vitorsilverio.armjitter.ir64.Ir64VectorWideOp;
 import dev.vitorsilverio.armjitter.ir64.Ir64VectorWideningOp;
 import dev.vitorsilverio.armjitter.ir64.Ir64SystemInstructionOp;
+import dev.vitorsilverio.armjitter.ir64.MemoryOp64;
+import dev.vitorsilverio.armjitter.ir64.SystemOp64;
 import dev.vitorsilverio.armjitter.memory.AddressSpace64;
 
 import java.util.Objects;
@@ -75,8 +84,8 @@ import java.util.Objects;
 /// escopo listado lança {@link UnsupportedOperationException} em vez de tentar adivinhar semântica
 /// (nenhum oráculo real cobre o que não foi implementado). B8.6 (dentro do mesmo `V=1`) acrescenta
 /// `LD1`-`LD4`/`ST1`-`ST4`/`LD1R`-`LD4R` (AdvSIMD load/store multiple/single structures) — ver
-/// {@link Ir64Op.VectorLoadStoreMultiple}/{@link Ir64Op.VectorLoadStoreSingle}/
-/// {@link Ir64Op.VectorLoadSingleReplicate}.
+/// {@link AdvSimdMoveOp64.LoadStoreMultiple}/{@link AdvSimdMoveOp64.LoadStoreSingle}/
+/// {@link AdvSimdMoveOp64.LoadSingleReplicate}.
 ///
 /// B11.2: recebe uma {@link Aarch64Architecture} no construtor, mesmo padrão dos decoders de
 /// extensão de 32 bits (ex. `Thumb2DataProcessingDecoder(ArmArchitecture)`) — {@link #architecture}
@@ -265,7 +274,7 @@ public final class Aarch64Decoder {
     // ── 7 bits (`BRANCH_REGISTER_FIXED_PATTERN`) e `op2`(`11111`) de `BR`/`BLR`/`RET`/`ERET` acima, ─
     // ── mas `op3`(bits[15:10]) tem os 5 bits altos fixos em `00001` (em vez de `000000`) — o bit
     // ── baixo de `op3` é `m` (chave A=0/B=1, não afeta o resultado sob a rota (b) registrada na
-    // ── task: nenhuma autenticação real é modelada, ver `Ir64Op.PointerAuthInPlace`). `opc`
+    // ── task: nenhuma autenticação real é modelada, ver `IntegerOp64.PointerAuthInPlace`). `opc`
     // ── (bits[24:21]) distingue as 6 formas: `BRAZ`=0000/`BLRAZ`=0001/`RETA`=0010/`ERETA`=0100
     // ── (MESMOS valores de `BR`/`BLR`/`RET`/`ERET`, diferenciados só por `op3`) e `BRA`=1000/
     // ── `BLRA`=1001 (valores NOVOS, bit23 setado). `BRAZ`/`BLRAZ`/`RETA`/`ERETA` (modificador ZERO
@@ -1008,7 +1017,7 @@ public final class Aarch64Decoder {
     /// {@link #EXCLUSIVE_FORM_LDXR} vs. {@link #EXCLUSIVE_FORM_STXR}.
     private static final int EXCLUSIVE_FORM_PAIR_LOAD_BIT = 0b010;
     /// Máscara que ignora bit22 (o bit `L`/acquire de `CASP`/`CAS`, não distinguido nesta
-    /// implementação — ver javadoc de {@link dev.vitorsilverio.armjitter.ir64.Ir64Op.CompareAndSwap}):
+    /// implementação — ver javadoc de {@link dev.vitorsilverio.armjitter.ir64.MemoryOp64.CompareAndSwap}):
     /// isola bit23+bit21 para reconhecer o GRUPO (`STXP`/`LDXP`/`CASP` vs. `CAS`) antes de
     /// desambiguar por {@link #EXCLUSIVE_PAIR_FIXED_BIT31_SHIFT}.
     private static final int EXCLUSIVE_FORM_MASK_IGNORE_L = 0b101;
@@ -1294,7 +1303,7 @@ public final class Aarch64Decoder {
     /// Tamanho fixo do escalar D-only (`esz=3`) — a forma vetorial NUNCA produz `esz=3`/`q=false`
     /// de verdade (doubleword exige `q=true` no hardware real, só existe `.2d`), então este par é
     /// reaproveitado como sentinela da forma escalar sem ambiguidade (ver javadoc de
-    /// {@link Ir64Op.VectorArithmeticThreeSame}).
+    /// {@link AdvSimdIntegerOp64.ArithmeticThreeSame}).
     private static final int ADVSIMD_INT_SCALAR_ESZ = 3;
     /// `Rm` fixo="00000" — "two-register miscellaneous" (`ABS`/`NEG`/`CM**0`/`SADDLP`/...).
     private static final int ADVSIMD_INT_RM_TWO_REG_MISC = 0b0_0000;
@@ -1499,7 +1508,7 @@ public final class Aarch64Decoder {
     private static final int CRYPTO_SHA3_XAR_IMM6_SHIFT = 10;
     private static final int CRYPTO_SHA3_XAR_IMM6_MASK = 0b11_1111;
     /// `RAX1` não tem campo de imediato real — o decoder passa `0` para
-    /// {@link Ir64Op.CryptoSha3TwoSourceRotate#rotateAmount()} (nunca lido pelo executor para esta
+    /// {@link CryptoOp64.Sha3TwoSourceRotate#rotateAmount()} (nunca lido pelo executor para esta
     /// operação, ver o javadoc do record).
     private static final int CRYPTO_SHA3_RAX1_UNUSED_ROTATE_AMOUNT = 0;
 
@@ -1972,7 +1981,7 @@ public final class Aarch64Decoder {
     // ── Conditional compare (CCMP/CCMN), subgrupo de Data Processing — Register (B6.8): ─────────
     // ── sf(31) op(30) 1(29,"S") 11010010(28:21) y(20:16) cond(15:12) imm(11) 0(10) rn(9:5) ───────
     // ── 0(4) nzcv(3:0) — CONFERIDO contra `a64.decode`/`translate-a64.c` do QEMU (Fatos de ────────
-    // ── referência da task, ver o Javadoc de `Ir64Op.ConditionalCompare`). `S`(bit29) faz parte ──
+    // ── referência da task, ver o Javadoc de `IntegerOp64.ConditionalCompare`). `S`(bit29) faz parte ──
     // ── do prefixo fixo de 9 bits (não é um campo): com `S=0` este mesmo prefixo de 8 bits não ───
     // ── casa com NENHUMA outra instrução no `a64.decode` real — cai no `unsupported` genérico. ───
     private static final int CCMP_FIXED_SHIFT = 21;
@@ -2036,7 +2045,7 @@ public final class Aarch64Decoder {
     private static final int MULH_FIXED_SIGNED = 0b1101_1010;
     private static final int MULH_FIXED_UNSIGNED = 0b1101_1110;
     /// `Ra` fixo em `XZR`(`11111`) no encoding de `SMULH`/`UMULH` — não é um acumulador real (ver
-    /// Javadoc de {@link Ir64Op.MultiplyHigh}), só validado para recusar combinações reservadas.
+    /// Javadoc de {@link IntegerOp64.MultiplyHigh}), só validado para recusar combinações reservadas.
     private static final int MULH_RA_FIXED = 0b1_1111;
 
     // ── Add/subtract (carry) + Rotate/Evaluate into flags, B8.2: MESMO campo de 8 bits fixos em ───
@@ -2064,7 +2073,7 @@ public final class Aarch64Decoder {
     private static final int SETF_LOW5_MASK = 0b1_1111;
     private static final int SETF_LOW5_PATTERN = 0b0_1101;
     /// `SETF8` avalia o BYTE baixo (`ARM DDI 0487`, "Evaluate into flags") — ver
-    /// {@link Ir64Op.EvaluateIntoFlags#sizeBits}.
+    /// {@link IntegerOp64.EvaluateIntoFlags#sizeBits}.
     private static final int EVALUATE_FLAGS_SIZE_8 = 8;
     /// `SETF16` avalia o HALFWORD baixo.
     private static final int EVALUATE_FLAGS_SIZE_16 = 16;
@@ -2285,12 +2294,12 @@ public final class Aarch64Decoder {
         int rt = word & REGISTER_FIELD_MASK;
         if (store) {
             int rs = (word >>> EXCLUSIVE_RS_SHIFT) & REGISTER_FIELD_MASK;
-            return new Ir64Op.StoreExclusive(rs, rt, rn, size, acquireRelease);
+            return new MemoryOp64.StoreExclusive(rs, rt, rn, size, acquireRelease);
         }
-        return new Ir64Op.LoadExclusive(rt, rn, size, acquireRelease);
+        return new MemoryOp64.LoadExclusive(rt, rn, size, acquireRelease);
     }
 
-    /// `LDAR`/`STLR` (B8.1): mesma semântica de {@link Ir64Op.Load64}/{@link Ir64Op.Store64} com
+    /// `LDAR`/`STLR` (B8.1): mesma semântica de {@link MemoryOp64.Load64}/{@link MemoryOp64.Store64} com
     /// endereçamento `[Rn]` (sem deslocamento) — o monitor de exclusividade NÃO se aplica aqui
     /// (diferente de `LDXR`/`STXR`), e a ordenação `acquire`/`release` é NOP observável neste
     /// interpretador (single-thread por construção), então reaproveitar os records comuns de
@@ -2301,9 +2310,9 @@ public final class Aarch64Decoder {
         int rn = (word >>> RN_SHIFT) & REGISTER_FIELD_MASK;
         int rt = word & REGISTER_FIELD_MASK;
         if (store) {
-            return new Ir64Op.Store64(rt, rn, size, wide, Ir64AddressingMode.OFFSET, 0L, -1, null, 0);
+            return new MemoryOp64.Store64(rt, rn, size, wide, Ir64AddressingMode.OFFSET, 0L, -1, null, 0);
         }
-        return new Ir64Op.Load64(rt, rn, size, false, wide, Ir64AddressingMode.OFFSET, 0L, -1, null, 0);
+        return new MemoryOp64.Load64(rt, rn, size, false, wide, Ir64AddressingMode.OFFSET, 0L, -1, null, 0);
     }
 
     /// `GCSSTR`/`GCSSTTR` (`FEAT_GCS`, B19.27): grava `Xt` em `[Xn]`. **Escopo isolado** — só o
@@ -2320,7 +2329,7 @@ public final class Aarch64Decoder {
         }
         int rn = (word >>> RN_SHIFT) & REGISTER_FIELD_MASK;
         int rt = word & REGISTER_FIELD_MASK;
-        return new Ir64Op.Store64(
+        return new MemoryOp64.Store64(
                 rt, rn, Ir64MemSize.DOUBLEWORD, true, Ir64AddressingMode.OFFSET, 0L, -1, null, 0);
     }
 
@@ -2378,12 +2387,12 @@ public final class Aarch64Decoder {
                 if (!architecture.has(Aarch64Feature.MEMORY_TAGGING)) {
                     throw unsupported(word, address);
                 }
-                return new Ir64Op.MemorySetTagged(decodeMopsPhase(phaseBits, word, address), rd, rn, rs);
+                return new MemoryOp64.MemorySetTagged(decodeMopsPhase(phaseBits, word, address), rd, rn, rs);
             }
-            return new Ir64Op.MemorySet(decodeMopsPhase(phaseBits, word, address), rd, rn, rs);
+            return new MemoryOp64.MemorySet(decodeMopsPhase(phaseBits, word, address), rd, rn, rs);
         }
         boolean forwardOnly = !tagOrGenericDirection;
-        return new Ir64Op.MemoryCopy(decodeMopsPhase(phaseField, word, address), forwardOnly, rd, rs, rn);
+        return new MemoryOp64.MemoryCopy(decodeMopsPhase(phaseField, word, address), forwardOnly, rd, rs, rn);
     }
 
     /// `LDAPR_i`/`STLR_i` (`FEAT_LRCPC2`, ARMv8.4-A, B19.19) — a forma com **offset imediato de 9
@@ -2412,11 +2421,11 @@ public final class Aarch64Decoder {
         return buildSingle(form, rt, rn, Ir64AddressingMode.OFFSET, immediate, -1, null, 0);
     }
 
-    private Ir64Op.Ir64MopsPhase decodeMopsPhase(int phaseBits, int word, long address) {
+    private MemoryOp64.Ir64MopsPhase decodeMopsPhase(int phaseBits, int word, long address) {
         return switch (phaseBits) {
-            case MOPS_PHASE_PROLOGUE -> Ir64Op.Ir64MopsPhase.PROLOGUE;
-            case MOPS_PHASE_MAIN -> Ir64Op.Ir64MopsPhase.MAIN;
-            case MOPS_PHASE_EPILOGUE -> Ir64Op.Ir64MopsPhase.EPILOGUE;
+            case MOPS_PHASE_PROLOGUE -> MemoryOp64.Ir64MopsPhase.PROLOGUE;
+            case MOPS_PHASE_MAIN -> MemoryOp64.Ir64MopsPhase.MAIN;
+            case MOPS_PHASE_EPILOGUE -> MemoryOp64.Ir64MopsPhase.EPILOGUE;
             default -> throw unsupported(word, address); // reservado
         };
     }
@@ -2444,14 +2453,14 @@ public final class Aarch64Decoder {
         long immediate = signExtend(imm9, TAG_FAMILY_IMM9_BITS) * MEMORY_TAG_GRANULE_SCALE_BYTES;
         if (variant == TAG_FAMILY_VARIANT_MULTIPLE) {
             return switch (size) {
-                case TAG_FAMILY_SIZE_STZGM -> new Ir64Op.MemoryTagMultiple(
-                        Ir64Op.Ir64MemoryTagMultipleOperation.STORE_ZERO_DATA_TAGS, rt, rn);
-                case TAG_FAMILY_SIZE_LDG -> new Ir64Op.MemoryTag(Ir64Op.Ir64MemoryTagOperation.LOAD,
+                case TAG_FAMILY_SIZE_STZGM -> new MemoryOp64.MemoryTagMultiple(
+                        MemoryOp64.Ir64MemoryTagMultipleOperation.STORE_ZERO_DATA_TAGS, rt, rn);
+                case TAG_FAMILY_SIZE_LDG -> new MemoryOp64.MemoryTag(MemoryOp64.Ir64MemoryTagOperation.LOAD,
                         false, 1, rt, rn, Ir64AddressingMode.OFFSET, immediate);
-                case TAG_FAMILY_SIZE_STGM -> new Ir64Op.MemoryTagMultiple(
-                        Ir64Op.Ir64MemoryTagMultipleOperation.STORE_TAGS, rt, rn);
-                case TAG_FAMILY_SIZE_LDGM -> new Ir64Op.MemoryTagMultiple(
-                        Ir64Op.Ir64MemoryTagMultipleOperation.LOAD_TAGS, rt, rn);
+                case TAG_FAMILY_SIZE_STGM -> new MemoryOp64.MemoryTagMultiple(
+                        MemoryOp64.Ir64MemoryTagMultipleOperation.STORE_TAGS, rt, rn);
+                case TAG_FAMILY_SIZE_LDGM -> new MemoryOp64.MemoryTagMultiple(
+                        MemoryOp64.Ir64MemoryTagMultipleOperation.LOAD_TAGS, rt, rn);
                 default -> throw new AssertionError("size de 2 bits só tem 4 valores possíveis");
             };
         }
@@ -2463,12 +2472,12 @@ public final class Aarch64Decoder {
         };
         boolean zeroData = (size & 0b01) != 0; // STZG(01)/STZ2G(11) zeram dados; STG(00)/ST2G(10) não.
         int granules = (size & 0b10) != 0 ? 2 : 1; // ST2G(10)/STZ2G(11) cobrem 2 granules.
-        return new Ir64Op.MemoryTag(
-                Ir64Op.Ir64MemoryTagOperation.STORE, zeroData, granules, rt, rn, addressingMode, immediate);
+        return new MemoryOp64.MemoryTag(
+                MemoryOp64.Ir64MemoryTagOperation.STORE, zeroData, granules, rt, rn, addressingMode, immediate);
     }
 
     /// `LDCLRP`/`LDSETP`/`SWPP` (`FEAT_LSE128`, ARMv9.4-A, B19.25) — ver o comentário de
-    /// {@link #ATOMIC128_XZR_INDEX} para a árvore de decisão completa e {@link Ir64Op.AtomicMemoryOpPair}
+    /// {@link #ATOMIC128_XZR_INDEX} para a árvore de decisão completa e {@link MemoryOp64.AtomicMemoryOpPair}
     /// para a semântica de execução.
     private Ir64Op decodeAtomic128(int word, long address) {
         if (!architecture.has(Aarch64Feature.LSE128)) {
@@ -2489,7 +2498,7 @@ public final class Aarch64Decoder {
         if (rt == ATOMIC128_XZR_INDEX || rt2 == ATOMIC128_XZR_INDEX || rt == rt2) {
             throw unsupported(word, address);
         }
-        return new Ir64Op.AtomicMemoryOpPair(rt, rt2, rn, operation, acquire, release);
+        return new MemoryOp64.AtomicMemoryOpPair(rt, rt2, rn, operation, acquire, release);
     }
 
     private Ir64Op decodeExclusivePair(int word, boolean load) {
@@ -2499,10 +2508,10 @@ public final class Aarch64Decoder {
         int rn = (word >>> RN_SHIFT) & REGISTER_FIELD_MASK;
         int rt = word & REGISTER_FIELD_MASK;
         if (load) {
-            return new Ir64Op.LoadExclusivePair(rt, rt2, rn, wide, acquireRelease);
+            return new MemoryOp64.LoadExclusivePair(rt, rt2, rn, wide, acquireRelease);
         }
         int rs = (word >>> EXCLUSIVE_RS_SHIFT) & REGISTER_FIELD_MASK;
-        return new Ir64Op.StoreExclusivePair(rs, rt, rt2, rn, wide, acquireRelease);
+        return new MemoryOp64.StoreExclusivePair(rs, rt, rt2, rn, wide, acquireRelease);
     }
 
     private Ir64Op decodeCompareAndSwapPair(int word) {
@@ -2510,7 +2519,7 @@ public final class Aarch64Decoder {
         int rs = (word >>> EXCLUSIVE_RS_SHIFT) & REGISTER_FIELD_MASK;
         int rn = (word >>> RN_SHIFT) & REGISTER_FIELD_MASK;
         int rt = word & REGISTER_FIELD_MASK;
-        return new Ir64Op.CompareAndSwapPair(rs, rt, rn, wide);
+        return new MemoryOp64.CompareAndSwapPair(rs, rt, rn, wide);
     }
 
     private Ir64Op decodeCompareAndSwap(int word) {
@@ -2518,7 +2527,7 @@ public final class Aarch64Decoder {
         int rs = (word >>> EXCLUSIVE_RS_SHIFT) & REGISTER_FIELD_MASK;
         int rn = (word >>> RN_SHIFT) & REGISTER_FIELD_MASK;
         int rt = word & REGISTER_FIELD_MASK;
-        return new Ir64Op.CompareAndSwap(rs, rt, rn, size);
+        return new MemoryOp64.CompareAndSwap(rs, rt, rn, size);
     }
 
     /// `LDADD`/`LDCLR`/`LDEOR`/`LDSET`/`LDSMAX`/`LDSMIN`/`LDUMAX`/`LDUMIN`/`SWP` (`FEAT_LSE`,
@@ -2528,7 +2537,7 @@ public final class Aarch64Decoder {
     /// `A`(bit23), `R`(bit22), `bit21`=1, `Rs`(bits[20:16]), `o3`(bit15), `opc`(bits[14:12]),
     /// bits[11:10]=00, `Rn`(bits[9:5]), `Rt`(bits[4:0]). As 9 operações LSE gateadas por
     /// {@link Aarch64Feature#LSE}; `LDAPR` (`o3`=1, `opc`=100, `Rs`=`XZR`, `A`=1, `R`=0) por
-    /// {@link Aarch64Feature#LRCPC} e reaproveita {@link Ir64Op.Load64} (endereçamento
+    /// {@link Aarch64Feature#LRCPC} e reaproveita {@link MemoryOp64.Load64} (endereçamento
     /// {@code OFFSET}, imediato `0`), como `LDAR` em {@link #decodeOrderedSingle}. Todo o resto do
     /// espaço `o3`:`opc` (`LD64B`/`ST64B` de `FEAT_LS64`, reservados, `LDAPR` malformado) →
     /// {@code UNSUPPORTED} explícito (G8).
@@ -2557,14 +2566,14 @@ public final class Aarch64Decoder {
             if (!architecture.has(Aarch64Feature.LSE)) {
                 throw unsupported(word, address);
             }
-            return new Ir64Op.AtomicMemoryOp(rs, rt, rn, size, operation, acquire, release);
+            return new MemoryOp64.AtomicMemoryOp(rs, rt, rn, size, operation, acquire, release);
         }
         // o3 == 1
         if (opc == ATOMIC_O3_OPC_SWP) {
             if (!architecture.has(Aarch64Feature.LSE)) {
                 throw unsupported(word, address);
             }
-            return new Ir64Op.AtomicMemoryOp(rs, rt, rn, size, Ir64AtomicOp.SWP, acquire, release);
+            return new MemoryOp64.AtomicMemoryOp(rs, rt, rn, size, Ir64AtomicOp.SWP, acquire, release);
         }
         if (opc == ATOMIC_O3_OPC_LDAPR) {
             // `LDAPR` exige `Rs`=`XZR`, `A`=1, `R`=0 fixos — qualquer outra combinação neste
@@ -2576,7 +2585,7 @@ public final class Aarch64Decoder {
                 throw unsupported(word, address);
             }
             boolean wide = size == Ir64MemSize.DOUBLEWORD;
-            return new Ir64Op.Load64(rt, rn, size, false, wide,
+            return new MemoryOp64.Load64(rt, rn, size, false, wide,
                     Ir64AddressingMode.OFFSET, 0L, -1, null, 0);
         }
         // `o3`=1 com `opc` em {001,010,011} = `LD64B`/`ST64B`/`LD64BV`/`ST64BV0` (`FEAT_LS64`,
@@ -2595,7 +2604,7 @@ public final class Aarch64Decoder {
     }
 
     /// `LD1`-`LD4`/`ST1`-`ST4` (AdvSIMD load/store MULTIPLE structures, B8.6) — ver
-    /// {@link Ir64Op.VectorLoadStoreMultiple}.
+    /// {@link AdvSimdMoveOp64.LoadStoreMultiple}.
     private Ir64Op decodeAdvancedSimdLoadStoreMultiple(int word, long address) {
         boolean q = ((word >>> ADVSIMD_LDST_Q_SHIFT) & 1) != 0;
         boolean postIndex = ((word >>> ADVSIMD_LDST_POST_INDEX_SHIFT) & 1) != 0;
@@ -2627,11 +2636,11 @@ public final class Aarch64Decoder {
         int rn = (word >>> RN_SHIFT) & REGISTER_FIELD_MASK;
         int rt = word & REGISTER_FIELD_MASK;
         int rm = postIndex ? (rawRm == ADVSIMD_LDST_RM_IMMEDIATE_ENCODING ? -1 : rawRm) : -1;
-        return new Ir64Op.VectorLoadStoreMultiple(load, rt, rn, rm, q, postIndex, elementSizeLog2, rpt, selem);
+        return new AdvSimdMoveOp64.LoadStoreMultiple(load, rt, rn, rm, q, postIndex, elementSizeLog2, rpt, selem);
     }
 
     /// `LD1`-`LD4`/`ST1`-`ST4`/`LD1R`-`LD4R` (AdvSIMD load/store SINGLE structure, B8.6) — ver
-    /// {@link Ir64Op.VectorLoadStoreSingle}/{@link Ir64Op.VectorLoadSingleReplicate}. `selem` usa
+    /// {@link AdvSimdMoveOp64.LoadStoreSingle}/{@link AdvSimdMoveOp64.LoadSingleReplicate}. `selem` usa
     /// os mesmos 2 bits espalhados (`bit13`+`bit21`) nas 3 famílias de tamanho E na forma de
     /// replicar; o resto dos bits de `opcode`/`S`/`size` é interpretado de um jeito DIFERENTE por
     /// família (byte/half/word/double/replicar) — fatos conferidos contra `a64.decode` real do
@@ -2659,7 +2668,7 @@ public final class Aarch64Decoder {
                 throw unsupported(word, address);
             }
             int elementSizeLog2 = (word >>> ADVSIMD_LDST_SINGLE_REPL_SCALE_SHIFT) & ADVSIMD_LDST_SINGLE_REPL_SCALE_MASK;
-            return new Ir64Op.VectorLoadSingleReplicate(rt, rn, rm, q, postIndex, elementSizeLog2, selem);
+            return new AdvSimdMoveOp64.LoadSingleReplicate(rt, rn, rm, q, postIndex, elementSizeLog2, selem);
         }
         int elementSizeLog2;
         int index;
@@ -2700,7 +2709,7 @@ public final class Aarch64Decoder {
             }
             default -> throw new IllegalStateException("unreachable");
         }
-        return new Ir64Op.VectorLoadStoreSingle(load, rt, rn, rm, postIndex, elementSizeLog2, selem, index);
+        return new AdvSimdMoveOp64.LoadStoreSingle(load, rt, rn, rm, postIndex, elementSizeLog2, selem, index);
     }
 
     private Ir64Op decodeLoadLiteral(int word, long address) {
@@ -2709,7 +2718,7 @@ public final class Aarch64Decoder {
         // um destino real — mesma semântica NOP puro da forma registrador de `PRFM` (B8.1, linha
         // 1906 acima: este emulador não modela cache nenhum).
         if (opc == LITERAL_OPC_PRFM) {
-            return new Ir64Op.SystemInstruction(Ir64SystemInstructionOp.NOP_HINT);
+            return new SystemOp64.SystemInstruction(Ir64SystemInstructionOp.NOP_HINT);
         }
         boolean wide;
         boolean signExtend;
@@ -2722,7 +2731,7 @@ public final class Aarch64Decoder {
         long imm19 = (word >>> LITERAL_IMM19_SHIFT) & bitMask(LITERAL_IMM19_BITS);
         long offset = signExtend(imm19, LITERAL_IMM19_BITS) * LITERAL_BYTES_PER_UNIT;
         int rt = word & REGISTER_FIELD_MASK;
-        return new Ir64Op.LoadLiteral64(rt, address + offset, wide, signExtend);
+        return new MemoryOp64.LoadLiteral64(rt, address + offset, wide, signExtend);
     }
 
     private Ir64Op decodeLoadStorePair(int word, long address) {
@@ -2758,12 +2767,12 @@ public final class Aarch64Decoder {
         int rt2 = (word >>> PAIR_RT2_SHIFT) & REGISTER_FIELD_MASK;
         int rn = (word >>> RN_SHIFT) & REGISTER_FIELD_MASK;
         int rt = word & REGISTER_FIELD_MASK;
-        return new Ir64Op.LoadStorePair(load, rt, rt2, rn, wide, addressingMode, immediate, ldpsw);
+        return new MemoryOp64.LoadStorePair(load, rt, rt2, rn, wide, addressingMode, immediate, ldpsw);
     }
 
     /// `STGP` (`FEAT_MTE2`, B19.14) — MESMO layout de campo que {@link #decodeLoadStorePair}
     /// (`@ldstpair`), só o escalonamento do imediato muda: granule de 16 bytes, não doubleword de 8
-    /// (ver Javadoc de {@link Ir64Op.StorePairTag}).
+    /// (ver Javadoc de {@link MemoryOp64.StorePairTag}).
     private Ir64Op decodeStorePairTag(int word, long address) {
         if (!architecture.has(Aarch64Feature.MEMORY_TAGGING)) {
             throw unsupported(word, address);
@@ -2780,7 +2789,7 @@ public final class Aarch64Decoder {
         int rt2 = (word >>> PAIR_RT2_SHIFT) & REGISTER_FIELD_MASK;
         int rn = (word >>> RN_SHIFT) & REGISTER_FIELD_MASK;
         int rt = word & REGISTER_FIELD_MASK;
-        return new Ir64Op.StorePairTag(rt, rt2, rn, addressingMode, immediate);
+        return new MemoryOp64.StorePairTag(rt, rt2, rn, addressingMode, immediate);
     }
 
     private Ir64Op decodeLoadStoreSingle(int word, long address) {
@@ -2822,7 +2831,7 @@ public final class Aarch64Decoder {
             // que ser interceptado ANTES de chamar decodeSingleForm/decodeSingleForm, cujo guard
             // presumia (errado) que esta combinação era só a forma SIMD&FP de 128 bits — essa
             // exige V=1, já filtrado bem antes em decodeLoadsAndStores.
-            return new Ir64Op.SystemInstruction(Ir64SystemInstructionOp.NOP_HINT);
+            return new SystemOp64.SystemInstruction(Ir64SystemInstructionOp.NOP_HINT);
         }
         SingleForm form = decodeSingleForm(sizeField, opcField, word, address);
         int rn = (word >>> RN_SHIFT) & REGISTER_FIELD_MASK;
@@ -2884,9 +2893,9 @@ public final class Aarch64Decoder {
     /// `LDRAA`/`LDRAB Xt, [Xn{, #imm}]{!}` (B19.15, `FEAT_PAuth`, `ARM DDI 0487 C6.2.133/134`) —
     /// já confirmado `size`=DOUBLEWORD/`idx`/`bit21` pelo chamador. Rota (b) registrada na task:
     /// nenhuma autenticação real é modelada, então `Xn` é usado DIRETO como endereço-base (a
-    /// "autenticação" de `Xn` é identidade, mesmo precedente de {@link Ir64Op.PointerAuthInPlace})
+    /// "autenticação" de `Xn` é identidade, mesmo precedente de {@link IntegerOp64.PointerAuthInPlace})
     /// — o resultado observável é IDÊNTICO a um `LDR Xt, [Xn, #imm]` comum, com ou sem
-    /// `writeback` conforme `W`. Reaproveita {@link Ir64Op.Load64} diretamente (nenhum record
+    /// `writeback` conforme `W`. Reaproveita {@link MemoryOp64.Load64} diretamente (nenhum record
     /// novo necessário: mesma forma de endereçamento pré-indexada/offset já suportada).
     private Ir64Op decodeLoadRegisterAuthenticated(int word, long address, boolean writeback) {
         boolean signBit = ((word >>> LDRA_S_BIT_SHIFT) & 1) != 0;
@@ -2897,7 +2906,7 @@ public final class Aarch64Decoder {
         int rt = word & REGISTER_FIELD_MASK;
         Ir64AddressingMode addressingMode =
                 writeback ? Ir64AddressingMode.PRE_INDEX : Ir64AddressingMode.OFFSET;
-        return new Ir64Op.Load64(rt, rn, Ir64MemSize.DOUBLEWORD, false, true, addressingMode,
+        return new MemoryOp64.Load64(rt, rn, Ir64MemSize.DOUBLEWORD, false, true, addressingMode,
                 immediate, -1, null, 0);
     }
 
@@ -2936,10 +2945,10 @@ public final class Aarch64Decoder {
     private Ir64Op buildSingle(SingleForm form, int rt, int rn, Ir64AddressingMode addressingMode,
             long immediate, int rm, Ir64ExtendType extendType, int shiftAmount) {
         if (form.store) {
-            return new Ir64Op.Store64(rt, rn, form.size, form.wide, addressingMode, immediate,
+            return new MemoryOp64.Store64(rt, rn, form.size, form.wide, addressingMode, immediate,
                     rm, extendType, shiftAmount);
         }
-        return new Ir64Op.Load64(rt, rn, form.size, form.signExtend, form.wide, addressingMode,
+        return new MemoryOp64.Load64(rt, rn, form.size, form.signExtend, form.wide, addressingMode,
                 immediate, rm, extendType, shiftAmount);
     }
 
@@ -3032,9 +3041,9 @@ public final class Aarch64Decoder {
     private Ir64Op buildFpSingle(FpSingleForm form, int vt, int rn, Ir64AddressingMode addressingMode,
             long immediate, int rm, Ir64ExtendType extendType, int shiftAmount) {
         if (form.store) {
-            return new Ir64Op.FpStore64(vt, rn, form.size, addressingMode, immediate, rm, extendType, shiftAmount);
+            return new FpOp64.Store64(vt, rn, form.size, addressingMode, immediate, rm, extendType, shiftAmount);
         }
-        return new Ir64Op.FpLoad64(vt, rn, form.size, addressingMode, immediate, rm, extendType, shiftAmount);
+        return new FpOp64.Load64(vt, rn, form.size, addressingMode, immediate, rm, extendType, shiftAmount);
     }
 
     /// `LDP`/`STP` SIMD&FP (`ARM DDI 0487 C6.2.127`/`C6.2.338`, `V=1` — B8.13): MESMO layout de
@@ -3061,7 +3070,7 @@ public final class Aarch64Decoder {
         int vt2 = (word >>> PAIR_RT2_SHIFT) & REGISTER_FIELD_MASK;
         int rn = (word >>> RN_SHIFT) & REGISTER_FIELD_MASK;
         int vt = word & REGISTER_FIELD_MASK;
-        return new Ir64Op.FpLoadStorePair(load, vt, vt2, rn, size, addressingMode, immediate);
+        return new FpOp64.LoadStorePair(load, vt, vt2, rn, size, addressingMode, immediate);
     }
 
     /// `LDR (literal)` SIMD&FP (`ARM DDI 0487 C6.2.122`, `V=1` — B8.13): MESMO layout de
@@ -3078,7 +3087,7 @@ public final class Aarch64Decoder {
         long imm19 = (word >>> LITERAL_IMM19_SHIFT) & bitMask(LITERAL_IMM19_BITS);
         long offset = signExtend(imm19, LITERAL_IMM19_BITS) * LITERAL_BYTES_PER_UNIT;
         int vt = word & REGISTER_FIELD_MASK;
-        return new Ir64Op.FpLoadLiteral64(vt, address + offset, size);
+        return new FpOp64.LoadLiteral64(vt, address + offset, size);
     }
 
     private Ir64Op decodeDataProcessingImmediate(int word, long address) {
@@ -3119,10 +3128,10 @@ public final class Aarch64Decoder {
                 : (word >>> EXTRACT_SHIFT_FIELD_SHIFT) & EXTRACT_IMM5_MASK;
         int rn = (word >>> RN_SHIFT) & REGISTER_FIELD_MASK;
         int rd = word & REGISTER_FIELD_MASK;
-        return new Ir64Op.Extract(rd, rn, rm, lsb, wide);
+        return new IntegerOp64.Extract(rd, rn, rm, lsb, wide);
     }
 
-    /// `SBFM`/`BFM`/`UBFM` (D2 da task B6.3.2): produz {@link Ir64Op.Bitfield} sempre a partir dos
+    /// `SBFM`/`BFM`/`UBFM` (D2 da task B6.3.2): produz {@link IntegerOp64.Bitfield} sempre a partir dos
     /// campos crus `immr`/`imms` — nenhum dos 11 aliases do épico (`UBFX`/`SBFX`/`BFI`/`BFXIL`/
     /// `LSL`/`LSR`/`ASR`/`UXTB`/`UXTH`/`SXTB`/`SXTH`/`SXTW`) exige reconhecimento aqui, só valores
     /// específicos desses campos que o assembler já resolveu (Fatos de referência #2 da task).
@@ -3149,7 +3158,7 @@ public final class Aarch64Decoder {
         int imms = (word >>> BITFIELD_IMMS_SHIFT) & BITFIELD_FIELD_MASK;
         int rn = (word >>> RN_SHIFT) & REGISTER_FIELD_MASK;
         int rd = word & REGISTER_FIELD_MASK;
-        return new Ir64Op.Bitfield(opcode, rd, rn, immr, imms, wide);
+        return new IntegerOp64.Bitfield(opcode, rd, rn, immr, imms, wide);
     }
 
     private Ir64Op decodeLogicalImmediate(int word, long address) {
@@ -3175,7 +3184,7 @@ public final class Aarch64Decoder {
         int rd = word & REGISTER_FIELD_MASK;
         // AND/ORR/EOR (imediato) NUNCA têm forma SP em Rd/Rn (diferente de ADD/SUB imediato) —
         // decisão D2 da task B6.3.1, setado explicitamente aqui (não deixado implícito).
-        return new Ir64Op.Alu64(opcode, rd, rn, immediate, wide, setFlags, false, false);
+        return new IntegerOp64.Alu64(opcode, rd, rn, immediate, wide, setFlags, false, false);
     }
 
     private Ir64Op decodePcRelative(int word, long address) {
@@ -3186,7 +3195,7 @@ public final class Aarch64Decoder {
         long imm = signExtend(rawImm, PC_REL_IMM_TOTAL_BITS);
         int rd = word & REGISTER_FIELD_MASK;
         long immediate = page ? (imm << ADRP_PAGE_SHIFT) : imm;
-        return new Ir64Op.PcRelative(rd, address, immediate, page);
+        return new IntegerOp64.PcRelative(rd, address, immediate, page);
     }
 
     private Ir64Op decodeAddSubImmediate(int word) {
@@ -3201,7 +3210,7 @@ public final class Aarch64Decoder {
         // ARM DDI 0487 C6.2.4/C6.2.339: sem `S` (ADD/SUB), Rd|SP; com `S` (ADDS/SUBS), Rd é
         // sempre um registrador normal (ZR quando 31). Rn é sempre Rn|SP nas duas formas.
         boolean dstIsStackPointer = !setFlags;
-        return new Ir64Op.Alu64(
+        return new IntegerOp64.Alu64(
                 isSub ? Ir64AluOp.SUB : Ir64AluOp.ADD, rd, rn, immediate, wide, setFlags,
                 dstIsStackPointer, true);
     }
@@ -3220,7 +3229,7 @@ public final class Aarch64Decoder {
         int shift = hw * MOVE_WIDE_HW_UNIT_BITS;
         int imm16 = (word >>> IMM16_SHIFT) & IMM16_MASK;
         int rd = word & REGISTER_FIELD_MASK;
-        return new Ir64Op.MoveWide(opcode, rd, imm16, shift, wide);
+        return new IntegerOp64.MoveWide(opcode, rd, imm16, shift, wide);
     }
 
     /// Sub-dispatch da classe "Data Processing — Register" (D1 da task B6.3.1, estendido por
@@ -3330,7 +3339,7 @@ public final class Aarch64Decoder {
                 int minMaxRm = (word >>> ADDSUB_REGISTER_RM_SHIFT) & REGISTER_FIELD_MASK;
                 int minMaxRn = (word >>> RN_SHIFT) & REGISTER_FIELD_MASK;
                 int minMaxRd = word & REGISTER_FIELD_MASK;
-                return new Ir64Op.MinMaxGeneral(minMaxOp, minMaxRd, minMaxRn, minMaxRm, minMaxWide);
+                return new IntegerOp64.MinMaxGeneral(minMaxOp, minMaxRd, minMaxRn, minMaxRm, minMaxWide);
             }
             throw unsupported(word, address);
         }
@@ -3355,11 +3364,11 @@ public final class Aarch64Decoder {
         int rm = (word >>> ADDSUB_REGISTER_RM_SHIFT) & REGISTER_FIELD_MASK;
         int rn = (word >>> RN_SHIFT) & REGISTER_FIELD_MASK;
         int rd = word & REGISTER_FIELD_MASK;
-        return new Ir64Op.ShiftVariable(rd, rn, rm, shiftType, wide);
+        return new IntegerOp64.ShiftVariable(rd, rn, rm, shiftType, wide);
     }
 
     /// `PACGA Xd, Xn, Xm` (B19.6 bloco C, `FEAT_PAuth`) — este emulador não modela autenticação de
-    /// ponteiro de verdade (ver javadoc de {@link Ir64Op.PointerAuthGeneric}); gateado do mesmo modo
+    /// ponteiro de verdade (ver javadoc de {@link IntegerOp64.PointerAuthGeneric}); gateado do mesmo modo
     /// que os outros primeiros gates reais de A64 (B11.4 em diante).
     private Ir64Op decodePacga(int word, long address) {
         if (!architecture.has(Aarch64Feature.POINTER_AUTHENTICATION)) {
@@ -3368,7 +3377,7 @@ public final class Aarch64Decoder {
         int rm = (word >>> ADDSUB_REGISTER_RM_SHIFT) & REGISTER_FIELD_MASK;
         int rn = (word >>> RN_SHIFT) & REGISTER_FIELD_MASK;
         int rd = word & REGISTER_FIELD_MASK;
-        return new Ir64Op.PointerAuthGeneric(rd, rn, rm);
+        return new IntegerOp64.PointerAuthGeneric(rd, rn, rm);
     }
 
     /// `SUBP`/`SUBPS Xd, Xn, Xm` (`FEAT_MTE2`, B19.14) — sempre 64 bits (não existe forma de 32
@@ -3381,7 +3390,7 @@ public final class Aarch64Decoder {
         int rm = (word >>> ADDSUB_REGISTER_RM_SHIFT) & REGISTER_FIELD_MASK;
         int rn = (word >>> RN_SHIFT) & REGISTER_FIELD_MASK;
         int rd = word & REGISTER_FIELD_MASK;
-        return new Ir64Op.SubtractPointer(setFlags, rd, rn, rm);
+        return new IntegerOp64.SubtractPointer(setFlags, rd, rn, rm);
     }
 
     /// `IRG Xd, Xn, Xm` (`FEAT_MTE2`, B19.14) — ver
@@ -3394,7 +3403,7 @@ public final class Aarch64Decoder {
         int rm = (word >>> ADDSUB_REGISTER_RM_SHIFT) & REGISTER_FIELD_MASK;
         int rn = (word >>> RN_SHIFT) & REGISTER_FIELD_MASK;
         int rd = word & REGISTER_FIELD_MASK;
-        return new Ir64Op.InsertRandomTag(rd, rn, rm);
+        return new IntegerOp64.InsertRandomTag(rd, rn, rm);
     }
 
     /// `GMI Xd, Xn, Xm` (`FEAT_MTE2`, B19.14).
@@ -3405,7 +3414,7 @@ public final class Aarch64Decoder {
         int rm = (word >>> ADDSUB_REGISTER_RM_SHIFT) & REGISTER_FIELD_MASK;
         int rn = (word >>> RN_SHIFT) & REGISTER_FIELD_MASK;
         int rd = word & REGISTER_FIELD_MASK;
-        return new Ir64Op.TagMaskInsert(rd, rn, rm);
+        return new IntegerOp64.TagMaskInsert(rd, rn, rm);
     }
 
     /// `CRC32{B,H,W,X}`/`CRC32C{B,H,W,X}` (B19.17, `FEAT_CRC32`) — `size`(bits[11:10]) escolhe a
@@ -3432,7 +3441,7 @@ public final class Aarch64Decoder {
         int rm = (word >>> ADDSUB_REGISTER_RM_SHIFT) & REGISTER_FIELD_MASK;
         int rn = (word >>> RN_SHIFT) & REGISTER_FIELD_MASK;
         int rd = word & REGISTER_FIELD_MASK;
-        return new Ir64Op.Crc32(rd, rn, rm, dataWidthBits, castagnoli);
+        return new IntegerOp64.Crc32(rd, rn, rm, dataWidthBits, castagnoli);
     }
 
     /// `RBIT`/`REV16`/`REV`(`W`)/`REV32`(`X`)/`REV64`/`CLZ`/`CLS`/`CNT` (B8.2, "Data-processing
@@ -3459,14 +3468,14 @@ public final class Aarch64Decoder {
         }
         // B19.6 bloco D: `ABS Xd, Xn` (`FEAT_CSSC`) — MESMO subgrupo "Data-processing (1 source)",
         // opcode=`0b001000`. Gateado ANTES do `switch` de `Ir64OneSourceOp` (record próprio, ver
-        // {@link Ir64Op.AbsGeneral} — não é o `ABS` vetorial AdvSIMD, já `✅` desde B8.7).
+        // {@link IntegerOp64.AbsGeneral} — não é o `ABS` vetorial AdvSIMD, já `✅` desde B8.7).
         if (opcode == ONE_SOURCE_OPCODE_ABS) {
             if (!architecture.has(Aarch64Feature.COMMON_SHORT_SEQUENCE_COMPRESSION)) {
                 throw unsupported(word, address);
             }
             int absRn = (word >>> RN_SHIFT) & REGISTER_FIELD_MASK;
             int absRd = word & REGISTER_FIELD_MASK;
-            return new Ir64Op.AbsGeneral(absRd, absRn, wide);
+            return new IntegerOp64.AbsGeneral(absRd, absRn, wide);
         }
         // B19.21: `CTZ Xd, Xn` (`FEAT_CSSC`) — MESMO gate/subgrupo de `ABS` acima. `opcode2==0` já
         // garantido pelo gate no topo desta função (B19.15) — a checagem isolada de `Rm==00000` que
@@ -3477,7 +3486,7 @@ public final class Aarch64Decoder {
             }
             int ctzRn = (word >>> RN_SHIFT) & REGISTER_FIELD_MASK;
             int ctzRd = word & REGISTER_FIELD_MASK;
-            return new Ir64Op.DataProcessing1Source(Ir64OneSourceOp.CTZ, ctzRd, ctzRn, wide);
+            return new IntegerOp64.DataProcessing1Source(Ir64OneSourceOp.CTZ, ctzRd, ctzRn, wide);
         }
         Ir64OneSourceOp op = switch (opcode) {
             case ONE_SOURCE_OPCODE_RBIT -> Ir64OneSourceOp.RBIT;
@@ -3497,7 +3506,7 @@ public final class Aarch64Decoder {
         };
         int rn = (word >>> RN_SHIFT) & REGISTER_FIELD_MASK;
         int rd = word & REGISTER_FIELD_MASK;
-        return new Ir64Op.DataProcessing1Source(op, rd, rn, wide);
+        return new IntegerOp64.DataProcessing1Source(op, rd, rn, wide);
     }
 
     /// `PACIA`/`PACIB`/`PACDA`/`PACDB`/`AUTIA`/`AUTIB`/`AUTDA`/`AUTDB`/`XPACI`/`XPACD` (B19.15,
@@ -3529,7 +3538,7 @@ public final class Aarch64Decoder {
                 default -> throw new AssertionError("low3 de 3 bits só tem 8 valores possíveis");
             };
             int rn = (word >>> RN_SHIFT) & REGISTER_FIELD_MASK;
-            return new Ir64Op.PointerAuthInPlace(op, rd, rn);
+            return new IntegerOp64.PointerAuthInPlace(op, rd, rn);
         }
         if (top2 == PAUTH_IN_PLACE_TOP2_XPAC) {
             int rn = (word >>> RN_SHIFT) & REGISTER_FIELD_MASK;
@@ -3541,7 +3550,7 @@ public final class Aarch64Decoder {
                 case 0b0001 -> Ir64PointerAuthOp.XPACD;
                 default -> throw unsupported(word, address); // reservado (ex. XPACLRI vive noutro espaço)
             };
-            return new Ir64Op.PointerAuthInPlace(op, rd, -1);
+            return new IntegerOp64.PointerAuthInPlace(op, rd, -1);
         }
         throw unsupported(word, address); // reservado
     }
@@ -3559,7 +3568,7 @@ public final class Aarch64Decoder {
             int rm = (word >>> ADDSUB_REGISTER_RM_SHIFT) & REGISTER_FIELD_MASK;
             int rn = (word >>> RN_SHIFT) & REGISTER_FIELD_MASK;
             int rd = word & REGISTER_FIELD_MASK;
-            return new Ir64Op.AluWithCarry(subtract, rd, rn, rm, wide, setFlags);
+            return new IntegerOp64.AluWithCarry(subtract, rd, rn, rm, wide, setFlags);
         }
         boolean rmifFixedTail = ((word >>> RMIF_FIXED_TAIL_SHIFT) & RMIF_FIXED_TAIL_MASK) == RMIF_FIXED_TAIL_PATTERN;
         boolean rmifBit4Clear = (word & RMIF_BIT4_MASK) == 0;
@@ -3572,7 +3581,7 @@ public final class Aarch64Decoder {
             int shift = (word >>> RMIF_IMM6_SHIFT) & RMIF_IMM6_MASK;
             int rn = (word >>> RN_SHIFT) & REGISTER_FIELD_MASK;
             int mask = word & RMIF_MASK_FIELD_MASK;
-            return new Ir64Op.RotateIntoFlags(rn, shift, mask);
+            return new IntegerOp64.RotateIntoFlags(rn, shift, mask);
         }
         boolean setfRmFieldZero = ((word >>> ADDSUB_REGISTER_RM_SHIFT) & REGISTER_FIELD_MASK) == 0;
         boolean setfLow5Fixed = (word & SETF_LOW5_MASK) == SETF_LOW5_PATTERN;
@@ -3584,28 +3593,28 @@ public final class Aarch64Decoder {
             }
             int rn = (word >>> RN_SHIFT) & REGISTER_FIELD_MASK;
             if (opcode2 == SETF_OPCODE2_SETF8) {
-                return new Ir64Op.EvaluateIntoFlags(rn, EVALUATE_FLAGS_SIZE_8);
+                return new IntegerOp64.EvaluateIntoFlags(rn, EVALUATE_FLAGS_SIZE_8);
             }
             if (opcode2 == SETF_OPCODE2_SETF16) {
-                return new Ir64Op.EvaluateIntoFlags(rn, EVALUATE_FLAGS_SIZE_16);
+                return new IntegerOp64.EvaluateIntoFlags(rn, EVALUATE_FLAGS_SIZE_16);
             }
         }
         throw unsupported(word, address);
     }
 
     /// `SMADDL`/`SMSUBL`/`UMADDL`/`UMSUBL` (B8.2) — `sf` é fixo em `1` no encoding (só existe a
-    /// forma `X`), por isso {@link Ir64Op.MultiplyAccumulateLong} não carrega `wide`.
+    /// forma `X`), por isso {@link IntegerOp64.MultiplyAccumulateLong} não carrega `wide`.
     private Ir64Op decodeMultiplyAccumulateLong(int word, boolean signed) {
         boolean subtract = ((word >>> MADD_MSUB_O0_SHIFT) & 1) != 0;
         int rm = (word >>> ADDSUB_REGISTER_RM_SHIFT) & REGISTER_FIELD_MASK;
         int ra = (word >>> MADD_MSUB_RA_SHIFT) & REGISTER_FIELD_MASK;
         int rn = (word >>> RN_SHIFT) & REGISTER_FIELD_MASK;
         int rd = word & REGISTER_FIELD_MASK;
-        return new Ir64Op.MultiplyAccumulateLong(subtract, signed, rd, rn, rm, ra);
+        return new IntegerOp64.MultiplyAccumulateLong(subtract, signed, rd, rn, rm, ra);
     }
 
     /// `SMULH`/`UMULH` (B8.2) — `Ra` fixo em `XZR` (não é campo real, ver Javadoc de
-    /// {@link Ir64Op.MultiplyHigh}); recusa qualquer combinação que viole isso (G8: em vez de
+    /// {@link IntegerOp64.MultiplyHigh}); recusa qualquer combinação que viole isso (G8: em vez de
     /// silenciosamente ignorar `Ra`, confere o valor fixo).
     private Ir64Op decodeMultiplyHigh(int word, long address, boolean signed) {
         int ra = (word >>> MADD_MSUB_RA_SHIFT) & REGISTER_FIELD_MASK;
@@ -3615,7 +3624,7 @@ public final class Aarch64Decoder {
         int rm = (word >>> ADDSUB_REGISTER_RM_SHIFT) & REGISTER_FIELD_MASK;
         int rn = (word >>> RN_SHIFT) & REGISTER_FIELD_MASK;
         int rd = word & REGISTER_FIELD_MASK;
-        return new Ir64Op.MultiplyHigh(signed, rd, rn, rm);
+        return new IntegerOp64.MultiplyHigh(signed, rd, rn, rm);
     }
 
     /// `MADD`/`MSUB` (B6.3.3) — `MUL`/`MNEG` (aliases com `Ra=XZR`) chegam aqui como o mesmo
@@ -3627,7 +3636,7 @@ public final class Aarch64Decoder {
         int ra = (word >>> MADD_MSUB_RA_SHIFT) & REGISTER_FIELD_MASK;
         int rn = (word >>> RN_SHIFT) & REGISTER_FIELD_MASK;
         int rd = word & REGISTER_FIELD_MASK;
-        return new Ir64Op.MultiplyAccumulate(subtract, rd, rn, rm, ra, wide);
+        return new IntegerOp64.MultiplyAccumulate(subtract, rd, rn, rm, ra, wide);
     }
 
     /// `SDIV`/`UDIV` (B6.3.3).
@@ -3637,7 +3646,7 @@ public final class Aarch64Decoder {
         int rm = (word >>> ADDSUB_REGISTER_RM_SHIFT) & REGISTER_FIELD_MASK;
         int rn = (word >>> RN_SHIFT) & REGISTER_FIELD_MASK;
         int rd = word & REGISTER_FIELD_MASK;
-        return new Ir64Op.Divide(signed, rd, rn, rm, wide);
+        return new IntegerOp64.Divide(signed, rd, rn, rm, wide);
     }
 
     /// `CSEL`/`CSINC`/`CSINV`/`CSNEG` (D1 da task B6.3.2) — o opcode é resolvido só pelos bits
@@ -3662,7 +3671,7 @@ public final class Aarch64Decoder {
         Ir64Condition condition = Ir64Condition.decode((word >>> CSEL_COND_SHIFT) & COND_FIELD_MASK);
         int rn = (word >>> RN_SHIFT) & REGISTER_FIELD_MASK;
         int rd = word & REGISTER_FIELD_MASK;
-        return new Ir64Op.ConditionalSelect(opcode, rd, rn, rm, wide, condition);
+        return new IntegerOp64.ConditionalSelect(opcode, rd, rn, rm, wide, condition);
     }
 
     /// `CCMP`/`CCMN`, forma registrador E forma imediato (B6.8) — `op`(bit30) `0`=`CCMN`
@@ -3679,7 +3688,7 @@ public final class Aarch64Decoder {
         Ir64Condition condition = Ir64Condition.decode((word >>> CCMP_COND_SHIFT) & COND_FIELD_MASK);
         int rn = (word >>> RN_SHIFT) & REGISTER_FIELD_MASK;
         int nzcv = word & CCMP_NZCV_MASK;
-        return new Ir64Op.ConditionalCompare(opcode, rn, immediateForm, rm, immediate, wide, condition, nzcv);
+        return new IntegerOp64.ConditionalCompare(opcode, rn, immediateForm, rm, immediate, wide, condition, nzcv);
     }
 
     private Ir64Op decodeAddSubShiftedRegister(int word, long address) {
@@ -3706,7 +3715,7 @@ public final class Aarch64Decoder {
         int rm = (word >>> ADDSUB_REGISTER_RM_SHIFT) & REGISTER_FIELD_MASK;
         int rn = (word >>> RN_SHIFT) & REGISTER_FIELD_MASK;
         int rd = word & REGISTER_FIELD_MASK;
-        return new Ir64Op.AluShiftedRegister(
+        return new IntegerOp64.AluShiftedRegister(
                 isSub ? Ir64AluOp.SUB : Ir64AluOp.ADD, rd, rn, rm, shiftType, shiftAmount, wide, setFlags);
     }
 
@@ -3745,7 +3754,7 @@ public final class Aarch64Decoder {
         int rm = (word >>> ADDSUB_REGISTER_RM_SHIFT) & REGISTER_FIELD_MASK;
         int rn = (word >>> RN_SHIFT) & REGISTER_FIELD_MASK;
         int rd = word & REGISTER_FIELD_MASK;
-        return new Ir64Op.LogicalShiftedRegister(
+        return new IntegerOp64.LogicalShiftedRegister(
                 opcode, rd, rn, rm, shiftType, shiftAmount, invert, wide, setFlags);
     }
 
@@ -3782,9 +3791,9 @@ public final class Aarch64Decoder {
         int rd = word & REGISTER_FIELD_MASK;
         // ARM DDI 0487 C6.2.4/C6.2.339 (extended): Rn é SEMPRE Rn|SP; Rd é Rd|SP só sem `S`
         // (mesma regra da forma imediata, ver decodeAddSubImmediate) — resolvido pelo EXECUTOR
-        // checando o índice, nunca incondicionalmente (ver Ir64Op.AluExtendedRegister javadoc).
+        // checando o índice, nunca incondicionalmente (ver IntegerOp64.AluExtendedRegister javadoc).
         boolean dstIsStackPointer = !setFlags;
-        return new Ir64Op.AluExtendedRegister(
+        return new IntegerOp64.AluExtendedRegister(
                 isSub ? Ir64AluOp.SUB : Ir64AluOp.ADD, rd, rn, rm, extendType, shiftAmount, wide,
                 setFlags, dstIsStackPointer);
     }
@@ -3890,7 +3899,7 @@ public final class Aarch64Decoder {
                 }
                 int ra = (word >>> CRYPTO_SHA3_RA_SHIFT) & CRYPTO_SHA3_RA_MASK;
                 Ir64CryptoSha3Op op = op0 == CRYPTO_SHA3_OP0_EOR3 ? Ir64CryptoSha3Op.EOR3 : Ir64CryptoSha3Op.BCAX;
-                yield new Ir64Op.CryptoSha3FourRegister(op, rd, rn, rm, ra);
+                yield new CryptoOp64.Sha3FourRegister(op, rd, rn, rm, ra);
             }
             // B19.10: `SM3SS1` (4 registradores, MESMO layout de `EOR3`/`BCAX` — `Ra` de 4 bits) e
             // `SM3TT1A/1B/2A/2B` (layout próprio) convivem em `op0=0b010`, discriminados por
@@ -3903,7 +3912,7 @@ public final class Aarch64Decoder {
                         throw unsupported(word, address);
                     }
                     int ra = (word >>> CRYPTO_SHA3_RA_SHIFT) & CRYPTO_SHA3_RA_MASK;
-                    yield new Ir64Op.CryptoSm3FourRegister(rd, rn, rm, ra);
+                    yield new CryptoOp64.Sm3FourRegister(rd, rn, rm, ra);
                 }
                 if (bit15_14 == CRYPTO_SM3_MIX_BIT15_14_SM3TT) {
                     if (!architecture.has(Aarch64Feature.SM3)) {
@@ -3917,7 +3926,7 @@ public final class Aarch64Decoder {
                         case 2 -> Ir64CryptoSm3TtOp.TT2A;
                         default -> Ir64CryptoSm3TtOp.TT2B;
                     };
-                    yield new Ir64Op.CryptoSm3ThreeRegisterImm2(op, rd, rn, rm, imm2);
+                    yield new CryptoOp64.Sm3ThreeRegisterImm2(op, rd, rn, rm, imm2);
                 }
                 throw unsupported(word, address);
             }
@@ -3930,7 +3939,7 @@ public final class Aarch64Decoder {
                     if (!architecture.has(Aarch64Feature.SHA3)) {
                         throw unsupported(word, address);
                     }
-                    yield new Ir64Op.CryptoSha3TwoSourceRotate(
+                    yield new CryptoOp64.Sha3TwoSourceRotate(
                             Ir64CryptoSha3Op.RAX1, rd, rn, rm, CRYPTO_SHA3_RAX1_UNUSED_ROTATE_AMOUNT);
                 }
                 Ir64CryptoSha512Op sha512Op = switch (opcode6) {
@@ -3943,7 +3952,7 @@ public final class Aarch64Decoder {
                     if (!architecture.has(Aarch64Feature.SHA512)) {
                         throw unsupported(word, address);
                     }
-                    yield new Ir64Op.CryptoSha512ThreeRegister(sha512Op, rd, rn, rm);
+                    yield new CryptoOp64.Sha512ThreeRegister(sha512Op, rd, rn, rm);
                 }
                 Ir64CryptoSm3Op sm3Op = switch (opcode6) {
                     case CRYPTO_OPCODE6_SM3PARTW1 -> Ir64CryptoSm3Op.PARTW1;
@@ -3954,13 +3963,13 @@ public final class Aarch64Decoder {
                     if (!architecture.has(Aarch64Feature.SM3)) {
                         throw unsupported(word, address);
                     }
-                    yield new Ir64Op.CryptoSm3ThreeRegister(sm3Op, rd, rn, rm);
+                    yield new CryptoOp64.Sm3ThreeRegister(sm3Op, rd, rn, rm);
                 }
                 if (opcode6 == CRYPTO_OPCODE6_SM4EKEY) {
                     if (!architecture.has(Aarch64Feature.SM4)) {
                         throw unsupported(word, address);
                     }
-                    yield new Ir64Op.CryptoSm4KeyUpdate(rd, rn, rm);
+                    yield new CryptoOp64.Sm4KeyUpdate(rd, rn, rm);
                 }
                 throw unsupported(word, address);
             }
@@ -3969,7 +3978,7 @@ public final class Aarch64Decoder {
                     throw unsupported(word, address);
                 }
                 int imm6 = (word >>> CRYPTO_SHA3_XAR_IMM6_SHIFT) & CRYPTO_SHA3_XAR_IMM6_MASK;
-                yield new Ir64Op.CryptoSha3TwoSourceRotate(Ir64CryptoSha3Op.XAR, rd, rn, rm, imm6);
+                yield new CryptoOp64.Sha3TwoSourceRotate(Ir64CryptoSha3Op.XAR, rd, rn, rm, imm6);
             }
             // B19.10: `SHA512SU0`/`SM4E` — forma de 2 registradores, `Rm`(bits[20:16]) fixo em zero.
             case CRYPTO_SHA3_OP0_TWO_REGISTER -> {
@@ -3982,13 +3991,13 @@ public final class Aarch64Decoder {
                     if (!architecture.has(Aarch64Feature.SHA512)) {
                         throw unsupported(word, address);
                     }
-                    yield new Ir64Op.CryptoSha512TwoRegister(rd, rn);
+                    yield new CryptoOp64.Sha512TwoRegister(rd, rn);
                 }
                 if (opcode6 == CRYPTO_OPCODE6_SM4E) {
                     if (!architecture.has(Aarch64Feature.SM4)) {
                         throw unsupported(word, address);
                     }
-                    yield new Ir64Op.CryptoSm4Encrypt(rd, rn);
+                    yield new CryptoOp64.Sm4Encrypt(rd, rn);
                 }
                 throw unsupported(word, address);
             }
@@ -4160,7 +4169,7 @@ public final class Aarch64Decoder {
                 }
                 Ir64CryptoShaThreeRegisterOp shaOp = decodeCryptoShaThreeRegisterOpcode(opcode);
                 if (shaOp != null) {
-                    return new Ir64Op.CryptoShaThreeRegister(shaOp, rd, rn, rm);
+                    return new CryptoOp64.ShaThreeRegister(shaOp, rd, rn, rm);
                 }
             }
             throw unsupported(word, address);
@@ -4229,14 +4238,14 @@ public final class Aarch64Decoder {
         // encoding real (`a64.decode` do QEMU, seção "Cryptographic AES") são `Q=1`/`U=0`/`size=00`
         // sempre fixos e `Rm=0b01000` sempre fixo (a diferença entre as 4 instruções mora inteira
         // no campo `opcode`, `9`/`11`/`13`/`15` — nenhum desses 4 valores colide com os opcodes
-        // PARES já usados por `VectorArithmeticWidening`/`Wide`/`Narrow` em
+        // PARES já usados por `AdvSimdIntegerOp64.ArithmeticWidening`/`Wide`/`Narrow` em
         // {@link #decodeAdvancedSimdThreeDifferent}, conferido exaustivamente). Checado ANTES do
         // resto do dispatch de "three different" porque usa um record totalmente diferente (2
         // registradores reais, não 3).
         if (q && !u && esz == 0 && rm == ADVSIMD_AES_RM) {
             Ir64CryptoAesOp aesOp = decodeCryptoAesOpcode(opcode);
             if (aesOp != null) {
-                return new Ir64Op.CryptoAes(aesOp, rd, rn);
+                return new CryptoOp64.Aes(aesOp, rd, rn);
             }
         }
         // B8.11b: `SHA1H`/`SHA1SU1`/`SHA256SU0` ("Cryptographic two-register SHA") vivem no MESMO
@@ -4249,7 +4258,7 @@ public final class Aarch64Decoder {
         if (scalar && !u && esz == 0 && rm == ADVSIMD_AES_RM) {
             Ir64CryptoShaTwoRegisterOp shaOp = decodeCryptoShaTwoRegisterOpcode(opcode);
             if (shaOp != null) {
-                return new Ir64Op.CryptoShaTwoRegister(shaOp, rd, rn);
+                return new CryptoOp64.ShaTwoRegister(shaOp, rd, rn);
             }
         }
         if (rm == ADVSIMD_INT_RM_TWO_REG_MISC) {
@@ -4263,7 +4272,7 @@ public final class Aarch64Decoder {
             if (!scalar && opcode == ADVSIMD_TWO_REG_MISC_BYTE_ONLY_OPCODE) {
                 Ir64VectorUnaryOp byteOp = decodeVectorUnaryByteOnlyOpcode(u, esz);
                 if (byteOp != null) {
-                    return new Ir64Op.VectorArithmeticUnary(byteOp, false, q, 0, rd, rn);
+                    return new AdvSimdIntegerOp64.ArithmeticUnary(byteOp, false, q, 0, rd, rn);
                 }
                 throw unsupported(word, address);
             }
@@ -4271,13 +4280,13 @@ public final class Aarch64Decoder {
             if (op != null) {
                 validateScalarUnaryEsz(word, address, scalar, op, esz);
                 validateVectorUnaryEsz(word, address, op, esz);
-                return new Ir64Op.VectorArithmeticUnary(op, scalar, q, esz, rd, rn);
+                return new AdvSimdIntegerOp64.ArithmeticUnary(op, scalar, q, esz, rd, rn);
             }
             // B8.9 (vetorial: `FABS_v`/`FNEG_v`/`FCM**0_v`) + B19.3 (escalar: só as 5
             // comparações-contra-zero `FCMGT0_s`/`FCMGE0_s`/`FCMEQ0_s`/`FCMLE0_s`/`FCMLT0_s`) —
             // MESMO slot `Rm=00000` do inteiro (achado real da triagem, ver javadoc de
             // {@link Ir64VectorFpUnaryOp}). `FABS`/`FNEG` FP NÃO têm forma escalar aqui (os
-            // escalares já são {@link Ir64Op.Fp64Alu} desde B8.4) ⇒ com prefixo escalar são
+            // escalares já são {@link FpOp64.Alu} desde B8.4) ⇒ com prefixo escalar são
             // reservados ⇒ `unsupported` (G8, via {@link #fpUnaryOpHasScalarForm}).
             boolean fpRmZeroA = ((esz >>> 1) & 1) != 0;
             int fpRmZeroEsz = 2 + (esz & 1);
@@ -4286,7 +4295,7 @@ public final class Aarch64Decoder {
                 if (scalar && !fpUnaryOpHasScalarForm(fpRmZeroOp)) {
                     throw unsupported(word, address);
                 }
-                return new Ir64Op.VectorFpArithmeticUnary(fpRmZeroOp, scalar, q, fpRmZeroEsz, rd, rn);
+                return new AdvSimdFpOp64.FpArithmeticUnary(fpRmZeroOp, scalar, q, fpRmZeroEsz, rd, rn);
             }
             throw unsupported(word, address);
         }
@@ -4300,10 +4309,10 @@ public final class Aarch64Decoder {
                     // Doubleword não tem forma estreitada real (não há `Q`→`D`); G8.
                     throw unsupported(word, address);
                 }
-                return new Ir64Op.VectorArithmeticNarrowUnary(narrowOp, scalar, q, esz, rd, rn);
+                return new AdvSimdIntegerOp64.ArithmeticNarrowUnary(narrowOp, scalar, q, esz, rd, rn);
             }
             // B8.20: `SHLL`/`SHLL2` — MESMO slot, opcode `0b0_0111`/`U=1`; reaproveita 100%
-            // `Ir64Op.VectorShiftWidenImmediate`/`USHLL` (B8.8) — `SHLL` É literalmente "zero-extend
+            // `AdvSimdIntegerOp64.ShiftWidenImmediate`/`USHLL` (B8.8) — `SHLL` É literalmente "zero-extend
             // e desloca à esquerda pela largura INTEIRA do elemento estreito" (`8<<esz`, quantidade
             // FIXA, não um imediato genérico), mas a fórmula do executor (`zext(Rn) << shift`) é
             // idêntica; sem forma escalar/doubleword real (G8).
@@ -4311,7 +4320,7 @@ public final class Aarch64Decoder {
                 if (esz == ADVSIMD_INT_SCALAR_ESZ) {
                     throw unsupported(word, address);
                 }
-                return new Ir64Op.VectorShiftWidenImmediate(Ir64VectorShiftWidenOp.USHLL, q, esz, 8 << esz, rd, rn);
+                return new AdvSimdIntegerOp64.ShiftWidenImmediate(Ir64VectorShiftWidenOp.USHLL, q, esz, 8 << esz, rd, rn);
             }
             // B8.20: `URECPE`/`URSQRTE` — MESMO slot/opcode (`0b1_1001`) que `FCVTAS`/`FCVTAU` usam
             // no dispatch FP abaixo, discriminados pelo bit ALTO de `esz` (`a`, ver
@@ -4320,20 +4329,20 @@ public final class Aarch64Decoder {
             // corpus real (devkitA64). Só arranjo `.2s`/`.4s` (sem forma escalar/doubleword, G8).
             if (!scalar && opcode == ADVSIMD_URECPE_URSQRTE_OPCODE && esz == ADVSIMD_ESZ_WORD) {
                 Ir64VectorUnaryOp recipOp = u ? Ir64VectorUnaryOp.URSQRTE : Ir64VectorUnaryOp.URECPE;
-                return new Ir64Op.VectorArithmeticUnary(recipOp, false, q, esz, rd, rn);
+                return new AdvSimdIntegerOp64.ArithmeticUnary(recipOp, false, q, esz, rd, rn);
             }
             // B19.3: `FRECPX_s` — só forma AdvSIMD-escalar; colide de opcode com `SQRT` vetorial
             // (`decodeVectorFpUnaryRmOneOpcode`, `key==0b11`) ⇒ `if` EXPLÍCITO ANTES da tabela
             // compartilhada, NUNCA nela (Armadilha 2 da task).
             if (scalar && !u && opcode == ADVSIMD_FRECPX_OPCODE && ((esz >>> 1) & 1) != 0) {
-                return new Ir64Op.VectorFpArithmeticUnary(
+                return new AdvSimdFpOp64.FpArithmeticUnary(
                         Ir64VectorFpUnaryOp.FRECPX, true, false, 2 + (esz & 1), rd, rn);
             }
             // B19.3: `FCVTXN_s` — `f64`→`f32` round-to-odd; só escalar (`FCVTXN_v` é B19.4).
             // `esz` do record = ENTRADA `f64` (doubleword); os `bits[23:22]` crus do encoding
             // `@rr_s` valem `01` e NÃO representam tamanho aqui.
             if (scalar && u && opcode == ADVSIMD_FCVTXN_OPCODE) {
-                return new Ir64Op.VectorFpArithmeticUnary(
+                return new AdvSimdFpOp64.FpArithmeticUnary(
                         Ir64VectorFpUnaryOp.FCVTXN, true, false, ADVSIMD_INT_SCALAR_ESZ, rd, rn);
             }
             // B19.4: `FCVTN_v`/`FCVTXN_v`/`FCVTL_v` — conversões de PRECISÃO vetoriais (`f16`↔`f32`↔
@@ -4347,15 +4356,15 @@ public final class Aarch64Decoder {
                 int precisionA = (esz >>> 1) & 1;
                 int precisionSz = esz & 1;
                 if (opcode == ADVSIMD_FCVTXN_OPCODE && !u && precisionA == 0) {
-                    return new Ir64Op.VectorFpConvertPrecision(
+                    return new AdvSimdFpOp64.FpConvertPrecision(
                             Ir64VectorFpConvertPrecisionOp.FCVTN, q, 1 + precisionSz, rd, rn);
                 }
                 if (opcode == ADVSIMD_FCVTXN_OPCODE && u && precisionA == 0 && precisionSz == 1) {
-                    return new Ir64Op.VectorFpConvertPrecision(
+                    return new AdvSimdFpOp64.FpConvertPrecision(
                             Ir64VectorFpConvertPrecisionOp.FCVTXN, q, ADVSIMD_ESZ_WORD, rd, rn);
                 }
                 if (opcode == ADVSIMD_FCVTL_OPCODE && !u && precisionA == 0) {
-                    return new Ir64Op.VectorFpConvertPrecision(
+                    return new AdvSimdFpOp64.FpConvertPrecision(
                             Ir64VectorFpConvertPrecisionOp.FCVTL, q, 1 + precisionSz, rd, rn);
                 }
                 // B19.7 (`FEAT_BF16`): `BFCVTN_v`/`BFCVTN2` — MESMO slot, `!u && a==1` (o caso que
@@ -4364,7 +4373,7 @@ public final class Aarch64Decoder {
                 // `bf16`, por isso `precisionSz` não entra na condição).
                 if (opcode == ADVSIMD_FCVTXN_OPCODE && !u && precisionA == 1
                         && architecture.has(Aarch64Feature.BFLOAT16)) {
-                    return new Ir64Op.VectorFpConvertPrecision(
+                    return new AdvSimdFpOp64.FpConvertPrecision(
                             Ir64VectorFpConvertPrecisionOp.BFCVTN, q, 1, rd, rn);
                 }
                 // B19.11 (`FEAT_FP8`): `F1CVTL`/`F2CVTL`/`BF1CVTL`/`BF2CVTL` — MESMO slot/opcode,
@@ -4380,15 +4389,15 @@ public final class Aarch64Decoder {
                     }
                     boolean bfloat16Destination = precisionA == 1;
                     boolean secondStream = precisionSz == 1;
-                    return new Ir64Op.VectorFpConvertFromFp8(secondStream, bfloat16Destination, q, rd, rn);
+                    return new AdvSimdFpOp64.FpConvertFromFp8(secondStream, bfloat16Destination, q, rd, rn);
                 }
                 // Toda combinação restante ⇒ reservado ⇒ `unsupported` (G8).
                 throw unsupported(word, address);
             }
             // B8.9 (vetorial: `FSQRT_v`/`FRINTx_v`/`FRECPE_v`/`FRSQRTE_v`/`SCVTF_vi`/...) + B19.3
             // (escalar: `RECPE`/`RSQRTE` + as 12 conversões `@icvt` int↔FP escala 0). `SQRT`/
-            // `FRINTx` FP NÃO têm forma escalar aqui (os escalares já são {@link Ir64Op.Fp64Alu}/
-            // {@link Ir64Op.Fp64Round} desde B8.4/B8.5) ⇒ com prefixo escalar são reservados ⇒
+            // `FRINTx` FP NÃO têm forma escalar aqui (os escalares já são {@link FpOp64.Alu}/
+            // {@link FpOp64.Round} desde B8.4/B8.5) ⇒ com prefixo escalar são reservados ⇒
             // `unsupported` (G8, via {@link #fpUnaryOpHasScalarForm}).
             boolean fpRmOneA = ((esz >>> 1) & 1) != 0;
             int fpRmOneEsz = 2 + (esz & 1);
@@ -4405,7 +4414,7 @@ public final class Aarch64Decoder {
                         && !architecture.has(Aarch64Feature.DIRECTED_ROUNDING_TO_INTEGRAL)) {
                     throw unsupported(word, address);
                 }
-                return new Ir64Op.VectorFpArithmeticUnary(fpRmOneOp, scalar, q, fpRmOneEsz, rd, rn);
+                return new AdvSimdFpOp64.FpArithmeticUnary(fpRmOneOp, scalar, q, fpRmOneEsz, rd, rn);
             }
             throw unsupported(word, address);
         }
@@ -4424,7 +4433,7 @@ public final class Aarch64Decoder {
                 if (scalar && !fpUnaryOpHasScalarForm(fpHalfZeroOp)) {
                     throw unsupported(word, address);
                 }
-                return new Ir64Op.VectorFpArithmeticUnary(fpHalfZeroOp, scalar, q, ADVSIMD_ESZ_HALFWORD, rd, rn);
+                return new AdvSimdFpOp64.FpArithmeticUnary(fpHalfZeroOp, scalar, q, ADVSIMD_ESZ_HALFWORD, rd, rn);
             }
             throw unsupported(word, address);
         }
@@ -4440,7 +4449,7 @@ public final class Aarch64Decoder {
                 throw unsupported(word, address);
             }
             if (scalar && !u && opcode == ADVSIMD_FRECPX_OPCODE && ((esz >>> 1) & 1) != 0) {
-                return new Ir64Op.VectorFpArithmeticUnary(
+                return new AdvSimdFpOp64.FpArithmeticUnary(
                         Ir64VectorFpUnaryOp.FRECPX, true, false, ADVSIMD_ESZ_HALFWORD, rd, rn);
             }
             boolean fpHalfOneA = ((esz >>> 1) & 1) != 0;
@@ -4449,7 +4458,7 @@ public final class Aarch64Decoder {
                 if (scalar && !fpUnaryOpHasScalarForm(fpHalfOneOp)) {
                     throw unsupported(word, address);
                 }
-                return new Ir64Op.VectorFpArithmeticUnary(fpHalfOneOp, scalar, q, ADVSIMD_ESZ_HALFWORD, rd, rn);
+                return new AdvSimdFpOp64.FpArithmeticUnary(fpHalfOneOp, scalar, q, ADVSIMD_ESZ_HALFWORD, rd, rn);
             }
             throw unsupported(word, address);
         }
@@ -4461,7 +4470,7 @@ public final class Aarch64Decoder {
                 // `size=11` no encoding real, então valida aqui (G8; antes o hardcode de B8.7
                 // tornava essa checagem desnecessária).
                 if (!u && rm == 0b1_0001 && opcode == 0b1_0111 && esz == ADVSIMD_INT_SCALAR_ESZ) {
-                    return new Ir64Op.VectorScalarPairwiseAdd(rd, rn);
+                    return new AdvSimdIntegerOp64.ScalarPairwiseAdd(rd, rn);
                 }
                 // B19.2: AdvSIMD "scalar pairwise (FP)" (`FADDP_s`/`FMAXP_s`/`FMINP_s`/`FMAXNMP_s`/
                 // `FMINNMP_s`) vive neste MESMO espaço (`rm`=`0b1_0000` fixo, `bit10=0`), ao lado do
@@ -4475,10 +4484,10 @@ public final class Aarch64Decoder {
                 if (fpPairwiseOp != null) {
                     if (u) {
                         int fpFloatEsz = 2 + (esz & 1);
-                        return new Ir64Op.VectorFpArithmeticPairwise(fpPairwiseOp, true, false, fpFloatEsz, rd, rn, rn);
+                        return new AdvSimdFpOp64.FpArithmeticPairwise(fpPairwiseOp, true, false, fpFloatEsz, rd, rn, rn);
                     }
                     if (architecture.has(Aarch64Feature.FP16)) {
-                        return new Ir64Op.VectorFpArithmeticPairwise(
+                        return new AdvSimdFpOp64.FpArithmeticPairwise(
                                 fpPairwiseOp, true, false, ADVSIMD_ESZ_HALFWORD, rd, rn, rn);
                     }
                 }
@@ -4490,7 +4499,7 @@ public final class Aarch64Decoder {
                     // Nenhuma destas operações reduz doubleword (ARM DDI 0487, "across lanes"; G8).
                     throw unsupported(word, address);
                 }
-                return new Ir64Op.VectorAcrossLanes(op, q, esz, rd, rn);
+                return new AdvSimdIntegerOp64.AcrossLanes(op, q, esz, rd, rn);
             }
             // B8.10: `FMAXNMV`/`FMINNMV`/`FMAXV`/`FMINV` vivem no MESMO slot `Rm[4]=1` do inteiro
             // "across lanes" — `U=1` sempre (nunca colide com os `U`s usados pelo inteiro acima,
@@ -4501,13 +4510,13 @@ public final class Aarch64Decoder {
             if (u && q) {
                 Ir64VectorFpAcrossLanesOp fpOp = decodeVectorFpAcrossLanesOpcode(opcode, esz);
                 if (fpOp != null) {
-                    return new Ir64Op.VectorFpAcrossLanes(fpOp, true, ADVSIMD_ESZ_WORD, rd, rn);
+                    return new AdvSimdFpOp64.FpAcrossLanes(fpOp, true, ADVSIMD_ESZ_WORD, rd, rn);
                 }
             }
             if (!u && architecture.has(Aarch64Feature.FP16)) {
                 Ir64VectorFpAcrossLanesOp fpOp = decodeVectorFpAcrossLanesOpcode(opcode, esz);
                 if (fpOp != null) {
-                    return new Ir64Op.VectorFpAcrossLanes(fpOp, q, ADVSIMD_ESZ_HALFWORD, rd, rn);
+                    return new AdvSimdFpOp64.FpAcrossLanes(fpOp, q, ADVSIMD_ESZ_HALFWORD, rd, rn);
                 }
             }
             throw unsupported(word, address);
@@ -4549,7 +4558,7 @@ public final class Aarch64Decoder {
         int rm = (word >>> ADVSIMD_INT_RM_SHIFT) & ADVSIMD_INT_RM_MASK;
         int rn = (word >>> RN_SHIFT) & REGISTER_FIELD_MASK;
         int rd = word & REGISTER_FIELD_MASK;
-        return new Ir64Op.VectorArithmeticThreeSame(op, scalar, q, esz, rd, rn, rm);
+        return new AdvSimdIntegerOp64.ArithmeticThreeSame(op, scalar, q, esz, rd, rn, rm);
     }
 
     /// B19.5.5 (`FEAT_FP16`): "AdvSIMD three same (FP)"/"AdvSIMD scalar three same (FP)" de meia
@@ -4592,7 +4601,7 @@ public final class Aarch64Decoder {
         int rm = (word >>> ADVSIMD_INT_RM_SHIFT) & ADVSIMD_INT_RM_MASK;
         int rn = (word >>> RN_SHIFT) & REGISTER_FIELD_MASK;
         int rd = word & REGISTER_FIELD_MASK;
-        return new Ir64Op.VectorFpArithmeticThreeSame(fpOp, scalar, q, ADVSIMD_ESZ_HALFWORD, rd, rn, rm);
+        return new AdvSimdFpOp64.FpArithmeticThreeSame(fpOp, scalar, q, ADVSIMD_ESZ_HALFWORD, rd, rn, rm);
     }
 
     /// B19.11 (`FEAT_FP8`): `FCVTN_bh`/`FCVTN_bs` — vivem no MESMO espaço que
@@ -4627,7 +4636,7 @@ public final class Aarch64Decoder {
         int rm = (word >>> ADVSIMD_INT_RM_SHIFT) & ADVSIMD_INT_RM_MASK;
         int rn = (word >>> RN_SHIFT) & REGISTER_FIELD_MASK;
         int rd = word & REGISTER_FIELD_MASK;
-        return new Ir64Op.VectorFpConvertToFp8(halfSource, q, rd, rn, rm);
+        return new AdvSimdFpOp64.FpConvertToFp8(halfSource, q, rd, rn, rm);
     }
 
     /// B19.11e (`FEAT_FP8`): `FSCALE_h` — vive no MESMO espaço `bit21=0` de `FEAT_RDM`/FP16/
@@ -4636,7 +4645,7 @@ public final class Aarch64Decoder {
     /// `opcode`(bits[15:11])={@link #ADVSIMD_FP8_SCALE_OPCODE_H}. **Achado real desta task**: sem
     /// este método, o encoding caía até {@link #decodeAdvancedSimdCopy} (fallback EXT/permute/
     /// copy), que leu `Rm`(bits[20:16], o registrador `Vm` de VERDADE aqui) como se fosse `imm5`
-    /// de `INS_element`/`DUP` — produzindo `VectorInsertElement`/`VectorInsertGeneral` sempre que
+    /// de `INS_element`/`DUP` — produzindo `AdvSimdMoveOp64.InsertElement`/`AdvSimdMoveOp64.InsertGeneral` sempre que
     /// os bits baixos de `Rm` calhassem de formar um `esz` válido (o `⚠️` medido pela task).
     /// {@link #decodeAdvancedSimdFp16ThreeSame} e {@link #decodeAdvancedSimdFp8ThreeSame} são
     /// tentados ANTES (mesma ordem do chamador) e devolvem `null` para este opcode sem ambiguidade
@@ -4660,7 +4669,7 @@ public final class Aarch64Decoder {
         int rm = (word >>> ADVSIMD_INT_RM_SHIFT) & ADVSIMD_INT_RM_MASK;
         int rn = (word >>> RN_SHIFT) & REGISTER_FIELD_MASK;
         int rd = word & REGISTER_FIELD_MASK;
-        return new Ir64Op.VectorFpScaleByInt(q, ADVSIMD_ESZ_HALFWORD, rd, rn, rm);
+        return new AdvSimdFpOp64.FpScaleByInt(q, ADVSIMD_ESZ_HALFWORD, rd, rn, rm);
     }
 
     /// B19.24 (`FEAT_FAMINMAX`): `FAMAX_h`/`FAMIN_h` — vivem no MESMO espaço `bit21=0` de
@@ -4671,7 +4680,7 @@ public final class Aarch64Decoder {
     /// documentou para `FSCALE_h`**: sem este método, o encoding cai até
     /// {@link #decodeAdvancedSimdCopy} (fallback EXT/permute/copy), que lê `Rm`(bits[20:16], o
     /// registrador `Vm` de VERDADE aqui) como se fosse `imm5` de `INS_element`/`DUP` — produzindo
-    /// `VectorInsertElement`/`VectorInsertGeneral` sempre que os bits baixos de `Rm` formassem um
+    /// `AdvSimdMoveOp64.InsertElement`/`AdvSimdMoveOp64.InsertGeneral` sempre que os bits baixos de `Rm` formassem um
     /// `esz` válido (o `⚠️` medido pela task). {@link #decodeAdvancedSimdFp16ThreeSame}/
     /// {@link #decodeAdvancedSimdFp8ThreeSame}/{@link #decodeAdvancedSimdFp8Scale} são tentados
     /// ANTES (mesma ordem do chamador) e devolvem `null` para este opcode sem ambiguidade
@@ -4695,7 +4704,7 @@ public final class Aarch64Decoder {
         int rm = (word >>> ADVSIMD_INT_RM_SHIFT) & ADVSIMD_INT_RM_MASK;
         int rn = (word >>> RN_SHIFT) & REGISTER_FIELD_MASK;
         int rd = word & REGISTER_FIELD_MASK;
-        return new Ir64Op.VectorFpAbsoluteMaxMin(!u, q, ADVSIMD_ESZ_HALFWORD, rd, rn, rm);
+        return new AdvSimdFpOp64.FpAbsoluteMaxMin(!u, q, ADVSIMD_ESZ_HALFWORD, rd, rn, rm);
     }
 
     /// B19.11b (`FEAT_FP8FMA`): `FMLAL_hb_v` — vive no MESMO espaço `bit21=0`/opcode
@@ -4705,7 +4714,7 @@ public final class Aarch64Decoder {
     /// `Rd`), então este método ignora completamente o `q` do chamador e lê `idxn` direto do bit30
     /// (achado que corrige a leitura inicial da spec desta task, que tratava esse campo como `Q`).
     /// `idxn` seleciona a PARIDADE dos bytes FP8 de `Rn`/`Rm` usados — ver Javadoc de
-    /// {@link Ir64Op.VectorFp8FusedMultiplyAddLong}.
+    /// {@link AdvSimdFpOp64.Fp8FusedMultiplyAddLong}.
     private Ir64Op decodeAdvancedSimdFp8FusedMultiplyAddHalf(int word, boolean scalar) {
         if (scalar) {
             return null;
@@ -4725,7 +4734,7 @@ public final class Aarch64Decoder {
         int rm = (word >>> ADVSIMD_INT_RM_SHIFT) & ADVSIMD_INT_RM_MASK;
         int rn = (word >>> RN_SHIFT) & REGISTER_FIELD_MASK;
         int rd = word & REGISTER_FIELD_MASK;
-        return new Ir64Op.VectorFp8FusedMultiplyAddLong(false, idxn, rd, rn, rm);
+        return new AdvSimdFpOp64.Fp8FusedMultiplyAddLong(false, idxn, rd, rn, rm);
     }
 
     /// B19.11b (`FEAT_FP8FMA`): `FMLALL_sb_v` — opcode PRÓPRIO {@link #ADVSIMD_FP8_FMA_OPCODE_SB},
@@ -4733,7 +4742,7 @@ public final class Aarch64Decoder {
     /// nunca colide, ver {@link #decodeAdvancedSimdFp8ThreeSame}). O campo `idxn` combina bit30
     /// (alto) e bit22 (baixo) num valor de 2 bits (`%fmlall_idxn` do QEMU), selecionando a FASE
     /// (`0`-`3`) dos bytes FP8 de `Rn`/`Rm` usados — ver Javadoc de
-    /// {@link Ir64Op.VectorFp8FusedMultiplyAddLong}.
+    /// {@link AdvSimdFpOp64.Fp8FusedMultiplyAddLong}.
     private Ir64Op decodeAdvancedSimdFp8FusedMultiplyAddSingle(int word, boolean scalar) {
         if (scalar) {
             return null;
@@ -4754,7 +4763,7 @@ public final class Aarch64Decoder {
         int rm = (word >>> ADVSIMD_INT_RM_SHIFT) & ADVSIMD_INT_RM_MASK;
         int rn = (word >>> RN_SHIFT) & REGISTER_FIELD_MASK;
         int rd = word & REGISTER_FIELD_MASK;
-        return new Ir64Op.VectorFp8FusedMultiplyAddLong(true, idxn, rd, rn, rm);
+        return new AdvSimdFpOp64.Fp8FusedMultiplyAddLong(true, idxn, rd, rn, rm);
     }
 
     /// B19.11c (`FEAT_FP8DOT2`): `FDOT_hb_v` — vive no MESMO espaço `bit21=0`/opcode
@@ -4783,7 +4792,7 @@ public final class Aarch64Decoder {
         int rm = (word >>> ADVSIMD_INT_RM_SHIFT) & ADVSIMD_INT_RM_MASK;
         int rn = (word >>> RN_SHIFT) & REGISTER_FIELD_MASK;
         int rd = word & REGISTER_FIELD_MASK;
-        return new Ir64Op.VectorFp8DotProduct(false, q, rd, rn, rm);
+        return new AdvSimdFpOp64.Fp8DotProduct(false, q, rd, rn, rm);
     }
 
     /// B19.11d (`FEAT_FP8DOT4`): `FDOT_sb_v` — vive no MESMO espaço `bit21=0`/opcode
@@ -4811,7 +4820,7 @@ public final class Aarch64Decoder {
         int rm = (word >>> ADVSIMD_INT_RM_SHIFT) & ADVSIMD_INT_RM_MASK;
         int rn = (word >>> RN_SHIFT) & REGISTER_FIELD_MASK;
         int rd = word & REGISTER_FIELD_MASK;
-        return new Ir64Op.VectorFp8DotProduct(true, q, rd, rn, rm);
+        return new AdvSimdFpOp64.Fp8DotProduct(true, q, rd, rn, rm);
     }
 
     /// B19.20 (`FEAT_FCMA`): `FCADD_90`/`FCADD_270`/`FCMLA_v` — vivem no MESMO espaço `bit21=0` que
@@ -4844,13 +4853,13 @@ public final class Aarch64Decoder {
         int rd = word & REGISTER_FIELD_MASK;
         if ((opcode & ADVSIMD_FCMA_OPCODE_PREFIX_MASK) == ADVSIMD_FCMA_OPCODE_PREFIX_PATTERN) {
             int rotation = (opcode & ADVSIMD_FCMA_ROTATION_MASK) * ADVSIMD_FCMA_ROTATION_UNIT_DEGREES;
-            return new Ir64Op.VectorFpComplexMultiplyAccumulate(q, esz, rotation, rd, rn, rm);
+            return new AdvSimdFpOp64.FpComplexMultiplyAccumulate(q, esz, rotation, rd, rn, rm);
         }
         if (opcode == ADVSIMD_FCADD_OPCODE_90) {
-            return new Ir64Op.VectorFpComplexAdd(q, esz, ADVSIMD_FCMA_ROTATION_UNIT_DEGREES, rd, rn, rm);
+            return new AdvSimdFpOp64.FpComplexAdd(q, esz, ADVSIMD_FCMA_ROTATION_UNIT_DEGREES, rd, rn, rm);
         }
         if (opcode == ADVSIMD_FCADD_OPCODE_270) {
-            return new Ir64Op.VectorFpComplexAdd(q, esz, 3 * ADVSIMD_FCMA_ROTATION_UNIT_DEGREES, rd, rn, rm);
+            return new AdvSimdFpOp64.FpComplexAdd(q, esz, 3 * ADVSIMD_FCMA_ROTATION_UNIT_DEGREES, rd, rn, rm);
         }
         return null;
     }
@@ -4899,17 +4908,17 @@ public final class Aarch64Decoder {
             int size = (word >>> ADVSIMD_INT_SIZE_SHIFT) & ADVSIMD_INT_SIZE_MASK;
             if (opcode == ADVSIMD_BF16_OPCODE_DOT_OR_MLAL) {
                 if (size == ADVSIMD_BF16_SIZE_HALFWORD) {
-                    return new Ir64Op.VectorFpDotProductBFloat16(q, rd, rn, rm);
+                    return new AdvSimdFpOp64.FpDotProductBFloat16(q, rd, rn, rm);
                 }
                 if (size == ADVSIMD_BF16_SIZE_DOUBLEWORD) {
                     // `q` aqui é o seletor `B`/`T` (`top`) — `Vd.4S` é sempre 128 bits nesta
-                    // família, ver Javadoc de {@link Ir64Op.VectorFpMultiplyAddLongBFloat16#top}.
-                    return new Ir64Op.VectorFpMultiplyAddLongBFloat16(q, rd, rn, rm);
+                    // família, ver Javadoc de {@link AdvSimdFpOp64.FpMultiplyAddLongBFloat16#top}.
+                    return new AdvSimdFpOp64.FpMultiplyAddLongBFloat16(q, rd, rn, rm);
                 }
             } else if (opcode == ADVSIMD_BFMMLA_OPCODE && size == ADVSIMD_BF16_SIZE_HALFWORD && q) {
                 // `Q` é FIXO em `1` no encoding real de `BFMMLA` (não há forma de 64 bits) —
                 // `q=false` aqui é combinação reservada (G8), cai no `unsupported` de sempre.
-                return new Ir64Op.VectorFpMatrixMultiplyAccumulateBFloat16(rd, rn, rm);
+                return new AdvSimdFpOp64.FpMatrixMultiplyAccumulateBFloat16(rd, rn, rm);
             }
         }
         // B19.12 (`FEAT_I8MM`): `USDOT_v`/`SMMLA`/`UMMLA`/`USMMLA` também vivem em `bit10=1` (MESMO
@@ -4924,31 +4933,31 @@ public final class Aarch64Decoder {
             if (size == ADVSIMD_I8MM_SIZE_WORD) {
                 if (!u && opcode == ADVSIMD_I8MM_OPCODE_USDOT) {
                     // `USDOT`: `Rn` sem sinal, `Rm` com sinal (não existe `SUDOT` vetorial).
-                    return new Ir64Op.VectorIntegerDotProduct(q, false, true, rd, rn, rm);
+                    return new AdvSimdIntegerOp64.IntegerDotProduct(q, false, true, rd, rn, rm);
                 }
                 // `SMMLA`/`UMMLA`/`USMMLA`: `Q` FIXO em `1` no encoding real (sem forma de 64 bits)
                 // — `q=false` aqui é combinação reservada (G8), cai no `unsupported` de sempre.
                 if (q && opcode == ADVSIMD_I8MM_OPCODE_MMLA) {
                     // `U` distingue `SMMLA`(assinado/assinado, `u=0`) de `UMMLA`(sem sinal/sem
                     // sinal, `u=1`).
-                    return new Ir64Op.VectorIntegerMatrixMultiplyAccumulate(!u, !u, rd, rn, rm);
+                    return new AdvSimdIntegerOp64.IntegerMatrixMultiplyAccumulate(!u, !u, rd, rn, rm);
                 }
                 if (q && !u && opcode == ADVSIMD_I8MM_OPCODE_USMMLA) {
                     // `USMMLA`: `Rn` sem sinal, `Rm` com sinal (não existe `SUMMLA`, `u=1` reservado).
-                    return new Ir64Op.VectorIntegerMatrixMultiplyAccumulate(false, true, rd, rn, rm);
+                    return new AdvSimdIntegerOp64.IntegerMatrixMultiplyAccumulate(false, true, rd, rn, rm);
                 }
             }
         }
         // B19.23 (`FEAT_DotProd` residual): `SDOT_v`/`UDOT_v` vivem no MESMO espaço `bit10=1` que
         // `USDOT_v` acima, `opcode`=0b10010 vizinho do 0b10011 de `USDOT_v`, `size` sempre
         // {@link #ADVSIMD_I8MM_SIZE_WORD} — checados ANTES de `decodeAdvancedSimdCopy` pelo mesmo
-        // motivo do bloco `INT8_MATRIX_MULTIPLY` acima. Reusa o MESMO record `VectorIntegerDotProduct`
+        // motivo do bloco `INT8_MATRIX_MULTIPLY` acima. Reusa o MESMO record `AdvSimdIntegerOp64.IntegerDotProduct`
         // do `USDOT_v` (B19.12), com sinal IGUAL nos dois operandos em vez de misto.
         if (bit10 && architecture.has(Aarch64Feature.DOT_PRODUCT)) {
             int size = (word >>> ADVSIMD_INT_SIZE_SHIFT) & ADVSIMD_INT_SIZE_MASK;
             if (size == ADVSIMD_I8MM_SIZE_WORD && opcode == ADVSIMD_DOTPRODUCT_OPCODE) {
                 // `SDOT`: os dois operandos com sinal (`u=0`); `UDOT`: os dois sem sinal (`u=1`).
-                return new Ir64Op.VectorIntegerDotProduct(q, !u, !u, rd, rn, rm);
+                return new AdvSimdIntegerOp64.IntegerDotProduct(q, !u, !u, rd, rn, rm);
             }
         }
         if (bit10) {
@@ -4970,7 +4979,7 @@ public final class Aarch64Decoder {
                 // `imm` >= 8 sem `Q`: bit14 real não existe na forma D (reservado), G8.
                 return null;
             }
-            return new Ir64Op.VectorExtract(q, imm, rd, rn, rm);
+            return new AdvSimdMoveOp64.Extract(q, imm, rd, rn, rm);
         }
         if (bit15) {
             // Reservado dentro do espaço EXT/permute/TBL (`bit10=0`) — `AdvSIMD copy` já foi
@@ -4995,7 +5004,7 @@ public final class Aarch64Decoder {
             if (op == null) {
                 return null;
             }
-            return new Ir64Op.VectorPermute(op, q, esz, rd, rn, rm);
+            return new AdvSimdMoveOp64.Permute(op, q, esz, rd, rn, rm);
         }
         // `TBL`/`TBX`: `bits[11:10]="00"` fixo (`bit11=0`,`bit10=0`); `bits[23:22]="00"` fixo
         // (parte do padrão real "000" junto com `bit21`, já garantido `0` pelo chamador) —
@@ -5006,7 +5015,7 @@ public final class Aarch64Decoder {
         }
         int len = (opcode >>> 2) & 0b11;
         boolean tbx = ((opcode >>> 1) & 1) != 0;
-        return new Ir64Op.VectorTableLookup(tbx, len, q, rd, rn, rm);
+        return new AdvSimdMoveOp64.TableLookup(tbx, len, q, rd, rn, rm);
     }
 
     /// `LUTI2`/`LUTI4` (AdvSIMD lookup table, `FEAT_LUT`, B19.8) — chamado só quando `u=0`,
@@ -5024,23 +5033,23 @@ public final class Aarch64Decoder {
                     yield null;
                 }
                 int idx = lowField >>> ADVSIMD_LUTI2_1B_IDX_SHIFT;
-                yield new Ir64Op.VectorLookupTable(false, ADVSIMD_LUTI_ESZ_BYTE, idx, rd, rn, rm);
+                yield new AdvSimdMoveOp64.LookupTable(false, ADVSIMD_LUTI_ESZ_BYTE, idx, rd, rn, rm);
             }
             case ADVSIMD_LUTI2_1H_PATTERN -> {
                 if ((lowField & ADVSIMD_LUTI2_1H_FIXED_MASK) != ADVSIMD_LUTI2_1H_FIXED_VALUE) {
                     yield null;
                 }
                 int idx = lowField >>> ADVSIMD_LUTI2_1H_IDX_SHIFT;
-                yield new Ir64Op.VectorLookupTable(false, ADVSIMD_LUTI_ESZ_HALFWORD, idx, rd, rn, rm);
+                yield new AdvSimdMoveOp64.LookupTable(false, ADVSIMD_LUTI_ESZ_HALFWORD, idx, rd, rn, rm);
             }
             case ADVSIMD_LUTI4_PATTERN -> {
                 if ((lowField & ADVSIMD_LUTI4_1B_FIXED_MASK) == ADVSIMD_LUTI4_1B_FIXED_VALUE) {
                     int idx = lowField >>> ADVSIMD_LUTI4_1B_IDX_SHIFT;
-                    yield new Ir64Op.VectorLookupTable(true, ADVSIMD_LUTI_ESZ_BYTE, idx, rd, rn, rm);
+                    yield new AdvSimdMoveOp64.LookupTable(true, ADVSIMD_LUTI_ESZ_BYTE, idx, rd, rn, rm);
                 }
                 if ((lowField & ADVSIMD_LUTI4_2H_FIXED_MASK) == ADVSIMD_LUTI4_2H_FIXED_VALUE) {
                     int idx = lowField >>> ADVSIMD_LUTI4_2H_IDX_SHIFT;
-                    yield new Ir64Op.VectorLookupTable(true, ADVSIMD_LUTI_ESZ_HALFWORD, idx, rd, rn, rm);
+                    yield new AdvSimdMoveOp64.LookupTable(true, ADVSIMD_LUTI_ESZ_HALFWORD, idx, rd, rn, rm);
                 }
                 yield null;
             }
@@ -5070,7 +5079,7 @@ public final class Aarch64Decoder {
             return null;
         }
         int index = imm5 >>> (esz + 1);
-        return new Ir64Op.VectorDuplicateElementScalar(esz, rd, rn, index);
+        return new AdvSimdMoveOp64.DuplicateElementScalar(esz, rd, rn, index);
     }
 
     private Ir64Op decodeAdvancedSimdCopy(int word, long address, boolean q) {
@@ -5095,7 +5104,7 @@ public final class Aarch64Decoder {
                 return null;
             }
             int srcIndex = (opcode & ADVSIMD_EXTRACT_IMM_MASK) >>> esz;
-            return new Ir64Op.VectorInsertElement(esz, rd, rn, index, srcIndex);
+            return new AdvSimdMoveOp64.InsertElement(esz, rd, rn, index, srcIndex);
         }
         if (bit15) {
             return null;
@@ -5104,19 +5113,19 @@ public final class Aarch64Decoder {
         return switch (imm4) {
             case ADVSIMD_COPY_DUP_ELEMENT -> (esz == ADVSIMD_INT_SCALAR_ESZ && !q)
                     ? null // doubleword exige `Q=1` (não existe arranjo "1D"), G8
-                    : new Ir64Op.VectorDuplicateElement(q, esz, rd, rn, index);
+                    : new AdvSimdMoveOp64.DuplicateElement(q, esz, rd, rn, index);
             case ADVSIMD_COPY_DUP_GENERAL -> (esz == ADVSIMD_INT_SCALAR_ESZ && !q)
                     ? null
-                    : new Ir64Op.VectorDuplicateGeneral(q, esz, rd, rn);
+                    : new AdvSimdMoveOp64.DuplicateGeneral(q, esz, rd, rn);
             case ADVSIMD_COPY_INS_GENERAL -> !q
                     ? null // `Q=1` fixo no encoding real, mesma regra de `INS_element`
-                    : new Ir64Op.VectorInsertGeneral(esz, rd, rn, index);
+                    : new AdvSimdMoveOp64.InsertGeneral(esz, rd, rn, index);
             case ADVSIMD_COPY_SMOV -> (esz == ADVSIMD_INT_SCALAR_ESZ || (esz == 2 && !q))
                     ? null // `SMOV` não existe p/ doubleword; `esz=2`(word) só sign-estende p/ `Xd`
-                    : new Ir64Op.VectorMoveElement(true, q, esz, rd, rn, index);
+                    : new AdvSimdMoveOp64.MoveElement(true, q, esz, rd, rn, index);
             case ADVSIMD_COPY_UMOV -> q != (esz == ADVSIMD_INT_SCALAR_ESZ)
                     ? null // `Q` é sempre `esz==3` p/ `UMOV` (sem forma "estendida" redundante)
-                    : new Ir64Op.VectorMoveElement(false, q, esz, rd, rn, index);
+                    : new AdvSimdMoveOp64.MoveElement(false, q, esz, rd, rn, index);
             default -> null;
         };
     }
@@ -5139,7 +5148,7 @@ public final class Aarch64Decoder {
         if (!scalar && opcode == ADVSIMD_THREE_SAME_LOGICAL_OPCODE) {
             Ir64VectorThreeSameOp logicalOp = decodeVectorLogicalOpcode(u, esz);
             if (logicalOp != null) {
-                return new Ir64Op.VectorArithmeticThreeSame(logicalOp, false, q, 0, rd, rn, rm);
+                return new AdvSimdIntegerOp64.ArithmeticThreeSame(logicalOp, false, q, 0, rd, rn, rm);
             }
             throw unsupported(word, address);
         }
@@ -5158,12 +5167,12 @@ public final class Aarch64Decoder {
                 // encoding real, não um campo livre de 2 bits como o resto desta tabela (G8).
                 throw unsupported(word, address);
             }
-            return new Ir64Op.VectorArithmeticThreeSame(threeSameOp, scalar, q, esz, rd, rn, rm);
+            return new AdvSimdIntegerOp64.ArithmeticThreeSame(threeSameOp, scalar, q, esz, rd, rn, rm);
         }
         if (!scalar) {
             Ir64VectorPairwiseOp pairwiseOp = decodeVectorPairwiseOpcode(u, opcode);
             if (pairwiseOp != null) {
-                return new Ir64Op.VectorArithmeticPairwise(pairwiseOp, q, esz, rd, rn, rm);
+                return new AdvSimdIntegerOp64.ArithmeticPairwise(pairwiseOp, q, esz, rd, rn, rm);
             }
         }
         // B8.9: "AdvSIMD three same (FP)"/"three same pairwise (FP)" — MESMO prefixo/bit10 do
@@ -5182,13 +5191,13 @@ public final class Aarch64Decoder {
         // (`FMLAL`/`FMLAL2`) ou subtração (`FMLSL`/`FMLSL2`); `sz`(bit22, `esz&1`) é sempre `0` no
         // encoding real — `1` é reservado (G8, cai no `throw` do fim deste método). Sem forma
         // escalar real. `q` aqui controla largura de VERDADE (`Vd.2S`/`Vd.4S`), diferente de
-        // `BFMLALB`/`BFMLALT` (B19.7) — ver Javadoc de {@link Ir64Op.VectorFpMultiplyAddLong}.
+        // `BFMLALB`/`BFMLALT` (B19.7) — ver Javadoc de {@link AdvSimdFpOp64.FpMultiplyAddLong}.
         if (!scalar && (esz & 1) == 0 && architecture.has(Aarch64Feature.FP16_FUSED_MULTIPLY_ADD_LONG)) {
             if (opcode == ADVSIMD_FHM_THREE_SAME_OPCODE_LOW && !u) {
-                return new Ir64Op.VectorFpMultiplyAddLong(q, false, a, rd, rn, rm);
+                return new AdvSimdFpOp64.FpMultiplyAddLong(q, false, a, rd, rn, rm);
             }
             if (opcode == ADVSIMD_FHM_THREE_SAME_OPCODE_HIGH && u) {
-                return new Ir64Op.VectorFpMultiplyAddLong(q, true, a, rd, rn, rm);
+                return new AdvSimdFpOp64.FpMultiplyAddLong(q, true, a, rd, rn, rm);
             }
         }
         // B19.2: a forma "three same (FP)" TAMBÉM tem forma AdvSIMD-escalar (`FMULX_s`/`FCMEQ_s`/
@@ -5196,7 +5205,7 @@ public final class Aarch64Decoder {
         // `(u,a,opcode)` da vetorial (conferido contra corpus real devkitA64). As demais entradas de
         // `decodeVectorFpThreeSameOpcode` (`ADD`/`SUB`/`DIV`/`MUL`/`MAX`/`MIN`/`MAXNM`/`MINNM`/`MLA`/
         // `MLS`) NÃO têm forma escalar real: com prefixo escalar, esses encodings são reservados ⇒
-        // `unsupported` (G8), nunca `VectorFpArithmeticThreeSame` nem a forma vetorial.
+        // `unsupported` (G8), nunca `AdvSimdFpOp64.FpArithmeticThreeSame` nem a forma vetorial.
         // B19.11e (`FEAT_FP8`): `FSCALE_sd` vive no MESMO opcode ({@link
         // #ADVSIMD_FP8_SCALE_OPCODE_SD}) que `DIV`/`RECPS`/`RSQRTS` em
         // {@link #decodeVectorFpThreeSameOpcode}, discriminado pela key `(u=1,a=1)=0b110` que
@@ -5205,7 +5214,7 @@ public final class Aarch64Decoder {
         // Sem forma escalar real.
         if (!scalar && opcode == ADVSIMD_FP8_SCALE_OPCODE_SD && u && a
                 && architecture.has(Aarch64Feature.FP8)) {
-            return new Ir64Op.VectorFpScaleByInt(q, floatEsz, rd, rn, rm);
+            return new AdvSimdFpOp64.FpScaleByInt(q, floatEsz, rd, rn, rm);
         }
         // B19.24 (`FEAT_FAMINMAX`): `FAMAX_sd`/`FAMIN_sd` vivem no MESMO opcode ({@link
         // #ADVSIMD_FAMINMAX_OPCODE_SD}) que `MUL`/`MULX` em {@link #decodeVectorFpThreeSameOpcode},
@@ -5215,21 +5224,21 @@ public final class Aarch64Decoder {
         // de `FSCALE_sd`/B19.11e). Sem forma escalar real.
         if (!scalar && opcode == ADVSIMD_FAMINMAX_OPCODE_SD && a
                 && architecture.has(Aarch64Feature.FP_ABSOLUTE_MAX_MIN)) {
-            return new Ir64Op.VectorFpAbsoluteMaxMin(!u, q, floatEsz, rd, rn, rm);
+            return new AdvSimdFpOp64.FpAbsoluteMaxMin(!u, q, floatEsz, rd, rn, rm);
         }
         Ir64VectorFpThreeSameOp fpOp = decodeVectorFpThreeSameOpcode(u, a, opcode);
         if (fpOp != null) {
             if (scalar && !fpThreeSameOpHasScalarForm(fpOp)) {
                 throw unsupported(word, address);
             }
-            return new Ir64Op.VectorFpArithmeticThreeSame(fpOp, scalar, q, floatEsz, rd, rn, rm);
+            return new AdvSimdFpOp64.FpArithmeticThreeSame(fpOp, scalar, q, floatEsz, rd, rn, rm);
         }
         // A "three same pairwise (FP)" vetorial NÃO tem forma escalar aqui — a `FADDP_s`/etc mora na
         // classe "AdvSIMD scalar pairwise" (`bit10=0`), tratada em {@link #decodeAdvancedSimdInteger}.
         if (!scalar) {
             Ir64VectorFpPairwiseOp fpPairwiseOp = decodeVectorFpPairwiseOpcode(u, a, opcode);
             if (fpPairwiseOp != null) {
-                return new Ir64Op.VectorFpArithmeticPairwise(fpPairwiseOp, false, q, floatEsz, rd, rn, rm);
+                return new AdvSimdFpOp64.FpArithmeticPairwise(fpPairwiseOp, false, q, floatEsz, rd, rn, rm);
             }
         }
         throw unsupported(word, address);
@@ -5318,8 +5327,8 @@ public final class Aarch64Decoder {
     /// B19.3: quais operações de {@link #decodeVectorFpUnaryRmZeroOpcode}/
     /// {@link #decodeVectorFpUnaryRmOneOpcode} têm forma AdvSIMD-ESCALAR real ("two-register
     /// miscellaneous" escalar + conversões `@icvt` escalares). As de fora (`ABS`/`NEG` FP,
-    /// `SQRT`, `RINTx`) só existem vetoriais — ou já são {@link Ir64Op.Fp64Alu}/
-    /// {@link Ir64Op.Fp64Round} escalares por outro encoding — então um encoding escalar que
+    /// `SQRT`, `RINTx`) só existem vetoriais — ou já são {@link FpOp64.Alu}/
+    /// {@link FpOp64.Round} escalares por outro encoding — então um encoding escalar que
     /// case uma delas é reservado ⇒ `unsupported` (G8). `FRECPX`/`FCVTXN` NUNCA passam por aqui
     /// (têm `if` explícito no decoder), logo `false`.
     private static boolean fpUnaryOpHasScalarForm(Ir64VectorFpUnaryOp op) {
@@ -5748,7 +5757,7 @@ public final class Aarch64Decoder {
                 // `SQDMULL`/`SQDMLAL`/`SQDMLSL` só existem H→S/S→D — sem forma `byte` (G8).
                 throw unsupported(word, address);
             }
-            return new Ir64Op.VectorArithmeticWidening(wideningOp, scalar, q, esz, rd, rn, rm);
+            return new AdvSimdIntegerOp64.ArithmeticWidening(wideningOp, scalar, q, esz, rd, rn, rm);
         }
         Ir64VectorWideOp wideOp = switch (opcode) {
             case 0b0_0010 -> u ? Ir64VectorWideOp.UADDW : Ir64VectorWideOp.SADDW;
@@ -5756,7 +5765,7 @@ public final class Aarch64Decoder {
             default -> null;
         };
         if (wideOp != null) {
-            return new Ir64Op.VectorArithmeticWide(wideOp, q, esz, rd, rn, rm);
+            return new AdvSimdIntegerOp64.ArithmeticWide(wideOp, q, esz, rd, rn, rm);
         }
         Ir64VectorNarrowOp narrowOp = switch (opcode) {
             case 0b0_1000 -> u ? Ir64VectorNarrowOp.RADDHN : Ir64VectorNarrowOp.ADDHN;
@@ -5764,7 +5773,7 @@ public final class Aarch64Decoder {
             default -> null;
         };
         if (narrowOp != null) {
-            return new Ir64Op.VectorArithmeticNarrow(narrowOp, q, esz, rd, rn, rm);
+            return new AdvSimdIntegerOp64.ArithmeticNarrow(narrowOp, q, esz, rd, rn, rm);
         }
         // B8.11: `PMULL`/`PMULL2` (`opcode=0b11100`, `u` sempre `false` no encoding real — mesmo
         // slot que a triagem original desta task previa, conferido bit a bit contra `a64.decode`
@@ -5772,10 +5781,10 @@ public final class Aarch64Decoder {
         // doubleword→128 bits inteiro); `01`/`10` são reservados (G8).
         if (opcode == 0b1_1100 && !u) {
             if (esz == 0) {
-                return new Ir64Op.VectorPolynomialMultiplyLong(false, q, rd, rn, rm);
+                return new AdvSimdIntegerOp64.PolynomialMultiplyLong(false, q, rd, rn, rm);
             }
             if (esz == 3) {
-                return new Ir64Op.VectorPolynomialMultiplyLong(true, q, rd, rn, rm);
+                return new AdvSimdIntegerOp64.PolynomialMultiplyLong(true, q, rd, rn, rm);
             }
         }
         throw unsupported(word, address);
@@ -5819,12 +5828,12 @@ public final class Aarch64Decoder {
             if (sizeField == ADVSIMD_INDEXED_SIZE_WORD && q && !l) {
                 int rm = (word >>> ADVSIMD_INT_RM_SHIFT) & ADVSIMD_INT_RM_MASK;
                 int index = h ? 1 : 0;
-                return new Ir64Op.VectorFpComplexMultiplyAccumulateByElement(true, 2, rotation, rd, rn, rm, index);
+                return new AdvSimdFpOp64.FpComplexMultiplyAccumulateByElement(true, 2, rotation, rd, rn, rm, index);
             }
             if (sizeField == ADVSIMD_INDEXED_SIZE_HALFWORD && (q || !h)) {
                 int rmH = (word >>> ADVSIMD_INT_RM_SHIFT) & ADVSIMD_INDEXED_RM_H_MASK;
                 int index = q ? ((h ? 0b10 : 0) | (l ? 0b01 : 0)) : (l ? 1 : 0);
-                return new Ir64Op.VectorFpComplexMultiplyAccumulateByElement(q, 1, rotation, rd, rn, rmH, index);
+                return new AdvSimdFpOp64.FpComplexMultiplyAccumulateByElement(q, 1, rotation, rd, rn, rmH, index);
             }
             // Combinações reservadas (`sizeField=WORD` com `!q`/`l=1`; `sizeField=HALFWORD` com
             // `!q&&h`) nunca são reais (G8) — caem na cadeia normal abaixo, que também não as trata,
@@ -5845,15 +5854,15 @@ public final class Aarch64Decoder {
                 // `BFDOT_vi`: `Vm.2H[index]` só tem 2 grupos — o índice é `L` sozinho (bit21); `H`
                 // (bit11) e `M` (bit20) são reservados/não usados nesta forma (medido contra corpus
                 // real, devkitA64 `.arch armv8.6-a+bf16`).
-                return new Ir64Op.VectorFpDotProductBFloat16ByElement(q, rd, rn, rmH, l ? 1 : 0);
+                return new AdvSimdFpOp64.FpDotProductBFloat16ByElement(q, rd, rn, rmH, l ? 1 : 0);
             }
             if (sizeField == ADVSIMD_INDEXED_SIZE_DOUBLEWORD) {
                 // `BFMLAL_vi`: índice `H:L:M` completo (3 bits), MESMA fórmula do ramo `HALFWORD`
                 // abaixo — `q` aqui é o seletor `B`/`T` (`top`), NÃO largura (ver Javadoc de
-                // {@link Ir64Op.VectorFpMultiplyAddLongBFloat16#top}).
+                // {@link AdvSimdFpOp64.FpMultiplyAddLongBFloat16#top}).
                 int lm = (word >>> ADVSIMD_INDEXED_LM_SHIFT) & ADVSIMD_INDEXED_LM_MASK;
                 int index = (h ? 0b100 : 0) | lm;
-                return new Ir64Op.VectorFpMultiplyAddLongBFloat16ByElement(q, rd, rn, rmH, index);
+                return new AdvSimdFpOp64.FpMultiplyAddLongBFloat16ByElement(q, rd, rn, rmH, index);
             }
         }
         // B19.12 (`FEAT_I8MM`): `USDOT_vi`/`SUDOT_vi` hijacham o MESMO `opcode`(bits[15:12])=`1111`
@@ -5873,11 +5882,11 @@ public final class Aarch64Decoder {
             int index = (h ? 0b10 : 0) | (l ? 0b01 : 0);
             if (sizeField == ADVSIMD_I8MM_SIZE_WORD) {
                 // `USDOT_vi`: `Rn` sem sinal, `Rm` com sinal.
-                return new Ir64Op.VectorIntegerDotProductByElement(q, false, true, rd, rn, rmH, index);
+                return new AdvSimdIntegerOp64.IntegerDotProductByElement(q, false, true, rd, rn, rmH, index);
             }
             if (sizeField == ADVSIMD_I8MM_INDEXED_SIZE_SUDOT) {
                 // `SUDOT_vi`: `Rn` com sinal, `Rm` sem sinal (só existe indexada — não há `SUDOT_v`).
-                return new Ir64Op.VectorIntegerDotProductByElement(q, true, false, rd, rn, rmH, index);
+                return new AdvSimdIntegerOp64.IntegerDotProductByElement(q, true, false, rd, rn, rmH, index);
             }
         }
         // B19.13 (`FEAT_FHM`): `FMLAL_vi`/`FMLSL_vi`/`FMLAL2_vi`/`FMLSL2_vi` hijacham o MESMO slot
@@ -5900,7 +5909,7 @@ public final class Aarch64Decoder {
             int index = (h ? 0b100 : 0) | lm;
             boolean top = (opcode & ADVSIMD_FHM_INDEXED_OPCODE_TOP_BIT) != 0;
             boolean subtract = (opcode & ADVSIMD_FHM_INDEXED_OPCODE_SUBTRACT_BIT) != 0;
-            return new Ir64Op.VectorFpMultiplyAddLongByElement(q, top, subtract, rd, rn, rmH, index);
+            return new AdvSimdFpOp64.FpMultiplyAddLongByElement(q, top, subtract, rd, rn, rmH, index);
         }
         // B19.23 (`FEAT_DotProd` residual): `SDOT_vi`/`UDOT_vi` hijacham `opcode`(bits[15:12])=`1110`
         // (vizinho do `1111` de `USDOT_vi`/`SUDOT_vi`/`BFDOT_vi`/`BFMLAL_vi` acima), `size=WORD`,
@@ -5913,7 +5922,7 @@ public final class Aarch64Decoder {
                 && architecture.has(Aarch64Feature.DOT_PRODUCT)) {
             int rm = (word >>> ADVSIMD_INT_RM_SHIFT) & ADVSIMD_INT_RM_MASK;
             int index = (h ? 0b10 : 0) | (l ? 0b01 : 0);
-            return new Ir64Op.VectorIntegerDotProductByElement(q, !u, !u, rd, rn, rm, index);
+            return new AdvSimdIntegerOp64.IntegerDotProductByElement(q, !u, !u, rd, rn, rm, index);
         }
         // B19.11b (`FEAT_FP8FMA`): `FMLAL_hb_vi` hijacka o MESMO slot `sizeField=DOUBLEWORD`(`11`)
         // que `BFMLAL_vi` usa (opcode PRÓPRIO {@link #ADVSIMD_FP8_FMA_INDEXED_OPCODE_HB}, nunca
@@ -5930,7 +5939,7 @@ public final class Aarch64Decoder {
             int index = (h ? 0b1000 : 0)
                     | ((word >>> ADVSIMD_FP8_FMA_INDEXED_INDEX_SHIFT) & ADVSIMD_FP8_FMA_INDEXED_INDEX_MASK);
             int idxn = (word >>> ADVSIMD_INT_Q_SHIFT) & 1;
-            return new Ir64Op.VectorFp8FusedMultiplyAddLongByElement(false, idxn, rd, rn, rmFp8, index);
+            return new AdvSimdFpOp64.Fp8FusedMultiplyAddLongByElement(false, idxn, rd, rn, rmFp8, index);
         }
         // B19.11b (`FEAT_FP8FMA`): `FMLALL_sb_vi` — `U`(bit29)=`1` fixo, `opcode`(bits[15:12])=
         // {@link #ADVSIMD_FP8_FMA_INDEXED_OPCODE_SB}, `bit23`=`0` fixo — mas bit22 aqui NÃO é
@@ -5949,7 +5958,7 @@ public final class Aarch64Decoder {
             int idxnHigh = (word >>> ADVSIMD_INT_Q_SHIFT) & 1;
             int idxnLow = (word >>> ADVSIMD_INT_SIZE_SHIFT) & 1;
             int idxn = (idxnHigh << 1) | idxnLow;
-            return new Ir64Op.VectorFp8FusedMultiplyAddLongByElement(true, idxn, rd, rn, rmFp8, index);
+            return new AdvSimdFpOp64.Fp8FusedMultiplyAddLongByElement(true, idxn, rd, rn, rmFp8, index);
         }
         // B19.11c (`FEAT_FP8DOT2`): `FDOT_hb_vi` — sizeField=`HALFWORD`(`01`), opcode
         // {@link #ADVSIMD_FP8_DOT_INDEXED_OPCODE}, `U`=`0` fixo. **Ao contrário de**
@@ -5967,7 +5976,7 @@ public final class Aarch64Decoder {
             int rm = (word >>> ADVSIMD_INT_RM_SHIFT) & ADVSIMD_INDEXED_RM_H_MASK;
             int lm = (word >>> ADVSIMD_INDEXED_LM_SHIFT) & ADVSIMD_INDEXED_LM_MASK;
             int index = (h ? 0b100 : 0) | lm;
-            return new Ir64Op.VectorFp8DotProductByElement(false, q, rd, rn, rm, index);
+            return new AdvSimdFpOp64.Fp8DotProductByElement(false, q, rd, rn, rm, index);
         }
         // B19.11d (`FEAT_FP8DOT4`): `FDOT_sb_vi` — mede `sizeField=HALF_PRECISION`(`00`), MESMO
         // `opcode`(bits[15:12])={@link #ADVSIMD_FP8_DOT_INDEXED_OPCODE}, `U`=`0` fixo, mas ao
@@ -5985,7 +5994,7 @@ public final class Aarch64Decoder {
                 && architecture.has(Aarch64Feature.FP8_DOT_PRODUCT_4WAY)) {
             int rm = (word >>> ADVSIMD_INT_RM_SHIFT) & ADVSIMD_INT_RM_MASK;
             int index = (h ? 0b10 : 0) | (l ? 0b01 : 0);
-            return new Ir64Op.VectorFp8DotProductByElement(true, q, rd, rn, rm, index);
+            return new AdvSimdFpOp64.Fp8DotProductByElement(true, q, rd, rn, rm, index);
         }
         Ir64Op result = switch (sizeField) {
             // Doubleword: só ponto flutuante (`FMUL`/`FMLA`/`FMLS`/`FMULX` "d") — `Rm` de 5 bits,
@@ -6053,7 +6062,7 @@ public final class Aarch64Decoder {
         if (op == null) {
             return null;
         }
-        return new Ir64Op.VectorFpArithmeticThreeSameByElement(op, scalar, q, esz, rd, rn, rm, index);
+        return new AdvSimdFpOp64.FpArithmeticThreeSameByElement(op, scalar, q, esz, rd, rn, rm, index);
     }
 
     /// Tabela `(U,opcode)` → {@link Ir64VectorThreeSameOp}/{@link Ir64VectorWideningOp} para
@@ -6075,7 +6084,7 @@ public final class Aarch64Decoder {
                 default -> null;
             };
             if (rdmOp != null) {
-                return new Ir64Op.VectorArithmeticThreeSameByElement(rdmOp, scalar, q, esz, rd, rn, rm, index);
+                return new AdvSimdIntegerOp64.ArithmeticThreeSameByElement(rdmOp, scalar, q, esz, rd, rn, rm, index);
             }
         }
         Ir64VectorThreeSameOp threeSameOp = switch (key) {
@@ -6092,7 +6101,7 @@ public final class Aarch64Decoder {
             if (scalar && !scalarAllowed) {
                 return null;
             }
-            return new Ir64Op.VectorArithmeticThreeSameByElement(threeSameOp, scalar, q, esz, rd, rn, rm, index);
+            return new AdvSimdIntegerOp64.ArithmeticThreeSameByElement(threeSameOp, scalar, q, esz, rd, rn, rm, index);
         }
         Ir64VectorWideningOp wideningOp = switch (key) {
             case 0b0_1010 -> Ir64VectorWideningOp.SMULL;
@@ -6114,7 +6123,7 @@ public final class Aarch64Decoder {
         if (scalar && !scalarAllowed) {
             return null;
         }
-        return new Ir64Op.VectorArithmeticWideningByElement(wideningOp, scalar, q, esz, rd, rn, rm, index);
+        return new AdvSimdIntegerOp64.ArithmeticWideningByElement(wideningOp, scalar, q, esz, rd, rn, rm, index);
     }
 
     /// "AdvSIMD shift by immediate" (B8.8) — entra já sabendo que o prefixo bateu
@@ -6171,7 +6180,7 @@ public final class Aarch64Decoder {
                 // `SHRN`/`RSHRN` não têm forma escalar real (só as saturantes têm) — G8.
                 throw unsupported(word, address);
             }
-            return new Ir64Op.VectorShiftNarrowImmediate(narrowOp, scalar, q, esz, rightShift, rd, rn);
+            return new AdvSimdIntegerOp64.ShiftNarrowImmediate(narrowOp, scalar, q, esz, rightShift, rd, rn);
         }
         if (opcode == 0b1_0100) {
             // `SSHLL`/`USHLL` — sem forma escalar real (G8).
@@ -6179,7 +6188,7 @@ public final class Aarch64Decoder {
                 throw unsupported(word, address);
             }
             Ir64VectorShiftWidenOp widenOp = u ? Ir64VectorShiftWidenOp.USHLL : Ir64VectorShiftWidenOp.SSHLL;
-            return new Ir64Op.VectorShiftWidenImmediate(widenOp, q, esz, leftShift, rd, rn);
+            return new AdvSimdIntegerOp64.ShiftWidenImmediate(widenOp, q, esz, leftShift, rd, rn);
         }
 
         Ir64VectorShiftOp op = switch (opcode) {
@@ -6219,7 +6228,7 @@ public final class Aarch64Decoder {
                 boolean toFloat = opcode == ADVSIMD_SHIFT_FCVT_FIXED_TO_FLOAT_OPCODE;
                 // `rightShift` (`2*esize - immh:immb`, já calculado) é EXATAMENTE o `#fbits` do
                 // `@fcvt_fixed`/`@fcvtq_{s,d}` (faixa `1..esize`); `!u` = variante assinada.
-                return new Ir64Op.VectorFpConvertFixedPoint(scalar, q, esz, rightShift, toFloat, !u, rd, rn);
+                return new AdvSimdFpOp64.FpConvertFixedPoint(scalar, q, esz, rightShift, toFloat, !u, rd, rn);
             }
             throw unsupported(word, address);
         }
@@ -6236,7 +6245,7 @@ public final class Aarch64Decoder {
             throw unsupported(word, address);
         }
         int shift = isRightShift ? rightShift : leftShift;
-        return new Ir64Op.VectorShiftImmediate(op, scalar, q, esz, shift, rd, rn);
+        return new AdvSimdIntegerOp64.ShiftImmediate(op, scalar, q, esz, shift, rd, rn);
     }
 
     /// Posição (`0`-`3`) do bit mais alto setado de `immh` (4 bits) — `-1` se `immh=0000`
@@ -6266,7 +6275,7 @@ public final class Aarch64Decoder {
     /// `FMADD`/`FMSUB`/`FNMADD`/`FNMSUB` (Floating-point data-processing, 3 source, B8.4) —
     /// `type=10`/`11` (meia-precisão/reservado) são UNDEFINED aqui, mesmo padrão de
     /// {@link #decodeFpDoublePrecision}, mas SEM reaproveitar aquele método: ali o campo é lido
-    /// isolado (`Fp64Alu`/`Fp64Convert`/`Fp64Compare` não têm mais nada nos bits vizinhos), aqui
+    /// isolado (`FpOp64.Alu`/`FpOp64.Convert`/`FpOp64.Compare` não têm mais nada nos bits vizinhos), aqui
     /// os bits21/15 (negação) ficam ENTRE o `type` e os campos de registrador — inlinar evita um
     /// método que devolveria só metade do que esta forma precisa.
     private Ir64Op decodeFpThreeSource(int word, long address) {
@@ -6285,7 +6294,7 @@ public final class Aarch64Decoder {
         int va = (word >>> FP_THREE_SOURCE_RA_SHIFT) & REGISTER_FIELD_MASK;
         int vn = (word >>> RN_SHIFT) & REGISTER_FIELD_MASK;
         int vd = word & REGISTER_FIELD_MASK;
-        return new Ir64Op.Fp64MultiplyAdd(doublePrecision, negateAddend, negateProduct, vd, vn, vm, va);
+        return new FpOp64.MultiplyAdd(doublePrecision, negateAddend, negateProduct, vd, vn, vm, va);
     }
 
     /// `FADD`/`FSUB`/`FMUL`/`FDIV`/`FMAX`/`FMIN`/`FMAXNM`/`FMINNM`/`FNMUL` (Floating-point
@@ -6294,16 +6303,16 @@ public final class Aarch64Decoder {
     private Ir64Op decodeFpTwoSource(int word, long address) {
         boolean doublePrecision = decodeFpDoublePrecision(word, address);
         int opcode = (word >>> FP_TWO_SOURCE_OPCODE_SHIFT) & FP_TWO_SOURCE_OPCODE_MASK;
-        Ir64Op.Fp64Operation op = switch (opcode) {
-            case FP_TWO_SOURCE_OPCODE_FMUL -> Ir64Op.Fp64Operation.MUL;
-            case FP_TWO_SOURCE_OPCODE_FDIV -> Ir64Op.Fp64Operation.DIV;
-            case FP_TWO_SOURCE_OPCODE_FADD -> Ir64Op.Fp64Operation.ADD;
-            case FP_TWO_SOURCE_OPCODE_FSUB -> Ir64Op.Fp64Operation.SUB;
-            case FP_TWO_SOURCE_OPCODE_FMAX -> Ir64Op.Fp64Operation.MAX;
-            case FP_TWO_SOURCE_OPCODE_FMIN -> Ir64Op.Fp64Operation.MIN;
-            case FP_TWO_SOURCE_OPCODE_FMAXNM -> Ir64Op.Fp64Operation.MAXNM;
-            case FP_TWO_SOURCE_OPCODE_FMINNM -> Ir64Op.Fp64Operation.MINNM;
-            case FP_TWO_SOURCE_OPCODE_FNMUL -> Ir64Op.Fp64Operation.NMUL;
+        FpOp64.Fp64Operation op = switch (opcode) {
+            case FP_TWO_SOURCE_OPCODE_FMUL -> FpOp64.Fp64Operation.MUL;
+            case FP_TWO_SOURCE_OPCODE_FDIV -> FpOp64.Fp64Operation.DIV;
+            case FP_TWO_SOURCE_OPCODE_FADD -> FpOp64.Fp64Operation.ADD;
+            case FP_TWO_SOURCE_OPCODE_FSUB -> FpOp64.Fp64Operation.SUB;
+            case FP_TWO_SOURCE_OPCODE_FMAX -> FpOp64.Fp64Operation.MAX;
+            case FP_TWO_SOURCE_OPCODE_FMIN -> FpOp64.Fp64Operation.MIN;
+            case FP_TWO_SOURCE_OPCODE_FMAXNM -> FpOp64.Fp64Operation.MAXNM;
+            case FP_TWO_SOURCE_OPCODE_FMINNM -> FpOp64.Fp64Operation.MINNM;
+            case FP_TWO_SOURCE_OPCODE_FNMUL -> FpOp64.Fp64Operation.NMUL;
             // Opcodes 1001-1111 são reservados nesta classe ("Floating-point data-processing,
             // 2 source") — FMULX (que soa parecido) vive em outro espaço de encoding (Advanced
             // SIMD escalar, `neon-dp.decode`), fora de escopo desta task.
@@ -6312,7 +6321,7 @@ public final class Aarch64Decoder {
         int vm = (word >>> FP_RM_SHIFT) & REGISTER_FIELD_MASK;
         int vn = (word >>> RN_SHIFT) & REGISTER_FIELD_MASK;
         int vd = word & REGISTER_FIELD_MASK;
-        return new Ir64Op.Fp64Alu(op, doublePrecision, vd, vn, vm);
+        return new FpOp64.Alu(op, doublePrecision, vd, vn, vm);
     }
 
     /// `FMOV`/`FABS`/`FNEG`/`FSQRT` (unárias), `FCVT` F32↔F64/F16↔F32/F16↔F64 (B19.26,
@@ -6332,7 +6341,7 @@ public final class Aarch64Decoder {
             }
             int vn = (word >>> RN_SHIFT) & REGISTER_FIELD_MASK;
             int vd = word & REGISTER_FIELD_MASK;
-            return new Ir64Op.Fp64ConvertToBf16(vd, vn);
+            return new FpOp64.ConvertToBf16(vd, vn);
         }
         // B19.26 (`FEAT_FP16`): `FCVT_s_hs`/`FCVT_s_hd` (destino meia-precisão, opcode=7) e
         // `FCVT_s_sh`/`FCVT_s_dh` (fonte meia-precisão, opcodes 4/5 com
@@ -6340,9 +6349,9 @@ public final class Aarch64Decoder {
         // {@link #decodeFpDoublePrecision}, que trataria `type`=meia-precisão como reservado.
         if (opcode == FP_ONE_SOURCE_OPCODE_FCVT_TO_HALF) {
             int type = (word >>> FP_TYPE_SHIFT) & FP_TYPE_MASK;
-            Ir64Op.Fp64HalfPrecisionConversion conversion = switch (type) {
-                case FP_TYPE_SINGLE -> Ir64Op.Fp64HalfPrecisionConversion.SINGLE_TO_HALF;
-                case FP_TYPE_DOUBLE -> Ir64Op.Fp64HalfPrecisionConversion.DOUBLE_TO_HALF;
+            FpOp64.Fp64HalfPrecisionConversion conversion = switch (type) {
+                case FP_TYPE_SINGLE -> FpOp64.Fp64HalfPrecisionConversion.SINGLE_TO_HALF;
+                case FP_TYPE_DOUBLE -> FpOp64.Fp64HalfPrecisionConversion.DOUBLE_TO_HALF;
                 default -> throw unsupported(word, address);
             };
             if (!architecture.has(Aarch64Feature.FP16)) {
@@ -6350,7 +6359,7 @@ public final class Aarch64Decoder {
             }
             int vn = (word >>> RN_SHIFT) & REGISTER_FIELD_MASK;
             int vd = word & REGISTER_FIELD_MASK;
-            return new Ir64Op.Fp64ConvertHalfPrecision(conversion, vd, vn);
+            return new FpOp64.ConvertHalfPrecision(conversion, vd, vn);
         }
         if (opcode == FP_ONE_SOURCE_OPCODE_FCVT_TO_SINGLE || opcode == FP_ONE_SOURCE_OPCODE_FCVT_TO_DOUBLE) {
             int type = (word >>> FP_TYPE_SHIFT) & FP_TYPE_MASK;
@@ -6360,11 +6369,11 @@ public final class Aarch64Decoder {
                 }
                 int vn = (word >>> RN_SHIFT) & REGISTER_FIELD_MASK;
                 int vd = word & REGISTER_FIELD_MASK;
-                Ir64Op.Fp64HalfPrecisionConversion conversion =
+                FpOp64.Fp64HalfPrecisionConversion conversion =
                         opcode == FP_ONE_SOURCE_OPCODE_FCVT_TO_SINGLE
-                                ? Ir64Op.Fp64HalfPrecisionConversion.HALF_TO_SINGLE
-                                : Ir64Op.Fp64HalfPrecisionConversion.HALF_TO_DOUBLE;
-                return new Ir64Op.Fp64ConvertHalfPrecision(conversion, vd, vn);
+                                ? FpOp64.Fp64HalfPrecisionConversion.HALF_TO_SINGLE
+                                : FpOp64.Fp64HalfPrecisionConversion.HALF_TO_DOUBLE;
+                return new FpOp64.ConvertHalfPrecision(conversion, vd, vn);
             }
         }
         boolean doublePrecision = decodeFpDoublePrecision(word, address);
@@ -6372,13 +6381,13 @@ public final class Aarch64Decoder {
         int vd = word & REGISTER_FIELD_MASK;
         return switch (opcode) {
             case FP_ONE_SOURCE_OPCODE_FMOV ->
-                    new Ir64Op.Fp64Alu(Ir64Op.Fp64Operation.MOV, doublePrecision, vd, 0, vn);
+                    new FpOp64.Alu(FpOp64.Fp64Operation.MOV, doublePrecision, vd, 0, vn);
             case FP_ONE_SOURCE_OPCODE_FABS ->
-                    new Ir64Op.Fp64Alu(Ir64Op.Fp64Operation.ABS, doublePrecision, vd, 0, vn);
+                    new FpOp64.Alu(FpOp64.Fp64Operation.ABS, doublePrecision, vd, 0, vn);
             case FP_ONE_SOURCE_OPCODE_FNEG ->
-                    new Ir64Op.Fp64Alu(Ir64Op.Fp64Operation.NEG, doublePrecision, vd, 0, vn);
+                    new FpOp64.Alu(FpOp64.Fp64Operation.NEG, doublePrecision, vd, 0, vn);
             case FP_ONE_SOURCE_OPCODE_FSQRT ->
-                    new Ir64Op.Fp64Alu(Ir64Op.Fp64Operation.SQRT, doublePrecision, vd, 0, vn);
+                    new FpOp64.Alu(FpOp64.Fp64Operation.SQRT, doublePrecision, vd, 0, vn);
             case FP_ONE_SOURCE_OPCODE_FCVT_TO_DOUBLE -> {
                 if (doublePrecision) {
                     // opcode=5 (FCVT-para-double) exige type=00 (fonte single) — a combinação
@@ -6386,7 +6395,7 @@ public final class Aarch64Decoder {
                     // fora de escopo.
                     throw unsupported(word, address);
                 }
-                yield new Ir64Op.Fp64Convert(Ir64Op.Fp64Conversion.F32_TO_F64, vd, vn);
+                yield new FpOp64.Convert(FpOp64.Fp64Conversion.F32_TO_F64, vd, vn);
             }
             case FP_ONE_SOURCE_OPCODE_FCVT_TO_SINGLE -> {
                 if (!doublePrecision) {
@@ -6394,39 +6403,39 @@ public final class Aarch64Decoder {
                     // contrária é outra instrução, fora de escopo (mesma simetria do case acima).
                     throw unsupported(word, address);
                 }
-                yield new Ir64Op.Fp64Convert(Ir64Op.Fp64Conversion.F64_TO_F32, vd, vn);
+                yield new FpOp64.Convert(FpOp64.Fp64Conversion.F64_TO_F32, vd, vn);
             }
-            case FP_ROUND_OPCODE_FRINTN -> new Ir64Op.Fp64Round(
-                    Ir64Op.Fp64RoundingDirection.NEAREST_TIES_EVEN, doublePrecision, vd, vn);
-            case FP_ROUND_OPCODE_FRINTP -> new Ir64Op.Fp64Round(
-                    Ir64Op.Fp64RoundingDirection.TOWARD_POSITIVE_INFINITY, doublePrecision, vd, vn);
-            case FP_ROUND_OPCODE_FRINTM -> new Ir64Op.Fp64Round(
-                    Ir64Op.Fp64RoundingDirection.TOWARD_NEGATIVE_INFINITY, doublePrecision, vd, vn);
-            case FP_ROUND_OPCODE_FRINTZ -> new Ir64Op.Fp64Round(
-                    Ir64Op.Fp64RoundingDirection.TOWARD_ZERO, doublePrecision, vd, vn);
-            case FP_ROUND_OPCODE_FRINTA -> new Ir64Op.Fp64Round(
-                    Ir64Op.Fp64RoundingDirection.NEAREST_TIES_AWAY, doublePrecision, vd, vn);
-            // FRINTX/FRINTI: MESMA direção de FRINTN — ver Javadoc de Ir64Op.Fp64Round (FPCR.RMode
+            case FP_ROUND_OPCODE_FRINTN -> new FpOp64.Round(
+                    FpOp64.Fp64RoundingDirection.NEAREST_TIES_EVEN, doublePrecision, vd, vn);
+            case FP_ROUND_OPCODE_FRINTP -> new FpOp64.Round(
+                    FpOp64.Fp64RoundingDirection.TOWARD_POSITIVE_INFINITY, doublePrecision, vd, vn);
+            case FP_ROUND_OPCODE_FRINTM -> new FpOp64.Round(
+                    FpOp64.Fp64RoundingDirection.TOWARD_NEGATIVE_INFINITY, doublePrecision, vd, vn);
+            case FP_ROUND_OPCODE_FRINTZ -> new FpOp64.Round(
+                    FpOp64.Fp64RoundingDirection.TOWARD_ZERO, doublePrecision, vd, vn);
+            case FP_ROUND_OPCODE_FRINTA -> new FpOp64.Round(
+                    FpOp64.Fp64RoundingDirection.NEAREST_TIES_AWAY, doublePrecision, vd, vn);
+            // FRINTX/FRINTI: MESMA direção de FRINTN — ver Javadoc de FpOp64.Round (FPCR.RMode
             // não modelado em A64).
-            case FP_ROUND_OPCODE_FRINTX -> new Ir64Op.Fp64Round(
-                    Ir64Op.Fp64RoundingDirection.NEAREST_TIES_EVEN, doublePrecision, vd, vn);
-            case FP_ROUND_OPCODE_FRINTI -> new Ir64Op.Fp64Round(
-                    Ir64Op.Fp64RoundingDirection.NEAREST_TIES_EVEN, doublePrecision, vd, vn);
+            case FP_ROUND_OPCODE_FRINTX -> new FpOp64.Round(
+                    FpOp64.Fp64RoundingDirection.NEAREST_TIES_EVEN, doublePrecision, vd, vn);
+            case FP_ROUND_OPCODE_FRINTI -> new FpOp64.Round(
+                    FpOp64.Fp64RoundingDirection.NEAREST_TIES_EVEN, doublePrecision, vd, vn);
             // B19.18 (`FEAT_FRINTTS`): `Z` sempre `TOWARD_ZERO` (real no hardware, não
             // simplificação); `X` degenera para `NEAREST_TIES_EVEN` (mesma decisão herdada de
             // `FRINTX`/`FRINTI` acima — `FPCR.RMode` não modelado, B8.5/B8.15).
             case FP_ROUND_RANGE_OPCODE_FRINT32Z -> requireDirectedRoundingToIntegral(word, address,
-                    new Ir64Op.Fp64RoundRangeLimited(
-                            Ir64Op.Fp64RoundingDirection.TOWARD_ZERO, false, doublePrecision, vd, vn));
+                    new FpOp64.RoundRangeLimited(
+                            FpOp64.Fp64RoundingDirection.TOWARD_ZERO, false, doublePrecision, vd, vn));
             case FP_ROUND_RANGE_OPCODE_FRINT32X -> requireDirectedRoundingToIntegral(word, address,
-                    new Ir64Op.Fp64RoundRangeLimited(
-                            Ir64Op.Fp64RoundingDirection.NEAREST_TIES_EVEN, false, doublePrecision, vd, vn));
+                    new FpOp64.RoundRangeLimited(
+                            FpOp64.Fp64RoundingDirection.NEAREST_TIES_EVEN, false, doublePrecision, vd, vn));
             case FP_ROUND_RANGE_OPCODE_FRINT64Z -> requireDirectedRoundingToIntegral(word, address,
-                    new Ir64Op.Fp64RoundRangeLimited(
-                            Ir64Op.Fp64RoundingDirection.TOWARD_ZERO, true, doublePrecision, vd, vn));
+                    new FpOp64.RoundRangeLimited(
+                            FpOp64.Fp64RoundingDirection.TOWARD_ZERO, true, doublePrecision, vd, vn));
             case FP_ROUND_RANGE_OPCODE_FRINT64X -> requireDirectedRoundingToIntegral(word, address,
-                    new Ir64Op.Fp64RoundRangeLimited(
-                            Ir64Op.Fp64RoundingDirection.NEAREST_TIES_EVEN, true, doublePrecision, vd, vn));
+                    new FpOp64.RoundRangeLimited(
+                            FpOp64.Fp64RoundingDirection.NEAREST_TIES_EVEN, true, doublePrecision, vd, vn));
             default -> throw unsupported(word, address);
         };
     }
@@ -6447,7 +6456,7 @@ public final class Aarch64Decoder {
         int imm8 = (word >>> FP_IMMEDIATE_IMM8_SHIFT) & FP_IMMEDIATE_IMM8_MASK;
         long immediateBits = expandFpImmediate(imm8, doublePrecision);
         int vd = word & REGISTER_FIELD_MASK;
-        return new Ir64Op.Fp64MoveImmediate(doublePrecision, vd, immediateBits);
+        return new FpOp64.MoveImmediate(doublePrecision, vd, immediateBits);
     }
 
     /// `FCMP`/`FCMPE`, com ou sem comparação-com-zero (`Rm` é fixo em `00000` na forma zero —
@@ -6458,7 +6467,7 @@ public final class Aarch64Decoder {
         boolean compareWithZero = ((word >>> FP_COMPARE_ZERO_BIT_SHIFT) & 1) != 0;
         int vn = (word >>> RN_SHIFT) & REGISTER_FIELD_MASK;
         int vm = compareWithZero ? 0 : (word >>> FP_RM_SHIFT) & REGISTER_FIELD_MASK;
-        return new Ir64Op.Fp64Compare(doublePrecision, compareWithZero, signalOnQuietNaN, vn, vm);
+        return new FpOp64.Compare(doublePrecision, compareWithZero, signalOnQuietNaN, vn, vm);
     }
 
     /// `FCSEL` (B8.5) — `Rm`(20:16)/`cond`(15:12) compartilhados com {@link #decodeFpConditionalCompare},
@@ -6469,7 +6478,7 @@ public final class Aarch64Decoder {
         Ir64Condition condition = Ir64Condition.decode((word >>> FP_COND_SHIFT) & COND_FIELD_MASK);
         int vn = (word >>> RN_SHIFT) & REGISTER_FIELD_MASK;
         int vd = word & REGISTER_FIELD_MASK;
-        return new Ir64Op.Fp64ConditionalSelect(doublePrecision, vd, vn, vm, condition);
+        return new FpOp64.ConditionalSelect(doublePrecision, vd, vn, vm, condition);
     }
 
     /// `FCCMP`/`FCCMPE` (B8.5) — `Rn`(9:5)/`Vm`(20:16)/`cond`(15:12) na MESMA posição de `FCSEL`;
@@ -6481,7 +6490,7 @@ public final class Aarch64Decoder {
         int vn = (word >>> RN_SHIFT) & REGISTER_FIELD_MASK;
         boolean signalOnQuietNaN = ((word >>> FP_CCMP_E_BIT_SHIFT) & 1) != 0;
         int nzcv = word & FP_CCMP_NZCV_MASK;
-        return new Ir64Op.Fp64ConditionalCompare(doublePrecision, signalOnQuietNaN, vn, vm, condition, nzcv);
+        return new FpOp64.ConditionalCompare(doublePrecision, signalOnQuietNaN, vn, vm, condition, nzcv);
     }
 
     /// "Conversion between floating-point and fixed-point (general register)" (B8.5): SÓ
@@ -6517,8 +6526,8 @@ public final class Aarch64Decoder {
         int rd = word & REGISTER_FIELD_MASK;
         int fpReg = toFloat ? rd : rn;
         int gpReg = toFloat ? rn : rd;
-        return new Ir64Op.Fp64IntegerConvert(toFloat, signed,
-                Ir64Op.Fp64RoundingDirection.TOWARD_ZERO, doublePrecision, wide, fractionBits, fpReg, gpReg);
+        return new FpOp64.IntegerConvert(toFloat, signed,
+                FpOp64.Fp64RoundingDirection.TOWARD_ZERO, doublePrecision, wide, fractionBits, fpReg, gpReg);
     }
 
     /// "Conversion between floating-point and integer (general register)" e `FMOV` registrador-
@@ -6539,7 +6548,7 @@ public final class Aarch64Decoder {
             int rn = (word >>> RN_SHIFT) & REGISTER_FIELD_MASK;
             int rd = word & REGISTER_FIELD_MASK;
             boolean toFloat = opcode == FP_GP_MOVE_OPCODE_HIGH_TO_FLOAT;
-            return new Ir64Op.Fp64HighHalfMove(toFloat, toFloat ? rd : rn, toFloat ? rn : rd);
+            return new FpOp64.HighHalfMove(toFloat, toFloat ? rd : rn, toFloat ? rn : rd);
         }
         // B19.29 (`FEAT_JSCVT`): `FJCVTZS` — MESMO padrão de `BFCVT`/`FMOV Vn.D[1]` acima: `type`
         // EXIGIDO=`DOUBLE` faz parte do encoding fixo da instrução (não existe forma de precisão
@@ -6552,13 +6561,13 @@ public final class Aarch64Decoder {
             }
             int rn = (word >>> RN_SHIFT) & REGISTER_FIELD_MASK;
             int rd = word & REGISTER_FIELD_MASK;
-            return new Ir64Op.Fp64JavascriptConvert(rd, rn);
+            return new FpOp64.JavascriptConvert(rd, rn);
         }
         // B19.26 (`FEAT_FP16`): `FMOV_hx`/`FMOV_xh` — MESMOS opcodes de `FMOV` registrador-geral↔FP
         // comum (`W`↔`S`/`X`↔`D`), mas `type`={@link #FP_TYPE_HALF_PRECISION} em vez de
         // `sf?DOUBLE:SINGLE` — checar ANTES de {@link #decodeFpDoublePrecision} (que trataria este
         // `type` como reservado). `sf` é ignorado de propósito (ver Javadoc de
-        // {@link Ir64Op.Fp64HalfPrecisionGeneralRegisterMove} — resultado idêntico nos dois valores,
+        // {@link FpOp64.HalfPrecisionGeneralRegisterMove} — resultado idêntico nos dois valores,
         // confirmado contra o corpus real).
         if (opcode == FP_GP_MOVE_OPCODE_TO_FLOAT || opcode == FP_GP_MOVE_OPCODE_TO_GP) {
             int type = (word >>> FP_TYPE_SHIFT) & FP_TYPE_MASK;
@@ -6569,7 +6578,7 @@ public final class Aarch64Decoder {
                 int rn = (word >>> RN_SHIFT) & REGISTER_FIELD_MASK;
                 int rd = word & REGISTER_FIELD_MASK;
                 boolean toFloat = opcode == FP_GP_MOVE_OPCODE_TO_FLOAT;
-                return new Ir64Op.Fp64HalfPrecisionGeneralRegisterMove(
+                return new FpOp64.HalfPrecisionGeneralRegisterMove(
                         toFloat, toFloat ? rd : rn, toFloat ? rn : rd);
             }
         }
@@ -6577,50 +6586,50 @@ public final class Aarch64Decoder {
         int rn = (word >>> RN_SHIFT) & REGISTER_FIELD_MASK;
         int rd = word & REGISTER_FIELD_MASK;
         if (opcode == FP_GP_MOVE_OPCODE_TO_FLOAT) {
-            return new Ir64Op.Fp64GeneralRegisterMove(true, wide, rd, rn);
+            return new FpOp64.GeneralRegisterMove(true, wide, rd, rn);
         }
         if (opcode == FP_GP_MOVE_OPCODE_TO_GP) {
-            return new Ir64Op.Fp64GeneralRegisterMove(false, wide, rn, rd);
+            return new FpOp64.GeneralRegisterMove(false, wide, rn, rd);
         }
         boolean toFloat;
         boolean signed;
-        Ir64Op.Fp64RoundingDirection rounding;
+        FpOp64.Fp64RoundingDirection rounding;
         switch (opcode) {
             case FP_INT_CONVERT_OPCODE_SCVTF -> {
-                toFloat = true; signed = true; rounding = Ir64Op.Fp64RoundingDirection.NEAREST_TIES_EVEN;
+                toFloat = true; signed = true; rounding = FpOp64.Fp64RoundingDirection.NEAREST_TIES_EVEN;
             }
             case FP_INT_CONVERT_OPCODE_UCVTF -> {
-                toFloat = true; signed = false; rounding = Ir64Op.Fp64RoundingDirection.NEAREST_TIES_EVEN;
+                toFloat = true; signed = false; rounding = FpOp64.Fp64RoundingDirection.NEAREST_TIES_EVEN;
             }
             case FP_INT_CONVERT_OPCODE_FCVTNS -> {
-                toFloat = false; signed = true; rounding = Ir64Op.Fp64RoundingDirection.NEAREST_TIES_EVEN;
+                toFloat = false; signed = true; rounding = FpOp64.Fp64RoundingDirection.NEAREST_TIES_EVEN;
             }
             case FP_INT_CONVERT_OPCODE_FCVTNU -> {
-                toFloat = false; signed = false; rounding = Ir64Op.Fp64RoundingDirection.NEAREST_TIES_EVEN;
+                toFloat = false; signed = false; rounding = FpOp64.Fp64RoundingDirection.NEAREST_TIES_EVEN;
             }
             case FP_INT_CONVERT_OPCODE_FCVTPS -> {
-                toFloat = false; signed = true; rounding = Ir64Op.Fp64RoundingDirection.TOWARD_POSITIVE_INFINITY;
+                toFloat = false; signed = true; rounding = FpOp64.Fp64RoundingDirection.TOWARD_POSITIVE_INFINITY;
             }
             case FP_INT_CONVERT_OPCODE_FCVTPU -> {
-                toFloat = false; signed = false; rounding = Ir64Op.Fp64RoundingDirection.TOWARD_POSITIVE_INFINITY;
+                toFloat = false; signed = false; rounding = FpOp64.Fp64RoundingDirection.TOWARD_POSITIVE_INFINITY;
             }
             case FP_INT_CONVERT_OPCODE_FCVTMS -> {
-                toFloat = false; signed = true; rounding = Ir64Op.Fp64RoundingDirection.TOWARD_NEGATIVE_INFINITY;
+                toFloat = false; signed = true; rounding = FpOp64.Fp64RoundingDirection.TOWARD_NEGATIVE_INFINITY;
             }
             case FP_INT_CONVERT_OPCODE_FCVTMU -> {
-                toFloat = false; signed = false; rounding = Ir64Op.Fp64RoundingDirection.TOWARD_NEGATIVE_INFINITY;
+                toFloat = false; signed = false; rounding = FpOp64.Fp64RoundingDirection.TOWARD_NEGATIVE_INFINITY;
             }
             case FP_INT_CONVERT_OPCODE_FCVTZS -> {
-                toFloat = false; signed = true; rounding = Ir64Op.Fp64RoundingDirection.TOWARD_ZERO;
+                toFloat = false; signed = true; rounding = FpOp64.Fp64RoundingDirection.TOWARD_ZERO;
             }
             case FP_INT_CONVERT_OPCODE_FCVTZU -> {
-                toFloat = false; signed = false; rounding = Ir64Op.Fp64RoundingDirection.TOWARD_ZERO;
+                toFloat = false; signed = false; rounding = FpOp64.Fp64RoundingDirection.TOWARD_ZERO;
             }
             case FP_INT_CONVERT_OPCODE_FCVTAS -> {
-                toFloat = false; signed = true; rounding = Ir64Op.Fp64RoundingDirection.NEAREST_TIES_AWAY;
+                toFloat = false; signed = true; rounding = FpOp64.Fp64RoundingDirection.NEAREST_TIES_AWAY;
             }
             case FP_INT_CONVERT_OPCODE_FCVTAU -> {
-                toFloat = false; signed = false; rounding = Ir64Op.Fp64RoundingDirection.NEAREST_TIES_AWAY;
+                toFloat = false; signed = false; rounding = FpOp64.Fp64RoundingDirection.NEAREST_TIES_AWAY;
             }
             // `_g_simd`/`_simd` (FEAT_FPRCVT): extensão POSTERIOR, CONFERIDA contra
             // translate-a64.c — ver isa-nao-aplicavel.tsv. `FJCVTZS` (FEAT_JSCVT) já foi
@@ -6629,7 +6638,7 @@ public final class Aarch64Decoder {
         }
         int fpReg = toFloat ? rd : rn;
         int gpReg = toFloat ? rn : rd;
-        return new Ir64Op.Fp64IntegerConvert(toFloat, signed, rounding, doublePrecision, wide, 0, fpReg, gpReg);
+        return new FpOp64.IntegerConvert(toFloat, signed, rounding, doublePrecision, wide, 0, fpReg, gpReg);
     }
 
     /// `VFPExpandImm`-equivalente de A64 (Armadilhas da task B6.5.3): MESMO algoritmo conceitual
@@ -6674,7 +6683,7 @@ public final class Aarch64Decoder {
             }
             long half16 = expandFpImmediateHalf(imm8);
             long imm64 = half16 | (half16 << 16) | (half16 << 32) | (half16 << 48);
-            return new Ir64Op.AdvSimdModifiedImmediate64(AdvSimdModifiedImmediateOp.MOV, q, rd, imm64);
+            return new AdvSimdMoveOp64.ModifiedImmediate64(AdvSimdModifiedImmediateOp.MOV, q, rd, imm64);
         }
         int fixedTwoBits = (word >>> ADVSIMD_MODIFIED_IMM_FIXED2_SHIFT) & 0b11;
         if (fixedTwoBits != ADVSIMD_MODIFIED_IMM_FIXED2_PATTERN) {
@@ -6687,10 +6696,10 @@ public final class Aarch64Decoder {
             // 64 bits — reaproveita {@link #expandFpImmediate} (MESMO algoritmo VFPExpandImm de
             // {@link #decodeFpMoveImmediate}, só o `imm8` já reconstruído acima).
             long imm64 = expandFpImmediate(imm8, true);
-            return new Ir64Op.AdvSimdModifiedImmediate64(AdvSimdModifiedImmediateOp.MOV, q, rd, imm64);
+            return new AdvSimdMoveOp64.ModifiedImmediate64(AdvSimdModifiedImmediateOp.MOV, q, rd, imm64);
         }
         AdvSimdModifiedImmediate.Expanded expanded = AdvSimdModifiedImmediate.expand(imm8, cmode, op);
-        return new Ir64Op.AdvSimdModifiedImmediate64(expanded.op(), q, rd, expanded.imm64());
+        return new AdvSimdMoveOp64.ModifiedImmediate64(expanded.op(), q, rd, expanded.imm64());
     }
 
     /// `VFPExpandImm`-equivalente de meia precisão (`FMOVI_v_h`, B19.6 bloco G) — mesmo pseudocódigo
@@ -6764,7 +6773,7 @@ public final class Aarch64Decoder {
         long imm26 = word & bitMask(IMM26_BITS);
         long offset = signExtend(imm26, IMM26_BITS) * BYTES_PER_BRANCH_UNIT;
         long target = address + offset;
-        return new Ir64Op.Branch64(
+        return new BranchOp64.Branch64(
                 Ir64BranchForm.IMMEDIATE, address, target, -1, link, Ir64Condition.AL);
     }
 
@@ -6773,7 +6782,7 @@ public final class Aarch64Decoder {
         long offset = signExtend(imm19, IMM19_BITS) * BYTES_PER_BRANCH_UNIT;
         long target = address + offset;
         Ir64Condition condition = Ir64Condition.decode(word & COND_FIELD_MASK);
-        return new Ir64Op.Branch64(Ir64BranchForm.IMMEDIATE, address, target, -1, false, condition);
+        return new BranchOp64.Branch64(Ir64BranchForm.IMMEDIATE, address, target, -1, false, condition);
     }
 
     private Ir64Op decodeCompareBranch(int word, long address) {
@@ -6783,7 +6792,7 @@ public final class Aarch64Decoder {
         long offset = signExtend(imm19, IMM19_BITS) * BYTES_PER_BRANCH_UNIT;
         long target = address + offset;
         int rt = word & REGISTER_FIELD_MASK;
-        return new Ir64Op.CompareBranch64(
+        return new BranchOp64.CompareBranch64(
                 Ir64CompareBranchForm.CBZ_CBNZ, rt, wide, -1, branchIfNonZero, target);
     }
 
@@ -6796,7 +6805,7 @@ public final class Aarch64Decoder {
         long offset = signExtend(imm14, IMM14_BITS) * BYTES_PER_BRANCH_UNIT;
         long target = address + offset;
         int rt = word & REGISTER_FIELD_MASK;
-        return new Ir64Op.CompareBranch64(
+        return new BranchOp64.CompareBranch64(
                 Ir64CompareBranchForm.TBZ_TBNZ, rt, true, bitPosition, branchIfNonZero, target);
     }
 
@@ -6861,7 +6870,7 @@ public final class Aarch64Decoder {
         long imm9 = (word >>> CB_COND_OFFSET_IMM9_SHIFT) & bitMask(CB_COND_OFFSET_IMM9_BITS);
         long offset = signExtend(imm9, CB_COND_OFFSET_IMM9_BITS) * BYTES_PER_BRANCH_UNIT;
         long target = address + offset;
-        return new Ir64Op.CompareAndBranchRegister(condition, rt, rm, size, target);
+        return new BranchOp64.CompareAndBranchRegister(condition, rt, rm, size, target);
     }
 
     private Ir64Op decodeCompareAndBranchImmediate(int word, long address) {
@@ -6877,7 +6886,7 @@ public final class Aarch64Decoder {
         long imm9 = (word >>> CB_COND_OFFSET_IMM9_SHIFT) & bitMask(CB_COND_OFFSET_IMM9_BITS);
         long offset = signExtend(imm9, CB_COND_OFFSET_IMM9_BITS) * BYTES_PER_BRANCH_UNIT;
         long target = address + offset;
-        return new Ir64Op.CompareAndBranchImmediate(condition, rt, wide, immediate, target);
+        return new BranchOp64.CompareAndBranchImmediate(condition, rt, wide, immediate, target);
     }
 
     private Ir64Op decodeBranchRegister(int word, long address) {
@@ -6892,7 +6901,7 @@ public final class Aarch64Decoder {
         if (op3 == BRANCH_REGISTER_OP3_FIXED && op4 == BRANCH_REGISTER_OP4_FIXED) {
             if (opc == BRANCH_REGISTER_OPC_ERET) {
                 // ERET (B6.6.4): Rn (bits 9:5) é fixo em `11111`, não um registrador — ignorado.
-                return new Ir64Op.ExceptionReturn();
+                return new SystemOp64.ExceptionReturn();
             }
             int rn = (word >>> RN_SHIFT) & REGISTER_FIELD_MASK;
             boolean link = switch (opc) {
@@ -6900,7 +6909,7 @@ public final class Aarch64Decoder {
                 case BRANCH_REGISTER_OPC_BLR -> true;
                 default -> throw unsupported(word, address);
             };
-            return new Ir64Op.Branch64(
+            return new BranchOp64.Branch64(
                     Ir64BranchForm.REGISTER, address, 0L, rn, link, Ir64Condition.AL);
         }
         int op3Upper = (op3 >>> 1) & PAUTH_BRANCH_OP3_UPPER_MASK;
@@ -6920,7 +6929,7 @@ public final class Aarch64Decoder {
 
     /// `BRAZ`/`BLRAZ`/`RETA`/`BRA`/`BLRA`/`ERETA` (B19.15, `FEAT_PAuth`) — já confirmado
     /// `op2`=`11111`/`op3` alto=`00001` pelo chamador. Rota (b) registrada na task (mesmo
-    /// precedente de {@link Ir64Op.PointerAuthGeneric}/{@link Ir64Op.PointerAuthInPlace}): nenhuma
+    /// precedente de {@link IntegerOp64.PointerAuthGeneric}/{@link IntegerOp64.PointerAuthInPlace}): nenhuma
     /// autenticação real é modelada, então cada forma delega DIRETO para a contraparte não
     /// autenticada (`BR`/`BLR`/`RET`/`ERET` comuns) — o modificador (`Xm` ou zero implícito) e a
     /// chave A/B são decodificados só para validar o encoding, nunca usados para alterar o alvo.
@@ -6932,14 +6941,14 @@ public final class Aarch64Decoder {
                 }
                 int rn = (word >>> RN_SHIFT) & REGISTER_FIELD_MASK;
                 boolean link = opc == PAUTH_BRANCH_OPC_BLRAZ;
-                yield new Ir64Op.Branch64(Ir64BranchForm.REGISTER, address, 0L, rn, link, Ir64Condition.AL);
+                yield new BranchOp64.Branch64(Ir64BranchForm.REGISTER, address, 0L, rn, link, Ir64Condition.AL);
             }
             case PAUTH_BRANCH_OPC_RETA -> {
                 if (op4 != PAUTH_BRANCH_OP4_ZERO_MODIFIER_FIXED
                         || ((word >>> RN_SHIFT) & REGISTER_FIELD_MASK) != PAUTH_BRANCH_RN_FIXED) {
                     throw unsupported(word, address); // reservado
                 }
-                yield new Ir64Op.Branch64(Ir64BranchForm.REGISTER, address, 0L,
+                yield new BranchOp64.Branch64(Ir64BranchForm.REGISTER, address, 0L,
                         PAUTH_RETA_TARGET_REGISTER, false, Ir64Condition.AL);
             }
             case PAUTH_BRANCH_OPC_ERETA -> {
@@ -6947,12 +6956,12 @@ public final class Aarch64Decoder {
                         || ((word >>> RN_SHIFT) & REGISTER_FIELD_MASK) != PAUTH_BRANCH_RN_FIXED) {
                     throw unsupported(word, address); // reservado
                 }
-                yield new Ir64Op.ExceptionReturn();
+                yield new SystemOp64.ExceptionReturn();
             }
             case PAUTH_BRANCH_OPC_BRA, PAUTH_BRANCH_OPC_BLRA -> {
                 int rn = (word >>> RN_SHIFT) & REGISTER_FIELD_MASK;
                 boolean link = opc == PAUTH_BRANCH_OPC_BLRA;
-                yield new Ir64Op.Branch64(Ir64BranchForm.REGISTER, address, 0L, rn, link, Ir64Condition.AL);
+                yield new BranchOp64.Branch64(Ir64BranchForm.REGISTER, address, 0L, rn, link, Ir64Condition.AL);
             }
             default -> throw unsupported(word, address); // reservado
         };
@@ -6963,7 +6972,7 @@ public final class Aarch64Decoder {
         int low5 = word & EXCEPTION_GEN_LOW5_MASK;
         int imm16 = (word >>> IMM16_SHIFT) & IMM16_MASK;
         if (opc == EXCEPTION_GEN_OPC_SVC && low5 == EXCEPTION_GEN_SVC_LOW5_FIXED) {
-            return new Ir64Op.Svc(imm16);
+            return new SystemOp64.Svc(imm16);
         }
         if (opc == EXCEPTION_GEN_OPC_SVC
                 && (low5 == EXCEPTION_GEN_HVC_LOW5_FIXED || low5 == EXCEPTION_GEN_SMC_LOW5_FIXED)) {
@@ -6972,17 +6981,17 @@ public final class Aarch64Decoder {
             // é ignorado pela semântica em ambos os casos (mesmo padrão real de hardware: o
             // imediato só importa para o handler em EL2/EL3, que lê a própria instrução — este
             // emulador não modela isso).
-            return new Ir64Op.PrivilegedCall(low5 == EXCEPTION_GEN_HVC_LOW5_FIXED);
+            return new SystemOp64.PrivilegedCall(low5 == EXCEPTION_GEN_HVC_LOW5_FIXED);
         }
         if (opc == EXCEPTION_GEN_OPC_BRK && low5 == EXCEPTION_GEN_BRK_HLT_LOW5_FIXED) {
             // BRK (B8.3): imm16 é o único operando.
-            return new Ir64Op.Breakpoint(imm16);
+            return new SystemOp64.Breakpoint(imm16);
         }
         if (opc == EXCEPTION_GEN_OPC_HLT && low5 == EXCEPTION_GEN_BRK_HLT_LOW5_FIXED) {
             // HLT (B8.3): sem estado de debug externo modelado, vira UNDEFINED (ver javadoc de
-            // Ir64Op.UndefinedInstructionTrap) — o imm16 do encoding só teria sentido para um host
+            // SystemOp64.UndefinedInstructionTrap) — o imm16 do encoding só teria sentido para um host
             // de debug, que não existe aqui.
-            return new Ir64Op.UndefinedInstructionTrap();
+            return new SystemOp64.UndefinedInstructionTrap();
         }
         // DCPS1/DCPS2/DCPS3: sempre UNDEF fora de "halting debug state" (não implementado, mesmo
         // achado documentado pelo próprio a64.decode do QEMU) — fora do escopo desta task.
@@ -7007,21 +7016,21 @@ public final class Aarch64Decoder {
                 case SYSTEM_INSTRUCTION_BARRIER_OP2_DSB, SYSTEM_INSTRUCTION_BARRIER_OP2_DMB,
                         SYSTEM_INSTRUCTION_BARRIER_OP2_ISB, SYSTEM_INSTRUCTION_BARRIER_OP2_DSB_NXS,
                         SYSTEM_INSTRUCTION_BARRIER_OP2_SB ->
-                        new Ir64Op.SystemInstruction(Ir64SystemInstructionOp.BARRIER);
+                        new SystemOp64.SystemInstruction(Ir64SystemInstructionOp.BARRIER);
                 case SYSTEM_INSTRUCTION_BARRIER_OP2_CLREX ->
-                        new Ir64Op.SystemInstruction(Ir64SystemInstructionOp.CLEAR_EXCLUSIVE);
+                        new SystemOp64.SystemInstruction(Ir64SystemInstructionOp.CLEAR_EXCLUSIVE);
                 default -> throw unsupported(word, address);
             };
         }
         if (crn == SYSTEM_INSTRUCTION_HINT_CRN) {
             if (op2 == SYSTEM_INSTRUCTION_HINT_OP2_WFI) {
-                return new Ir64Op.SystemInstruction(Ir64SystemInstructionOp.WFI);
+                return new SystemOp64.SystemInstruction(Ir64SystemInstructionOp.WFI);
             }
             // NOP/YIELD/WFE/SEV/SEVL (e qualquer combinação reservada de CRm/op2 dentro do
             // subgrupo "Hints" — RES NOP por definição arquitetural, `ARM DDI 0487 C6.2.132`):
             // NOP puro, mesmo tratamento das barreiras (D2 da task B6.6.7 — sem event-stream
             // modelado, `WFE`/`SEV`/`SEVL` não têm efeito observável neste emulador).
-            return new Ir64Op.SystemInstruction(Ir64SystemInstructionOp.NOP_HINT);
+            return new SystemOp64.SystemInstruction(Ir64SystemInstructionOp.NOP_HINT);
         }
         if (crn == SYSTEM_INSTRUCTION_WAIT_TIMEOUT_CRN) {
             // WFET/WFIT (B8.3, FEAT_WFxT): mesmo tratamento de WFE (NOP)/WFI (dorme até IRQ) sem
@@ -7033,9 +7042,9 @@ public final class Aarch64Decoder {
             }
             return switch (op2) {
                 case SYSTEM_INSTRUCTION_WAIT_TIMEOUT_OP2_WFET ->
-                        new Ir64Op.SystemInstruction(Ir64SystemInstructionOp.NOP_HINT);
+                        new SystemOp64.SystemInstruction(Ir64SystemInstructionOp.NOP_HINT);
                 case SYSTEM_INSTRUCTION_WAIT_TIMEOUT_OP2_WFIT ->
-                        new Ir64Op.SystemInstruction(Ir64SystemInstructionOp.WFI);
+                        new SystemOp64.SystemInstruction(Ir64SystemInstructionOp.WFI);
                 default -> throw unsupported(word, address);
             };
         }
@@ -7090,8 +7099,8 @@ public final class Aarch64Decoder {
                 default -> throw unsupported(word, address);
             };
             return flagOp != null
-                    ? new Ir64Op.ConvertFlags(flagOp)
-                    : new Ir64Op.SystemInstruction(Ir64SystemInstructionOp.PSTATE_FIELD_NOP);
+                    ? new IntegerOp64.ConvertFlags(flagOp)
+                    : new SystemOp64.SystemInstruction(Ir64SystemInstructionOp.PSTATE_FIELD_NOP);
         }
         if (op1 == SYSTEM_INSTRUCTION_ALLINT_OP1 && op2 == SYSTEM_INSTRUCTION_FLAG_MANIP_OP2_CFINV) {
             // MSR ALLINT (op2 reaproveita o mesmo valor 0b000 de CFINV — só o op1 distingue, e já
@@ -7099,21 +7108,21 @@ public final class Aarch64Decoder {
             if (!architecture.has(Aarch64Feature.NMI)) {
                 throw unsupported(word, address);
             }
-            return new Ir64Op.SystemInstruction(Ir64SystemInstructionOp.PSTATE_FIELD_NOP);
+            return new SystemOp64.SystemInstruction(Ir64SystemInstructionOp.PSTATE_FIELD_NOP);
         }
         if (op1 == SYSTEM_INSTRUCTION_PSTATE_IMM_OP1) {
             int imm = (word >>> SYSTEM_REGISTER_CRM_SHIFT) & SYSTEM_REGISTER_CRM_MASK;
             return switch (op2) {
                 case SYSTEM_INSTRUCTION_PSTATE_OP2_SBSS, SYSTEM_INSTRUCTION_PSTATE_OP2_TCO ->
-                        new Ir64Op.SystemInstruction(Ir64SystemInstructionOp.PSTATE_FIELD_NOP);
+                        new SystemOp64.SystemInstruction(Ir64SystemInstructionOp.PSTATE_FIELD_NOP);
                 case SYSTEM_INSTRUCTION_PSTATE_OP2_DIT -> {
                     if (!architecture.has(Aarch64Feature.DIT)) {
                         throw unsupported(word, address);
                     }
-                    yield new Ir64Op.SystemInstruction(Ir64SystemInstructionOp.PSTATE_FIELD_NOP);
+                    yield new SystemOp64.SystemInstruction(Ir64SystemInstructionOp.PSTATE_FIELD_NOP);
                 }
-                case SYSTEM_INSTRUCTION_PSTATE_OP2_DAIFSET -> new Ir64Op.InterruptMask(true, imm);
-                case SYSTEM_INSTRUCTION_PSTATE_OP2_DAIFCLEAR -> new Ir64Op.InterruptMask(false, imm);
+                case SYSTEM_INSTRUCTION_PSTATE_OP2_DAIFSET -> new SystemOp64.InterruptMask(true, imm);
+                case SYSTEM_INSTRUCTION_PSTATE_OP2_DAIFCLEAR -> new SystemOp64.InterruptMask(false, imm);
                 case SYSTEM_INSTRUCTION_PSTATE_OP2_SVCR -> {
                     // B19.28 decodificava e recusava; B18.2 dá o efeito (`SMSTART`/`SMSTOP`). Sem
                     // FEAT_SME na arquitetura, continua caindo no `unsupported` genérico de qualquer
@@ -7126,7 +7135,7 @@ public final class Aarch64Decoder {
                     if (svcrMask == 0) {
                         throw unsupported(word, address);
                     }
-                    yield new Ir64Op.StreamingModeControl(
+                    yield new SystemOp64.StreamingModeControl(
                             (imm & SYSTEM_INSTRUCTION_SVCR_IMMEDIATE_FIELD_MASK) != 0,
                             (svcrMask & SYSTEM_INSTRUCTION_SVCR_MASK_SM) != 0,
                             (svcrMask & SYSTEM_INSTRUCTION_SVCR_MASK_ZA) != 0,
@@ -7183,11 +7192,11 @@ public final class Aarch64Decoder {
         int op2 = (word >>> SYSTEM_REGISTER_OP2_SHIFT) & SYSTEM_REGISTER_OP2_MASK;
         if (op1 == SYSTEM_INSTRUCTION_IC_OP1_ALL && op2 == SYSTEM_INSTRUCTION_IC_OP2_ALL
                 && (crm == SYSTEM_INSTRUCTION_IC_CRM_IALLUIS || crm == SYSTEM_INSTRUCTION_IC_CRM_IALLU)) {
-            return new Ir64Op.SystemInstruction(Ir64SystemInstructionOp.INSTRUCTION_CACHE_INVALIDATE_ALL);
+            return new SystemOp64.SystemInstruction(Ir64SystemInstructionOp.INSTRUCTION_CACHE_INVALIDATE_ALL);
         }
         if (op1 == SYSTEM_INSTRUCTION_IC_OP1_IVAU && crm == SYSTEM_INSTRUCTION_IC_CRM_IALLU
                 && op2 == SYSTEM_INSTRUCTION_IC_OP2_IVAU) {
-            return new Ir64Op.SystemInstruction(Ir64SystemInstructionOp.INSTRUCTION_CACHE_INVALIDATE_BY_VA,
+            return new SystemOp64.SystemInstruction(Ir64SystemInstructionOp.INSTRUCTION_CACHE_INVALIDATE_BY_VA,
                     word & REGISTER_FIELD_MASK);
         }
         return null;
@@ -7198,7 +7207,7 @@ public final class Aarch64Decoder {
         int op1 = (word >>> SYSTEM_REGISTER_OP1_SHIFT) & SYSTEM_REGISTER_OP1_MASK;
         int crn = (word >>> SYSTEM_REGISTER_CRN_SHIFT) & SYSTEM_REGISTER_CRN_MASK;
         if (!isSysl && crn == SYSTEM_INSTRUCTION_TLBI_CRN && isTlbiRegime(op1)) {
-            return new Ir64Op.SystemInstruction(Ir64SystemInstructionOp.TLBI_ALL);
+            return new SystemOp64.SystemInstruction(Ir64SystemInstructionOp.TLBI_ALL);
         }
         if (!isSysl && crn == SYSTEM_INSTRUCTION_CACHE_CRN && isAddressTranslateStage1Crm(word)) {
             // CRm=0b1000 é SEMPRE `AT` (nunca manutenção de cache), para QUALQUER `op1` — os 3
@@ -7224,12 +7233,12 @@ public final class Aarch64Decoder {
             if (instructionCacheOp != null) {
                 return instructionCacheOp;
             }
-            return new Ir64Op.SystemInstruction(Ir64SystemInstructionOp.CACHE_MAINTENANCE_NOP);
+            return new SystemOp64.SystemInstruction(Ir64SystemInstructionOp.CACHE_MAINTENANCE_NOP);
         }
         // B19.6 bloco A: resto do espaço `SYS`/`SYSL` (`op0=1`) fora de TLBI/AT/manutenção de
         // cache — sem hospedeiro que trate manutenções desconhecidas, NOP explícito (ver javadoc
         // de Ir64SystemInstructionOp#MAINTENANCE_UNMODELED_NOP).
-        return new Ir64Op.SystemInstruction(Ir64SystemInstructionOp.MAINTENANCE_UNMODELED_NOP);
+        return new SystemOp64.SystemInstruction(Ir64SystemInstructionOp.MAINTENANCE_UNMODELED_NOP);
     }
 
     /// Confere se `op1` é um dos 3 regimes de `TLBI` que este emulador aceita (B10.9): EL1&0, EL2
@@ -7259,7 +7268,7 @@ public final class Aarch64Decoder {
             case SYSTEM_INSTRUCTION_AT_OP2_S1E0W -> Aarch64AddressTranslateForm.S1E0W;
             default -> throw unsupported(word, address);
         };
-        return new Ir64Op.AddressTranslate(form, rt);
+        return new SystemOp64.AddressTranslate(form, rt);
     }
 
     /// `AT S1E2R`/`S1E2W` (B10.6b, stage-1 pura do regime EL2) e `AT S12E1R`/`S12E1W`/`S12E0R`/
@@ -7278,7 +7287,7 @@ public final class Aarch64Decoder {
             case SYSTEM_INSTRUCTION_AT_OP2_S12E0W -> Aarch64AddressTranslateForm.S12E0W;
             default -> throw unsupported(word, address);
         };
-        return new Ir64Op.AddressTranslate(form, rt);
+        return new SystemOp64.AddressTranslate(form, rt);
     }
 
     /// `AT S1E3R`/`S1E3W` (B10.6c, stage-1 pura do regime EL3) — `op2` seleciona a forma; sem
@@ -7292,7 +7301,7 @@ public final class Aarch64Decoder {
             case SYSTEM_INSTRUCTION_AT_OP2_S1E3W -> Aarch64AddressTranslateForm.S1E3W;
             default -> throw unsupported(word, address);
         };
-        return new Ir64Op.AddressTranslate(form, rt);
+        return new SystemOp64.AddressTranslate(form, rt);
     }
 
     /// Confere se `{CRm, op2}` bate com `DC ZVA` (`CRn=0b0111` já checado pelo chamador) — único
@@ -7371,7 +7380,7 @@ public final class Aarch64Decoder {
                 || register == Aarch64SystemRegisterId.PRENR_EL1) && !architecture.has(Aarch64Feature.PMSA)) {
             throw unsupported(word, address);
         }
-        return new Ir64Op.SystemRegister(read, register, rt);
+        return new SystemOp64.SystemRegister(read, register, rt);
     }
 
     /// Tabela de registradores de sistema cobertos (Fatos de referência #2 da task B6.6.1,

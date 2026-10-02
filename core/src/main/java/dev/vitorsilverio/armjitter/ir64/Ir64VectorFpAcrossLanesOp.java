@@ -1,6 +1,6 @@
 package dev.vitorsilverio.armjitter.ir64;
 
-/// Operação de {@link Ir64Op.VectorFpAcrossLanes} (`FMAXNMV`/`FMINNMV`/`FMAXV`/`FMINV`, B8.10 —
+/// Operação de {@link AdvSimdFpOp64.FpAcrossLanes} (`FMAXNMV`/`FMINNMV`/`FMAXV`/`FMINV`, B8.10 —
 /// formas `_s`; B19.5.3 — formas `_h`, `FEAT_FP16`). Reduz os elementos de `Rn` a um único
 /// escalar em `Rd`: `4S` é o único arranjo real de precisão simples (`U`=1/`Q`=1 fixos, sem forma
 /// doubleword nem escalar D-only), mas meia precisão tem `4H`/`8H` (`Q` livre). Irmã de

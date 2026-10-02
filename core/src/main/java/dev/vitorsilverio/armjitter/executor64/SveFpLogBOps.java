@@ -2,7 +2,7 @@ package dev.vitorsilverio.armjitter.executor64;
 
 import dev.vitorsilverio.armjitter.core64.Aarch64Core;
 import dev.vitorsilverio.armjitter.core64.Aarch64ScalableRegisters;
-import dev.vitorsilverio.armjitter.ir64.Ir64Op;
+import dev.vitorsilverio.armjitter.ir64.SveFpOp64;
 
 /// Semântica de `FLOGB` (`_m`/`_z`, B17.23) — expoente (base 2) de `Zn` como inteiro da mesma largura.
 /// Medido contra `do_float{16,32,64}_logb_as_int` do QEMU real: zero/`NaN` levantam `Invalid` e devolvem o
@@ -16,7 +16,7 @@ final class SveFpLogBOps {
     }
 
     /// Executa. `true` = a instrução já entrou numa exceção (acesso negado).
-    static boolean execute(Aarch64Core core, Ir64Op.SveFpLogB op) {
+    static boolean execute(Aarch64Core core, SveFpOp64.FpLogB op) {
         if (!SvePredicateOps.accessAllowed(core, op.instructionAddress())) {
             return true;
         }

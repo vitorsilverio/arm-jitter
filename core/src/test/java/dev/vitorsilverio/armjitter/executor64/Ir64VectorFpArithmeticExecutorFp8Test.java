@@ -4,7 +4,8 @@ import dev.vitorsilverio.armjitter.advsimd.AdvSimdLanes;
 import dev.vitorsilverio.armjitter.core64.Aarch64Core;
 import dev.vitorsilverio.armjitter.core64.Aarch64FpRegisters;
 import dev.vitorsilverio.armjitter.ir64.Aarch64SystemRegisterId;
-import dev.vitorsilverio.armjitter.ir64.Ir64Op;
+import dev.vitorsilverio.armjitter.ir64.AdvSimdFpOp64;
+import dev.vitorsilverio.armjitter.ir64.SystemOp64;
 import dev.vitorsilverio.armjitter.memory.AddressSpace64;
 import dev.vitorsilverio.armjitter.support.TestAddressSpace;
 import org.junit.jupiter.api.Test;
@@ -25,7 +26,7 @@ class Ir64VectorFpArithmeticExecutorFp8Test {
 
     private static void writeFpmr(Aarch64Core core, long value) {
         core.setX(0, value);
-        EXECUTOR.executeOp(core, new Ir64Op.SystemRegister(false, Aarch64SystemRegisterId.FPMR, 0));
+        EXECUTOR.executeOp(core, new SystemOp64.SystemRegister(false, Aarch64SystemRegisterId.FPMR, 0));
     }
 
     private static final long FPMR_F8D_E4M3 = 0b001L << 6;
@@ -41,12 +42,12 @@ class Ir64VectorFpArithmeticExecutorFp8Test {
         writeFpmr(core, 0L); // F8D = E5M2 (0b000)
         fp.setElement(1, 0, 2, AdvSimdLanes.floatBits(1.5f));
         fp.setElement(2, 0, 2, AdvSimdLanes.floatBits(-1.5f));
-        EXECUTOR.executeOp(core, new Ir64Op.VectorFpConvertToFp8(false, false, 0, 1, 2));
+        EXECUTOR.executeOp(core, new AdvSimdFpOp64.FpConvertToFp8(false, false, 0, 1, 2));
         int e5m2Bits = (int) fp.element(0, 0, 0);
         assertEquals(AdvSimdLanes.floatToFp8(1.5f, false, false), e5m2Bits);
 
         writeFpmr(core, FPMR_F8D_E4M3); // F8D = E4M3
-        EXECUTOR.executeOp(core, new Ir64Op.VectorFpConvertToFp8(false, false, 0, 1, 2));
+        EXECUTOR.executeOp(core, new AdvSimdFpOp64.FpConvertToFp8(false, false, 0, 1, 2));
         int e4m3Bits = (int) fp.element(0, 0, 0);
         assertEquals(AdvSimdLanes.floatToFp8(1.5f, true, false), e4m3Bits);
         assertNotEquals(e5m2Bits, e4m3Bits, "mesmo valor de entrada, formato de destino diferente");
@@ -62,7 +63,7 @@ class Ir64VectorFpArithmeticExecutorFp8Test {
             fp.setElement(1, i, 2, AdvSimdLanes.floatBits(1.0f + i));
             fp.setElement(2, i, 2, AdvSimdLanes.floatBits(5.0f + i));
         }
-        EXECUTOR.executeOp(core, new Ir64Op.VectorFpConvertToFp8(false, false, 0, 1, 2));
+        EXECUTOR.executeOp(core, new AdvSimdFpOp64.FpConvertToFp8(false, false, 0, 1, 2));
         for (int i = 0; i < 4; i++) {
             assertEquals(AdvSimdLanes.floatToFp8(1.0f + i, false, false), (int) fp.element(0, i, 0));
             assertEquals(AdvSimdLanes.floatToFp8(5.0f + i, false, false), (int) fp.element(0, 4 + i, 0));
@@ -78,7 +79,7 @@ class Ir64VectorFpArithmeticExecutorFp8Test {
         fp.setD(0, 0x1111_1111_2222_2222L); // metade baixa pré-existente, deve sobreviver
         fp.setElement(1, 0, 2, AdvSimdLanes.floatBits(3.0f));
         fp.setElement(2, 0, 2, AdvSimdLanes.floatBits(7.0f));
-        EXECUTOR.executeOp(core, new Ir64Op.VectorFpConvertToFp8(false, true, 0, 1, 2));
+        EXECUTOR.executeOp(core, new AdvSimdFpOp64.FpConvertToFp8(false, true, 0, 1, 2));
         assertEquals(0x1111_1111_2222_2222L, fp.low64(0), "FCVTN2 preserva a metade baixa");
         assertEquals(AdvSimdLanes.floatToFp8(3.0f, false, false), (int) fp.element(0, 8, 0));
         assertEquals(AdvSimdLanes.floatToFp8(7.0f, false, false), (int) fp.element(0, 12, 0));
@@ -93,7 +94,7 @@ class Ir64VectorFpArithmeticExecutorFp8Test {
             fp.setElement(1, i, 1, AdvSimdLanes.halfBits(1.0f + i));
             fp.setElement(2, i, 1, AdvSimdLanes.halfBits(9.0f + i));
         }
-        EXECUTOR.executeOp(core, new Ir64Op.VectorFpConvertToFp8(true, true, 0, 1, 2));
+        EXECUTOR.executeOp(core, new AdvSimdFpOp64.FpConvertToFp8(true, true, 0, 1, 2));
         for (int i = 0; i < 8; i++) {
             assertEquals(AdvSimdLanes.floatToFp8(1.0f + i, false, false), (int) fp.element(0, i, 0));
             assertEquals(AdvSimdLanes.floatToFp8(9.0f + i, false, false), (int) fp.element(0, 8 + i, 0));
@@ -107,7 +108,7 @@ class Ir64VectorFpArithmeticExecutorFp8Test {
         writeFpmr(core, 1L << 24); // NSCALE = +1 -> escala por 2^1
         fp.setElement(1, 0, 2, AdvSimdLanes.floatBits(1.0f));
         fp.setElement(2, 0, 2, AdvSimdLanes.floatBits(0f));
-        EXECUTOR.executeOp(core, new Ir64Op.VectorFpConvertToFp8(false, false, 0, 1, 2));
+        EXECUTOR.executeOp(core, new AdvSimdFpOp64.FpConvertToFp8(false, false, 0, 1, 2));
         assertEquals(AdvSimdLanes.floatToFp8(2.0f, false, false), (int) fp.element(0, 0, 0),
                 "1.0 escalado por NSCALE=+1 vira 2.0 antes de converter");
     }
@@ -119,11 +120,11 @@ class Ir64VectorFpArithmeticExecutorFp8Test {
         writeFpmr(core, FPMR_F8D_E4M3); // sem OSC (bit15=0): overflow em E4M3 -> NaN
         fp.setElement(1, 0, 2, AdvSimdLanes.floatBits(1_000_000f));
         fp.setElement(2, 0, 2, AdvSimdLanes.floatBits(0f));
-        EXECUTOR.executeOp(core, new Ir64Op.VectorFpConvertToFp8(false, false, 0, 1, 2));
+        EXECUTOR.executeOp(core, new AdvSimdFpOp64.FpConvertToFp8(false, false, 0, 1, 2));
         assertEquals(0b0_1111_111, (int) fp.element(0, 0, 0));
 
         writeFpmr(core, FPMR_F8D_E4M3 | (1L << 15)); // OSC=1: satura no máximo normal
-        EXECUTOR.executeOp(core, new Ir64Op.VectorFpConvertToFp8(false, false, 0, 1, 2));
+        EXECUTOR.executeOp(core, new AdvSimdFpOp64.FpConvertToFp8(false, false, 0, 1, 2));
         assertEquals(0b0_1111_110, (int) fp.element(0, 0, 0));
     }
 
@@ -138,7 +139,7 @@ class Ir64VectorFpArithmeticExecutorFp8Test {
         for (int i = 0; i < 8; i++) {
             fp.setElement(1, i, 0, bits);
         }
-        EXECUTOR.executeOp(core, new Ir64Op.VectorFpConvertFromFp8(false, false, false, 0, 1));
+        EXECUTOR.executeOp(core, new AdvSimdFpOp64.FpConvertFromFp8(false, false, false, 0, 1));
         assertEquals(AdvSimdLanes.halfBits(448.0f), fp.element(0, 0, 1));
     }
 
@@ -152,9 +153,9 @@ class Ir64VectorFpArithmeticExecutorFp8Test {
         for (int i = 0; i < 8; i++) {
             fp.setElement(1, i, 0, bits);
         }
-        EXECUTOR.executeOp(core, new Ir64Op.VectorFpConvertFromFp8(false, false, false, 0, 1));
+        EXECUTOR.executeOp(core, new AdvSimdFpOp64.FpConvertFromFp8(false, false, false, 0, 1));
         long asFirstStream = fp.element(0, 0, 1); // lê F8S1 = E5M2
-        EXECUTOR.executeOp(core, new Ir64Op.VectorFpConvertFromFp8(true, false, false, 0, 1));
+        EXECUTOR.executeOp(core, new AdvSimdFpOp64.FpConvertFromFp8(true, false, false, 0, 1));
         long asSecondStream = fp.element(0, 0, 1); // lê F8S2 = E4M3
         assertNotEquals(asFirstStream, asSecondStream, "F1CVTL×F2CVTL não podem ler o mesmo formato aqui");
         assertEquals(AdvSimdLanes.halfBits(AdvSimdLanes.fp8ToFloat(bits, true)), asSecondStream);
@@ -170,9 +171,9 @@ class Ir64VectorFpArithmeticExecutorFp8Test {
         for (int i = 0; i < 8; i++) {
             fp.setElement(1, i, 0, bits);
         }
-        EXECUTOR.executeOp(core, new Ir64Op.VectorFpConvertFromFp8(false, false, false, 0, 1));
+        EXECUTOR.executeOp(core, new AdvSimdFpOp64.FpConvertFromFp8(false, false, false, 0, 1));
         assertEquals(AdvSimdLanes.halfBits(0.5f), fp.element(0, 0, 1), "F1CVTL: 1.0 * 2^-1");
-        EXECUTOR.executeOp(core, new Ir64Op.VectorFpConvertFromFp8(true, false, false, 0, 1));
+        EXECUTOR.executeOp(core, new AdvSimdFpOp64.FpConvertFromFp8(true, false, false, 0, 1));
         assertEquals(AdvSimdLanes.halfBits(0.25f), fp.element(0, 0, 1), "F2CVTL: 1.0 * 2^-2");
     }
 
@@ -185,7 +186,7 @@ class Ir64VectorFpArithmeticExecutorFp8Test {
         for (int i = 0; i < 8; i++) {
             fp.setElement(1, i, 0, bits);
         }
-        EXECUTOR.executeOp(core, new Ir64Op.VectorFpConvertFromFp8(false, true, false, 0, 1));
+        EXECUTOR.executeOp(core, new AdvSimdFpOp64.FpConvertFromFp8(false, true, false, 0, 1));
         long produced = fp.element(0, 0, 1);
         assertEquals(AdvSimdLanes.bf16Bits(448.0f), produced);
         assertNotEquals(AdvSimdLanes.halfBits(448.0f) & 0xFFFFL, produced & 0xFFFFL,
@@ -201,7 +202,7 @@ class Ir64VectorFpArithmeticExecutorFp8Test {
         for (int i = 0; i < 8; i++) {
             fp.setElement(1, i, 0, bits);
         }
-        EXECUTOR.executeOp(core, new Ir64Op.VectorFpConvertFromFp8(true, true, false, 0, 1));
+        EXECUTOR.executeOp(core, new AdvSimdFpOp64.FpConvertFromFp8(true, true, false, 0, 1));
         assertEquals(AdvSimdLanes.bf16Bits(448.0f), fp.element(0, 0, 1));
     }
 
@@ -216,9 +217,9 @@ class Ir64VectorFpArithmeticExecutorFp8Test {
             fp.setElement(1, i, 0, lowBits);
             fp.setElement(1, 8 + i, 0, highBits);
         }
-        EXECUTOR.executeOp(core, new Ir64Op.VectorFpConvertFromFp8(false, false, false, 0, 1));
+        EXECUTOR.executeOp(core, new AdvSimdFpOp64.FpConvertFromFp8(false, false, false, 0, 1));
         assertEquals(AdvSimdLanes.halfBits(1.0f), fp.element(0, 0, 1));
-        EXECUTOR.executeOp(core, new Ir64Op.VectorFpConvertFromFp8(false, false, true, 0, 1));
+        EXECUTOR.executeOp(core, new AdvSimdFpOp64.FpConvertFromFp8(false, false, true, 0, 1));
         assertEquals(AdvSimdLanes.halfBits(2.0f), fp.element(0, 0, 1));
     }
 }

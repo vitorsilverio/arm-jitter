@@ -3,6 +3,8 @@ package dev.vitorsilverio.armjitter.decoder64;
 import dev.vitorsilverio.armjitter.arch64.Aarch64Architecture;
 import dev.vitorsilverio.armjitter.arch64.Aarch64Feature;
 import dev.vitorsilverio.armjitter.ir64.Ir64Op;
+import dev.vitorsilverio.armjitter.ir64.SveIntegerOp64;
+import dev.vitorsilverio.armjitter.ir64.SvePredicateOp64;
 
 /// Decoder das instruções SVE (`FEAT_SVE`, classe `op0 = 0010` do A64), fatiado por grupo do
 /// `sve.decode` do QEMU. Hoje cobre os predicados da B17.4: lógica de predicado, "misc"
@@ -459,39 +461,39 @@ final class Aarch64SveDecoder {
             return decodeBrkp(word, address);
         }
         if ((word & PTEST_MASK) == PTEST_VALUE) {
-            return misc(Ir64Op.SvePredicateMisc.Op.PTEST, 0, 0, field(word, PG_LOGICAL_SHIFT, PREDICATE_FIELD_MASK),
+            return misc(SvePredicateOp64.PredicateMisc.Op.PTEST, 0, 0, field(word, PG_LOGICAL_SHIFT, PREDICATE_FIELD_MASK),
                     field(word, PN_SHIFT, PREDICATE_FIELD_MASK), true, 0, address);
         }
         if ((word & PTRUE_MASK) == PTRUE_VALUE) {
-            return misc(Ir64Op.SvePredicateMisc.Op.PTRUE, field(word, ESZ_SHIFT, ESZ_MASK),
+            return misc(SvePredicateOp64.PredicateMisc.Op.PTRUE, field(word, ESZ_SHIFT, ESZ_MASK),
                     field(word, PD_SHIFT, PREDICATE_FIELD_MASK), 0, 0, bit(word, PTRUE_SET_FLAGS_BIT),
                     field(word, PTRUE_PATTERN_SHIFT, PATTERN_MASK), address);
         }
         if (word == SETFFR_WORD) {
-            return misc(Ir64Op.SvePredicateMisc.Op.SETFFR, 0, 0, 0, 0, false, 0, address);
+            return misc(SvePredicateOp64.PredicateMisc.Op.SETFFR, 0, 0, 0, 0, false, 0, address);
         }
         if ((word & PFALSE_MASK) == PFALSE_VALUE) {
-            return misc(Ir64Op.SvePredicateMisc.Op.PFALSE, 0, field(word, PD_SHIFT, PREDICATE_FIELD_MASK), 0, 0,
+            return misc(SvePredicateOp64.PredicateMisc.Op.PFALSE, 0, field(word, PD_SHIFT, PREDICATE_FIELD_MASK), 0, 0,
                     false, 0, address);
         }
         if ((word & RDFFR_MASK) == RDFFR_VALUE) {
-            return misc(Ir64Op.SvePredicateMisc.Op.RDFFR, 0, field(word, PD_SHIFT, PREDICATE_FIELD_MASK), 0, 0,
+            return misc(SvePredicateOp64.PredicateMisc.Op.RDFFR, 0, field(word, PD_SHIFT, PREDICATE_FIELD_MASK), 0, 0,
                     false, 0, address);
         }
         if ((word & RDFFR_PREDICATED_MASK) == RDFFR_PREDICATED_VALUE) {
-            return misc(Ir64Op.SvePredicateMisc.Op.RDFFR_PREDICATED, 0, field(word, PD_SHIFT, PREDICATE_FIELD_MASK),
+            return misc(SvePredicateOp64.PredicateMisc.Op.RDFFR_PREDICATED, 0, field(word, PD_SHIFT, PREDICATE_FIELD_MASK),
                     field(word, PN_SHIFT, PREDICATE_FIELD_MASK), 0, bit(word, BIT_SET_FLAGS), 0, address);
         }
         if ((word & WRFFR_MASK) == WRFFR_VALUE) {
-            return misc(Ir64Op.SvePredicateMisc.Op.WRFFR, 0, 0, 0, field(word, PN_SHIFT, PREDICATE_FIELD_MASK), false,
+            return misc(SvePredicateOp64.PredicateMisc.Op.WRFFR, 0, 0, 0, field(word, PN_SHIFT, PREDICATE_FIELD_MASK), false,
                     0, address);
         }
         if ((word & PFIRST_MASK) == PFIRST_VALUE) {
-            return misc(Ir64Op.SvePredicateMisc.Op.PFIRST, 0, field(word, PD_SHIFT, PREDICATE_FIELD_MASK),
+            return misc(SvePredicateOp64.PredicateMisc.Op.PFIRST, 0, field(word, PD_SHIFT, PREDICATE_FIELD_MASK),
                     field(word, PN_SHIFT, PREDICATE_FIELD_MASK), 0, true, 0, address);
         }
         if ((word & PNEXT_MASK) == PNEXT_VALUE) {
-            return misc(Ir64Op.SvePredicateMisc.Op.PNEXT, field(word, ESZ_SHIFT, ESZ_MASK),
+            return misc(SvePredicateOp64.PredicateMisc.Op.PNEXT, field(word, ESZ_SHIFT, ESZ_MASK),
                     field(word, PD_SHIFT, PREDICATE_FIELD_MASK), field(word, PN_SHIFT, PREDICATE_FIELD_MASK), 0, true,
                     0, address);
         }
@@ -500,7 +502,7 @@ final class Aarch64SveDecoder {
         }
         if ((word & BRKN_MASK) == BRKN_VALUE) {
             int pd = field(word, PD_SHIFT, PREDICATE_FIELD_MASK);
-            return new Ir64Op.SvePartitionBreak(Ir64Op.SvePartitionBreak.Op.BRKN, pd,
+            return new SvePredicateOp64.PartitionBreak(SvePredicateOp64.PartitionBreak.Op.BRKN, pd,
                     field(word, PG_LOGICAL_SHIFT, PREDICATE_FIELD_MASK), field(word, PN_SHIFT, PREDICATE_FIELD_MASK),
                     pd, bit(word, BIT_SET_FLAGS), false, address);
         }
@@ -511,16 +513,16 @@ final class Aarch64SveDecoder {
         boolean secondGroup = bit(word, BIT_OPERATION_SELECT);
         boolean setFlags = bit(word, BIT_SET_FLAGS);
         int selector = (bit(word, BIT_O2) ? 2 : 0) | (bit(word, BIT_O3) ? 1 : 0);
-        Ir64Op.SvePredicateLogical.Op op = switch (selector) {
-            case 0 -> secondGroup ? Ir64Op.SvePredicateLogical.Op.ORR : Ir64Op.SvePredicateLogical.Op.AND;
-            case 1 -> secondGroup ? Ir64Op.SvePredicateLogical.Op.ORN : Ir64Op.SvePredicateLogical.Op.BIC;
-            case 2 -> secondGroup ? Ir64Op.SvePredicateLogical.Op.NOR : Ir64Op.SvePredicateLogical.Op.EOR;
-            default -> secondGroup ? Ir64Op.SvePredicateLogical.Op.NAND : Ir64Op.SvePredicateLogical.Op.SEL;
+        SvePredicateOp64.PredicateLogical.Op op = switch (selector) {
+            case 0 -> secondGroup ? SvePredicateOp64.PredicateLogical.Op.ORR : SvePredicateOp64.PredicateLogical.Op.AND;
+            case 1 -> secondGroup ? SvePredicateOp64.PredicateLogical.Op.ORN : SvePredicateOp64.PredicateLogical.Op.BIC;
+            case 2 -> secondGroup ? SvePredicateOp64.PredicateLogical.Op.NOR : SvePredicateOp64.PredicateLogical.Op.EOR;
+            default -> secondGroup ? SvePredicateOp64.PredicateLogical.Op.NAND : SvePredicateOp64.PredicateLogical.Op.SEL;
         };
-        if (op == Ir64Op.SvePredicateLogical.Op.SEL && setFlags) {
+        if (op == SvePredicateOp64.PredicateLogical.Op.SEL && setFlags) {
             return null; // SEL não tem forma que seta flags: não alocado
         }
-        return new Ir64Op.SvePredicateLogical(op, field(word, PD_SHIFT, PREDICATE_FIELD_MASK),
+        return new SvePredicateOp64.PredicateLogical(op, field(word, PD_SHIFT, PREDICATE_FIELD_MASK),
                 field(word, PG_LOGICAL_SHIFT, PREDICATE_FIELD_MASK), field(word, PN_SHIFT, PREDICATE_FIELD_MASK),
                 field(word, PM_SHIFT, PREDICATE_FIELD_MASK), setFlags, address);
     }
@@ -529,10 +531,10 @@ final class Aarch64SveDecoder {
         if (bit(word, BIT_OPERATION_SELECT)) {
             return null; // `BRKPA`/`BRKPB` só existem com bit 23 = 0
         }
-        Ir64Op.SvePartitionBreak.Op op = bit(word, BIT_O3)
-                ? Ir64Op.SvePartitionBreak.Op.BRKPB
-                : Ir64Op.SvePartitionBreak.Op.BRKPA;
-        return new Ir64Op.SvePartitionBreak(op, field(word, PD_SHIFT, PREDICATE_FIELD_MASK),
+        SvePredicateOp64.PartitionBreak.Op op = bit(word, BIT_O3)
+                ? SvePredicateOp64.PartitionBreak.Op.BRKPB
+                : SvePredicateOp64.PartitionBreak.Op.BRKPA;
+        return new SvePredicateOp64.PartitionBreak(op, field(word, PD_SHIFT, PREDICATE_FIELD_MASK),
                 field(word, PG_LOGICAL_SHIFT, PREDICATE_FIELD_MASK), field(word, PN_SHIFT, PREDICATE_FIELD_MASK),
                 field(word, PM_SHIFT, PREDICATE_FIELD_MASK), bit(word, BIT_SET_FLAGS), false, address);
     }
@@ -543,10 +545,10 @@ final class Aarch64SveDecoder {
         if (merging && setFlags) {
             return null; // as formas /M não têm sufixo S (`@pd_pg_pn_s0`: s = 0 forçado)
         }
-        Ir64Op.SvePartitionBreak.Op op = bit(word, BIT_OPERATION_SELECT)
-                ? Ir64Op.SvePartitionBreak.Op.BRKB
-                : Ir64Op.SvePartitionBreak.Op.BRKA;
-        return new Ir64Op.SvePartitionBreak(op, field(word, PD_SHIFT, PREDICATE_FIELD_MASK),
+        SvePredicateOp64.PartitionBreak.Op op = bit(word, BIT_OPERATION_SELECT)
+                ? SvePredicateOp64.PartitionBreak.Op.BRKB
+                : SvePredicateOp64.PartitionBreak.Op.BRKA;
+        return new SvePredicateOp64.PartitionBreak(op, field(word, PD_SHIFT, PREDICATE_FIELD_MASK),
                 field(word, PG_LOGICAL_SHIFT, PREDICATE_FIELD_MASK), field(word, PN_SHIFT, PREDICATE_FIELD_MASK), 0,
                 setFlags, merging, address);
     }
@@ -554,42 +556,42 @@ final class Aarch64SveDecoder {
     private Ir64Op decodePredicateCount(int word, long address) {
         int esz = field(word, ESZ_SHIFT, ESZ_MASK);
         if ((word & CNTP_MASK) == CNTP_VALUE) {
-            return count(Ir64Op.SvePredicateCount.Op.CNTP, esz, word, address);
+            return count(SvePredicateOp64.PredicateCount.Op.CNTP, esz, word, address);
         }
         if ((word & CNTP_MASK) == FIRSTP_VALUE) {
             return architecture.has(Aarch64Feature.SVE2_2)
-                    ? count(Ir64Op.SvePredicateCount.Op.FIRSTP, esz, word, address)
+                    ? count(SvePredicateOp64.PredicateCount.Op.FIRSTP, esz, word, address)
                     : null;
         }
         if ((word & CNTP_MASK) == LASTP_VALUE) {
             return architecture.has(Aarch64Feature.SVE2_2)
-                    ? count(Ir64Op.SvePredicateCount.Op.LASTP, esz, word, address)
+                    ? count(SvePredicateOp64.PredicateCount.Op.LASTP, esz, word, address)
                     : null;
         }
         int pg = field(word, INCDECP_PG_SHIFT, PREDICATE_FIELD_MASK);
         int rd = field(word, PD_SHIFT, REGISTER_FIELD_MASK);
         if ((word & INCDECP_SCALAR_MASK) == INCDECP_SCALAR_VALUE) {
-            return incdecp(Ir64Op.SvePredicateCount.Op.INCDECP_SCALAR, esz, rd, pg, bit(word, INCDECP_D_BIT), false,
+            return incdecp(SvePredicateOp64.PredicateCount.Op.INCDECP_SCALAR, esz, rd, pg, bit(word, INCDECP_D_BIT), false,
                     address);
         }
         if ((word & INCDECP_VECTOR_MASK) == INCDECP_VECTOR_VALUE) {
             return esz == RESERVED_ESZ_BYTE
                     ? null
-                    : incdecp(Ir64Op.SvePredicateCount.Op.INCDECP_VECTOR, esz, rd, pg, bit(word, INCDECP_D_BIT), false,
+                    : incdecp(SvePredicateOp64.PredicateCount.Op.INCDECP_VECTOR, esz, rd, pg, bit(word, INCDECP_D_BIT), false,
                             address);
         }
         boolean decrement = bit(word, SINCDECP_D_BIT);
         boolean unsigned = bit(word, SINCDECP_U_BIT);
         if ((word & SINCDECP_SCALAR_32_MASK) == SINCDECP_SCALAR_32_VALUE) {
-            return incdecp(Ir64Op.SvePredicateCount.Op.SINCDECP_SCALAR_32, esz, rd, pg, decrement, unsigned, address);
+            return incdecp(SvePredicateOp64.PredicateCount.Op.SINCDECP_SCALAR_32, esz, rd, pg, decrement, unsigned, address);
         }
         if ((word & SINCDECP_SCALAR_64_MASK) == SINCDECP_SCALAR_64_VALUE) {
-            return incdecp(Ir64Op.SvePredicateCount.Op.SINCDECP_SCALAR_64, esz, rd, pg, decrement, unsigned, address);
+            return incdecp(SvePredicateOp64.PredicateCount.Op.SINCDECP_SCALAR_64, esz, rd, pg, decrement, unsigned, address);
         }
         if ((word & SINCDECP_VECTOR_MASK) == SINCDECP_VECTOR_VALUE) {
             return esz == RESERVED_ESZ_BYTE
                     ? null
-                    : incdecp(Ir64Op.SvePredicateCount.Op.SINCDECP_VECTOR, esz, rd, pg, decrement, unsigned, address);
+                    : incdecp(SvePredicateOp64.PredicateCount.Op.SINCDECP_VECTOR, esz, rd, pg, decrement, unsigned, address);
         }
         return null;
     }
@@ -600,32 +602,32 @@ final class Aarch64SveDecoder {
         int rd = field(word, PD_SHIFT, REGISTER_FIELD_MASK);
         int multiplier = field(word, ELEMENT_COUNT_IMM4_SHIFT, ELEMENT_COUNT_IMM4_MASK) + 1;
         if ((word & CNT_R_MASK) == CNT_R_VALUE) {
-            return elementCount(Ir64Op.SveElementCount.Op.CNT, esz, rd, pattern, multiplier, false, true, address);
+            return elementCount(SveIntegerOp64.ElementCount.Op.CNT, esz, rd, pattern, multiplier, false, true, address);
         }
         if ((word & INCDEC_R_MASK) == INCDEC_R_VALUE) {
-            return elementCount(Ir64Op.SveElementCount.Op.INCDEC_SCALAR, esz, rd, pattern, multiplier,
+            return elementCount(SveIntegerOp64.ElementCount.Op.INCDEC_SCALAR, esz, rd, pattern, multiplier,
                     bit(word, ELEMENT_COUNT_D_BIT_PLAIN_FORMS), true, address);
         }
         boolean decrement = bit(word, ELEMENT_COUNT_D_BIT_UNSIGNED_FORMS);
         boolean unsigned = bit(word, ELEMENT_COUNT_U_BIT_UNSIGNED_FORMS);
         if ((word & SINCDEC_R_32_MASK) == SINCDEC_R_32_VALUE) {
-            return elementCount(Ir64Op.SveElementCount.Op.SINCDEC_SCALAR_32, esz, rd, pattern, multiplier, decrement,
+            return elementCount(SveIntegerOp64.ElementCount.Op.SINCDEC_SCALAR_32, esz, rd, pattern, multiplier, decrement,
                     unsigned, address);
         }
         if ((word & SINCDEC_R_32_MASK) == SINCDEC_R_64_VALUE) {
-            return elementCount(Ir64Op.SveElementCount.Op.SINCDEC_SCALAR_64, esz, rd, pattern, multiplier, decrement,
+            return elementCount(SveIntegerOp64.ElementCount.Op.SINCDEC_SCALAR_64, esz, rd, pattern, multiplier, decrement,
                     unsigned, address);
         }
         if ((word & INCDEC_V_MASK) == INCDEC_V_VALUE) {
             return esz == RESERVED_ESZ_BYTE
                     ? null
-                    : elementCount(Ir64Op.SveElementCount.Op.INCDEC_VECTOR, esz, rd, pattern, multiplier,
+                    : elementCount(SveIntegerOp64.ElementCount.Op.INCDEC_VECTOR, esz, rd, pattern, multiplier,
                             bit(word, ELEMENT_COUNT_D_BIT_PLAIN_FORMS), true, address);
         }
         if ((word & SINCDEC_V_MASK) == SINCDEC_V_VALUE) {
             return esz == RESERVED_ESZ_BYTE
                     ? null
-                    : elementCount(Ir64Op.SveElementCount.Op.SINCDEC_VECTOR, esz, rd, pattern, multiplier, decrement,
+                    : elementCount(SveIntegerOp64.ElementCount.Op.SINCDEC_VECTOR, esz, rd, pattern, multiplier, decrement,
                             unsigned, address);
         }
         return null;
@@ -641,26 +643,26 @@ final class Aarch64SveDecoder {
         int imm = (field(word, ADDRESSING_IMM_SHIFT, ADDRESSING_IMM_MASK) << (Integer.SIZE - ADDRESSING_IMM_BITS))
                 >> (Integer.SIZE - ADDRESSING_IMM_BITS);
         if ((word & ADDVL_MASK) == ADDVL_VALUE) {
-            return new Ir64Op.SveAddress(Ir64Op.SveAddress.Op.ADDVL, rd, stackBase, 0, imm, 0, address);
+            return new SveIntegerOp64.Address(SveIntegerOp64.Address.Op.ADDVL, rd, stackBase, 0, imm, 0, address);
         }
         if ((word & ADDVL_MASK) == ADDPL_VALUE) {
-            return new Ir64Op.SveAddress(Ir64Op.SveAddress.Op.ADDPL, rd, stackBase, 0, imm, 0, address);
+            return new SveIntegerOp64.Address(SveIntegerOp64.Address.Op.ADDPL, rd, stackBase, 0, imm, 0, address);
         }
         if ((word & RDVL_MASK) == RDVL_VALUE) {
-            return new Ir64Op.SveAddress(Ir64Op.SveAddress.Op.RDVL, rd, 0, 0, imm, 0, address);
+            return new SveIntegerOp64.Address(SveIntegerOp64.Address.Op.RDVL, rd, 0, 0, imm, 0, address);
         }
         Ir64Op streaming = decodeStreamingAddressing(word, address);
         if (streaming != null) {
             return streaming;
         }
         if ((word & ADR_MASK) == ADR_VALUE) {
-            Ir64Op.SveAddress.Op op = switch (field(word, ESZ_SHIFT, ESZ_MASK)) {
-                case ADR_OPCODE_S32 -> Ir64Op.SveAddress.Op.ADR_S32;
-                case ADR_OPCODE_U32 -> Ir64Op.SveAddress.Op.ADR_U32;
-                case ADR_OPCODE_P32 -> Ir64Op.SveAddress.Op.ADR_P32;
-                default -> Ir64Op.SveAddress.Op.ADR_P64;
+            SveIntegerOp64.Address.Op op = switch (field(word, ESZ_SHIFT, ESZ_MASK)) {
+                case ADR_OPCODE_S32 -> SveIntegerOp64.Address.Op.ADR_S32;
+                case ADR_OPCODE_U32 -> SveIntegerOp64.Address.Op.ADR_U32;
+                case ADR_OPCODE_P32 -> SveIntegerOp64.Address.Op.ADR_P32;
+                default -> SveIntegerOp64.Address.Op.ADR_P64;
             };
-            return new Ir64Op.SveAddress(op, rd, rn, field(word, RM_SHIFT, REGISTER_FIELD_MASK), 0,
+            return new SveIntegerOp64.Address(op, rd, rn, field(word, RM_SHIFT, REGISTER_FIELD_MASK), 0,
                     field(word, ADR_MSZ_SHIFT, ADR_MSZ_MASK), address);
         }
         return null;
@@ -677,13 +679,13 @@ final class Aarch64SveDecoder {
         int imm = (field(word, ADDRESSING_IMM_SHIFT, ADDRESSING_IMM_MASK) << (Integer.SIZE - ADDRESSING_IMM_BITS))
                 >> (Integer.SIZE - ADDRESSING_IMM_BITS);
         if ((word & ADDVL_MASK) == ADDSVL_VALUE) {
-            return new Ir64Op.SveAddress(Ir64Op.SveAddress.Op.ADDSVL, rd, stackBase, 0, imm, 0, address);
+            return new SveIntegerOp64.Address(SveIntegerOp64.Address.Op.ADDSVL, rd, stackBase, 0, imm, 0, address);
         }
         if ((word & ADDVL_MASK) == ADDSPL_VALUE) {
-            return new Ir64Op.SveAddress(Ir64Op.SveAddress.Op.ADDSPL, rd, stackBase, 0, imm, 0, address);
+            return new SveIntegerOp64.Address(SveIntegerOp64.Address.Op.ADDSPL, rd, stackBase, 0, imm, 0, address);
         }
         if ((word & RDVL_MASK) == RDSVL_VALUE) {
-            return new Ir64Op.SveAddress(Ir64Op.SveAddress.Op.RDSVL, rd, 0, 0, imm, 0, address);
+            return new SveIntegerOp64.Address(SveIntegerOp64.Address.Op.RDSVL, rd, 0, 0, imm, 0, address);
         }
         return null;
     }
@@ -699,22 +701,22 @@ final class Aarch64SveDecoder {
             return decodeMultiplyAdd(word, address, esz, rd, rn, rm);
         }
         if ((word & MOVPRFX_MASK) == MOVPRFX_VALUE) {
-            return integer(Ir64Op.SveIntegerUnpredicated.Op.MOVPRFX, 0, rd, rn, 0, 0, 0, 0, 0, address);
+            return integer(SveIntegerOp64.IntegerUnpredicated.Op.MOVPRFX, 0, rd, rn, 0, 0, 0, 0, 0, address);
         }
         if ((word & FEXPA_MASK) == FEXPA_VALUE) {
             return esz == RESERVED_ESZ_BYTE
                     ? null
-                    : integer(Ir64Op.SveIntegerUnpredicated.Op.FEXPA, esz, rd, rn, 0, 0, 0, 0, 0, address);
+                    : integer(SveIntegerOp64.IntegerUnpredicated.Op.FEXPA, esz, rd, rn, 0, 0, 0, 0, 0, address);
         }
         // Daqui em diante bit 21 = 1: com bit 21 = 0 a palavra já foi consumida (ou recusada) pelo teste do MLA acima.
         int opcode = field(word, OPCODE_SHIFT, OPCODE_FIELD_MASK);
-        Ir64Op.SveIntegerUnpredicated.Op arithmetic = switch (opcode) {
-            case OP_ADD -> Ir64Op.SveIntegerUnpredicated.Op.ADD;
-            case OP_SUB -> Ir64Op.SveIntegerUnpredicated.Op.SUB;
-            case OP_SQADD -> Ir64Op.SveIntegerUnpredicated.Op.SQADD;
-            case OP_UQADD -> Ir64Op.SveIntegerUnpredicated.Op.UQADD;
-            case OP_SQSUB -> Ir64Op.SveIntegerUnpredicated.Op.SQSUB;
-            case OP_UQSUB -> Ir64Op.SveIntegerUnpredicated.Op.UQSUB;
+        SveIntegerOp64.IntegerUnpredicated.Op arithmetic = switch (opcode) {
+            case OP_ADD -> SveIntegerOp64.IntegerUnpredicated.Op.ADD;
+            case OP_SUB -> SveIntegerOp64.IntegerUnpredicated.Op.SUB;
+            case OP_SQADD -> SveIntegerOp64.IntegerUnpredicated.Op.SQADD;
+            case OP_UQADD -> SveIntegerOp64.IntegerUnpredicated.Op.UQADD;
+            case OP_SQSUB -> SveIntegerOp64.IntegerUnpredicated.Op.SQSUB;
+            case OP_UQSUB -> SveIntegerOp64.IntegerUnpredicated.Op.UQSUB;
             default -> null;
         };
         if (arithmetic != null) {
@@ -722,34 +724,34 @@ final class Aarch64SveDecoder {
         }
         return switch (opcode) {
             case OP_LOGICAL -> integer(switch (esz) {
-                case 0 -> Ir64Op.SveIntegerUnpredicated.Op.AND;
-                case 1 -> Ir64Op.SveIntegerUnpredicated.Op.ORR;
-                case 2 -> Ir64Op.SveIntegerUnpredicated.Op.EOR;
-                default -> Ir64Op.SveIntegerUnpredicated.Op.BIC;
+                case 0 -> SveIntegerOp64.IntegerUnpredicated.Op.AND;
+                case 1 -> SveIntegerOp64.IntegerUnpredicated.Op.ORR;
+                case 2 -> SveIntegerOp64.IntegerUnpredicated.Op.EOR;
+                default -> SveIntegerOp64.IntegerUnpredicated.Op.BIC;
             }, 0, rd, rn, rm, 0, 0, 0, 0, address);
             case OP_XAR -> decodeXar(word, address, rd);
             case OP_TERNARY_EOR3_BCAX -> decodeTernary(esz, rd, rm, word, address, false);
             case OP_TERNARY_BSL -> decodeTernary(esz, rd, rm, word, address, true);
             case OP_SHIFT_IMM_ASR ->
-                    decodeShiftImmediate(Ir64Op.SveIntegerUnpredicated.Op.ASR_IMM, word, address, false);
+                    decodeShiftImmediate(SveIntegerOp64.IntegerUnpredicated.Op.ASR_IMM, word, address, false);
             case OP_SHIFT_IMM_LSR ->
-                    decodeShiftImmediate(Ir64Op.SveIntegerUnpredicated.Op.LSR_IMM, word, address, false);
+                    decodeShiftImmediate(SveIntegerOp64.IntegerUnpredicated.Op.LSR_IMM, word, address, false);
             case OP_SHIFT_IMM_LSL ->
-                    decodeShiftImmediate(Ir64Op.SveIntegerUnpredicated.Op.LSL_IMM, word, address, true);
-            case OP_SHIFT_WIDE_ASR -> wideShift(Ir64Op.SveIntegerUnpredicated.Op.ASR_WIDE, esz, rd, rn, rm, address);
-            case OP_SHIFT_WIDE_LSR -> wideShift(Ir64Op.SveIntegerUnpredicated.Op.LSR_WIDE, esz, rd, rn, rm, address);
-            case OP_SHIFT_WIDE_LSL -> wideShift(Ir64Op.SveIntegerUnpredicated.Op.LSL_WIDE, esz, rd, rn, rm, address);
-            case OP_INDEX_II -> integer(Ir64Op.SveIntegerUnpredicated.Op.INDEX_II, esz, rd, 0, 0, 0, 0,
+                    decodeShiftImmediate(SveIntegerOp64.IntegerUnpredicated.Op.LSL_IMM, word, address, true);
+            case OP_SHIFT_WIDE_ASR -> wideShift(SveIntegerOp64.IntegerUnpredicated.Op.ASR_WIDE, esz, rd, rn, rm, address);
+            case OP_SHIFT_WIDE_LSR -> wideShift(SveIntegerOp64.IntegerUnpredicated.Op.LSR_WIDE, esz, rd, rn, rm, address);
+            case OP_SHIFT_WIDE_LSL -> wideShift(SveIntegerOp64.IntegerUnpredicated.Op.LSL_WIDE, esz, rd, rn, rm, address);
+            case OP_INDEX_II -> integer(SveIntegerOp64.IntegerUnpredicated.Op.INDEX_II, esz, rd, 0, 0, 0, 0,
                     signedImmediate(word, INDEX_IMM_LOW_SHIFT), signedImmediate(word, INDEX_IMM_HIGH_SHIFT), address);
-            case OP_INDEX_IR -> integer(Ir64Op.SveIntegerUnpredicated.Op.INDEX_IR, esz, rd, 0, rm, 0, 0,
+            case OP_INDEX_IR -> integer(SveIntegerOp64.IntegerUnpredicated.Op.INDEX_IR, esz, rd, 0, rm, 0, 0,
                     signedImmediate(word, INDEX_IMM_LOW_SHIFT), 0, address);
-            case OP_INDEX_RI -> integer(Ir64Op.SveIntegerUnpredicated.Op.INDEX_RI, esz, rd, rn, 0, 0, 0,
+            case OP_INDEX_RI -> integer(SveIntegerOp64.IntegerUnpredicated.Op.INDEX_RI, esz, rd, rn, 0, 0, 0,
                     signedImmediate(word, INDEX_IMM_HIGH_SHIFT), 0, address);
             case OP_INDEX_RR ->
-                    integer(Ir64Op.SveIntegerUnpredicated.Op.INDEX_RR, esz, rd, rn, rm, 0, 0, 0, 0, address);
+                    integer(SveIntegerOp64.IntegerUnpredicated.Op.INDEX_RR, esz, rd, rn, rm, 0, 0, 0, 0, address);
             case OP_FTSSEL -> esz == RESERVED_ESZ_BYTE
                     ? null
-                    : integer(Ir64Op.SveIntegerUnpredicated.Op.FTSSEL, esz, rd, rn, rm, 0, 0, 0, 0, address);
+                    : integer(SveIntegerOp64.IntegerUnpredicated.Op.FTSSEL, esz, rd, rn, rm, 0, 0, 0, 0, address);
             default -> null;
         };
     }
@@ -773,47 +775,47 @@ final class Aarch64SveDecoder {
     }
 
     /// Grupo de redução (`bits[15:13] = 001`, 19 encodings): 9 reduções escalares, 8 por segmento (`FEAT_SVE2p1`) e
-    /// os 2 `MOVPRFX` predicados — que escrevem `Zd`, não `Vd`, e por isso viram {@link Ir64Op.SveIntegerPredicated}.
+    /// os 2 `MOVPRFX` predicados — que escrevem `Zd`, não `Vd`, e por isso viram {@link SveIntegerOp64.IntegerPredicated}.
     private Ir64Op decodeReduction(int word, long address, int opcode) {
         int esz = field(word, ESZ_SHIFT, ESZ_MASK);
         int rd = field(word, PD_SHIFT, REGISTER_FIELD_MASK);
         int rn = field(word, RN_PREDICATED_SHIFT, REGISTER_FIELD_MASK);
         int pg = field(word, PG_PREDICATED_SHIFT, PG_PREDICATED_MASK);
         if (opcode == RED_MOVPRFX_Z || opcode == RED_MOVPRFX_M) {
-            return new Ir64Op.SveIntegerPredicated(Ir64Op.SveIntegerPredicated.Op.MOVPRFX, esz, rd, rn, 0, pg, 0,
+            return new SveIntegerOp64.IntegerPredicated(SveIntegerOp64.IntegerPredicated.Op.MOVPRFX, esz, rd, rn, 0, pg, 0,
                     opcode == RED_MOVPRFX_Z, address);
         }
-        Ir64Op.SveIntegerReduction.Op op = switch (opcode) {
-            case RED_ORV -> Ir64Op.SveIntegerReduction.Op.ORV;
-            case RED_EORV -> Ir64Op.SveIntegerReduction.Op.EORV;
-            case RED_ANDV -> Ir64Op.SveIntegerReduction.Op.ANDV;
-            case RED_SADDV -> Ir64Op.SveIntegerReduction.Op.SADDV;
-            case RED_UADDV -> Ir64Op.SveIntegerReduction.Op.UADDV;
-            case RED_SMAXV -> Ir64Op.SveIntegerReduction.Op.SMAXV;
-            case RED_UMAXV -> Ir64Op.SveIntegerReduction.Op.UMAXV;
-            case RED_SMINV -> Ir64Op.SveIntegerReduction.Op.SMINV;
-            case RED_UMINV -> Ir64Op.SveIntegerReduction.Op.UMINV;
-            case RED_ORQV -> Ir64Op.SveIntegerReduction.Op.ORQV;
-            case RED_EORQV -> Ir64Op.SveIntegerReduction.Op.EORQV;
-            case RED_ANDQV -> Ir64Op.SveIntegerReduction.Op.ANDQV;
-            case RED_ADDQV -> Ir64Op.SveIntegerReduction.Op.ADDQV;
-            case RED_SMAXQV -> Ir64Op.SveIntegerReduction.Op.SMAXQV;
-            case RED_UMAXQV -> Ir64Op.SveIntegerReduction.Op.UMAXQV;
-            case RED_SMINQV -> Ir64Op.SveIntegerReduction.Op.SMINQV;
-            case RED_UMINQV -> Ir64Op.SveIntegerReduction.Op.UMINQV;
+        SveIntegerOp64.IntegerReduction.Op op = switch (opcode) {
+            case RED_ORV -> SveIntegerOp64.IntegerReduction.Op.ORV;
+            case RED_EORV -> SveIntegerOp64.IntegerReduction.Op.EORV;
+            case RED_ANDV -> SveIntegerOp64.IntegerReduction.Op.ANDV;
+            case RED_SADDV -> SveIntegerOp64.IntegerReduction.Op.SADDV;
+            case RED_UADDV -> SveIntegerOp64.IntegerReduction.Op.UADDV;
+            case RED_SMAXV -> SveIntegerOp64.IntegerReduction.Op.SMAXV;
+            case RED_UMAXV -> SveIntegerOp64.IntegerReduction.Op.UMAXV;
+            case RED_SMINV -> SveIntegerOp64.IntegerReduction.Op.SMINV;
+            case RED_UMINV -> SveIntegerOp64.IntegerReduction.Op.UMINV;
+            case RED_ORQV -> SveIntegerOp64.IntegerReduction.Op.ORQV;
+            case RED_EORQV -> SveIntegerOp64.IntegerReduction.Op.EORQV;
+            case RED_ANDQV -> SveIntegerOp64.IntegerReduction.Op.ANDQV;
+            case RED_ADDQV -> SveIntegerOp64.IntegerReduction.Op.ADDQV;
+            case RED_SMAXQV -> SveIntegerOp64.IntegerReduction.Op.SMAXQV;
+            case RED_UMAXQV -> SveIntegerOp64.IntegerReduction.Op.UMAXQV;
+            case RED_SMINQV -> SveIntegerOp64.IntegerReduction.Op.SMINQV;
+            case RED_UMINQV -> SveIntegerOp64.IntegerReduction.Op.UMINQV;
             default -> null;
         };
-        if (op == null || op == Ir64Op.SveIntegerReduction.Op.SADDV && esz == ESZ_DOUBLEWORD) {
+        if (op == null || op == SveIntegerOp64.IntegerReduction.Op.SADDV && esz == ESZ_DOUBLEWORD) {
             return null; // SADDV exige esz != 3 (não há como alargar a soma com sinal além de 64 bits)
         }
         if (isSegmentReduction(op) && !architecture.has(Aarch64Feature.SVE2_1)
                 && !architecture.has(Aarch64Feature.SVE2_2)) {
             return null; // `aa64_sme2p1_or_sve2p1`; SVE2p2 implica SVE2p1
         }
-        return new Ir64Op.SveIntegerReduction(op, esz, rd, rn, pg, address);
+        return new SveIntegerOp64.IntegerReduction(op, esz, rd, rn, pg, address);
     }
 
-    private static boolean isSegmentReduction(Ir64Op.SveIntegerReduction.Op op) {
+    private static boolean isSegmentReduction(SveIntegerOp64.IntegerReduction.Op op) {
         return switch (op) {
             case ORQV, EORQV, ANDQV, ADDQV, SMAXQV, UMAXQV, SMINQV, UMINQV -> true;
             default -> false;
@@ -825,27 +827,27 @@ final class Aarch64SveDecoder {
     private Ir64Op decodePredicatedBinary(int word, long address, int opcode) {
         int esz = field(word, ESZ_SHIFT, ESZ_MASK);
         boolean reverse = opcode == PRED_SUBR || opcode == PRED_SDIVR || opcode == PRED_UDIVR;
-        Ir64Op.SveIntegerPredicated.Op op = switch (opcode) {
-            case PRED_ORR -> Ir64Op.SveIntegerPredicated.Op.ORR;
-            case PRED_EOR -> Ir64Op.SveIntegerPredicated.Op.EOR;
-            case PRED_AND -> Ir64Op.SveIntegerPredicated.Op.AND;
-            case PRED_BIC -> Ir64Op.SveIntegerPredicated.Op.BIC;
-            case PRED_ADD -> Ir64Op.SveIntegerPredicated.Op.ADD;
-            case PRED_SUB, PRED_SUBR -> Ir64Op.SveIntegerPredicated.Op.SUB;
-            case PRED_SMAX -> Ir64Op.SveIntegerPredicated.Op.SMAX;
-            case PRED_UMAX -> Ir64Op.SveIntegerPredicated.Op.UMAX;
-            case PRED_SMIN -> Ir64Op.SveIntegerPredicated.Op.SMIN;
-            case PRED_UMIN -> Ir64Op.SveIntegerPredicated.Op.UMIN;
-            case PRED_SABD -> Ir64Op.SveIntegerPredicated.Op.SABD;
-            case PRED_UABD -> Ir64Op.SveIntegerPredicated.Op.UABD;
-            case PRED_MUL -> Ir64Op.SveIntegerPredicated.Op.MUL;
-            case PRED_SMULH -> Ir64Op.SveIntegerPredicated.Op.SMULH;
-            case PRED_UMULH -> Ir64Op.SveIntegerPredicated.Op.UMULH;
-            case PRED_SDIV, PRED_SDIVR -> Ir64Op.SveIntegerPredicated.Op.SDIV;
-            case PRED_UDIV, PRED_UDIVR -> Ir64Op.SveIntegerPredicated.Op.UDIV;
+        SveIntegerOp64.IntegerPredicated.Op op = switch (opcode) {
+            case PRED_ORR -> SveIntegerOp64.IntegerPredicated.Op.ORR;
+            case PRED_EOR -> SveIntegerOp64.IntegerPredicated.Op.EOR;
+            case PRED_AND -> SveIntegerOp64.IntegerPredicated.Op.AND;
+            case PRED_BIC -> SveIntegerOp64.IntegerPredicated.Op.BIC;
+            case PRED_ADD -> SveIntegerOp64.IntegerPredicated.Op.ADD;
+            case PRED_SUB, PRED_SUBR -> SveIntegerOp64.IntegerPredicated.Op.SUB;
+            case PRED_SMAX -> SveIntegerOp64.IntegerPredicated.Op.SMAX;
+            case PRED_UMAX -> SveIntegerOp64.IntegerPredicated.Op.UMAX;
+            case PRED_SMIN -> SveIntegerOp64.IntegerPredicated.Op.SMIN;
+            case PRED_UMIN -> SveIntegerOp64.IntegerPredicated.Op.UMIN;
+            case PRED_SABD -> SveIntegerOp64.IntegerPredicated.Op.SABD;
+            case PRED_UABD -> SveIntegerOp64.IntegerPredicated.Op.UABD;
+            case PRED_MUL -> SveIntegerOp64.IntegerPredicated.Op.MUL;
+            case PRED_SMULH -> SveIntegerOp64.IntegerPredicated.Op.SMULH;
+            case PRED_UMULH -> SveIntegerOp64.IntegerPredicated.Op.UMULH;
+            case PRED_SDIV, PRED_SDIVR -> SveIntegerOp64.IntegerPredicated.Op.SDIV;
+            case PRED_UDIV, PRED_UDIVR -> SveIntegerOp64.IntegerPredicated.Op.UDIV;
             default -> null;
         };
-        boolean divide = op == Ir64Op.SveIntegerPredicated.Op.SDIV || op == Ir64Op.SveIntegerPredicated.Op.UDIV;
+        boolean divide = op == SveIntegerOp64.IntegerPredicated.Op.SDIV || op == SveIntegerOp64.IntegerPredicated.Op.UDIV;
         if (op == null || (divide && esz < ESZ_WORD)) {
             return null; // divisão exige esz >= 2; abaixo disso é não alocado
         }
@@ -854,22 +856,22 @@ final class Aarch64SveDecoder {
 
     private Ir64Op decodePredicatedShift(int word, long address, int opcode) {
         int esz = field(word, ESZ_SHIFT, ESZ_MASK);
-        Ir64Op.SveIntegerPredicated.Op op = switch (opcode) {
-            case PRED_SHIFT_ASR_IMM -> Ir64Op.SveIntegerPredicated.Op.ASR_IMM;
-            case PRED_SHIFT_LSR_IMM -> Ir64Op.SveIntegerPredicated.Op.LSR_IMM;
-            case PRED_SHIFT_LSL_IMM -> Ir64Op.SveIntegerPredicated.Op.LSL_IMM;
-            case PRED_SHIFT_ASRD -> Ir64Op.SveIntegerPredicated.Op.ASRD;
-            case PRED_SHIFT_SQSHL_IMM -> Ir64Op.SveIntegerPredicated.Op.SQSHL_IMM;
-            case PRED_SHIFT_UQSHL_IMM -> Ir64Op.SveIntegerPredicated.Op.UQSHL_IMM;
-            case PRED_SHIFT_SRSHR -> Ir64Op.SveIntegerPredicated.Op.SRSHR;
-            case PRED_SHIFT_URSHR -> Ir64Op.SveIntegerPredicated.Op.URSHR;
-            case PRED_SHIFT_SQSHLU -> Ir64Op.SveIntegerPredicated.Op.SQSHLU;
-            case PRED_SHIFT_ASR, PRED_SHIFT_ASRR -> Ir64Op.SveIntegerPredicated.Op.ASR;
-            case PRED_SHIFT_LSR, PRED_SHIFT_LSRR -> Ir64Op.SveIntegerPredicated.Op.LSR;
-            case PRED_SHIFT_LSL, PRED_SHIFT_LSLR -> Ir64Op.SveIntegerPredicated.Op.LSL;
-            case PRED_SHIFT_ASR_WIDE -> Ir64Op.SveIntegerPredicated.Op.ASR_WIDE;
-            case PRED_SHIFT_LSR_WIDE -> Ir64Op.SveIntegerPredicated.Op.LSR_WIDE;
-            case PRED_SHIFT_LSL_WIDE -> Ir64Op.SveIntegerPredicated.Op.LSL_WIDE;
+        SveIntegerOp64.IntegerPredicated.Op op = switch (opcode) {
+            case PRED_SHIFT_ASR_IMM -> SveIntegerOp64.IntegerPredicated.Op.ASR_IMM;
+            case PRED_SHIFT_LSR_IMM -> SveIntegerOp64.IntegerPredicated.Op.LSR_IMM;
+            case PRED_SHIFT_LSL_IMM -> SveIntegerOp64.IntegerPredicated.Op.LSL_IMM;
+            case PRED_SHIFT_ASRD -> SveIntegerOp64.IntegerPredicated.Op.ASRD;
+            case PRED_SHIFT_SQSHL_IMM -> SveIntegerOp64.IntegerPredicated.Op.SQSHL_IMM;
+            case PRED_SHIFT_UQSHL_IMM -> SveIntegerOp64.IntegerPredicated.Op.UQSHL_IMM;
+            case PRED_SHIFT_SRSHR -> SveIntegerOp64.IntegerPredicated.Op.SRSHR;
+            case PRED_SHIFT_URSHR -> SveIntegerOp64.IntegerPredicated.Op.URSHR;
+            case PRED_SHIFT_SQSHLU -> SveIntegerOp64.IntegerPredicated.Op.SQSHLU;
+            case PRED_SHIFT_ASR, PRED_SHIFT_ASRR -> SveIntegerOp64.IntegerPredicated.Op.ASR;
+            case PRED_SHIFT_LSR, PRED_SHIFT_LSRR -> SveIntegerOp64.IntegerPredicated.Op.LSR;
+            case PRED_SHIFT_LSL, PRED_SHIFT_LSLR -> SveIntegerOp64.IntegerPredicated.Op.LSL;
+            case PRED_SHIFT_ASR_WIDE -> SveIntegerOp64.IntegerPredicated.Op.ASR_WIDE;
+            case PRED_SHIFT_LSR_WIDE -> SveIntegerOp64.IntegerPredicated.Op.LSR_WIDE;
+            case PRED_SHIFT_LSL_WIDE -> SveIntegerOp64.IntegerPredicated.Op.LSL_WIDE;
             default -> null;
         };
         if (op == null) {
@@ -877,11 +879,11 @@ final class Aarch64SveDecoder {
         }
         switch (op) {
             case ASR_IMM, LSR_IMM, LSL_IMM, ASRD, SRSHR, URSHR, SQSHL_IMM, UQSHL_IMM, SQSHLU -> {
-                boolean sve2Only = op == Ir64Op.SveIntegerPredicated.Op.SQSHL_IMM
-                        || op == Ir64Op.SveIntegerPredicated.Op.UQSHL_IMM
-                        || op == Ir64Op.SveIntegerPredicated.Op.SRSHR
-                        || op == Ir64Op.SveIntegerPredicated.Op.URSHR
-                        || op == Ir64Op.SveIntegerPredicated.Op.SQSHLU;
+                boolean sve2Only = op == SveIntegerOp64.IntegerPredicated.Op.SQSHL_IMM
+                        || op == SveIntegerOp64.IntegerPredicated.Op.UQSHL_IMM
+                        || op == SveIntegerOp64.IntegerPredicated.Op.SRSHR
+                        || op == SveIntegerOp64.IntegerPredicated.Op.URSHR
+                        || op == SveIntegerOp64.IntegerPredicated.Op.SQSHLU;
                 if (sve2Only && !architecture.has(Aarch64Feature.SVE2)) {
                     return null;
                 }
@@ -890,10 +892,10 @@ final class Aarch64SveDecoder {
                 if (immEsz < 0) {
                     return null; // tsz = 0: não alocado
                 }
-                boolean left = op == Ir64Op.SveIntegerPredicated.Op.LSL_IMM
-                        || op == Ir64Op.SveIntegerPredicated.Op.SQSHL_IMM
-                        || op == Ir64Op.SveIntegerPredicated.Op.UQSHL_IMM
-                        || op == Ir64Op.SveIntegerPredicated.Op.SQSHLU;
+                boolean left = op == SveIntegerOp64.IntegerPredicated.Op.LSL_IMM
+                        || op == SveIntegerOp64.IntegerPredicated.Op.SQSHL_IMM
+                        || op == SveIntegerOp64.IntegerPredicated.Op.UQSHL_IMM
+                        || op == SveIntegerOp64.IntegerPredicated.Op.SQSHLU;
                 long amount = left ? tszimm - (ESIZE_BITS_BASE << immEsz) : (ESIZE_SHR_BASE << immEsz) - tszimm;
                 return predicatedImmediate(op, immEsz, word, address, amount);
             }
@@ -917,37 +919,37 @@ final class Aarch64SveDecoder {
         }
         int selector = opcode & UNARY_SELECTOR_MASK;
         boolean bitOperations = ((opcode >>> UNARY_BIT_OPERATIONS) & 1) != 0;
-        Ir64Op.SveIntegerPredicated.Op op = bitOperations ? switch (selector) {
-            case 0 -> Ir64Op.SveIntegerPredicated.Op.CLS;
-            case 1 -> Ir64Op.SveIntegerPredicated.Op.CLZ;
-            case 2 -> Ir64Op.SveIntegerPredicated.Op.CNT;
-            case 3 -> Ir64Op.SveIntegerPredicated.Op.CNOT;
-            case 4 -> Ir64Op.SveIntegerPredicated.Op.FABS;
-            case 5 -> Ir64Op.SveIntegerPredicated.Op.FNEG;
-            case 6 -> Ir64Op.SveIntegerPredicated.Op.NOT;
+        SveIntegerOp64.IntegerPredicated.Op op = bitOperations ? switch (selector) {
+            case 0 -> SveIntegerOp64.IntegerPredicated.Op.CLS;
+            case 1 -> SveIntegerOp64.IntegerPredicated.Op.CLZ;
+            case 2 -> SveIntegerOp64.IntegerPredicated.Op.CNT;
+            case 3 -> SveIntegerOp64.IntegerPredicated.Op.CNOT;
+            case 4 -> SveIntegerOp64.IntegerPredicated.Op.FABS;
+            case 5 -> SveIntegerOp64.IntegerPredicated.Op.FNEG;
+            case 6 -> SveIntegerOp64.IntegerPredicated.Op.NOT;
             default -> null;
         } : switch (selector) {
-            case 0 -> Ir64Op.SveIntegerPredicated.Op.SXTB;
-            case 1 -> Ir64Op.SveIntegerPredicated.Op.UXTB;
-            case 2 -> Ir64Op.SveIntegerPredicated.Op.SXTH;
-            case 3 -> Ir64Op.SveIntegerPredicated.Op.UXTH;
-            case 4 -> Ir64Op.SveIntegerPredicated.Op.SXTW;
-            case 5 -> Ir64Op.SveIntegerPredicated.Op.UXTW;
-            case 6 -> Ir64Op.SveIntegerPredicated.Op.ABS;
-            default -> Ir64Op.SveIntegerPredicated.Op.NEG;
+            case 0 -> SveIntegerOp64.IntegerPredicated.Op.SXTB;
+            case 1 -> SveIntegerOp64.IntegerPredicated.Op.UXTB;
+            case 2 -> SveIntegerOp64.IntegerPredicated.Op.SXTH;
+            case 3 -> SveIntegerOp64.IntegerPredicated.Op.UXTH;
+            case 4 -> SveIntegerOp64.IntegerPredicated.Op.SXTW;
+            case 5 -> SveIntegerOp64.IntegerPredicated.Op.UXTW;
+            case 6 -> SveIntegerOp64.IntegerPredicated.Op.ABS;
+            default -> SveIntegerOp64.IntegerPredicated.Op.NEG;
         };
-        if (op == null || esz < minimumUnaryEsz(op) || (op == Ir64Op.SveIntegerPredicated.Op.SXTW
-                || op == Ir64Op.SveIntegerPredicated.Op.UXTW) && esz != ESZ_DOUBLEWORD) {
+        if (op == null || esz < minimumUnaryEsz(op) || (op == SveIntegerOp64.IntegerPredicated.Op.SXTW
+                || op == SveIntegerOp64.IntegerPredicated.Op.UXTW) && esz != ESZ_DOUBLEWORD) {
             return null;
         }
-        return new Ir64Op.SveIntegerPredicated(op, esz, field(word, PD_SHIFT, REGISTER_FIELD_MASK),
+        return new SveIntegerOp64.IntegerPredicated(op, esz, field(word, PD_SHIFT, REGISTER_FIELD_MASK),
                 field(word, RN_PREDICATED_SHIFT, REGISTER_FIELD_MASK), 0,
                 field(word, PG_PREDICATED_SHIFT, PG_PREDICATED_MASK), 0, zeroing, address);
     }
 
     /// Menor `esz` permitido de cada unária: as extensões precisam de um elemento maior que a origem
     /// (`SXTB`/`UXTB` ≥ half, `SXTH`/`UXTH` ≥ word) e `FABS`/`FNEG` não existem em bytes.
-    private static int minimumUnaryEsz(Ir64Op.SveIntegerPredicated.Op op) {
+    private static int minimumUnaryEsz(SveIntegerOp64.IntegerPredicated.Op op) {
         return switch (op) {
             case SXTB, UXTB, FABS, FNEG -> ESZ_HALFWORD;
             case SXTH, UXTH -> ESZ_WORD;
@@ -955,18 +957,18 @@ final class Aarch64SveDecoder {
         };
     }
 
-    private static Ir64Op predicated(Ir64Op.SveIntegerPredicated.Op op, int esz, int word, long address,
+    private static Ir64Op predicated(SveIntegerOp64.IntegerPredicated.Op op, int esz, int word, long address,
             boolean reverse, long imm, boolean zeroing) {
         int rd = field(word, PD_SHIFT, REGISTER_FIELD_MASK);
         int other = field(word, RN_PREDICATED_SHIFT, REGISTER_FIELD_MASK);
-        return new Ir64Op.SveIntegerPredicated(op, esz, rd, reverse ? other : rd, reverse ? rd : other,
+        return new SveIntegerOp64.IntegerPredicated(op, esz, rd, reverse ? other : rd, reverse ? rd : other,
                 field(word, PG_PREDICATED_SHIFT, PG_PREDICATED_MASK), imm, zeroing, address);
     }
 
-    private static Ir64Op predicatedImmediate(Ir64Op.SveIntegerPredicated.Op op, int esz, int word, long address,
+    private static Ir64Op predicatedImmediate(SveIntegerOp64.IntegerPredicated.Op op, int esz, int word, long address,
             long amount) {
         int rd = field(word, PD_SHIFT, REGISTER_FIELD_MASK);
-        return new Ir64Op.SveIntegerPredicated(op, esz, rd, rd, 0, field(word, PG_PREDICATED_SHIFT, PG_PREDICATED_MASK),
+        return new SveIntegerOp64.IntegerPredicated(op, esz, rd, rd, 0, field(word, PG_PREDICATED_SHIFT, PG_PREDICATED_MASK),
                 amount, false, address);
     }
 
@@ -976,13 +978,13 @@ final class Aarch64SveDecoder {
         int pg = field(word, PG_MULTIPLY_SHIFT, PG_MULTIPLY_MASK);
         return switch (field(word, MULTIPLY_ADD_OPCODE_SHIFT, MULTIPLY_ADD_OPCODE_MASK)) {
             case MULTIPLY_ADD_MLA ->
-                    integer(Ir64Op.SveIntegerUnpredicated.Op.MLA, esz, rd, rn, rm, 0, pg, 0, 0, address);
+                    integer(SveIntegerOp64.IntegerUnpredicated.Op.MLA, esz, rd, rn, rm, 0, pg, 0, 0, address);
             case MULTIPLY_ADD_MLS ->
-                    integer(Ir64Op.SveIntegerUnpredicated.Op.MLS, esz, rd, rn, rm, 0, pg, 0, 0, address);
+                    integer(SveIntegerOp64.IntegerUnpredicated.Op.MLS, esz, rd, rn, rm, 0, pg, 0, 0, address);
             case MULTIPLY_ADD_MAD ->
-                    integer(Ir64Op.SveIntegerUnpredicated.Op.MAD, esz, rd, rd, rm, rn, pg, 0, 0, address);
+                    integer(SveIntegerOp64.IntegerUnpredicated.Op.MAD, esz, rd, rd, rm, rn, pg, 0, 0, address);
             case MULTIPLY_ADD_MSB ->
-                    integer(Ir64Op.SveIntegerUnpredicated.Op.MSB, esz, rd, rd, rm, rn, pg, 0, 0, address);
+                    integer(SveIntegerOp64.IntegerUnpredicated.Op.MSB, esz, rd, rd, rm, rn, pg, 0, 0, address);
             default -> null;
         };
     }
@@ -993,18 +995,18 @@ final class Aarch64SveDecoder {
         if (!architecture.has(Aarch64Feature.SVE2)) {
             return null;
         }
-        Ir64Op.SveIntegerUnpredicated.Op op;
+        SveIntegerOp64.IntegerUnpredicated.Op op;
         if (bitSelect) {
             op = switch (selector) {
-                case 0 -> Ir64Op.SveIntegerUnpredicated.Op.BSL;
-                case 1 -> Ir64Op.SveIntegerUnpredicated.Op.BSL1N;
-                case 2 -> Ir64Op.SveIntegerUnpredicated.Op.BSL2N;
-                default -> Ir64Op.SveIntegerUnpredicated.Op.NBSL;
+                case 0 -> SveIntegerOp64.IntegerUnpredicated.Op.BSL;
+                case 1 -> SveIntegerOp64.IntegerUnpredicated.Op.BSL1N;
+                case 2 -> SveIntegerOp64.IntegerUnpredicated.Op.BSL2N;
+                default -> SveIntegerOp64.IntegerUnpredicated.Op.NBSL;
             };
         } else {
             op = switch (selector) {
-                case 0 -> Ir64Op.SveIntegerUnpredicated.Op.EOR3;
-                case 1 -> Ir64Op.SveIntegerUnpredicated.Op.BCAX;
+                case 0 -> SveIntegerOp64.IntegerUnpredicated.Op.EOR3;
+                case 1 -> SveIntegerOp64.IntegerUnpredicated.Op.BCAX;
                 default -> null;
             };
         }
@@ -1020,12 +1022,12 @@ final class Aarch64SveDecoder {
         if (esz < 0 || !architecture.has(Aarch64Feature.SVE2)) {
             return null;
         }
-        return integer(Ir64Op.SveIntegerUnpredicated.Op.XAR, esz, rd, rd, field(word, RA_SHIFT, REGISTER_FIELD_MASK), 0,
+        return integer(SveIntegerOp64.IntegerUnpredicated.Op.XAR, esz, rd, rd, field(word, RA_SHIFT, REGISTER_FIELD_MASK), 0,
                 0, (ESIZE_SHR_BASE << esz) - tszimm, 0, address);
     }
 
     /// `ASR`/`LSR`/`LSL` por imediato: `esz` e a contagem derivam do MESMO campo `tszimm` (não há `size`).
-    private static Ir64Op decodeShiftImmediate(Ir64Op.SveIntegerUnpredicated.Op op, int word, long address,
+    private static Ir64Op decodeShiftImmediate(SveIntegerOp64.IntegerUnpredicated.Op op, int word, long address,
             boolean left) {
         int tszimm = tszimm(word, TSZ_LOW_SHIFT);
         int esz = tszimmEsz(tszimm);
@@ -1038,7 +1040,7 @@ final class Aarch64SveDecoder {
     }
 
     /// Shift por elemento largo (`_zzw`): `esz = 3` não existe (o `Zm` já é de doublewords).
-    private static Ir64Op wideShift(Ir64Op.SveIntegerUnpredicated.Op op, int esz, int rd, int rn, int rm,
+    private static Ir64Op wideShift(SveIntegerOp64.IntegerUnpredicated.Op op, int esz, int rd, int rn, int rm,
             long address) {
         return esz == ESZ_DOUBLEWORD ? null : integer(op, esz, rd, rn, rm, 0, 0, 0, 0, address);
     }
@@ -1061,32 +1063,32 @@ final class Aarch64SveDecoder {
         return (raw << (Integer.SIZE - SIGNED_IMMEDIATE_BITS)) >> (Integer.SIZE - SIGNED_IMMEDIATE_BITS);
     }
 
-    private static Ir64Op integer(Ir64Op.SveIntegerUnpredicated.Op op, int esz, int rd, int rn, int rm, int ra, int pg,
+    private static Ir64Op integer(SveIntegerOp64.IntegerUnpredicated.Op op, int esz, int rd, int rn, int rm, int ra, int pg,
             long imm, long imm2, long address) {
-        return new Ir64Op.SveIntegerUnpredicated(op, esz, rd, rn, rm, ra, pg, imm, imm2, address);
+        return new SveIntegerOp64.IntegerUnpredicated(op, esz, rd, rn, rm, ra, pg, imm, imm2, address);
     }
 
-    private static Ir64Op misc(Ir64Op.SvePredicateMisc.Op op, int esz, int pd, int pg, int pn, boolean setFlags,
+    private static Ir64Op misc(SvePredicateOp64.PredicateMisc.Op op, int esz, int pd, int pg, int pn, boolean setFlags,
             int pattern, long address) {
         // `PTEST`/`PFIRST`/`PNEXT` usam o argumento `pn` como o predicado lido e `pg` como o
         // governante; os chamadores acima já passaram cada campo na posição certa.
-        return new Ir64Op.SvePredicateMisc(op, esz, pd, pg, pn, setFlags, pattern, address);
+        return new SvePredicateOp64.PredicateMisc(op, esz, pd, pg, pn, setFlags, pattern, address);
     }
 
-    private static Ir64Op count(Ir64Op.SvePredicateCount.Op op, int esz, int word, long address) {
-        return new Ir64Op.SvePredicateCount(op, esz, field(word, PD_SHIFT, REGISTER_FIELD_MASK),
+    private static Ir64Op count(SvePredicateOp64.PredicateCount.Op op, int esz, int word, long address) {
+        return new SvePredicateOp64.PredicateCount(op, esz, field(word, PD_SHIFT, REGISTER_FIELD_MASK),
                 field(word, COUNT_PG_SHIFT, PREDICATE_FIELD_MASK), field(word, PN_SHIFT, PREDICATE_FIELD_MASK), false,
                 false, address);
     }
 
-    private static Ir64Op incdecp(Ir64Op.SvePredicateCount.Op op, int esz, int rd, int pg, boolean decrement,
+    private static Ir64Op incdecp(SvePredicateOp64.PredicateCount.Op op, int esz, int rd, int pg, boolean decrement,
             boolean unsigned, long address) {
-        return new Ir64Op.SvePredicateCount(op, esz, rd, pg, pg, decrement, unsigned, address);
+        return new SvePredicateOp64.PredicateCount(op, esz, rd, pg, pg, decrement, unsigned, address);
     }
 
-    private static Ir64Op elementCount(Ir64Op.SveElementCount.Op op, int esz, int rd, int pattern, int multiplier,
+    private static Ir64Op elementCount(SveIntegerOp64.ElementCount.Op op, int esz, int rd, int pattern, int multiplier,
             boolean decrement, boolean unsigned, long address) {
-        return new Ir64Op.SveElementCount(op, esz, rd, pattern, multiplier, decrement, unsigned, address);
+        return new SveIntegerOp64.ElementCount(op, esz, rd, pattern, multiplier, decrement, unsigned, address);
     }
 
     private static int field(int word, int shift, int mask) {

@@ -1,7 +1,7 @@
 package dev.vitorsilverio.armjitter.executor64;
 
 import dev.vitorsilverio.armjitter.core64.Aarch64Core;
-import dev.vitorsilverio.armjitter.ir64.Ir64Op;
+import dev.vitorsilverio.armjitter.ir64.FpOp64;
 import dev.vitorsilverio.armjitter.memory.AddressSpace64;
 import dev.vitorsilverio.armjitter.support.TestAddressSpace;
 import org.junit.jupiter.api.Test;
@@ -26,7 +26,7 @@ class Ir64JavascriptConvertExecutorTest {
 
     private static Aarch64Core convert(double dn) {
         Aarch64Core core = newCore(dn);
-        EXECUTOR.executeOp(core, new Ir64Op.Fp64JavascriptConvert(0, 1));
+        EXECUTOR.executeOp(core, new FpOp64.JavascriptConvert(0, 1));
         return core;
     }
 

@@ -6,7 +6,7 @@ import dev.vitorsilverio.armjitter.core64.Aarch64Fp8Format;
 import dev.vitorsilverio.armjitter.core64.Aarch64MatrixRegisters;
 import dev.vitorsilverio.armjitter.core64.Aarch64MatrixTileAddressing;
 import dev.vitorsilverio.armjitter.core64.Aarch64ScalableRegisters;
-import dev.vitorsilverio.armjitter.ir64.Ir64Op;
+import dev.vitorsilverio.armjitter.ir64.SmeOp64;
 
 /// Semântica de `ADDHA`/`ADDVA` e do produto externo acumulado (`FMOPA`/`BFMOPA`/`SMOPA`/`SUMOPA`/`USMOPA`/`UMOPA`/
 /// `BMOPA`, B18.5): `ZA<tile>[i][j]` é atualizado a partir de `Zn[i]` e `Zm[j]` onde `Pn[i]` E `Pm[j]` permitem.
@@ -59,17 +59,17 @@ final class SmeOuterProductOps {
     }
 
     /// @return `true` = a instrução já entrou numa exceção (acesso negado)
-    static boolean execute(Aarch64Core core, Ir64Op.SmeOuterProduct op) {
+    static boolean execute(Aarch64Core core, SmeOp64.OuterProduct op) {
         if (!core.smeStreamingAndZaEnabledCheck(op.instructionAddress())) {
             return true;
         }
         Aarch64MatrixRegisters matrix = core.matrix();
         Aarch64ScalableRegisters regs = core.scalable();
-        Ir64Op.SmeOuterProduct.Op kind = op.op();
+        SmeOp64.OuterProduct.Op kind = op.op();
         int esz = kind.accumulatorEsz();
         int elements = core.streamingVectorLengthBytes() >>> esz;
-        boolean addVector = kind == Ir64Op.SmeOuterProduct.Op.ADDHA_S || kind == Ir64Op.SmeOuterProduct.Op.ADDVA_S
-                || kind == Ir64Op.SmeOuterProduct.Op.ADDHA_D || kind == Ir64Op.SmeOuterProduct.Op.ADDVA_D;
+        boolean addVector = kind == SmeOp64.OuterProduct.Op.ADDHA_S || kind == SmeOp64.OuterProduct.Op.ADDVA_S
+                || kind == SmeOp64.OuterProduct.Op.ADDHA_D || kind == SmeOp64.OuterProduct.Op.ADDVA_D;
         int columnSource = addVector ? op.zn() : op.zm();
         Context context = contextFor(core, kind);
         for (int row = 0; row < elements; row++) {
@@ -87,7 +87,7 @@ final class SmeOuterProductOps {
         return false;
     }
 
-    static Context contextFor(Aarch64Core core, Ir64Op.SmeOuterProduct.Op kind) {
+    static Context contextFor(Aarch64Core core, SmeOp64.OuterProduct.Op kind) {
         Context context = new Context();
         switch (kind) {
             case FMOPA_W_H -> {
@@ -105,7 +105,7 @@ final class SmeOuterProductOps {
                 context.nE4m3 = core.fp8SourceFormat1() == Aarch64Fp8Format.E4M3;
                 context.mE4m3 = core.fp8SourceFormat2() == Aarch64Fp8Format.E4M3;
                 context.osm = core.fp8OverflowSaturatesToMaxNormalOnMultiply();
-                context.lscale = kind == Ir64Op.SmeOuterProduct.Op.FMOPA_SB ? core.fp8MultiplyDownscale()
+                context.lscale = kind == SmeOp64.OuterProduct.Op.FMOPA_SB ? core.fp8MultiplyDownscale()
                         : core.fp8WidenScale();
             }
             case FMOPA_H -> context.accumulate = SveFloat.Env.ofZa(core, ESZ_HALF);
@@ -124,13 +124,13 @@ final class SmeOuterProductOps {
 
     /// Mesma aritmética de {@link #combine}, para as formas SEM predicado (`MOP4`/`TMOP`, B18.5b): reaproveita o
     /// mesmo núcleo (`f16_dotadd`, `bfdotadd*`, `fp8`, produtos inteiros) em vez de duplicá-lo.
-    static long combineUnpredicated(Ir64Op.SmeOuterProduct.Op kind, Context context, boolean subtract, long n,
+    static long combineUnpredicated(SmeOp64.OuterProduct.Op kind, Context context, boolean subtract, long n,
             long m, long accumulator) {
         return combine(kind, context, subtract, n, m, accumulator, ALL_ACTIVE, ALL_ACTIVE);
     }
 
     /// Novo valor do elemento do acumulador. `pa`/`pb` são os grupos de bits de predicado do elemento de linha/coluna.
-    private static long combine(Ir64Op.SmeOuterProduct.Op kind, Context context, boolean subtract, long n, long m,
+    private static long combine(SmeOp64.OuterProduct.Op kind, Context context, boolean subtract, long n, long m,
             long accumulator, int pa, int pb) {
         boolean active = ((pa & pb) & 1) != 0;
         return switch (kind) {

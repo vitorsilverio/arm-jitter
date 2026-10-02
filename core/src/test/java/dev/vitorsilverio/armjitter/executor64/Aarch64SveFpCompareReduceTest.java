@@ -10,6 +10,7 @@ import dev.vitorsilverio.armjitter.ir64.Aarch64SystemRegisterId;
 import dev.vitorsilverio.armjitter.ir64.Ir64Block;
 import dev.vitorsilverio.armjitter.ir64.Ir64Op;
 import dev.vitorsilverio.armjitter.ir64.StandardIr64BlockLifter;
+import dev.vitorsilverio.armjitter.ir64.SveFpOp64;
 import dev.vitorsilverio.armjitter.memory.AddressSpace64;
 import dev.vitorsilverio.armjitter.support.TestAddressSpace;
 import org.junit.jupiter.api.Test;
@@ -116,7 +117,7 @@ class Aarch64SveFpCompareReduceTest {
 
     private static boolean decodes(Aarch64Architecture architecture, int word) {
         try {
-            return decode(architecture, word) instanceof Ir64Op.SveFpCompareReduce;
+            return decode(architecture, word) instanceof SveFpOp64.FpCompareReduce;
         } catch (UnsupportedOperationException refused) {
             return false;
         }
@@ -265,38 +266,38 @@ class Aarch64SveFpCompareReduceTest {
 
     static Stream<Arguments> assembled() {
         return Stream.of(
-                Arguments.of(0x65444861, Ir64Op.SveFpCompareReduce.Op.FCMGE, 1, false),
-                Arguments.of(0x65844871, Ir64Op.SveFpCompareReduce.Op.FCMGT, 2, false),
-                Arguments.of(0x65c46861, Ir64Op.SveFpCompareReduce.Op.FCMEQ, 3, false),
-                Arguments.of(0x65de7fff, Ir64Op.SveFpCompareReduce.Op.FCMNE, 3, false),
-                Arguments.of(0x6584c861, Ir64Op.SveFpCompareReduce.Op.FCMUO, 2, false),
-                Arguments.of(0x6584c871, Ir64Op.SveFpCompareReduce.Op.FACGE, 2, false),
-                Arguments.of(0x6584e871, Ir64Op.SveFpCompareReduce.Op.FACGT, 2, false),
-                Arguments.of(0x65902861, Ir64Op.SveFpCompareReduce.Op.FCMGE, 2, true),
-                Arguments.of(0x65902871, Ir64Op.SveFpCompareReduce.Op.FCMGT, 2, true),
-                Arguments.of(0x65912861, Ir64Op.SveFpCompareReduce.Op.FCMLT, 2, true),
-                Arguments.of(0x65912871, Ir64Op.SveFpCompareReduce.Op.FCMLE, 2, true),
-                Arguments.of(0x65922861, Ir64Op.SveFpCompareReduce.Op.FCMEQ, 2, true),
-                Arguments.of(0x65533fe1, Ir64Op.SveFpCompareReduce.Op.FCMNE, 1, true),
-                Arguments.of(0x65402861, Ir64Op.SveFpCompareReduce.Op.FADDV, 1, false),
-                Arguments.of(0x65802861, Ir64Op.SveFpCompareReduce.Op.FADDV, 2, false),
-                Arguments.of(0x65c42861, Ir64Op.SveFpCompareReduce.Op.FMAXNMV, 3, false),
-                Arguments.of(0x65852861, Ir64Op.SveFpCompareReduce.Op.FMINNMV, 2, false),
-                Arguments.of(0x65862861, Ir64Op.SveFpCompareReduce.Op.FMAXV, 2, false),
-                Arguments.of(0x65872861, Ir64Op.SveFpCompareReduce.Op.FMINV, 2, false),
-                Arguments.of(0x6490a861, Ir64Op.SveFpCompareReduce.Op.FADDQV, 2, false),
-                Arguments.of(0x64d4a861, Ir64Op.SveFpCompareReduce.Op.FMAXNMQV, 3, false),
-                Arguments.of(0x6455a861, Ir64Op.SveFpCompareReduce.Op.FMINNMQV, 1, false),
-                Arguments.of(0x6496a861, Ir64Op.SveFpCompareReduce.Op.FMAXQV, 2, false),
-                Arguments.of(0x6497a861, Ir64Op.SveFpCompareReduce.Op.FMINQV, 2, false),
-                Arguments.of(0x65982861, Ir64Op.SveFpCompareReduce.Op.FADDA, 2, false),
-                Arguments.of(0x65d83fdf, Ir64Op.SveFpCompareReduce.Op.FADDA, 3, false));
+                Arguments.of(0x65444861, SveFpOp64.FpCompareReduce.Op.FCMGE, 1, false),
+                Arguments.of(0x65844871, SveFpOp64.FpCompareReduce.Op.FCMGT, 2, false),
+                Arguments.of(0x65c46861, SveFpOp64.FpCompareReduce.Op.FCMEQ, 3, false),
+                Arguments.of(0x65de7fff, SveFpOp64.FpCompareReduce.Op.FCMNE, 3, false),
+                Arguments.of(0x6584c861, SveFpOp64.FpCompareReduce.Op.FCMUO, 2, false),
+                Arguments.of(0x6584c871, SveFpOp64.FpCompareReduce.Op.FACGE, 2, false),
+                Arguments.of(0x6584e871, SveFpOp64.FpCompareReduce.Op.FACGT, 2, false),
+                Arguments.of(0x65902861, SveFpOp64.FpCompareReduce.Op.FCMGE, 2, true),
+                Arguments.of(0x65902871, SveFpOp64.FpCompareReduce.Op.FCMGT, 2, true),
+                Arguments.of(0x65912861, SveFpOp64.FpCompareReduce.Op.FCMLT, 2, true),
+                Arguments.of(0x65912871, SveFpOp64.FpCompareReduce.Op.FCMLE, 2, true),
+                Arguments.of(0x65922861, SveFpOp64.FpCompareReduce.Op.FCMEQ, 2, true),
+                Arguments.of(0x65533fe1, SveFpOp64.FpCompareReduce.Op.FCMNE, 1, true),
+                Arguments.of(0x65402861, SveFpOp64.FpCompareReduce.Op.FADDV, 1, false),
+                Arguments.of(0x65802861, SveFpOp64.FpCompareReduce.Op.FADDV, 2, false),
+                Arguments.of(0x65c42861, SveFpOp64.FpCompareReduce.Op.FMAXNMV, 3, false),
+                Arguments.of(0x65852861, SveFpOp64.FpCompareReduce.Op.FMINNMV, 2, false),
+                Arguments.of(0x65862861, SveFpOp64.FpCompareReduce.Op.FMAXV, 2, false),
+                Arguments.of(0x65872861, SveFpOp64.FpCompareReduce.Op.FMINV, 2, false),
+                Arguments.of(0x6490a861, SveFpOp64.FpCompareReduce.Op.FADDQV, 2, false),
+                Arguments.of(0x64d4a861, SveFpOp64.FpCompareReduce.Op.FMAXNMQV, 3, false),
+                Arguments.of(0x6455a861, SveFpOp64.FpCompareReduce.Op.FMINNMQV, 1, false),
+                Arguments.of(0x6496a861, SveFpOp64.FpCompareReduce.Op.FMAXQV, 2, false),
+                Arguments.of(0x6497a861, SveFpOp64.FpCompareReduce.Op.FMINQV, 2, false),
+                Arguments.of(0x65982861, SveFpOp64.FpCompareReduce.Op.FADDA, 2, false),
+                Arguments.of(0x65d83fdf, SveFpOp64.FpCompareReduce.Op.FADDA, 3, false));
     }
 
     @ParameterizedTest
     @MethodSource("assembled")
-    void everyAssembledWordDecodesToItsOperation(int word, Ir64Op.SveFpCompareReduce.Op expected, int esz, boolean zero) {
-        Ir64Op.SveFpCompareReduce op = assertInstanceOf(Ir64Op.SveFpCompareReduce.class, decode(SVE2P1, word));
+    void everyAssembledWordDecodesToItsOperation(int word, SveFpOp64.FpCompareReduce.Op expected, int esz, boolean zero) {
+        SveFpOp64.FpCompareReduce op = assertInstanceOf(SveFpOp64.FpCompareReduce.class, decode(SVE2P1, word));
         assertEquals(expected, op.op());
         assertEquals(esz, op.esz());
         assertEquals(zero, op.zero());
@@ -305,13 +306,13 @@ class Aarch64SveFpCompareReduceTest {
     @Test
     void registerFieldsAreDecodedFromTheRightBits() {
         // fcmne p15.d, p7/z, z31.d, z30.d
-        Ir64Op.SveFpCompareReduce compare = assertInstanceOf(Ir64Op.SveFpCompareReduce.class, decode(SVE, 0x65de7fff));
+        SveFpOp64.FpCompareReduce compare = assertInstanceOf(SveFpOp64.FpCompareReduce.class, decode(SVE, 0x65de7fff));
         assertEquals(15, compare.rd());
         assertEquals(7, compare.pg());
         assertEquals(31, compare.rn());
         assertEquals(30, compare.rm());
         // fadda d31, p7, d31, z30.d: Vdn nos bits 4:0, Zm nos bits 9:5
-        Ir64Op.SveFpCompareReduce serial = assertInstanceOf(Ir64Op.SveFpCompareReduce.class, decode(SVE, 0x65d83fdf));
+        SveFpOp64.FpCompareReduce serial = assertInstanceOf(SveFpOp64.FpCompareReduce.class, decode(SVE, 0x65d83fdf));
         assertEquals(31, serial.rd());
         assertEquals(31, serial.rn());
         assertEquals(30, serial.rm());

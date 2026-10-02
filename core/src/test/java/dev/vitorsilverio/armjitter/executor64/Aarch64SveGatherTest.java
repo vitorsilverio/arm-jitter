@@ -8,6 +8,7 @@ import dev.vitorsilverio.armjitter.decoder64.Aarch64Decoder;
 import dev.vitorsilverio.armjitter.ir64.Ir64Block;
 import dev.vitorsilverio.armjitter.ir64.Ir64Op;
 import dev.vitorsilverio.armjitter.ir64.StandardIr64BlockLifter;
+import dev.vitorsilverio.armjitter.ir64.SveMemoryOp64;
 import dev.vitorsilverio.armjitter.memory.AddressSpace64;
 import dev.vitorsilverio.armjitter.memory.MemoryAccessType;
 import dev.vitorsilverio.armjitter.memory.mmu.FaultStatus64;
@@ -833,7 +834,7 @@ class Aarch64SveGatherTest {
         assertEquals(JUNK, core.scalable().zWord(Z0, 0));
         assertTrue(memory.touched.isEmpty());
         Ir64Op op = decodeOrNull(SVE, word);
-        assertEquals(Ir64Op.SveLoad.Op.PRF, assertInstanceOf(Ir64Op.SveLoad.class, op).op());
+        assertEquals(SveMemoryOp64.Load.Op.PRF, assertInstanceOf(SveMemoryOp64.Load.class, op).op());
     }
 
     @ParameterizedTest
@@ -1000,7 +1001,7 @@ class Aarch64SveGatherTest {
                         if (prefix == 0b1100010) {
                             assertNull(decoded, "recusada: " + hex);
                         } else {
-                            assertFalse(decoded instanceof Ir64Op.SveGather, "recusada: " + hex);
+                            assertFalse(decoded instanceof SveMemoryOp64.Gather, "recusada: " + hex);
                         }
                         continue;
                     }
@@ -1031,18 +1032,18 @@ class Aarch64SveGatherTest {
 
     private static void assertExpected(Pattern pattern, int word, Ir64Op decoded, String hex) {
         if (pattern.kind() == PRF_KIND) {
-            Ir64Op.SveLoad prefetch = assertInstanceOf(Ir64Op.SveLoad.class, decoded, hex);
-            assertEquals(Ir64Op.SveLoad.Op.PRF, prefetch.op(), hex);
+            SveMemoryOp64.Load prefetch = assertInstanceOf(SveMemoryOp64.Load.class, decoded, hex);
+            assertEquals(SveMemoryOp64.Load.Op.PRF, prefetch.op(), hex);
             assertTrue(prefetch.nonStreaming(), hex);
             return;
         }
-        Ir64Op.SveGather gather = assertInstanceOf(Ir64Op.SveGather.class, decoded, hex);
+        SveMemoryOp64.Gather gather = assertInstanceOf(SveMemoryOp64.Gather.class, decoded, hex);
         assertEquals(pattern.esz(), gather.esz(), hex);
         assertEquals(word & 31, gather.rd(), hex);
         assertEquals((word >>> 5) & 31, gather.rn(), hex);
         assertEquals((word >>> 10) & 7, gather.pg(), hex);
         if (pattern.kind() == LDNT1_KIND) {
-            assertEquals(Ir64Op.SveGather.Op.VECTOR_PLUS_SCALAR, gather.op(), hex);
+            assertEquals(SveMemoryOp64.Gather.Op.VECTOR_PLUS_SCALAR, gather.op(), hex);
             assertEquals((word >>> 23) & 3, gather.msz(), hex);
             assertEquals((word >>> 16) & 31, gather.rm(), hex);
             assertEquals(!bit(word, ntUnsignedBit(pattern)), gather.signExtend(), hex);
@@ -1050,7 +1051,7 @@ class Aarch64SveGatherTest {
             return;
         }
         if (pattern.kind() == LD1Q_KIND) {
-            assertEquals(Ir64Op.SveGather.Op.LD1Q, gather.op(), hex);
+            assertEquals(SveMemoryOp64.Gather.Op.LD1Q, gather.op(), hex);
             assertEquals(4, gather.msz(), hex);
             assertEquals((word >>> 16) & 31, gather.rm(), hex);
             assertFalse(gather.firstFault(), hex);
@@ -1061,15 +1062,15 @@ class Aarch64SveGatherTest {
         assertEquals(!unsigned, gather.signExtend(), hex);
         assertEquals(bit(word, 13), gather.firstFault(), "o bit ff dobra cada linha: " + hex);
         if (pattern.kind() == ZPIZ) {
-            assertEquals(Ir64Op.SveGather.Op.VECTOR_PLUS_IMMEDIATE, gather.op(), hex);
+            assertEquals(SveMemoryOp64.Gather.Op.VECTOR_PLUS_IMMEDIATE, gather.op(), hex);
             assertEquals((word >>> 16) & 31, gather.immediate(), hex);
             return;
         }
-        assertEquals(Ir64Op.SveGather.Op.SCALAR_PLUS_VECTOR, gather.op(), hex);
+        assertEquals(SveMemoryOp64.Gather.Op.SCALAR_PLUS_VECTOR, gather.op(), hex);
         assertEquals((word >>> 16) & 31, gather.rm(), hex);
         assertEquals(pattern.scale() == FIELD ? bit(word, 21) : pattern.scale() == 1, gather.scaled(), hex);
-        int extend = pattern.kind() == ZPRZ_64 ? Ir64Op.SveGather.OFFSET_64
-                : bit(word, 22) ? Ir64Op.SveGather.OFFSET_SXTW : Ir64Op.SveGather.OFFSET_UXTW;
+        int extend = pattern.kind() == ZPRZ_64 ? SveMemoryOp64.Gather.OFFSET_64
+                : bit(word, 22) ? SveMemoryOp64.Gather.OFFSET_SXTW : SveMemoryOp64.Gather.OFFSET_UXTW;
         assertEquals(extend, gather.offsetExtend(), hex);
     }
 
@@ -1084,6 +1085,6 @@ class Aarch64SveGatherTest {
     }
 
     private static boolean decodes(Aarch64Architecture architecture, int word) {
-        return decodeOrNull(architecture, word) instanceof Ir64Op.SveGather;
+        return decodeOrNull(architecture, word) instanceof SveMemoryOp64.Gather;
     }
 }

@@ -2,7 +2,8 @@ package dev.vitorsilverio.armjitter.executor64;
 
 import dev.vitorsilverio.armjitter.core64.Aarch64Core;
 import dev.vitorsilverio.armjitter.core64.Aarch64FpRegisters;
-import dev.vitorsilverio.armjitter.ir64.Ir64Op;
+import dev.vitorsilverio.armjitter.ir64.AdvSimdFpOp64;
+import dev.vitorsilverio.armjitter.ir64.FpOp64;
 import dev.vitorsilverio.armjitter.ir64.Ir64VectorFpUnaryOp;
 import dev.vitorsilverio.armjitter.memory.AddressSpace64;
 import dev.vitorsilverio.armjitter.support.TestAddressSpace;
@@ -37,13 +38,13 @@ class Ir64BlockExecutorB1918Test {
         Aarch64Core core = newCore();
         Aarch64FpRegisters fp = core.fp();
         fp.setDDouble(1, 1.5);
-        EXECUTOR.executeOp(core, new Ir64Op.Fp64RoundRangeLimited(
-                Ir64Op.Fp64RoundingDirection.TOWARD_ZERO, false, true, 0, 1));
+        EXECUTOR.executeOp(core, new FpOp64.RoundRangeLimited(
+                FpOp64.Fp64RoundingDirection.TOWARD_ZERO, false, true, 0, 1));
         assertEquals(1.0, fp.dDouble(0));
 
         fp.setDDouble(1, -1.5);
-        EXECUTOR.executeOp(core, new Ir64Op.Fp64RoundRangeLimited(
-                Ir64Op.Fp64RoundingDirection.TOWARD_ZERO, false, true, 0, 1));
+        EXECUTOR.executeOp(core, new FpOp64.RoundRangeLimited(
+                FpOp64.Fp64RoundingDirection.TOWARD_ZERO, false, true, 0, 1));
         assertEquals(-1.0, fp.dDouble(0));
     }
 
@@ -52,8 +53,8 @@ class Ir64BlockExecutorB1918Test {
         Aarch64Core core = newCore();
         Aarch64FpRegisters fp = core.fp();
         fp.setDDouble(1, 1.5);
-        EXECUTOR.executeOp(core, new Ir64Op.Fp64RoundRangeLimited(
-                Ir64Op.Fp64RoundingDirection.NEAREST_TIES_EVEN, false, true, 0, 1));
+        EXECUTOR.executeOp(core, new FpOp64.RoundRangeLimited(
+                FpOp64.Fp64RoundingDirection.NEAREST_TIES_EVEN, false, true, 0, 1));
         assertEquals(2.0, fp.dDouble(0));
     }
 
@@ -66,12 +67,12 @@ class Ir64BlockExecutorB1918Test {
         double hugeValue = 1.0e30; // fora de alcance de 32 E de 64 bits com sinal
         fp.setDDouble(1, hugeValue);
 
-        EXECUTOR.executeOp(core, new Ir64Op.Fp64RoundRangeLimited(
-                Ir64Op.Fp64RoundingDirection.TOWARD_ZERO, false, true, 0, 1));
+        EXECUTOR.executeOp(core, new FpOp64.RoundRangeLimited(
+                FpOp64.Fp64RoundingDirection.TOWARD_ZERO, false, true, 0, 1));
         assertEquals(TWO_POW_31, fp.dDouble(0));
 
-        EXECUTOR.executeOp(core, new Ir64Op.Fp64RoundRangeLimited(
-                Ir64Op.Fp64RoundingDirection.TOWARD_ZERO, true, true, 2, 1));
+        EXECUTOR.executeOp(core, new FpOp64.RoundRangeLimited(
+                FpOp64.Fp64RoundingDirection.TOWARD_ZERO, true, true, 2, 1));
         assertEquals(TWO_POW_63, fp.dDouble(2));
     }
 
@@ -80,8 +81,8 @@ class Ir64BlockExecutorB1918Test {
         Aarch64Core core = newCore();
         Aarch64FpRegisters fp = core.fp();
         fp.setDDouble(1, -1.0e30);
-        EXECUTOR.executeOp(core, new Ir64Op.Fp64RoundRangeLimited(
-                Ir64Op.Fp64RoundingDirection.TOWARD_ZERO, false, true, 0, 1));
+        EXECUTOR.executeOp(core, new FpOp64.RoundRangeLimited(
+                FpOp64.Fp64RoundingDirection.TOWARD_ZERO, false, true, 0, 1));
         assertEquals(-TWO_POW_31, fp.dDouble(0));
         assertTrue(Double.isFinite(fp.dDouble(0)));
     }
@@ -92,8 +93,8 @@ class Ir64BlockExecutorB1918Test {
         Aarch64Core core = newCore();
         Aarch64FpRegisters fp = core.fp();
         fp.setDDouble(1, Double.POSITIVE_INFINITY);
-        EXECUTOR.executeOp(core, new Ir64Op.Fp64RoundRangeLimited(
-                Ir64Op.Fp64RoundingDirection.NEAREST_TIES_EVEN, true, true, 0, 1));
+        EXECUTOR.executeOp(core, new FpOp64.RoundRangeLimited(
+                FpOp64.Fp64RoundingDirection.NEAREST_TIES_EVEN, true, true, 0, 1));
         assertEquals(TWO_POW_63, fp.dDouble(0));
     }
 
@@ -102,20 +103,20 @@ class Ir64BlockExecutorB1918Test {
         Aarch64Core core = newCore();
         Aarch64FpRegisters fp = core.fp();
         fp.setDDouble(1, Double.NaN);
-        EXECUTOR.executeOp(core, new Ir64Op.Fp64RoundRangeLimited(
-                Ir64Op.Fp64RoundingDirection.TOWARD_ZERO, false, true, 0, 1));
+        EXECUTOR.executeOp(core, new FpOp64.RoundRangeLimited(
+                FpOp64.Fp64RoundingDirection.TOWARD_ZERO, false, true, 0, 1));
         assertTrue(Double.isNaN(fp.dDouble(0)));
     }
 
     @Test
     void scalarExactBoundaryDoesNotSaturate() {
         // `2^31` exato É um resultado válido (não `2^31-1`) — achado medido contra o algoritmo
-        // real do QEMU (`int32_max_as_float32`), ver Javadoc de `Ir64Op.Fp64RoundRangeLimited`.
+        // real do QEMU (`int32_max_as_float32`), ver Javadoc de `FpOp64.RoundRangeLimited`.
         Aarch64Core core = newCore();
         Aarch64FpRegisters fp = core.fp();
         fp.setDDouble(1, TWO_POW_31);
-        EXECUTOR.executeOp(core, new Ir64Op.Fp64RoundRangeLimited(
-                Ir64Op.Fp64RoundingDirection.TOWARD_ZERO, false, true, 0, 1));
+        EXECUTOR.executeOp(core, new FpOp64.RoundRangeLimited(
+                FpOp64.Fp64RoundingDirection.TOWARD_ZERO, false, true, 0, 1));
         assertEquals(TWO_POW_31, fp.dDouble(0));
     }
 
@@ -124,8 +125,8 @@ class Ir64BlockExecutorB1918Test {
         Aarch64Core core = newCore();
         Aarch64FpRegisters fp = core.fp();
         fp.setSFloat(1, 1.0e30f);
-        EXECUTOR.executeOp(core, new Ir64Op.Fp64RoundRangeLimited(
-                Ir64Op.Fp64RoundingDirection.TOWARD_ZERO, false, false, 0, 1));
+        EXECUTOR.executeOp(core, new FpOp64.RoundRangeLimited(
+                FpOp64.Fp64RoundingDirection.TOWARD_ZERO, false, false, 0, 1));
         assertEquals((float) TWO_POW_31, fp.sFloat(0));
     }
 
@@ -137,7 +138,7 @@ class Ir64BlockExecutorB1918Test {
         Aarch64FpRegisters fp = core.fp();
         fp.setElement(1, 0, ESZ_SINGLE, Float.floatToRawIntBits(1.5f) & 0xFFFF_FFFFL);
         fp.setElement(1, 1, ESZ_SINGLE, Float.floatToRawIntBits(1.0e30f) & 0xFFFF_FFFFL);
-        EXECUTOR.executeOp(core, new Ir64Op.VectorFpArithmeticUnary(
+        EXECUTOR.executeOp(core, new AdvSimdFpOp64.FpArithmeticUnary(
                 Ir64VectorFpUnaryOp.RINT32Z, false, false, ESZ_SINGLE, 0, 1));
         assertEquals(1.0f, Float.intBitsToFloat((int) fp.element(0, 0, ESZ_SINGLE)));
         assertEquals((float) TWO_POW_31, Float.intBitsToFloat((int) fp.element(0, 1, ESZ_SINGLE)));
@@ -149,7 +150,7 @@ class Ir64BlockExecutorB1918Test {
         Aarch64FpRegisters fp = core.fp();
         fp.setElement(1, 0, ESZ_DOUBLE, Double.doubleToRawLongBits(1.5));
         fp.setElement(1, 1, ESZ_DOUBLE, Double.doubleToRawLongBits(-1.0e30));
-        EXECUTOR.executeOp(core, new Ir64Op.VectorFpArithmeticUnary(
+        EXECUTOR.executeOp(core, new AdvSimdFpOp64.FpArithmeticUnary(
                 Ir64VectorFpUnaryOp.RINT64X, false, true, ESZ_DOUBLE, 0, 1));
         assertEquals(2.0, Double.longBitsToDouble(fp.element(0, 0, ESZ_DOUBLE)));
         assertEquals(-TWO_POW_63, Double.longBitsToDouble(fp.element(0, 1, ESZ_DOUBLE)));

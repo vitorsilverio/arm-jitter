@@ -1,9 +1,9 @@
 package dev.vitorsilverio.armjitter.ir64;
 
-/// Operação de {@link Ir64Op.CryptoSm3ThreeRegister} (`FEAT_SM3`, ARMv8.2-A, B19.10) — hash chinês
+/// Operação de {@link CryptoOp64.Sm3ThreeRegister} (`FEAT_SM3`, ARMv8.2-A, B19.10) — hash chinês
 /// SM3 (GB/T 32905-2016), mesma extensão criptográfica opcional de {@link Ir64CryptoSha512Op}
-/// (`FEAT_SHA512`) e da família `SM4` (`FEAT_SM4`, ver {@link Ir64Op.CryptoSm4Encrypt}/
-/// {@link Ir64Op.CryptoSm4KeyUpdate}).
+/// (`FEAT_SHA512`) e da família `SM4` (`FEAT_SM4`, ver {@link CryptoOp64.Sm4Encrypt}/
+/// {@link CryptoOp64.Sm4KeyUpdate}).
 public enum Ir64CryptoSm3Op {
     /// `SM3PARTW1`: atualização de agenda de mensagem, primeira metade.
     PARTW1,

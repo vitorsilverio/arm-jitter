@@ -5,11 +5,17 @@ import dev.vitorsilverio.armjitter.core.Condition;
 import dev.vitorsilverio.armjitter.core.CpuMode;
 import dev.vitorsilverio.armjitter.ir.IrOp;
 import dev.vitorsilverio.armjitter.ir.IrOperand;
+import dev.vitorsilverio.armjitter.ir64.AdvSimdFpOp64;
+import dev.vitorsilverio.armjitter.ir64.AdvSimdIntegerOp64;
+import dev.vitorsilverio.armjitter.ir64.CryptoOp64;
+import dev.vitorsilverio.armjitter.ir64.IntegerOp64;
 import dev.vitorsilverio.armjitter.ir64.Ir64AluOp;
 import dev.vitorsilverio.armjitter.ir64.Ir64AtomicOp;
 import dev.vitorsilverio.armjitter.ir64.Ir64CryptoSha3Op;
 import dev.vitorsilverio.armjitter.ir64.Ir64Op;
 import dev.vitorsilverio.armjitter.ir64.Ir64VectorThreeSameOp;
+import dev.vitorsilverio.armjitter.ir64.MemoryOp64;
+import dev.vitorsilverio.armjitter.ir64.SveIntegerOp64;
 
 import java.lang.reflect.Constructor;
 import java.lang.reflect.RecordComponent;
@@ -92,23 +98,23 @@ public final class IrOpSamples {
 
         // ── 64 bits ──────────────────────────────────────────────────────────────────────────
         // O grupo lógico nunca carrega `ADD`/`SUB` (primeiras constantes de `Ir64AluOp`).
-        override(Ir64Op.LogicalShiftedRegister.class, "opcode", Ir64AluOp.AND);
+        override(IntegerOp64.LogicalShiftedRegister.class, "opcode", Ir64AluOp.AND);
         for (Class<?> fpRecord : List.of(
-                Ir64Op.VectorFpArithmeticThreeSame.class, Ir64Op.VectorFpArithmeticPairwise.class,
-                Ir64Op.VectorFpArithmeticUnary.class, Ir64Op.VectorFpArithmeticThreeSameByElement.class,
-                Ir64Op.VectorFpComplexAdd.class, Ir64Op.VectorFpComplexMultiplyAccumulate.class,
-                Ir64Op.VectorFpComplexMultiplyAccumulateByElement.class, Ir64Op.VectorFpScaleByInt.class,
-                Ir64Op.VectorFpAbsoluteMaxMin.class)) {
+                AdvSimdFpOp64.FpArithmeticThreeSame.class, AdvSimdFpOp64.FpArithmeticPairwise.class,
+                AdvSimdFpOp64.FpArithmeticUnary.class, AdvSimdFpOp64.FpArithmeticThreeSameByElement.class,
+                AdvSimdFpOp64.FpComplexAdd.class, AdvSimdFpOp64.FpComplexMultiplyAccumulate.class,
+                AdvSimdFpOp64.FpComplexMultiplyAccumulateByElement.class, AdvSimdFpOp64.FpScaleByInt.class,
+                AdvSimdFpOp64.FpAbsoluteMaxMin.class)) {
             override(fpRecord, "esz", ESZ_SINGLE_PRECISION);
         }
-        override(Ir64Op.VectorArithmeticThreeSameByElement.class, "op", Ir64VectorThreeSameOp.MUL);
-        override(Ir64Op.VectorArithmeticThreeSameByElement.class, "esz", ESZ_HALFWORD);
+        override(AdvSimdIntegerOp64.ArithmeticThreeSameByElement.class, "op", Ir64VectorThreeSameOp.MUL);
+        override(AdvSimdIntegerOp64.ArithmeticThreeSameByElement.class, "esz", ESZ_HALFWORD);
         // `EOR3`/`BCAX` (primeiras constantes) são do record de QUATRO registradores.
-        override(Ir64Op.CryptoSha3TwoSourceRotate.class, "op", Ir64CryptoSha3Op.RAX1);
+        override(CryptoOp64.Sha3TwoSourceRotate.class, "op", Ir64CryptoSha3Op.RAX1);
         // As formas de par (`LDCLRP`/`LDSETP`/`SWPP`) só existem para `CLR`/`SET`/`SWP`.
-        override(Ir64Op.AtomicMemoryOpPair.class, "operation", Ir64AtomicOp.CLR);
-        override(Ir64Op.SveMultiplyIndexed.class, "esz", ESZ_SINGLE_PRECISION);
-        override(Ir64Op.SveMultiplyIndexed.class, "ways", DOT_PRODUCT_FOUR_WAYS);
+        override(MemoryOp64.AtomicMemoryOpPair.class, "operation", Ir64AtomicOp.CLR);
+        override(SveIntegerOp64.MultiplyIndexed.class, "esz", ESZ_SINGLE_PRECISION);
+        override(SveIntegerOp64.MultiplyIndexed.class, "ways", DOT_PRODUCT_FOUR_WAYS);
     }
 
     /// `true` quando a amostra precisa de um core de perfil M (`MProfileExceptionModel` + preset
@@ -214,7 +220,7 @@ public final class IrOpSamples {
         if (type == Ir64Op.class) {
             // `StreamingRestricted.inner`: uma operação REAL (não `Cycle`, que o executor recusa
             // fora do tratamento inline de `executeBlock`).
-            return sample(Ir64Op.MoveWide.class);
+            return sample(IntegerOp64.MoveWide.class);
         }
         if (type.isEnum()) {
             return type.getEnumConstants()[0];

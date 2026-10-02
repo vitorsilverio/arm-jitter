@@ -1,7 +1,7 @@
 package dev.vitorsilverio.armjitter.ir64;
 
-/// Sub-operação de {@link Ir64Op.SystemInstruction} (task B6.6.3) — instruções `SYS`/`SYS(L)` e
-/// barreiras de memória, distintas de `MRS`/`MSR (register)` ({@link Ir64Op.SystemRegister},
+/// Sub-operação de {@link SystemOp64.SystemInstruction} (task B6.6.3) — instruções `SYS`/`SYS(L)` e
+/// barreiras de memória, distintas de `MRS`/`MSR (register)` ({@link SystemOp64.SystemRegister},
 /// B6.6.1) mesmo compartilhando a mesma classe de encoding top-level (`op0` diferente, ver
 /// `Aarch64Decoder#decodeBranchExceptionSystem`).
 public enum Ir64SystemInstructionOp {

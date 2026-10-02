@@ -19,9 +19,9 @@ import dev.vitorsilverio.armjitter.ir64.Ir64Op;
 /// manipulação de flags — 16 `Kind`, ver {@code c12.3-a64-inteiro-nativo.md}), **C12.4** (FP
 /// escalar restante: `FMADD`/`FMSUB`/`FNMADD`/`FNMSUB` fundidos, `FCSEL`, `FCCMP`/`FCCMPE`,
 /// `FRINT*`, conversão FP↔inteiro geral, `FMOV` bits crus entre `V` e `X`/`W` — 6 `Kind`, ver
-/// {@code c12.4-a64-fp-escalar-nativo.md}) e **C12.5** (load/store FP/SIMD: `FpLoad64`/
-/// `FpStore64`/`FpLoadStorePair`/`FpLoadLiteral64` escalares e `VectorLoadStoreMultiple`/
-/// `VectorLoadStoreSingle`/`VectorLoadSingleReplicate` estruturados (`LD1`-`LD4`/`ST1`-`ST4`) — 7
+/// {@code c12.4-a64-fp-escalar-nativo.md}) e **C12.5** (load/store FP/SIMD: `FpOp64.Load64`/
+/// `FpOp64.Store64`/`FpOp64.LoadStorePair`/`FpOp64.LoadLiteral64` escalares e `AdvSimdMoveOp64.LoadStoreMultiple`/
+/// `AdvSimdMoveOp64.LoadStoreSingle`/`AdvSimdMoveOp64.LoadSingleReplicate` estruturados (`LD1`-`LD4`/`ST1`-`ST4`) — 7
 /// `Kind`, ver {@code c12.5-a64-loadstore-fp-simd-nativo.md}). **C12.10** NÃO moveu esta lista (ver {@link #isSystemViaHelper}). Os que ainda faltam — AdvSIMD
 /// aritmético (C12.6), sistema (C12.10), SVE/SME e crípto — caem no
 /// {@link dev.vitorsilverio.armjitter.codegen64.InterpretedIr64CodeEmitter}.

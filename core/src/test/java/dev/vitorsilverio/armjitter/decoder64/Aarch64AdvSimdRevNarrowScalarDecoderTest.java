@@ -1,5 +1,6 @@
 package dev.vitorsilverio.armjitter.decoder64;
 
+import dev.vitorsilverio.armjitter.ir64.AdvSimdIntegerOp64;
 import dev.vitorsilverio.armjitter.ir64.Ir64Op;
 import dev.vitorsilverio.armjitter.ir64.Ir64VectorNarrowUnaryOp;
 import dev.vitorsilverio.armjitter.ir64.Ir64VectorShiftWidenOp;
@@ -31,7 +32,7 @@ class Aarch64AdvSimdRevNarrowScalarDecoderTest {
     @Test
     void rev64Byte16b() {
         // 4e200820: rev64 v0.16b, v1.16b
-        Ir64Op.VectorArithmeticUnary op = (Ir64Op.VectorArithmeticUnary) decodeWord(0x4e200820);
+        AdvSimdIntegerOp64.ArithmeticUnary op = (AdvSimdIntegerOp64.ArithmeticUnary) decodeWord(0x4e200820);
         assertEquals(Ir64VectorUnaryOp.REV64, op.op());
         assertEquals(false, op.scalar());
         assertEquals(true, op.q());
@@ -43,7 +44,7 @@ class Aarch64AdvSimdRevNarrowScalarDecoderTest {
     @Test
     void rev64Halfword8h() {
         // 4e600820: rev64 v0.8h, v1.8h
-        Ir64Op.VectorArithmeticUnary op = (Ir64Op.VectorArithmeticUnary) decodeWord(0x4e600820);
+        AdvSimdIntegerOp64.ArithmeticUnary op = (AdvSimdIntegerOp64.ArithmeticUnary) decodeWord(0x4e600820);
         assertEquals(Ir64VectorUnaryOp.REV64, op.op());
         assertEquals(1, op.esz());
     }
@@ -51,7 +52,7 @@ class Aarch64AdvSimdRevNarrowScalarDecoderTest {
     @Test
     void rev64Word4s() {
         // 4ea00820: rev64 v0.4s, v1.4s
-        Ir64Op.VectorArithmeticUnary op = (Ir64Op.VectorArithmeticUnary) decodeWord(0x4ea00820);
+        AdvSimdIntegerOp64.ArithmeticUnary op = (AdvSimdIntegerOp64.ArithmeticUnary) decodeWord(0x4ea00820);
         assertEquals(Ir64VectorUnaryOp.REV64, op.op());
         assertEquals(2, op.esz());
     }
@@ -59,7 +60,7 @@ class Aarch64AdvSimdRevNarrowScalarDecoderTest {
     @Test
     void rev32Byte16b() {
         // 6e200820: rev32 v0.16b, v1.16b
-        Ir64Op.VectorArithmeticUnary op = (Ir64Op.VectorArithmeticUnary) decodeWord(0x6e200820);
+        AdvSimdIntegerOp64.ArithmeticUnary op = (AdvSimdIntegerOp64.ArithmeticUnary) decodeWord(0x6e200820);
         assertEquals(Ir64VectorUnaryOp.REV32, op.op());
         assertEquals(0, op.esz());
     }
@@ -67,7 +68,7 @@ class Aarch64AdvSimdRevNarrowScalarDecoderTest {
     @Test
     void rev32Halfword8h() {
         // 6e600820: rev32 v0.8h, v1.8h
-        Ir64Op.VectorArithmeticUnary op = (Ir64Op.VectorArithmeticUnary) decodeWord(0x6e600820);
+        AdvSimdIntegerOp64.ArithmeticUnary op = (AdvSimdIntegerOp64.ArithmeticUnary) decodeWord(0x6e600820);
         assertEquals(Ir64VectorUnaryOp.REV32, op.op());
         assertEquals(1, op.esz());
     }
@@ -75,7 +76,7 @@ class Aarch64AdvSimdRevNarrowScalarDecoderTest {
     @Test
     void rev16Byte16b() {
         // 4e201820: rev16 v0.16b, v1.16b
-        Ir64Op.VectorArithmeticUnary op = (Ir64Op.VectorArithmeticUnary) decodeWord(0x4e201820);
+        AdvSimdIntegerOp64.ArithmeticUnary op = (AdvSimdIntegerOp64.ArithmeticUnary) decodeWord(0x4e201820);
         assertEquals(Ir64VectorUnaryOp.REV16, op.op());
         assertEquals(0, op.esz());
     }
@@ -112,7 +113,7 @@ class Aarch64AdvSimdRevNarrowScalarDecoderTest {
     @Test
     void xtnByte8b() {
         // 0e212820: xtn v0.8b, v1.8h
-        Ir64Op.VectorArithmeticNarrowUnary op = (Ir64Op.VectorArithmeticNarrowUnary) decodeWord(0x0e212820);
+        AdvSimdIntegerOp64.ArithmeticNarrowUnary op = (AdvSimdIntegerOp64.ArithmeticNarrowUnary) decodeWord(0x0e212820);
         assertEquals(Ir64VectorNarrowUnaryOp.XTN, op.op());
         assertEquals(false, op.scalar());
         assertEquals(false, op.q());
@@ -124,7 +125,7 @@ class Aarch64AdvSimdRevNarrowScalarDecoderTest {
     @Test
     void xtnHalfword4h() {
         // 0e612820: xtn v0.4h, v1.4s
-        Ir64Op.VectorArithmeticNarrowUnary op = (Ir64Op.VectorArithmeticNarrowUnary) decodeWord(0x0e612820);
+        AdvSimdIntegerOp64.ArithmeticNarrowUnary op = (AdvSimdIntegerOp64.ArithmeticNarrowUnary) decodeWord(0x0e612820);
         assertEquals(Ir64VectorNarrowUnaryOp.XTN, op.op());
         assertEquals(1, op.esz());
     }
@@ -132,7 +133,7 @@ class Aarch64AdvSimdRevNarrowScalarDecoderTest {
     @Test
     void xtn2Word16b() {
         // 4e212820: xtn2 v0.16b, v1.8h
-        Ir64Op.VectorArithmeticNarrowUnary op = (Ir64Op.VectorArithmeticNarrowUnary) decodeWord(0x4e212820);
+        AdvSimdIntegerOp64.ArithmeticNarrowUnary op = (AdvSimdIntegerOp64.ArithmeticNarrowUnary) decodeWord(0x4e212820);
         assertEquals(Ir64VectorNarrowUnaryOp.XTN, op.op());
         assertEquals(true, op.q());
     }
@@ -140,7 +141,7 @@ class Aarch64AdvSimdRevNarrowScalarDecoderTest {
     @Test
     void shllByteTo8h() {
         // 2e213820: shll v0.8h, v1.8b, #8
-        Ir64Op.VectorShiftWidenImmediate op = (Ir64Op.VectorShiftWidenImmediate) decodeWord(0x2e213820);
+        AdvSimdIntegerOp64.ShiftWidenImmediate op = (AdvSimdIntegerOp64.ShiftWidenImmediate) decodeWord(0x2e213820);
         assertEquals(Ir64VectorShiftWidenOp.USHLL, op.op());
         assertEquals(false, op.q());
         assertEquals(0, op.esz());
@@ -152,7 +153,7 @@ class Aarch64AdvSimdRevNarrowScalarDecoderTest {
     @Test
     void shllHalfwordTo4s() {
         // 2e613820: shll v0.4s, v1.4h, #16
-        Ir64Op.VectorShiftWidenImmediate op = (Ir64Op.VectorShiftWidenImmediate) decodeWord(0x2e613820);
+        AdvSimdIntegerOp64.ShiftWidenImmediate op = (AdvSimdIntegerOp64.ShiftWidenImmediate) decodeWord(0x2e613820);
         assertEquals(1, op.esz());
         assertEquals(16, op.shift());
     }
@@ -160,7 +161,7 @@ class Aarch64AdvSimdRevNarrowScalarDecoderTest {
     @Test
     void shll2WordTo2d() {
         // 6e213820: shll2 v0.8h, v1.16b, #8
-        Ir64Op.VectorShiftWidenImmediate op = (Ir64Op.VectorShiftWidenImmediate) decodeWord(0x6e213820);
+        AdvSimdIntegerOp64.ShiftWidenImmediate op = (AdvSimdIntegerOp64.ShiftWidenImmediate) decodeWord(0x6e213820);
         assertEquals(true, op.q());
         assertEquals(0, op.esz());
         assertEquals(8, op.shift());
@@ -169,7 +170,7 @@ class Aarch64AdvSimdRevNarrowScalarDecoderTest {
     @Test
     void urecpeWord2s() {
         // 0ea1c820: urecpe v0.2s, v1.2s
-        Ir64Op.VectorArithmeticUnary op = (Ir64Op.VectorArithmeticUnary) decodeWord(0x0ea1c820);
+        AdvSimdIntegerOp64.ArithmeticUnary op = (AdvSimdIntegerOp64.ArithmeticUnary) decodeWord(0x0ea1c820);
         assertEquals(Ir64VectorUnaryOp.URECPE, op.op());
         assertEquals(false, op.q());
         assertEquals(2, op.esz());
@@ -178,7 +179,7 @@ class Aarch64AdvSimdRevNarrowScalarDecoderTest {
     @Test
     void urecpeWord4s() {
         // 4ea1c820: urecpe v0.4s, v1.4s
-        Ir64Op.VectorArithmeticUnary op = (Ir64Op.VectorArithmeticUnary) decodeWord(0x4ea1c820);
+        AdvSimdIntegerOp64.ArithmeticUnary op = (AdvSimdIntegerOp64.ArithmeticUnary) decodeWord(0x4ea1c820);
         assertEquals(Ir64VectorUnaryOp.URECPE, op.op());
         assertEquals(true, op.q());
     }
@@ -186,14 +187,14 @@ class Aarch64AdvSimdRevNarrowScalarDecoderTest {
     @Test
     void ursqrteWord2s() {
         // 2ea1c820: ursqrte v0.2s, v1.2s
-        Ir64Op.VectorArithmeticUnary op = (Ir64Op.VectorArithmeticUnary) decodeWord(0x2ea1c820);
+        AdvSimdIntegerOp64.ArithmeticUnary op = (AdvSimdIntegerOp64.ArithmeticUnary) decodeWord(0x2ea1c820);
         assertEquals(Ir64VectorUnaryOp.URSQRTE, op.op());
     }
 
     @Test
     void ursqrteWord4s() {
         // 6ea1c820: ursqrte v0.4s, v1.4s
-        Ir64Op.VectorArithmeticUnary op = (Ir64Op.VectorArithmeticUnary) decodeWord(0x6ea1c820);
+        AdvSimdIntegerOp64.ArithmeticUnary op = (AdvSimdIntegerOp64.ArithmeticUnary) decodeWord(0x6ea1c820);
         assertEquals(Ir64VectorUnaryOp.URSQRTE, op.op());
         assertEquals(true, op.q());
     }
@@ -203,7 +204,7 @@ class Aarch64AdvSimdRevNarrowScalarDecoderTest {
     @Test
     void sqdmullScalarHalfwordToWord() {
         // 5e62d020: sqdmull s0, h1, h2
-        Ir64Op.VectorArithmeticWidening op = (Ir64Op.VectorArithmeticWidening) decodeWord(0x5e62d020);
+        AdvSimdIntegerOp64.ArithmeticWidening op = (AdvSimdIntegerOp64.ArithmeticWidening) decodeWord(0x5e62d020);
         assertEquals(Ir64VectorWideningOp.SQDMULL, op.op());
         assertEquals(true, op.scalar());
         assertEquals(1, op.esz());
@@ -215,7 +216,7 @@ class Aarch64AdvSimdRevNarrowScalarDecoderTest {
     @Test
     void sqdmullScalarWordToDoubleword() {
         // 5ea2d020: sqdmull d0, s1, s2
-        Ir64Op.VectorArithmeticWidening op = (Ir64Op.VectorArithmeticWidening) decodeWord(0x5ea2d020);
+        AdvSimdIntegerOp64.ArithmeticWidening op = (AdvSimdIntegerOp64.ArithmeticWidening) decodeWord(0x5ea2d020);
         assertEquals(Ir64VectorWideningOp.SQDMULL, op.op());
         assertEquals(true, op.scalar());
         assertEquals(2, op.esz());
@@ -224,7 +225,7 @@ class Aarch64AdvSimdRevNarrowScalarDecoderTest {
     @Test
     void sqdmlalScalarHalfwordToWord() {
         // 5e629020: sqdmlal s0, h1, h2
-        Ir64Op.VectorArithmeticWidening op = (Ir64Op.VectorArithmeticWidening) decodeWord(0x5e629020);
+        AdvSimdIntegerOp64.ArithmeticWidening op = (AdvSimdIntegerOp64.ArithmeticWidening) decodeWord(0x5e629020);
         assertEquals(Ir64VectorWideningOp.SQDMLAL, op.op());
         assertEquals(true, op.scalar());
         assertEquals(1, op.esz());
@@ -233,7 +234,7 @@ class Aarch64AdvSimdRevNarrowScalarDecoderTest {
     @Test
     void sqdmlslScalarWordToDoubleword() {
         // 5ea2b020: sqdmlsl d0, s1, s2
-        Ir64Op.VectorArithmeticWidening op = (Ir64Op.VectorArithmeticWidening) decodeWord(0x5ea2b020);
+        AdvSimdIntegerOp64.ArithmeticWidening op = (AdvSimdIntegerOp64.ArithmeticWidening) decodeWord(0x5ea2b020);
         assertEquals(Ir64VectorWideningOp.SQDMLSL, op.op());
         assertEquals(true, op.scalar());
         assertEquals(2, op.esz());

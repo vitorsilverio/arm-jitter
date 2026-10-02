@@ -6,10 +6,15 @@ import dev.vitorsilverio.armjitter.codegen64.InterpretedIr64CodeEmitter;
 import dev.vitorsilverio.armjitter.codegen64.jvm64.Ir64NativePolicy;
 import dev.vitorsilverio.armjitter.core64.Aarch64Core;
 import dev.vitorsilverio.armjitter.core64.Aarch64ExceptionLevel;
+import dev.vitorsilverio.armjitter.ir64.FpOp64;
+import dev.vitorsilverio.armjitter.ir64.IntegerOp64;
 import dev.vitorsilverio.armjitter.ir64.Ir64AluOp;
 import dev.vitorsilverio.armjitter.ir64.Ir64Block;
 import dev.vitorsilverio.armjitter.ir64.Ir64MoveWideOp;
 import dev.vitorsilverio.armjitter.ir64.Ir64Op;
+import dev.vitorsilverio.armjitter.ir64.MemoryOp64;
+import dev.vitorsilverio.armjitter.ir64.SveIntegerOp64;
+import dev.vitorsilverio.armjitter.ir64.SystemOp64;
 import dev.vitorsilverio.armjitter.memory.AddressSpace64;
 import dev.vitorsilverio.armjitter.memory.mmu.TranslatingAddressSpace64;
 import dev.vitorsilverio.armjitter.support.TestAddressSpace;
@@ -22,13 +27,13 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 /// Aceite da task C12.2: {@link Asm64FallbackPolicy#PER_OP} produz o MESMO
 /// {@link Aarch64CpuSnapshot}/ciclos que {@link InterpretedIr64CodeEmitter} (G1) para blocos MISTOS
 /// (ops nativas + pelo menos uma fora de {@link Ir64NativePolicy}), inclusive quando a op
-/// interpretada lança uma das 5 exceções de controle. {@link Ir64Op.SveElementCount} (`CNTD`) é a op "fora da política" usada nos testes de
+/// interpretada lança uma das 5 exceções de controle. {@link SveIntegerOp64.ElementCount} (`CNTD`) é a op "fora da política" usada nos testes de
 /// fluxo normal — não suportada nativamente hoje (SVE é a C12.6/B17), não lança, escreve um
 /// registrador geral só. **Achado da C12.3, revalidado pela C12.4**: a versão original desta task
 /// usava {@link dev.vitorsilverio.armjitter.ir64.Ir64OneSourceOp#RBIT} (`DataProcessing1Source`)
 /// para isso — a C12.3 passou a suportar esse `Kind` nativamente, e a troca seguinte
-/// ({@link Ir64Op.Fp64ConditionalSelect}, `FCSEL`) quebrou de novo quando a C12.4 fechou FP
-/// escalar restante; trocado agora por `SveElementCount`: a C12.10 passou a emitir `SystemRegister` via helper.
+/// ({@link FpOp64.ConditionalSelect}, `FCSEL`) quebrou de novo quando a C12.4 fechou FP
+/// escalar restante; trocado agora por `SveIntegerOp64.ElementCount`: a C12.10 passou a emitir `SystemRegister` via helper.
 class Asm64CodeEmitterPerOpTest {
     private final BlockEquivalenceHarness64 harness = new BlockEquivalenceHarness64();
     private final InterpretedIr64CodeEmitter interpreted = new InterpretedIr64CodeEmitter();
@@ -42,7 +47,7 @@ class Asm64CodeEmitterPerOpTest {
     /// um registrador geral — a op "fora da política" dos testes de fluxo normal. **Achado da C12.10**:
     /// antes era `SystemRegister` (`MRS CURRENT_EL`), que a C12.10 passou a emitir via helper.
     private static Ir64Op unsupportedOp(int rd) {
-        return new Ir64Op.SveElementCount(Ir64Op.SveElementCount.Op.CNT, 3, rd, 31, 1, false, false, 0L);
+        return new SveIntegerOp64.ElementCount(SveIntegerOp64.ElementCount.Op.CNT, 3, rd, 31, 1, false, false, 0L);
     }
 
     private static Aarch64Core newCore() {
@@ -76,9 +81,9 @@ class Asm64CodeEmitterPerOpTest {
     @Test
     void unsupportedOpInTheMiddleThenNativeOpsContinueCorrectly() {
         Ir64Block block = blockOf(0x1000,
-                new Ir64Op.MoveWide(Ir64MoveWideOp.MOVZ, 0, 0x1234, 0, true),                // nativo: X0=0x1234
+                new IntegerOp64.MoveWide(Ir64MoveWideOp.MOVZ, 0, 0x1234, 0, true),                // nativo: X0=0x1234
                 unsupportedOp(1),      // interpretado: CNTD
-                new Ir64Op.Alu64(Ir64AluOp.ADD, 2, 1, 1, true, true, false, false));         // nativo: X2=X1+1, flags
+                new IntegerOp64.Alu64(Ir64AluOp.ADD, 2, 1, 1, true, true, false, false));         // nativo: X2=X1+1, flags
         harness.assertEquivalent(interpreted, asmPerOp, block, pair());
     }
 
@@ -86,7 +91,7 @@ class Asm64CodeEmitterPerOpTest {
     @Test
     void unsupportedOpAtLastPosition() {
         Ir64Block block = blockOf(0x2000,
-                new Ir64Op.MoveWide(Ir64MoveWideOp.MOVZ, 3, 0xABCD, 0, true),
+                new IntegerOp64.MoveWide(Ir64MoveWideOp.MOVZ, 3, 0xABCD, 0, true),
                 unsupportedOp(4));
         harness.assertEquivalent(interpreted, asmPerOp, block, pair());
     }
@@ -96,7 +101,7 @@ class Asm64CodeEmitterPerOpTest {
     /// `nextPc` sequencial em vez do `ELR_EL1` que o `ERET` de verdade grava.
     @Test
     void unsupportedOpThatChangesPc() {
-        Ir64Block block = blockOf(0x3000, new Ir64Op.ExceptionReturn());
+        Ir64Block block = blockOf(0x3000, new SystemOp64.ExceptionReturn());
         harness.assertEquivalent(interpreted, asmPerOp, block, () -> {
             Aarch64Core reference = newCore();
             Aarch64Core candidate = newCore();
@@ -121,7 +126,7 @@ class Asm64CodeEmitterPerOpTest {
         builder.add(unsupportedOp(0));
         builder.add(new Ir64Op.Fetch(0x4004, 4));
         builder.add(new Ir64Op.Cycle(5));
-        builder.add(new Ir64Op.Alu64(Ir64AluOp.ADD, 1, 0, 1, true, false, false, false));
+        builder.add(new IntegerOp64.Alu64(Ir64AluOp.ADD, 1, 0, 1, true, false, false, false));
         builder.endPc(0x4008);
         Ir64Block block = builder.sealed();
 
@@ -134,20 +139,20 @@ class Asm64CodeEmitterPerOpTest {
     /// Uma op interpretada que lança {@code MemoryTranslationException64} é capturada pelo handler
     /// do bloco compilado — mesmo `LOCAL_FAULT_PC`/ciclos parciais que uma op nativa já tem
     /// (`Ir64BlockCompilerMemoryAbortTest`). **Achado da C12.5, mesmo padrão de troca de op já
-    /// documentado acima**: a versão original desta task usava `Ir64Op.FpLoad64` (SIMD&FP
+    /// documentado acima**: a versão original desta task usava `FpOp64.Load64` (SIMD&FP
     /// load/store, B8.13) como "não suportada nativamente hoje" — a C12.5 passou a suportar os 7
     /// `Kind` de load/store FP/SIMD nativamente, então trocado por
-    /// {@link Ir64Op.AtomicMemoryOpPair} (`LDCLRP`/`LDSETP`/`SWPP`, `FEAT_LSE128`), que nenhuma
+    /// {@link MemoryOp64.AtomicMemoryOpPair} (`LDCLRP`/`LDSETP`/`SWPP`, `FEAT_LSE128`), que nenhuma
     /// sub-task de C12 reivindica ainda e também toca memória via `core.memory().read64`.
     @Test
     void interpretedOpMemoryTranslationFaultEntersGuestHandler() {
         assertFalse(Ir64NativePolicy.supports(
-                new Ir64Op.AtomicMemoryOpPair(0, 1, 0, dev.vitorsilverio.armjitter.ir64.Ir64AtomicOp.SWP,
+                new MemoryOp64.AtomicMemoryOpPair(0, 1, 0, dev.vitorsilverio.armjitter.ir64.Ir64AtomicOp.SWP,
                         false, false)));
 
         long faultingVa = 0x5000L;
         Ir64Block block = blockOf(0x1000,
-                new Ir64Op.AtomicMemoryOpPair(0, 1, 0, dev.vitorsilverio.armjitter.ir64.Ir64AtomicOp.SWP,
+                new MemoryOp64.AtomicMemoryOpPair(0, 1, 0, dev.vitorsilverio.armjitter.ir64.Ir64AtomicOp.SWP,
                         false, false));
         harness.assertEquivalent(interpreted, asmPerOp, block, () -> {
             Aarch64Core reference = newFaultingCore();
@@ -163,9 +168,9 @@ class Asm64CodeEmitterPerOpTest {
     /// op nativa de sistema teria.
     @Test
     void interpretedOpHypervisorCallEntersEl2() {
-        assertFalse(Ir64NativePolicy.supports(new Ir64Op.PrivilegedCall(true)));
+        assertFalse(Ir64NativePolicy.supports(new SystemOp64.PrivilegedCall(true)));
 
-        Ir64Block block = blockOf(0x6000, new Ir64Op.PrivilegedCall(true));
+        Ir64Block block = blockOf(0x6000, new SystemOp64.PrivilegedCall(true));
         harness.assertEquivalent(interpreted, asmPerOp, block, pair());
     }
 
@@ -186,14 +191,14 @@ class Asm64CodeEmitterPerOpTest {
     void perOpCountersTrackMixedBlockCorrectly() {
         Asm64CodeEmitter emitter = new Asm64CodeEmitter(Asm64FallbackPolicy.PER_OP);
         Ir64Block block = blockOf(0x7000,
-                new Ir64Op.MoveWide(Ir64MoveWideOp.MOVZ, 0, 1, 0, true),
+                new IntegerOp64.MoveWide(Ir64MoveWideOp.MOVZ, 0, 1, 0, true),
                 unsupportedOp(1),
                 unsupportedOp(2));
         emitter.emit(block).execute(newCore());
 
         assertEquals(1, emitter.nativeBlockCount());
         assertEquals(0, emitter.fallbackBlockCount());
-        assertEquals(2, emitter.perOpFallbackOpCount(), "as 2 SveElementCount não suportadas");
+        assertEquals(2, emitter.perOpFallbackOpCount(), "as 2 SveIntegerOp64.ElementCount não suportadas");
 
         emitter.resetCounters();
         assertEquals(0, emitter.nativeBlockCount());
@@ -206,7 +211,7 @@ class Asm64CodeEmitterPerOpTest {
         Asm64CodeEmitter emitter = new Asm64CodeEmitter(); // WHOLE_BLOCK, default (G3)
         assertEquals(Asm64FallbackPolicy.WHOLE_BLOCK, emitter.policy());
         Ir64Block block = blockOf(0x7100,
-                new Ir64Op.MoveWide(Ir64MoveWideOp.MOVZ, 0, 1, 0, true),
+                new IntegerOp64.MoveWide(Ir64MoveWideOp.MOVZ, 0, 1, 0, true),
                 unsupportedOp(1));
         emitter.emit(block).execute(newCore());
 
@@ -220,7 +225,7 @@ class Asm64CodeEmitterPerOpTest {
     @Test
     void fullyNativeBlockCompilesIdenticallyUnderBothPolicies() {
         Ir64Block block = blockOf(0x7200,
-                new Ir64Op.Alu64(Ir64AluOp.ADD, 0, 1, 5, true, false, false, false));
+                new IntegerOp64.Alu64(Ir64AluOp.ADD, 0, 1, 5, true, false, false, false));
         Asm64CodeEmitter wholeBlock = new Asm64CodeEmitter();
         Asm64CodeEmitter perOp = new Asm64CodeEmitter(Asm64FallbackPolicy.PER_OP);
         harness.assertEquivalent(wholeBlock, perOp, block, pair());

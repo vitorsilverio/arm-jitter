@@ -602,7 +602,7 @@ public final class Thumb2LoadStoreDecoder implements DecoderExtension {
     /// doubleword/UNPREDICTABLE do exclusivo clássico — só muda o `ArmFeature` de gate e o
     /// tamanho `word`(4) fica disponível aqui (o exclusivo clássico só tem word via
     /// {@link #decodeWordExclusive}, com offset). Ordenação acquire/release é NOP observável neste
-    /// interpretador single-thread (mesma decisão de {@code Ir64Op.LoadExclusive#acquireRelease}
+    /// interpretador single-thread (mesma decisão de {@code MemoryOp64.LoadExclusive#acquireRelease}
     /// no lado A64 e do bloco A32 equivalente em {@code ArmDecoder}) — como o monitor de
     /// exclusividade já é a MESMA semântica de `LDREX`/`STREX`, reusa
     /// {@link InstructionKind#LOAD_EXCLUSIVE}/{@link InstructionKind#STORE_EXCLUSIVE} sem sinalizar

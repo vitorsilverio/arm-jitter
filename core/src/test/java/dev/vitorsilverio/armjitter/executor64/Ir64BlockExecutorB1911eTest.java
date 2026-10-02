@@ -2,7 +2,7 @@ package dev.vitorsilverio.armjitter.executor64;
 
 import dev.vitorsilverio.armjitter.core64.Aarch64Core;
 import dev.vitorsilverio.armjitter.core64.Aarch64FpRegisters;
-import dev.vitorsilverio.armjitter.ir64.Ir64Op;
+import dev.vitorsilverio.armjitter.ir64.AdvSimdFpOp64;
 import dev.vitorsilverio.armjitter.memory.AddressSpace64;
 import dev.vitorsilverio.armjitter.support.TestAddressSpace;
 import org.junit.jupiter.api.Test;
@@ -33,7 +33,7 @@ class Ir64BlockExecutorB1911eTest {
         fp.setElement(1, 0, ESZ_SINGLE, Float.floatToRawIntBits(3.0f) & 0xFFFF_FFFFL);
         fp.setElement(2, 0, ESZ_SINGLE, 2); // Vm[0] = +2 (inteiro, não ponto flutuante)
 
-        EXECUTOR.executeOp(core, new Ir64Op.VectorFpScaleByInt(false, ESZ_SINGLE, 0, 1, 2));
+        EXECUTOR.executeOp(core, new AdvSimdFpOp64.FpScaleByInt(false, ESZ_SINGLE, 0, 1, 2));
 
         assertEquals(12.0f, Float.intBitsToFloat((int) fp.element(0, 0, ESZ_SINGLE)));
     }
@@ -45,7 +45,7 @@ class Ir64BlockExecutorB1911eTest {
         fp.setElement(1, 0, ESZ_SINGLE, Float.floatToRawIntBits(8.0f) & 0xFFFF_FFFFL);
         fp.setElement(2, 0, ESZ_SINGLE, 0xFFFF_FFFDL); // Vm[0] = -3 (32 bits, sinal em bit31)
 
-        EXECUTOR.executeOp(core, new Ir64Op.VectorFpScaleByInt(false, ESZ_SINGLE, 0, 1, 2));
+        EXECUTOR.executeOp(core, new AdvSimdFpOp64.FpScaleByInt(false, ESZ_SINGLE, 0, 1, 2));
 
         assertEquals(1.0f, Float.intBitsToFloat((int) fp.element(0, 0, ESZ_SINGLE)));
     }
@@ -59,7 +59,7 @@ class Ir64BlockExecutorB1911eTest {
         fp.setElement(2, 0, ESZ_SINGLE, 1000); // expoente MUITO maior que o máximo IEEE-754 (127)
         fp.setElement(2, 1, ESZ_SINGLE, 1000);
 
-        EXECUTOR.executeOp(core, new Ir64Op.VectorFpScaleByInt(true, ESZ_SINGLE, 0, 1, 2));
+        EXECUTOR.executeOp(core, new AdvSimdFpOp64.FpScaleByInt(true, ESZ_SINGLE, 0, 1, 2));
 
         assertEquals(Float.POSITIVE_INFINITY, Float.intBitsToFloat((int) fp.element(0, 0, ESZ_SINGLE)));
         assertEquals(Float.NEGATIVE_INFINITY, Float.intBitsToFloat((int) fp.element(0, 1, ESZ_SINGLE)));
@@ -72,7 +72,7 @@ class Ir64BlockExecutorB1911eTest {
         fp.setElement(1, 0, ESZ_SINGLE, Float.floatToRawIntBits(1.0f) & 0xFFFF_FFFFL);
         fp.setElement(2, 0, ESZ_SINGLE, 0xFFFF_FC18L); // Vm[0] = -1000 (expoente MUITO negativo)
 
-        EXECUTOR.executeOp(core, new Ir64Op.VectorFpScaleByInt(false, ESZ_SINGLE, 0, 1, 2));
+        EXECUTOR.executeOp(core, new AdvSimdFpOp64.FpScaleByInt(false, ESZ_SINGLE, 0, 1, 2));
 
         float result = Float.intBitsToFloat((int) fp.element(0, 0, ESZ_SINGLE));
         assertEquals(0.0f, result);
@@ -87,7 +87,7 @@ class Ir64BlockExecutorB1911eTest {
         fp.setElement(1, 0, ESZ_SINGLE, nanBits & 0xFFFF_FFFFL);
         fp.setElement(2, 0, ESZ_SINGLE, 5);
 
-        EXECUTOR.executeOp(core, new Ir64Op.VectorFpScaleByInt(false, ESZ_SINGLE, 0, 1, 2));
+        EXECUTOR.executeOp(core, new AdvSimdFpOp64.FpScaleByInt(false, ESZ_SINGLE, 0, 1, 2));
 
         assertTrue(Float.isNaN(Float.intBitsToFloat((int) fp.element(0, 0, ESZ_SINGLE))));
     }
@@ -100,7 +100,7 @@ class Ir64BlockExecutorB1911eTest {
         fp.setElement(1, 0, ESZ_SINGLE, Float.floatToRawIntBits(3.0f) & 0xFFFF_FFFFL);
         fp.setElement(2, 0, ESZ_SINGLE, 1);
 
-        EXECUTOR.executeOp(core, new Ir64Op.VectorFpScaleByInt(false, ESZ_SINGLE, 0, 1, 2));
+        EXECUTOR.executeOp(core, new AdvSimdFpOp64.FpScaleByInt(false, ESZ_SINGLE, 0, 1, 2));
 
         assertEquals(0L, fp.high64(0), "escrita SIMD&FP destrutiva: bits[127:64] zerados quando !q");
     }
@@ -114,7 +114,7 @@ class Ir64BlockExecutorB1911eTest {
         fp.setElement(1, 0, ESZ_HALF, Float.floatToFloat16(1.0f) & 0xFFFFL);
         fp.setElement(2, 0, ESZ_HALF, 4); // Vm[0] = +4 CRU — não é `halfBits(4.0f)`
 
-        EXECUTOR.executeOp(core, new Ir64Op.VectorFpScaleByInt(true, ESZ_HALF, 0, 1, 2));
+        EXECUTOR.executeOp(core, new AdvSimdFpOp64.FpScaleByInt(true, ESZ_HALF, 0, 1, 2));
 
         assertEquals(16.0f, Float.float16ToFloat((short) fp.element(0, 0, ESZ_HALF)));
     }

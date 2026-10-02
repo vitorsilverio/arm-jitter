@@ -3,7 +3,8 @@ package dev.vitorsilverio.armjitter.decoder64;
 import dev.vitorsilverio.armjitter.arch64.Aarch64Architecture;
 import dev.vitorsilverio.armjitter.arch64.Aarch64Feature;
 import dev.vitorsilverio.armjitter.ir64.Ir64Op;
-import dev.vitorsilverio.armjitter.ir64.Ir64Op.SmeArrayMultiVector.Op;
+import dev.vitorsilverio.armjitter.ir64.SmeOp64.ArrayMultiVector.Op;
+import dev.vitorsilverio.armjitter.ir64.SmeOp64;
 import dev.vitorsilverio.armjitter.memory.AddressSpace64;
 import dev.vitorsilverio.armjitter.support.TestAddressSpace;
 import org.junit.jupiter.api.Test;
@@ -310,7 +311,7 @@ class Aarch64SmeArrayVectorDecoderTest {
     @ParameterizedTest(name = "{0}")
     @MethodSource("allCases")
     void decodesEveryEncodingFromTheAssembler(Case c) {
-        Ir64Op.SmeArrayMultiVector op = assertInstanceOf(Ir64Op.SmeArrayMultiVector.class, decode(ALL, c.word()));
+        SmeOp64.ArrayMultiVector op = assertInstanceOf(SmeOp64.ArrayMultiVector.class, decode(ALL, c.word()));
         assertEquals(c.op(), op.op());
         assertEquals(c.count(), op.count());
         assertEquals(c.register(), op.registerIndex(), "W<rv> = campo + 8");
@@ -325,13 +326,13 @@ class Aarch64SmeArrayVectorDecoderTest {
     void eachEncodingNeedsExactlyItsOwnFeatures(Case c) {
         Aarch64Feature extra = extraFeature(c.op());
         if (extra == null) {
-            assertInstanceOf(Ir64Op.SmeArrayMultiVector.class, decode(SME2, c.word()));
+            assertInstanceOf(SmeOp64.ArrayMultiVector.class, decode(SME2, c.word()));
             return;
         }
         assertThrows(UnsupportedOperationException.class, () -> decode(SME2, c.word()),
                 "sem " + extra + " continua UNIMPLEMENTED");
         Aarch64Architecture only = Aarch64Architecture.extending(SME2, "teste-azz-dec-" + extra, extra);
-        assertInstanceOf(Ir64Op.SmeArrayMultiVector.class, decode(only, c.word()));
+        assertInstanceOf(SmeOp64.ArrayMultiVector.class, decode(only, c.word()));
     }
 
     @Test
@@ -371,7 +372,7 @@ class Aarch64SmeArrayVectorDecoderTest {
     @Test
     void offsetIsScaledByTheNumberOfVectorsWrittenPerMember() {
         // fmlal za.s[w9, 6:7, vgx2] -> off = 6 (o2x2: campo 3 × 2); usmlall za.s[w9, 12:15] -> off = 12 (o2x4: 3 × 4).
-        assertEquals(6, assertInstanceOf(Ir64Op.SmeArrayMultiVector.class, decode(ALL, 0xC1292863)).off());
-        assertEquals(12, assertInstanceOf(Ir64Op.SmeArrayMultiVector.class, decode(ALL, 0xC12924A7)).off());
+        assertEquals(6, assertInstanceOf(SmeOp64.ArrayMultiVector.class, decode(ALL, 0xC1292863)).off());
+        assertEquals(12, assertInstanceOf(SmeOp64.ArrayMultiVector.class, decode(ALL, 0xC12924A7)).off());
     }
 }

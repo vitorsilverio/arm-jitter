@@ -3,6 +3,10 @@ package dev.vitorsilverio.armjitter.decoder64;
 import dev.vitorsilverio.armjitter.arch64.Aarch64Architecture;
 import dev.vitorsilverio.armjitter.ir64.Aarch64AddressTranslateForm;
 import dev.vitorsilverio.armjitter.ir64.Aarch64SystemRegisterId;
+import dev.vitorsilverio.armjitter.ir64.AdvSimdFpOp64;
+import dev.vitorsilverio.armjitter.ir64.BranchOp64;
+import dev.vitorsilverio.armjitter.ir64.FpOp64;
+import dev.vitorsilverio.armjitter.ir64.IntegerOp64;
 import dev.vitorsilverio.armjitter.ir64.Ir64AddressingMode;
 import dev.vitorsilverio.armjitter.ir64.Ir64AluExtendType;
 import dev.vitorsilverio.armjitter.ir64.Ir64AluOp;
@@ -17,10 +21,12 @@ import dev.vitorsilverio.armjitter.ir64.Ir64MemSize;
 import dev.vitorsilverio.armjitter.ir64.Ir64MoveWideOp;
 import dev.vitorsilverio.armjitter.ir64.Ir64Op;
 import dev.vitorsilverio.armjitter.ir64.Ir64OneSourceOp;
-// Ir64Op.MultiplyAccumulate/Ir64Op.Divide (B6.3.3) são referenciados via Ir64Op.* (mesmo padrão
+// IntegerOp64.MultiplyAccumulate/IntegerOp64.Divide (B6.3.3) são referenciados via Ir64Op.* (mesmo padrão
 // já usado neste arquivo para os demais subtipos aninhados).
 import dev.vitorsilverio.armjitter.ir64.Ir64ShiftType;
 import dev.vitorsilverio.armjitter.ir64.Ir64SystemInstructionOp;
+import dev.vitorsilverio.armjitter.ir64.MemoryOp64;
+import dev.vitorsilverio.armjitter.ir64.SystemOp64;
 import dev.vitorsilverio.armjitter.memory.AddressSpace64;
 import dev.vitorsilverio.armjitter.support.TestAddressSpace;
 import org.junit.jupiter.api.BeforeAll;
@@ -61,7 +67,7 @@ class Aarch64DecoderCorpusTest {
 
     @Test
     void adrX0Self() {
-        Ir64Op.PcRelative op = (Ir64Op.PcRelative) DECODER.decode(memory, 0x00);
+        IntegerOp64.PcRelative op = (IntegerOp64.PcRelative) DECODER.decode(memory, 0x00);
         assertEquals(0, op.dst());
         assertEquals(0x00L, op.instructionAddress());
         assertEquals(0L, op.immediate());
@@ -70,7 +76,7 @@ class Aarch64DecoderCorpusTest {
 
     @Test
     void adrX1ToLabel1() {
-        Ir64Op.PcRelative op = (Ir64Op.PcRelative) DECODER.decode(memory, 0x04);
+        IntegerOp64.PcRelative op = (IntegerOp64.PcRelative) DECODER.decode(memory, 0x04);
         assertEquals(1, op.dst());
         assertEquals(0x90L - 0x04L, op.immediate());
         assertFalse(op.page());
@@ -82,7 +88,7 @@ class Aarch64DecoderCorpusTest {
         // (0x08 & ~0xFFF == 0), então o resultado esperado é 0 — mas o campo importante deste
         // vetor é justamente que o executor (não o decoder) faz esse alinhamento; aqui só
         // verificamos que o decoder marca `page=true` e não pré-alinha `instructionAddress`.
-        Ir64Op.PcRelative op = (Ir64Op.PcRelative) DECODER.decode(memory, 0x08);
+        IntegerOp64.PcRelative op = (IntegerOp64.PcRelative) DECODER.decode(memory, 0x08);
         assertEquals(2, op.dst());
         assertTrue(op.page());
         assertEquals(0x08L, op.instructionAddress());
@@ -91,7 +97,7 @@ class Aarch64DecoderCorpusTest {
 
     @Test
     void addImmediate() {
-        Ir64Op.Alu64 op = (Ir64Op.Alu64) DECODER.decode(memory, 0x10);
+        IntegerOp64.Alu64 op = (IntegerOp64.Alu64) DECODER.decode(memory, 0x10);
         assertEquals(Ir64AluOp.ADD, op.opcode());
         assertEquals(4, op.dst());
         assertEquals(5, op.src1());
@@ -104,13 +110,13 @@ class Aarch64DecoderCorpusTest {
 
     @Test
     void addImmediateLsl12() {
-        Ir64Op.Alu64 op = (Ir64Op.Alu64) DECODER.decode(memory, 0x14);
+        IntegerOp64.Alu64 op = (IntegerOp64.Alu64) DECODER.decode(memory, 0x14);
         assertEquals(0x123000L, op.immediate());
     }
 
     @Test
     void addsClearsDstStackPointerVariant() {
-        Ir64Op.Alu64 op = (Ir64Op.Alu64) DECODER.decode(memory, 0x18);
+        IntegerOp64.Alu64 op = (IntegerOp64.Alu64) DECODER.decode(memory, 0x18);
         assertEquals(Ir64AluOp.ADD, op.opcode());
         assertEquals(6, op.dst());
         assertEquals(7, op.src1());
@@ -123,7 +129,7 @@ class Aarch64DecoderCorpusTest {
 
     @Test
     void subImmediate() {
-        Ir64Op.Alu64 op = (Ir64Op.Alu64) DECODER.decode(memory, 0x20);
+        IntegerOp64.Alu64 op = (IntegerOp64.Alu64) DECODER.decode(memory, 0x20);
         assertEquals(Ir64AluOp.SUB, op.opcode());
         assertEquals(8, op.dst());
         assertEquals(9, op.src1());
@@ -133,7 +139,7 @@ class Aarch64DecoderCorpusTest {
 
     @Test
     void addImmediate32Bit() {
-        Ir64Op.Alu64 op = (Ir64Op.Alu64) DECODER.decode(memory, 0x2c);
+        IntegerOp64.Alu64 op = (IntegerOp64.Alu64) DECODER.decode(memory, 0x2c);
         assertEquals(Ir64AluOp.ADD, op.opcode());
         assertFalse(op.wide());
         assertEquals(12, op.dst());
@@ -143,7 +149,7 @@ class Aarch64DecoderCorpusTest {
 
     @Test
     void movzComposesLowHalf() {
-        Ir64Op.MoveWide op = (Ir64Op.MoveWide) DECODER.decode(memory, 0x34);
+        IntegerOp64.MoveWide op = (IntegerOp64.MoveWide) DECODER.decode(memory, 0x34);
         assertEquals(Ir64MoveWideOp.MOVZ, op.opcode());
         assertEquals(0, op.dst());
         assertEquals(0x1234, op.immediate16());
@@ -153,25 +159,25 @@ class Aarch64DecoderCorpusTest {
 
     @Test
     void movzShift16() {
-        Ir64Op.MoveWide op = (Ir64Op.MoveWide) DECODER.decode(memory, 0x38);
+        IntegerOp64.MoveWide op = (IntegerOp64.MoveWide) DECODER.decode(memory, 0x38);
         assertEquals(16, op.shift());
     }
 
     @Test
     void movzShift32() {
-        Ir64Op.MoveWide op = (Ir64Op.MoveWide) DECODER.decode(memory, 0x3c);
+        IntegerOp64.MoveWide op = (IntegerOp64.MoveWide) DECODER.decode(memory, 0x3c);
         assertEquals(32, op.shift());
     }
 
     @Test
     void movzShift48() {
-        Ir64Op.MoveWide op = (Ir64Op.MoveWide) DECODER.decode(memory, 0x40);
+        IntegerOp64.MoveWide op = (IntegerOp64.MoveWide) DECODER.decode(memory, 0x40);
         assertEquals(48, op.shift());
     }
 
     @Test
     void movn() {
-        Ir64Op.MoveWide op = (Ir64Op.MoveWide) DECODER.decode(memory, 0x44);
+        IntegerOp64.MoveWide op = (IntegerOp64.MoveWide) DECODER.decode(memory, 0x44);
         assertEquals(Ir64MoveWideOp.MOVN, op.opcode());
         assertEquals(1, op.dst());
         assertEquals(0xabcd, op.immediate16());
@@ -179,7 +185,7 @@ class Aarch64DecoderCorpusTest {
 
     @Test
     void movkComposes64BitAddress() {
-        Ir64Op.MoveWide op = (Ir64Op.MoveWide) DECODER.decode(memory, 0x48);
+        IntegerOp64.MoveWide op = (IntegerOp64.MoveWide) DECODER.decode(memory, 0x48);
         assertEquals(Ir64MoveWideOp.MOVK, op.opcode());
         assertEquals(2, op.dst());
         assertEquals(0x5678, op.immediate16());
@@ -189,7 +195,7 @@ class Aarch64DecoderCorpusTest {
 
     @Test
     void movz32Bit() {
-        Ir64Op.MoveWide op = (Ir64Op.MoveWide) DECODER.decode(memory, 0x4c);
+        IntegerOp64.MoveWide op = (IntegerOp64.MoveWide) DECODER.decode(memory, 0x4c);
         assertEquals(3, op.dst());
         assertFalse(op.wide());
     }
@@ -198,14 +204,14 @@ class Aarch64DecoderCorpusTest {
     void movzXzrAsDestination() {
         // movz xzr, #1 (offset 0x50): decoder ainda copia o campo cru Rd=31; é o EXECUTOR quem
         // descarta a escrita — ver Aarch64BlockExecutorTest.
-        Ir64Op.MoveWide op = (Ir64Op.MoveWide) DECODER.decode(memory, 0x50);
+        IntegerOp64.MoveWide op = (IntegerOp64.MoveWide) DECODER.decode(memory, 0x50);
         assertEquals(31, op.dst());
         assertEquals(1, op.immediate16());
     }
 
     @Test
     void unconditionalBranchB() {
-        Ir64Op.Branch64 op = (Ir64Op.Branch64) DECODER.decode(memory, 0x54);
+        BranchOp64.Branch64 op = (BranchOp64.Branch64) DECODER.decode(memory, 0x54);
         assertEquals(Ir64BranchForm.IMMEDIATE, op.form());
         assertEquals(0x90L, op.target());
         assertFalse(op.link());
@@ -214,14 +220,14 @@ class Aarch64DecoderCorpusTest {
 
     @Test
     void unconditionalBranchBl() {
-        Ir64Op.Branch64 op = (Ir64Op.Branch64) DECODER.decode(memory, 0x58);
+        BranchOp64.Branch64 op = (BranchOp64.Branch64) DECODER.decode(memory, 0x58);
         assertEquals(0x90L, op.target());
         assertTrue(op.link());
     }
 
     @Test
     void conditionalBranchEq() {
-        Ir64Op.Branch64 op = (Ir64Op.Branch64) DECODER.decode(memory, 0x5c);
+        BranchOp64.Branch64 op = (BranchOp64.Branch64) DECODER.decode(memory, 0x5c);
         assertEquals(0x90L, op.target());
         assertEquals(Ir64Condition.EQ, op.condition());
         assertFalse(op.link());
@@ -229,19 +235,19 @@ class Aarch64DecoderCorpusTest {
 
     @Test
     void conditionalBranchNe() {
-        Ir64Op.Branch64 op = (Ir64Op.Branch64) DECODER.decode(memory, 0x60);
+        BranchOp64.Branch64 op = (BranchOp64.Branch64) DECODER.decode(memory, 0x60);
         assertEquals(Ir64Condition.NE, op.condition());
     }
 
     @Test
     void conditionalBranchGe() {
-        Ir64Op.Branch64 op = (Ir64Op.Branch64) DECODER.decode(memory, 0x64);
+        BranchOp64.Branch64 op = (BranchOp64.Branch64) DECODER.decode(memory, 0x64);
         assertEquals(Ir64Condition.GE, op.condition());
     }
 
     @Test
     void cbzWide() {
-        Ir64Op.CompareBranch64 op = (Ir64Op.CompareBranch64) DECODER.decode(memory, 0x68);
+        BranchOp64.CompareBranch64 op = (BranchOp64.CompareBranch64) DECODER.decode(memory, 0x68);
         assertEquals(Ir64CompareBranchForm.CBZ_CBNZ, op.form());
         assertEquals(0, op.rn());
         assertTrue(op.wide());
@@ -251,21 +257,21 @@ class Aarch64DecoderCorpusTest {
 
     @Test
     void cbnzWide() {
-        Ir64Op.CompareBranch64 op = (Ir64Op.CompareBranch64) DECODER.decode(memory, 0x6c);
+        BranchOp64.CompareBranch64 op = (BranchOp64.CompareBranch64) DECODER.decode(memory, 0x6c);
         assertTrue(op.branchIfNonZero());
     }
 
     @Test
     void cbzNarrowW() {
         // cbz w1, label1 (offset 0x70): forma W (`wide=false`).
-        Ir64Op.CompareBranch64 op = (Ir64Op.CompareBranch64) DECODER.decode(memory, 0x70);
+        BranchOp64.CompareBranch64 op = (BranchOp64.CompareBranch64) DECODER.decode(memory, 0x70);
         assertEquals(1, op.rn());
         assertFalse(op.wide());
     }
 
     @Test
     void tbzLowBit() {
-        Ir64Op.CompareBranch64 op = (Ir64Op.CompareBranch64) DECODER.decode(memory, 0x74);
+        BranchOp64.CompareBranch64 op = (BranchOp64.CompareBranch64) DECODER.decode(memory, 0x74);
         assertEquals(Ir64CompareBranchForm.TBZ_TBNZ, op.form());
         assertEquals(2, op.rn());
         assertEquals(5, op.bitPosition());
@@ -276,7 +282,7 @@ class Aarch64DecoderCorpusTest {
     @Test
     void tbnzHighBit() {
         // tbnz x2, #40, label1 (offset 0x78): posição >= 32 exige o bit `b5` do encoding.
-        Ir64Op.CompareBranch64 op = (Ir64Op.CompareBranch64) DECODER.decode(memory, 0x78);
+        BranchOp64.CompareBranch64 op = (BranchOp64.CompareBranch64) DECODER.decode(memory, 0x78);
         assertEquals(2, op.rn());
         assertEquals(40, op.bitPosition());
         assertTrue(op.branchIfNonZero());
@@ -284,7 +290,7 @@ class Aarch64DecoderCorpusTest {
 
     @Test
     void branchRegisterBr() {
-        Ir64Op.Branch64 op = (Ir64Op.Branch64) DECODER.decode(memory, 0x7c);
+        BranchOp64.Branch64 op = (BranchOp64.Branch64) DECODER.decode(memory, 0x7c);
         assertEquals(Ir64BranchForm.REGISTER, op.form());
         assertEquals(9, op.registerOperand());
         assertFalse(op.link());
@@ -292,14 +298,14 @@ class Aarch64DecoderCorpusTest {
 
     @Test
     void branchRegisterBlr() {
-        Ir64Op.Branch64 op = (Ir64Op.Branch64) DECODER.decode(memory, 0x80);
+        BranchOp64.Branch64 op = (BranchOp64.Branch64) DECODER.decode(memory, 0x80);
         assertEquals(10, op.registerOperand());
         assertTrue(op.link());
     }
 
     @Test
     void ret() {
-        Ir64Op.Branch64 op = (Ir64Op.Branch64) DECODER.decode(memory, 0x84);
+        BranchOp64.Branch64 op = (BranchOp64.Branch64) DECODER.decode(memory, 0x84);
         assertEquals(Ir64BranchForm.REGISTER, op.form());
         assertEquals(30, op.registerOperand());
         assertFalse(op.link());
@@ -307,13 +313,13 @@ class Aarch64DecoderCorpusTest {
 
     @Test
     void retExplicitRegister() {
-        Ir64Op.Branch64 op = (Ir64Op.Branch64) DECODER.decode(memory, 0x88);
+        BranchOp64.Branch64 op = (BranchOp64.Branch64) DECODER.decode(memory, 0x88);
         assertEquals(11, op.registerOperand());
     }
 
     @Test
     void svc() {
-        Ir64Op.Svc op = (Ir64Op.Svc) DECODER.decode(memory, 0x8c);
+        SystemOp64.Svc op = (SystemOp64.Svc) DECODER.decode(memory, 0x8c);
         assertEquals(0x1234, op.immediate());
     }
 
@@ -323,7 +329,7 @@ class Aarch64DecoderCorpusTest {
         // antes de B6.6.7, hints inteiros eram fora de escopo (este teste chamava isso de
         // `unsupportedEncodingThrows`); agora `NOP`/`YIELD`/`WFE`/`SEV`/`SEVL` decodificam como
         // NOP puro (ver {@link #nopHintYieldWfeSevSevl}, apêndice do corpus).
-        Ir64Op.SystemInstruction op = (Ir64Op.SystemInstruction) DECODER.decode(memory, 0x90);
+        SystemOp64.SystemInstruction op = (SystemOp64.SystemInstruction) DECODER.decode(memory, 0x90);
         assertEquals(Ir64SystemInstructionOp.NOP_HINT, op.opcode());
     }
 
@@ -331,14 +337,14 @@ class Aarch64DecoderCorpusTest {
     void clrexDecodesNow() {
         // clrex (offset 0x37c) — B8.3: antes desta task ficava fora do subconjunto coberto (ver
         // histórico), agora fecha o monitor de exclusividade.
-        Ir64Op.SystemInstruction op = (Ir64Op.SystemInstruction) DECODER.decode(memory, 0x37c);
+        SystemOp64.SystemInstruction op = (SystemOp64.SystemInstruction) DECODER.decode(memory, 0x37c);
         assertEquals(Ir64SystemInstructionOp.CLEAR_EXCLUSIVE, op.opcode());
     }
 
     @Test
     void brkDecodesNow() {
         // brk #0x0 (offset 0x380) — B8.3: `opc=001` (grupo "Exception generating") agora reconhecido.
-        Ir64Op.Breakpoint op = (Ir64Op.Breakpoint) DECODER.decode(memory, 0x380);
+        SystemOp64.Breakpoint op = (SystemOp64.Breakpoint) DECODER.decode(memory, 0x380);
         assertEquals(0, op.immediate());
     }
 
@@ -346,7 +352,7 @@ class Aarch64DecoderCorpusTest {
 
     @Test
     void ldrXUnsignedOffset() {
-        Ir64Op.Load64 op = (Ir64Op.Load64) DECODER.decode(memory, 0x94);
+        MemoryOp64.Load64 op = (MemoryOp64.Load64) DECODER.decode(memory, 0x94);
         assertEquals(4, op.rt());
         assertEquals(5, op.rn());
         assertEquals(Ir64MemSize.DOUBLEWORD, op.size());
@@ -358,13 +364,13 @@ class Aarch64DecoderCorpusTest {
 
     @Test
     void ldrXUnsignedOffsetScaledBy8() {
-        Ir64Op.Load64 op = (Ir64Op.Load64) DECODER.decode(memory, 0x98);
+        MemoryOp64.Load64 op = (MemoryOp64.Load64) DECODER.decode(memory, 0x98);
         assertEquals(16L, op.immediate(), "imm12=2 escalado por 8 (tamanho X)");
     }
 
     @Test
     void strXUnsignedOffset() {
-        Ir64Op.Store64 op = (Ir64Op.Store64) DECODER.decode(memory, 0x9c);
+        MemoryOp64.Store64 op = (MemoryOp64.Store64) DECODER.decode(memory, 0x9c);
         assertEquals(4, op.rt());
         assertEquals(5, op.rn());
         assertEquals(Ir64MemSize.DOUBLEWORD, op.size());
@@ -374,7 +380,7 @@ class Aarch64DecoderCorpusTest {
 
     @Test
     void ldrW32Bit() {
-        Ir64Op.Load64 op = (Ir64Op.Load64) DECODER.decode(memory, 0xa0);
+        MemoryOp64.Load64 op = (MemoryOp64.Load64) DECODER.decode(memory, 0xa0);
         assertEquals(Ir64MemSize.WORD, op.size());
         assertFalse(op.wide());
         assertFalse(op.signExtend());
@@ -383,7 +389,7 @@ class Aarch64DecoderCorpusTest {
 
     @Test
     void ldrbZeroExtend() {
-        Ir64Op.Load64 op = (Ir64Op.Load64) DECODER.decode(memory, 0xa4);
+        MemoryOp64.Load64 op = (MemoryOp64.Load64) DECODER.decode(memory, 0xa4);
         assertEquals(Ir64MemSize.BYTE, op.size());
         assertFalse(op.signExtend());
         assertFalse(op.wide());
@@ -392,7 +398,7 @@ class Aarch64DecoderCorpusTest {
 
     @Test
     void ldrhZeroExtend() {
-        Ir64Op.Load64 op = (Ir64Op.Load64) DECODER.decode(memory, 0xa8);
+        MemoryOp64.Load64 op = (MemoryOp64.Load64) DECODER.decode(memory, 0xa8);
         assertEquals(Ir64MemSize.HALF, op.size());
         assertFalse(op.signExtend());
         assertEquals(2L, op.immediate());
@@ -400,7 +406,7 @@ class Aarch64DecoderCorpusTest {
 
     @Test
     void ldrsbSignExtendToX() {
-        Ir64Op.Load64 op = (Ir64Op.Load64) DECODER.decode(memory, 0xac);
+        MemoryOp64.Load64 op = (MemoryOp64.Load64) DECODER.decode(memory, 0xac);
         assertEquals(Ir64MemSize.BYTE, op.size());
         assertTrue(op.signExtend());
         assertTrue(op.wide());
@@ -408,7 +414,7 @@ class Aarch64DecoderCorpusTest {
 
     @Test
     void ldrsbSignExtendToW() {
-        Ir64Op.Load64 op = (Ir64Op.Load64) DECODER.decode(memory, 0xb0);
+        MemoryOp64.Load64 op = (MemoryOp64.Load64) DECODER.decode(memory, 0xb0);
         assertEquals(Ir64MemSize.BYTE, op.size());
         assertTrue(op.signExtend());
         assertFalse(op.wide());
@@ -416,7 +422,7 @@ class Aarch64DecoderCorpusTest {
 
     @Test
     void ldrshSignExtendToX() {
-        Ir64Op.Load64 op = (Ir64Op.Load64) DECODER.decode(memory, 0xb4);
+        MemoryOp64.Load64 op = (MemoryOp64.Load64) DECODER.decode(memory, 0xb4);
         assertEquals(Ir64MemSize.HALF, op.size());
         assertTrue(op.signExtend());
         assertTrue(op.wide());
@@ -424,7 +430,7 @@ class Aarch64DecoderCorpusTest {
 
     @Test
     void ldrshSignExtendToW() {
-        Ir64Op.Load64 op = (Ir64Op.Load64) DECODER.decode(memory, 0xb8);
+        MemoryOp64.Load64 op = (MemoryOp64.Load64) DECODER.decode(memory, 0xb8);
         assertEquals(Ir64MemSize.HALF, op.size());
         assertTrue(op.signExtend());
         assertFalse(op.wide());
@@ -432,7 +438,7 @@ class Aarch64DecoderCorpusTest {
 
     @Test
     void ldrswSignExtendToXOnly() {
-        Ir64Op.Load64 op = (Ir64Op.Load64) DECODER.decode(memory, 0xbc);
+        MemoryOp64.Load64 op = (MemoryOp64.Load64) DECODER.decode(memory, 0xbc);
         assertEquals(Ir64MemSize.WORD, op.size());
         assertTrue(op.signExtend());
         assertTrue(op.wide());
@@ -440,7 +446,7 @@ class Aarch64DecoderCorpusTest {
 
     @Test
     void ldurUnscaledNegativeOffset() {
-        Ir64Op.Load64 op = (Ir64Op.Load64) DECODER.decode(memory, 0xc0);
+        MemoryOp64.Load64 op = (MemoryOp64.Load64) DECODER.decode(memory, 0xc0);
         assertEquals(Ir64MemSize.DOUBLEWORD, op.size());
         assertEquals(Ir64AddressingMode.OFFSET, op.addressingMode());
         assertEquals(-8L, op.immediate(), "LDUR/STUR: imm9 cru, sem escala");
@@ -448,13 +454,13 @@ class Aarch64DecoderCorpusTest {
 
     @Test
     void sturUnscaledNegativeOffset() {
-        Ir64Op.Store64 op = (Ir64Op.Store64) DECODER.decode(memory, 0xc4);
+        MemoryOp64.Store64 op = (MemoryOp64.Store64) DECODER.decode(memory, 0xc4);
         assertEquals(-8L, op.immediate());
     }
 
     @Test
     void ldurWordUnscaled() {
-        Ir64Op.Load64 op = (Ir64Op.Load64) DECODER.decode(memory, 0xc8);
+        MemoryOp64.Load64 op = (MemoryOp64.Load64) DECODER.decode(memory, 0xc8);
         assertEquals(Ir64MemSize.WORD, op.size());
         assertEquals(-4L, op.immediate());
         assertFalse(op.signExtend());
@@ -462,35 +468,35 @@ class Aarch64DecoderCorpusTest {
 
     @Test
     void ldrPreIndex() {
-        Ir64Op.Load64 op = (Ir64Op.Load64) DECODER.decode(memory, 0xcc);
+        MemoryOp64.Load64 op = (MemoryOp64.Load64) DECODER.decode(memory, 0xcc);
         assertEquals(Ir64AddressingMode.PRE_INDEX, op.addressingMode());
         assertEquals(8L, op.immediate());
     }
 
     @Test
     void strPreIndex() {
-        Ir64Op.Store64 op = (Ir64Op.Store64) DECODER.decode(memory, 0xd0);
+        MemoryOp64.Store64 op = (MemoryOp64.Store64) DECODER.decode(memory, 0xd0);
         assertEquals(Ir64AddressingMode.PRE_INDEX, op.addressingMode());
         assertEquals(8L, op.immediate());
     }
 
     @Test
     void ldrPostIndex() {
-        Ir64Op.Load64 op = (Ir64Op.Load64) DECODER.decode(memory, 0xd4);
+        MemoryOp64.Load64 op = (MemoryOp64.Load64) DECODER.decode(memory, 0xd4);
         assertEquals(Ir64AddressingMode.POST_INDEX, op.addressingMode());
         assertEquals(8L, op.immediate());
     }
 
     @Test
     void strPostIndex() {
-        Ir64Op.Store64 op = (Ir64Op.Store64) DECODER.decode(memory, 0xd8);
+        MemoryOp64.Store64 op = (MemoryOp64.Store64) DECODER.decode(memory, 0xd8);
         assertEquals(Ir64AddressingMode.POST_INDEX, op.addressingMode());
         assertEquals(8L, op.immediate());
     }
 
     @Test
     void ldrbPostIndexByte() {
-        Ir64Op.Load64 op = (Ir64Op.Load64) DECODER.decode(memory, 0xdc);
+        MemoryOp64.Load64 op = (MemoryOp64.Load64) DECODER.decode(memory, 0xdc);
         assertEquals(Ir64MemSize.BYTE, op.size());
         assertEquals(Ir64AddressingMode.POST_INDEX, op.addressingMode());
         assertEquals(1L, op.immediate());
@@ -498,7 +504,7 @@ class Aarch64DecoderCorpusTest {
 
     @Test
     void ldrRegisterOffsetPlainLsl() {
-        Ir64Op.Load64 op = (Ir64Op.Load64) DECODER.decode(memory, 0xe0);
+        MemoryOp64.Load64 op = (MemoryOp64.Load64) DECODER.decode(memory, 0xe0);
         assertEquals(Ir64AddressingMode.REGISTER_OFFSET, op.addressingMode());
         assertEquals(6, op.rm());
         assertEquals(Ir64ExtendType.LSL, op.extendType());
@@ -507,35 +513,35 @@ class Aarch64DecoderCorpusTest {
 
     @Test
     void ldrRegisterOffsetLsl3() {
-        Ir64Op.Load64 op = (Ir64Op.Load64) DECODER.decode(memory, 0xe4);
+        MemoryOp64.Load64 op = (MemoryOp64.Load64) DECODER.decode(memory, 0xe4);
         assertEquals(Ir64ExtendType.LSL, op.extendType());
         assertEquals(3, op.shiftAmount());
     }
 
     @Test
     void ldrRegisterOffsetSxtwNoShift() {
-        Ir64Op.Load64 op = (Ir64Op.Load64) DECODER.decode(memory, 0xe8);
+        MemoryOp64.Load64 op = (MemoryOp64.Load64) DECODER.decode(memory, 0xe8);
         assertEquals(Ir64ExtendType.SXTW, op.extendType());
         assertEquals(0, op.shiftAmount());
     }
 
     @Test
     void ldrRegisterOffsetSxtwShift3() {
-        Ir64Op.Load64 op = (Ir64Op.Load64) DECODER.decode(memory, 0xec);
+        MemoryOp64.Load64 op = (MemoryOp64.Load64) DECODER.decode(memory, 0xec);
         assertEquals(Ir64ExtendType.SXTW, op.extendType());
         assertEquals(3, op.shiftAmount());
     }
 
     @Test
     void ldrRegisterOffsetSxtxShift3() {
-        Ir64Op.Load64 op = (Ir64Op.Load64) DECODER.decode(memory, 0xf0);
+        MemoryOp64.Load64 op = (MemoryOp64.Load64) DECODER.decode(memory, 0xf0);
         assertEquals(Ir64ExtendType.SXTX, op.extendType());
         assertEquals(3, op.shiftAmount());
     }
 
     @Test
     void ldrWordRegisterOffsetUxtwShift2() {
-        Ir64Op.Load64 op = (Ir64Op.Load64) DECODER.decode(memory, 0xf4);
+        MemoryOp64.Load64 op = (MemoryOp64.Load64) DECODER.decode(memory, 0xf4);
         assertFalse(op.wide());
         assertEquals(Ir64ExtendType.UXTW, op.extendType());
         assertEquals(2, op.shiftAmount());
@@ -543,7 +549,7 @@ class Aarch64DecoderCorpusTest {
 
     @Test
     void stpPreIndexDoubleword() {
-        Ir64Op.LoadStorePair op = (Ir64Op.LoadStorePair) DECODER.decode(memory, 0xf8);
+        MemoryOp64.LoadStorePair op = (MemoryOp64.LoadStorePair) DECODER.decode(memory, 0xf8);
         assertFalse(op.load());
         assertEquals(29, op.rt());
         assertEquals(30, op.rt2());
@@ -555,7 +561,7 @@ class Aarch64DecoderCorpusTest {
 
     @Test
     void ldpPostIndexDoubleword() {
-        Ir64Op.LoadStorePair op = (Ir64Op.LoadStorePair) DECODER.decode(memory, 0xfc);
+        MemoryOp64.LoadStorePair op = (MemoryOp64.LoadStorePair) DECODER.decode(memory, 0xfc);
         assertTrue(op.load());
         assertEquals(29, op.rt());
         assertEquals(30, op.rt2());
@@ -565,7 +571,7 @@ class Aarch64DecoderCorpusTest {
 
     @Test
     void stpSignedOffset() {
-        Ir64Op.LoadStorePair op = (Ir64Op.LoadStorePair) DECODER.decode(memory, 0x100);
+        MemoryOp64.LoadStorePair op = (MemoryOp64.LoadStorePair) DECODER.decode(memory, 0x100);
         assertFalse(op.load());
         assertEquals(0, op.rt());
         assertEquals(1, op.rt2());
@@ -575,7 +581,7 @@ class Aarch64DecoderCorpusTest {
 
     @Test
     void ldpWordSignedOffset() {
-        Ir64Op.LoadStorePair op = (Ir64Op.LoadStorePair) DECODER.decode(memory, 0x104);
+        MemoryOp64.LoadStorePair op = (MemoryOp64.LoadStorePair) DECODER.decode(memory, 0x104);
         assertTrue(op.load());
         assertFalse(op.wide());
         assertEquals(8L, op.immediate(), "imm7=2 escalado por 4 (par de 32 bits)");
@@ -583,14 +589,14 @@ class Aarch64DecoderCorpusTest {
 
     @Test
     void ldpPreIndexDoubleword() {
-        Ir64Op.LoadStorePair op = (Ir64Op.LoadStorePair) DECODER.decode(memory, 0x108);
+        MemoryOp64.LoadStorePair op = (MemoryOp64.LoadStorePair) DECODER.decode(memory, 0x108);
         assertEquals(Ir64AddressingMode.PRE_INDEX, op.addressingMode());
         assertEquals(16L, op.immediate());
     }
 
     @Test
     void stpPostIndexDoubleword() {
-        Ir64Op.LoadStorePair op = (Ir64Op.LoadStorePair) DECODER.decode(memory, 0x10c);
+        MemoryOp64.LoadStorePair op = (MemoryOp64.LoadStorePair) DECODER.decode(memory, 0x10c);
         assertFalse(op.load());
         assertEquals(Ir64AddressingMode.POST_INDEX, op.addressingMode());
         assertEquals(16L, op.immediate());
@@ -598,7 +604,7 @@ class Aarch64DecoderCorpusTest {
 
     @Test
     void ldrLiteralResolvesAbsoluteAddress() {
-        Ir64Op.LoadLiteral64 op = (Ir64Op.LoadLiteral64) DECODER.decode(memory, 0x110);
+        MemoryOp64.LoadLiteral64 op = (MemoryOp64.LoadLiteral64) DECODER.decode(memory, 0x110);
         assertEquals(7, op.rt());
         assertEquals(0x114L, op.address(), "instructionAddress(0x110) + imm19*4 -> litlabel(0x114)");
         assertTrue(op.wide());
@@ -610,7 +616,7 @@ class Aarch64DecoderCorpusTest {
     @Test
     void andImmediateSingleBitElement64() {
         // and x0, x1, #0x1: elemento de 64 bits (N=1), um único bit setado.
-        Ir64Op.Alu64 op = (Ir64Op.Alu64) DECODER.decode(memory, 0x118);
+        IntegerOp64.Alu64 op = (IntegerOp64.Alu64) DECODER.decode(memory, 0x118);
         assertEquals(Ir64AluOp.AND, op.opcode());
         assertEquals(0, op.dst());
         assertEquals(1, op.src1());
@@ -624,7 +630,7 @@ class Aarch64DecoderCorpusTest {
     @Test
     void orrImmediateReplicatedPattern() {
         // orr x2, x3, #0x5555555555555555: elemento de 2 bits (01), replicado.
-        Ir64Op.Alu64 op = (Ir64Op.Alu64) DECODER.decode(memory, 0x11c);
+        IntegerOp64.Alu64 op = (IntegerOp64.Alu64) DECODER.decode(memory, 0x11c);
         assertEquals(Ir64AluOp.ORR, op.opcode());
         assertEquals(2, op.dst());
         assertEquals(3, op.src1());
@@ -634,7 +640,7 @@ class Aarch64DecoderCorpusTest {
     @Test
     void eorImmediateElement4Bits() {
         // eor x4, x5, #0x1111111111111111: elemento de 4 bits (0001), replicado.
-        Ir64Op.Alu64 op = (Ir64Op.Alu64) DECODER.decode(memory, 0x120);
+        IntegerOp64.Alu64 op = (IntegerOp64.Alu64) DECODER.decode(memory, 0x120);
         assertEquals(Ir64AluOp.EOR, op.opcode());
         assertEquals(4, op.dst());
         assertEquals(5, op.src1());
@@ -644,7 +650,7 @@ class Aarch64DecoderCorpusTest {
     @Test
     void andsImmediateSetsFlagsAndNonTrivialRotation() {
         // ands x6, x7, #0xfffffffffffffffe: corrida de 63 uns rotacionada por 1 (immr != 0).
-        Ir64Op.Alu64 op = (Ir64Op.Alu64) DECODER.decode(memory, 0x124);
+        IntegerOp64.Alu64 op = (IntegerOp64.Alu64) DECODER.decode(memory, 0x124);
         assertEquals(Ir64AluOp.AND, op.opcode());
         assertEquals(6, op.dst());
         assertEquals(7, op.src1());
@@ -658,7 +664,7 @@ class Aarch64DecoderCorpusTest {
         // replicado até os 64 bits (mesma convenção do "wmask" do manual/QEMU, não truncado por
         // largura aqui) — o EXECUTOR (logicalWithFlags) é quem aplica a máscara de 32 bits no
         // resultado final; os 32 bits baixos de `immediate()` já são o valor 0xaaaaaaaa esperado.
-        Ir64Op.Alu64 op = (Ir64Op.Alu64) DECODER.decode(memory, 0x128);
+        IntegerOp64.Alu64 op = (IntegerOp64.Alu64) DECODER.decode(memory, 0x128);
         assertEquals(8, op.dst());
         assertEquals(9, op.src1());
         assertEquals(0xaaaa_aaaa_aaaa_aaaaL, op.immediate());
@@ -669,7 +675,7 @@ class Aarch64DecoderCorpusTest {
     @Test
     void andsImmediate32BitNonTrivialRotation() {
         // ands w10, w11, #0x80000001: corrida de 2 uns (bits 31 e 0) rotacionada dentro de 32 bits.
-        Ir64Op.Alu64 op = (Ir64Op.Alu64) DECODER.decode(memory, 0x12c);
+        IntegerOp64.Alu64 op = (IntegerOp64.Alu64) DECODER.decode(memory, 0x12c);
         assertEquals(10, op.dst());
         assertEquals(11, op.src1());
         assertEquals(0x8000_0001_8000_0001L, op.immediate());
@@ -697,7 +703,7 @@ class Aarch64DecoderCorpusTest {
 
     @Test
     void addShiftedRegisterLslZero() {
-        Ir64Op.AluShiftedRegister op = (Ir64Op.AluShiftedRegister) DECODER.decode(memory, 0x130);
+        IntegerOp64.AluShiftedRegister op = (IntegerOp64.AluShiftedRegister) DECODER.decode(memory, 0x130);
         assertEquals(Ir64AluOp.ADD, op.opcode());
         assertEquals(0, op.dst());
         assertEquals(1, op.src1());
@@ -710,14 +716,14 @@ class Aarch64DecoderCorpusTest {
 
     @Test
     void addShiftedRegisterLslNonZero() {
-        Ir64Op.AluShiftedRegister op = (Ir64Op.AluShiftedRegister) DECODER.decode(memory, 0x134);
+        IntegerOp64.AluShiftedRegister op = (IntegerOp64.AluShiftedRegister) DECODER.decode(memory, 0x134);
         assertEquals(Ir64ShiftType.LSL, op.shiftType());
         assertEquals(4, op.shiftAmount());
     }
 
     @Test
     void subShiftedRegisterLsr() {
-        Ir64Op.AluShiftedRegister op = (Ir64Op.AluShiftedRegister) DECODER.decode(memory, 0x138);
+        IntegerOp64.AluShiftedRegister op = (IntegerOp64.AluShiftedRegister) DECODER.decode(memory, 0x138);
         assertEquals(Ir64AluOp.SUB, op.opcode());
         assertEquals(3, op.dst());
         assertEquals(4, op.src1());
@@ -729,7 +735,7 @@ class Aarch64DecoderCorpusTest {
 
     @Test
     void subsShiftedRegisterAsrSetsFlags() {
-        Ir64Op.AluShiftedRegister op = (Ir64Op.AluShiftedRegister) DECODER.decode(memory, 0x13c);
+        IntegerOp64.AluShiftedRegister op = (IntegerOp64.AluShiftedRegister) DECODER.decode(memory, 0x13c);
         assertEquals(Ir64AluOp.SUB, op.opcode());
         assertEquals(Ir64ShiftType.ASR, op.shiftType());
         assertEquals(8, op.shiftAmount());
@@ -738,7 +744,7 @@ class Aarch64DecoderCorpusTest {
 
     @Test
     void addsShiftedRegister32BitLslZero() {
-        Ir64Op.AluShiftedRegister op = (Ir64Op.AluShiftedRegister) DECODER.decode(memory, 0x140);
+        IntegerOp64.AluShiftedRegister op = (IntegerOp64.AluShiftedRegister) DECODER.decode(memory, 0x140);
         assertEquals(Ir64AluOp.ADD, op.opcode());
         assertFalse(op.wide());
         assertTrue(op.setFlags());
@@ -749,7 +755,7 @@ class Aarch64DecoderCorpusTest {
 
     @Test
     void addShiftedRegister32BitLsr() {
-        Ir64Op.AluShiftedRegister op = (Ir64Op.AluShiftedRegister) DECODER.decode(memory, 0x144);
+        IntegerOp64.AluShiftedRegister op = (IntegerOp64.AluShiftedRegister) DECODER.decode(memory, 0x144);
         assertFalse(op.wide());
         assertEquals(Ir64ShiftType.LSR, op.shiftType());
         assertEquals(3, op.shiftAmount());
@@ -757,7 +763,7 @@ class Aarch64DecoderCorpusTest {
 
     @Test
     void subShiftedRegister32BitAsr() {
-        Ir64Op.AluShiftedRegister op = (Ir64Op.AluShiftedRegister) DECODER.decode(memory, 0x148);
+        IntegerOp64.AluShiftedRegister op = (IntegerOp64.AluShiftedRegister) DECODER.decode(memory, 0x148);
         assertFalse(op.wide());
         assertEquals(Ir64ShiftType.ASR, op.shiftType());
         assertEquals(7, op.shiftAmount());
@@ -788,7 +794,7 @@ class Aarch64DecoderCorpusTest {
 
     @Test
     void addExtendedRegisterUxtb() {
-        Ir64Op.AluExtendedRegister op = (Ir64Op.AluExtendedRegister) DECODER.decode(memory, 0x14c);
+        IntegerOp64.AluExtendedRegister op = (IntegerOp64.AluExtendedRegister) DECODER.decode(memory, 0x14c);
         assertEquals(Ir64AluOp.ADD, op.opcode());
         assertEquals(0, op.dst());
         assertEquals(1, op.src1());
@@ -802,50 +808,50 @@ class Aarch64DecoderCorpusTest {
 
     @Test
     void addExtendedRegisterUxth() {
-        Ir64Op.AluExtendedRegister op = (Ir64Op.AluExtendedRegister) DECODER.decode(memory, 0x150);
+        IntegerOp64.AluExtendedRegister op = (IntegerOp64.AluExtendedRegister) DECODER.decode(memory, 0x150);
         assertEquals(Ir64AluExtendType.UXTH, op.extendType());
     }
 
     @Test
     void addExtendedRegisterUxtw() {
-        Ir64Op.AluExtendedRegister op = (Ir64Op.AluExtendedRegister) DECODER.decode(memory, 0x154);
+        IntegerOp64.AluExtendedRegister op = (IntegerOp64.AluExtendedRegister) DECODER.decode(memory, 0x154);
         assertEquals(Ir64AluExtendType.UXTW, op.extendType());
     }
 
     @Test
     void addExtendedRegisterUxtx() {
-        Ir64Op.AluExtendedRegister op = (Ir64Op.AluExtendedRegister) DECODER.decode(memory, 0x158);
+        IntegerOp64.AluExtendedRegister op = (IntegerOp64.AluExtendedRegister) DECODER.decode(memory, 0x158);
         assertEquals(Ir64AluExtendType.UXTX, op.extendType());
     }
 
     @Test
     void addExtendedRegisterSxtb() {
-        Ir64Op.AluExtendedRegister op = (Ir64Op.AluExtendedRegister) DECODER.decode(memory, 0x15c);
+        IntegerOp64.AluExtendedRegister op = (IntegerOp64.AluExtendedRegister) DECODER.decode(memory, 0x15c);
         assertEquals(Ir64AluExtendType.SXTB, op.extendType());
     }
 
     @Test
     void addExtendedRegisterSxth() {
-        Ir64Op.AluExtendedRegister op = (Ir64Op.AluExtendedRegister) DECODER.decode(memory, 0x160);
+        IntegerOp64.AluExtendedRegister op = (IntegerOp64.AluExtendedRegister) DECODER.decode(memory, 0x160);
         assertEquals(Ir64AluExtendType.SXTH, op.extendType());
     }
 
     @Test
     void addExtendedRegisterSxtw() {
-        Ir64Op.AluExtendedRegister op = (Ir64Op.AluExtendedRegister) DECODER.decode(memory, 0x164);
+        IntegerOp64.AluExtendedRegister op = (IntegerOp64.AluExtendedRegister) DECODER.decode(memory, 0x164);
         assertEquals(Ir64AluExtendType.SXTW, op.extendType());
     }
 
     @Test
     void addExtendedRegisterSxtx() {
-        Ir64Op.AluExtendedRegister op = (Ir64Op.AluExtendedRegister) DECODER.decode(memory, 0x168);
+        IntegerOp64.AluExtendedRegister op = (IntegerOp64.AluExtendedRegister) DECODER.decode(memory, 0x168);
         assertEquals(Ir64AluExtendType.SXTX, op.extendType());
     }
 
     @Test
     void addExtendedRegisterSpAsRnAndRdNoShift() {
         // add sp, sp, x1: Rn=31 (SP) e Rd=31 (SP, permitido pois é ADD sem S).
-        Ir64Op.AluExtendedRegister op = (Ir64Op.AluExtendedRegister) DECODER.decode(memory, 0x16c);
+        IntegerOp64.AluExtendedRegister op = (IntegerOp64.AluExtendedRegister) DECODER.decode(memory, 0x16c);
         assertEquals(31, op.dst());
         assertEquals(31, op.src1());
         assertEquals(1, op.src2());
@@ -855,7 +861,7 @@ class Aarch64DecoderCorpusTest {
 
     @Test
     void addExtendedRegisterSpWithShiftAmount() {
-        Ir64Op.AluExtendedRegister op = (Ir64Op.AluExtendedRegister) DECODER.decode(memory, 0x170);
+        IntegerOp64.AluExtendedRegister op = (IntegerOp64.AluExtendedRegister) DECODER.decode(memory, 0x170);
         assertEquals(31, op.dst());
         assertEquals(31, op.src1());
         assertEquals(3, op.shiftAmount());
@@ -865,7 +871,7 @@ class Aarch64DecoderCorpusTest {
     void addExtendedRegisterSpAsRnOnly() {
         // add sp, x4, x5: Rd=31 (SP), Rn=4 (normal) — prova que dstIsStackPointer não implica
         // src1 também é SP (são checados de forma independente pelo executor).
-        Ir64Op.AluExtendedRegister op = (Ir64Op.AluExtendedRegister) DECODER.decode(memory, 0x174);
+        IntegerOp64.AluExtendedRegister op = (IntegerOp64.AluExtendedRegister) DECODER.decode(memory, 0x174);
         assertEquals(31, op.dst());
         assertEquals(4, op.src1());
         assertEquals(5, op.src2());
@@ -876,7 +882,7 @@ class Aarch64DecoderCorpusTest {
     void addsExtendedRegisterSpAsRnDstNeverStackPointer() {
         // adds x2, sp, x3: Rn=31 (SP), mas dstIsStackPointer é false (ADDS sempre tem destino
         // normal, nunca SP, mesmo se o índice fosse 31).
-        Ir64Op.AluExtendedRegister op = (Ir64Op.AluExtendedRegister) DECODER.decode(memory, 0x178);
+        IntegerOp64.AluExtendedRegister op = (IntegerOp64.AluExtendedRegister) DECODER.decode(memory, 0x178);
         assertEquals(2, op.dst());
         assertEquals(31, op.src1());
         assertEquals(3, op.src2());
@@ -888,7 +894,7 @@ class Aarch64DecoderCorpusTest {
     void addsExtendedRegisterXzrDestinationIsNormalNotStackPointer() {
         // adds xzr, x1, x2, uxtx (disassembla como "cmn"): Rd=31, mas é XZR normal (setFlags=true
         // implica dstIsStackPointer=false) — o resultado é descartado, não vai para SP.
-        Ir64Op.AluExtendedRegister op = (Ir64Op.AluExtendedRegister) DECODER.decode(memory, 0x17c);
+        IntegerOp64.AluExtendedRegister op = (IntegerOp64.AluExtendedRegister) DECODER.decode(memory, 0x17c);
         assertEquals(Ir64AluOp.ADD, op.opcode());
         assertEquals(31, op.dst());
         assertTrue(op.setFlags());
@@ -898,7 +904,7 @@ class Aarch64DecoderCorpusTest {
     @Test
     void subsExtendedRegisterXzrDestination() {
         // subs xzr, x1, x2, uxtx (disassembla como "cmp").
-        Ir64Op.AluExtendedRegister op = (Ir64Op.AluExtendedRegister) DECODER.decode(memory, 0x180);
+        IntegerOp64.AluExtendedRegister op = (IntegerOp64.AluExtendedRegister) DECODER.decode(memory, 0x180);
         assertEquals(Ir64AluOp.SUB, op.opcode());
         assertEquals(31, op.dst());
         assertTrue(op.setFlags());
@@ -907,7 +913,7 @@ class Aarch64DecoderCorpusTest {
 
     @Test
     void addExtendedRegister32BitWithShiftAmount() {
-        Ir64Op.AluExtendedRegister op = (Ir64Op.AluExtendedRegister) DECODER.decode(memory, 0x184);
+        IntegerOp64.AluExtendedRegister op = (IntegerOp64.AluExtendedRegister) DECODER.decode(memory, 0x184);
         assertFalse(op.wide());
         assertEquals(Ir64AluExtendType.UXTB, op.extendType());
         assertEquals(2, op.shiftAmount());
@@ -928,7 +934,7 @@ class Aarch64DecoderCorpusTest {
 
     @Test
     void csel() {
-        Ir64Op.ConditionalSelect op = (Ir64Op.ConditionalSelect) DECODER.decode(memory, 0x188);
+        IntegerOp64.ConditionalSelect op = (IntegerOp64.ConditionalSelect) DECODER.decode(memory, 0x188);
         assertEquals(Ir64ConditionalSelectOp.CSEL, op.opcode());
         assertEquals(0, op.dst());
         assertEquals(1, op.src1());
@@ -939,7 +945,7 @@ class Aarch64DecoderCorpusTest {
 
     @Test
     void csinc() {
-        Ir64Op.ConditionalSelect op = (Ir64Op.ConditionalSelect) DECODER.decode(memory, 0x18c);
+        IntegerOp64.ConditionalSelect op = (IntegerOp64.ConditionalSelect) DECODER.decode(memory, 0x18c);
         assertEquals(Ir64ConditionalSelectOp.CSINC, op.opcode());
         assertEquals(3, op.dst());
         assertEquals(4, op.src1());
@@ -949,7 +955,7 @@ class Aarch64DecoderCorpusTest {
 
     @Test
     void csinv() {
-        Ir64Op.ConditionalSelect op = (Ir64Op.ConditionalSelect) DECODER.decode(memory, 0x190);
+        IntegerOp64.ConditionalSelect op = (IntegerOp64.ConditionalSelect) DECODER.decode(memory, 0x190);
         assertEquals(Ir64ConditionalSelectOp.CSINV, op.opcode());
         assertEquals(6, op.dst());
         assertEquals(7, op.src1());
@@ -959,7 +965,7 @@ class Aarch64DecoderCorpusTest {
 
     @Test
     void csneg() {
-        Ir64Op.ConditionalSelect op = (Ir64Op.ConditionalSelect) DECODER.decode(memory, 0x194);
+        IntegerOp64.ConditionalSelect op = (IntegerOp64.ConditionalSelect) DECODER.decode(memory, 0x194);
         assertEquals(Ir64ConditionalSelectOp.CSNEG, op.opcode());
         assertEquals(9, op.dst());
         assertEquals(10, op.src1());
@@ -969,7 +975,7 @@ class Aarch64DecoderCorpusTest {
 
     @Test
     void cselNarrowW() {
-        Ir64Op.ConditionalSelect op = (Ir64Op.ConditionalSelect) DECODER.decode(memory, 0x198);
+        IntegerOp64.ConditionalSelect op = (IntegerOp64.ConditionalSelect) DECODER.decode(memory, 0x198);
         assertFalse(op.wide());
         assertEquals(20, op.dst());
         assertEquals(21, op.src1());
@@ -982,7 +988,7 @@ class Aarch64DecoderCorpusTest {
         // cset x12, eq: alias de CSINC x12, xzr, xzr, invert(eq)=ne — o assembler já inverteu a
         // condição e igualou src1==src2==31; o decoder não reconhece o alias, só produz o
         // ConditionalSelect genérico com esses campos (Fatos de referência #1 da task).
-        Ir64Op.ConditionalSelect op = (Ir64Op.ConditionalSelect) DECODER.decode(memory, 0x19c);
+        IntegerOp64.ConditionalSelect op = (IntegerOp64.ConditionalSelect) DECODER.decode(memory, 0x19c);
         assertEquals(Ir64ConditionalSelectOp.CSINC, op.opcode());
         assertEquals(12, op.dst());
         assertEquals(31, op.src1());
@@ -992,7 +998,7 @@ class Aarch64DecoderCorpusTest {
 
     @Test
     void csetmAliasIsCsinvWithXzrOperands() {
-        Ir64Op.ConditionalSelect op = (Ir64Op.ConditionalSelect) DECODER.decode(memory, 0x1a0);
+        IntegerOp64.ConditionalSelect op = (IntegerOp64.ConditionalSelect) DECODER.decode(memory, 0x1a0);
         assertEquals(Ir64ConditionalSelectOp.CSINV, op.opcode());
         assertEquals(13, op.dst());
         assertEquals(31, op.src1());
@@ -1003,7 +1009,7 @@ class Aarch64DecoderCorpusTest {
     @Test
     void cincAliasIsCsincWithMatchingSrc1Src2() {
         // cinc x14, x15, eq: alias de CSINC x14, x15, x15, invert(eq)=ne.
-        Ir64Op.ConditionalSelect op = (Ir64Op.ConditionalSelect) DECODER.decode(memory, 0x1a4);
+        IntegerOp64.ConditionalSelect op = (IntegerOp64.ConditionalSelect) DECODER.decode(memory, 0x1a4);
         assertEquals(Ir64ConditionalSelectOp.CSINC, op.opcode());
         assertEquals(14, op.dst());
         assertEquals(15, op.src1());
@@ -1013,7 +1019,7 @@ class Aarch64DecoderCorpusTest {
 
     @Test
     void cinvAliasIsCsinvWithMatchingSrc1Src2() {
-        Ir64Op.ConditionalSelect op = (Ir64Op.ConditionalSelect) DECODER.decode(memory, 0x1a8);
+        IntegerOp64.ConditionalSelect op = (IntegerOp64.ConditionalSelect) DECODER.decode(memory, 0x1a8);
         assertEquals(Ir64ConditionalSelectOp.CSINV, op.opcode());
         assertEquals(16, op.dst());
         assertEquals(17, op.src1());
@@ -1024,7 +1030,7 @@ class Aarch64DecoderCorpusTest {
     @Test
     void cnegAliasIsCsnegWithMatchingSrc1Src2() {
         // cneg x18, x19, eq: alias de CSNEG x18, x19, x19, invert(eq)=ne.
-        Ir64Op.ConditionalSelect op = (Ir64Op.ConditionalSelect) DECODER.decode(memory, 0x1ac);
+        IntegerOp64.ConditionalSelect op = (IntegerOp64.ConditionalSelect) DECODER.decode(memory, 0x1ac);
         assertEquals(Ir64ConditionalSelectOp.CSNEG, op.opcode());
         assertEquals(18, op.dst());
         assertEquals(19, op.src1());
@@ -1037,7 +1043,7 @@ class Aarch64DecoderCorpusTest {
     @Test
     void sbfxAliasImmsGreaterEqualImmr() {
         // sbfm x0, x1, #4, #10 (disassembla como "sbfx x0, x1, #4, #7"): si=10 >= ri=4.
-        Ir64Op.Bitfield op = (Ir64Op.Bitfield) DECODER.decode(memory, 0x1b0);
+        IntegerOp64.Bitfield op = (IntegerOp64.Bitfield) DECODER.decode(memory, 0x1b0);
         assertEquals(Ir64BitfieldOp.SBFM, op.opcode());
         assertEquals(0, op.dst());
         assertEquals(1, op.src());
@@ -1050,7 +1056,7 @@ class Aarch64DecoderCorpusTest {
     void sbfizAliasImmsLessThanImmr() {
         // sbfm x2, x3, #10, #4 (disassembla como "sbfiz x2, x3, #54, #5"): si=4 < ri=10 — os
         // campos crus decodificados continuam immr=10/imms=4, sem pré-cálculo (D2 da task).
-        Ir64Op.Bitfield op = (Ir64Op.Bitfield) DECODER.decode(memory, 0x1b4);
+        IntegerOp64.Bitfield op = (IntegerOp64.Bitfield) DECODER.decode(memory, 0x1b4);
         assertEquals(Ir64BitfieldOp.SBFM, op.opcode());
         assertEquals(2, op.dst());
         assertEquals(3, op.src());
@@ -1060,7 +1066,7 @@ class Aarch64DecoderCorpusTest {
 
     @Test
     void ubfxAliasImmsGreaterEqualImmr() {
-        Ir64Op.Bitfield op = (Ir64Op.Bitfield) DECODER.decode(memory, 0x1b8);
+        IntegerOp64.Bitfield op = (IntegerOp64.Bitfield) DECODER.decode(memory, 0x1b8);
         assertEquals(Ir64BitfieldOp.UBFM, op.opcode());
         assertEquals(4, op.dst());
         assertEquals(5, op.src());
@@ -1070,7 +1076,7 @@ class Aarch64DecoderCorpusTest {
 
     @Test
     void ubfizAliasImmsLessThanImmr() {
-        Ir64Op.Bitfield op = (Ir64Op.Bitfield) DECODER.decode(memory, 0x1bc);
+        IntegerOp64.Bitfield op = (IntegerOp64.Bitfield) DECODER.decode(memory, 0x1bc);
         assertEquals(Ir64BitfieldOp.UBFM, op.opcode());
         assertEquals(6, op.dst());
         assertEquals(7, op.src());
@@ -1080,7 +1086,7 @@ class Aarch64DecoderCorpusTest {
 
     @Test
     void bfxilAliasImmsGreaterEqualImmr() {
-        Ir64Op.Bitfield op = (Ir64Op.Bitfield) DECODER.decode(memory, 0x1c0);
+        IntegerOp64.Bitfield op = (IntegerOp64.Bitfield) DECODER.decode(memory, 0x1c0);
         assertEquals(Ir64BitfieldOp.BFM, op.opcode());
         assertEquals(8, op.dst());
         assertEquals(9, op.src());
@@ -1090,7 +1096,7 @@ class Aarch64DecoderCorpusTest {
 
     @Test
     void bfiAliasImmsLessThanImmr() {
-        Ir64Op.Bitfield op = (Ir64Op.Bitfield) DECODER.decode(memory, 0x1c4);
+        IntegerOp64.Bitfield op = (IntegerOp64.Bitfield) DECODER.decode(memory, 0x1c4);
         assertEquals(Ir64BitfieldOp.BFM, op.opcode());
         assertEquals(10, op.dst());
         assertEquals(11, op.src());
@@ -1101,7 +1107,7 @@ class Aarch64DecoderCorpusTest {
     @Test
     void lslAliasIsUbfmWithComplementImmr() {
         // lsl x12, x13, #5 = UBFM x12, x13, #(-5 mod 64)=59, #(63-5)=58.
-        Ir64Op.Bitfield op = (Ir64Op.Bitfield) DECODER.decode(memory, 0x1c8);
+        IntegerOp64.Bitfield op = (IntegerOp64.Bitfield) DECODER.decode(memory, 0x1c8);
         assertEquals(Ir64BitfieldOp.UBFM, op.opcode());
         assertEquals(12, op.dst());
         assertEquals(13, op.src());
@@ -1112,7 +1118,7 @@ class Aarch64DecoderCorpusTest {
     @Test
     void lsrAliasIsUbfmWithShiftAsImmr() {
         // lsr x14, x15, #5 = UBFM x14, x15, #5, #63.
-        Ir64Op.Bitfield op = (Ir64Op.Bitfield) DECODER.decode(memory, 0x1cc);
+        IntegerOp64.Bitfield op = (IntegerOp64.Bitfield) DECODER.decode(memory, 0x1cc);
         assertEquals(Ir64BitfieldOp.UBFM, op.opcode());
         assertEquals(14, op.dst());
         assertEquals(15, op.src());
@@ -1123,7 +1129,7 @@ class Aarch64DecoderCorpusTest {
     @Test
     void asrAliasIsSbfmWithShiftAsImmr() {
         // asr x16, x17, #5 = SBFM x16, x17, #5, #63.
-        Ir64Op.Bitfield op = (Ir64Op.Bitfield) DECODER.decode(memory, 0x1d0);
+        IntegerOp64.Bitfield op = (IntegerOp64.Bitfield) DECODER.decode(memory, 0x1d0);
         assertEquals(Ir64BitfieldOp.SBFM, op.opcode());
         assertEquals(16, op.dst());
         assertEquals(17, op.src());
@@ -1134,7 +1140,7 @@ class Aarch64DecoderCorpusTest {
     @Test
     void ubfxExplicitLsbWidth() {
         // ubfx x18, x19, #8, #16 = UBFM x18, x19, #8, #(8+16-1)=23.
-        Ir64Op.Bitfield op = (Ir64Op.Bitfield) DECODER.decode(memory, 0x1d4);
+        IntegerOp64.Bitfield op = (IntegerOp64.Bitfield) DECODER.decode(memory, 0x1d4);
         assertEquals(Ir64BitfieldOp.UBFM, op.opcode());
         assertEquals(18, op.dst());
         assertEquals(19, op.src());
@@ -1144,7 +1150,7 @@ class Aarch64DecoderCorpusTest {
 
     @Test
     void sbfxExplicitLsbWidth() {
-        Ir64Op.Bitfield op = (Ir64Op.Bitfield) DECODER.decode(memory, 0x1d8);
+        IntegerOp64.Bitfield op = (IntegerOp64.Bitfield) DECODER.decode(memory, 0x1d8);
         assertEquals(Ir64BitfieldOp.SBFM, op.opcode());
         assertEquals(20, op.dst());
         assertEquals(21, op.src());
@@ -1155,7 +1161,7 @@ class Aarch64DecoderCorpusTest {
     @Test
     void bfiExplicitLsbWidth() {
         // bfi x22, x23, #8, #16 = BFM x22, x23, #(-8 mod 64)=56, #(16-1)=15.
-        Ir64Op.Bitfield op = (Ir64Op.Bitfield) DECODER.decode(memory, 0x1dc);
+        IntegerOp64.Bitfield op = (IntegerOp64.Bitfield) DECODER.decode(memory, 0x1dc);
         assertEquals(Ir64BitfieldOp.BFM, op.opcode());
         assertEquals(22, op.dst());
         assertEquals(23, op.src());
@@ -1165,7 +1171,7 @@ class Aarch64DecoderCorpusTest {
 
     @Test
     void bfxilExplicitLsbWidth() {
-        Ir64Op.Bitfield op = (Ir64Op.Bitfield) DECODER.decode(memory, 0x1e0);
+        IntegerOp64.Bitfield op = (IntegerOp64.Bitfield) DECODER.decode(memory, 0x1e0);
         assertEquals(Ir64BitfieldOp.BFM, op.opcode());
         assertEquals(24, op.dst());
         assertEquals(25, op.src());
@@ -1175,7 +1181,7 @@ class Aarch64DecoderCorpusTest {
 
     @Test
     void uxtbAliasIsUbfmNarrowZeroToSeven() {
-        Ir64Op.Bitfield op = (Ir64Op.Bitfield) DECODER.decode(memory, 0x1e4);
+        IntegerOp64.Bitfield op = (IntegerOp64.Bitfield) DECODER.decode(memory, 0x1e4);
         assertEquals(Ir64BitfieldOp.UBFM, op.opcode());
         assertEquals(26, op.dst());
         assertEquals(27, op.src());
@@ -1186,7 +1192,7 @@ class Aarch64DecoderCorpusTest {
 
     @Test
     void uxthAliasIsUbfmNarrowZeroToFifteen() {
-        Ir64Op.Bitfield op = (Ir64Op.Bitfield) DECODER.decode(memory, 0x1e8);
+        IntegerOp64.Bitfield op = (IntegerOp64.Bitfield) DECODER.decode(memory, 0x1e8);
         assertEquals(Ir64BitfieldOp.UBFM, op.opcode());
         assertEquals(28, op.dst());
         assertEquals(29, op.src());
@@ -1199,7 +1205,7 @@ class Aarch64DecoderCorpusTest {
     void sxtbAliasIsSbfmWideZeroToSeven() {
         // sxtb x30, w0: destino X implica encoding sf=1 mesmo a fonte sendo "w0" na sintaxe —
         // SXTB Xd,Wn é alias de SBFM Xd,Xn,#0,#7 (mesmo índice de registrador, visão X completa).
-        Ir64Op.Bitfield op = (Ir64Op.Bitfield) DECODER.decode(memory, 0x1ec);
+        IntegerOp64.Bitfield op = (IntegerOp64.Bitfield) DECODER.decode(memory, 0x1ec);
         assertEquals(Ir64BitfieldOp.SBFM, op.opcode());
         assertEquals(30, op.dst());
         assertEquals(0, op.src());
@@ -1210,7 +1216,7 @@ class Aarch64DecoderCorpusTest {
 
     @Test
     void sxthAliasIsSbfmWideZeroToFifteen() {
-        Ir64Op.Bitfield op = (Ir64Op.Bitfield) DECODER.decode(memory, 0x1f0);
+        IntegerOp64.Bitfield op = (IntegerOp64.Bitfield) DECODER.decode(memory, 0x1f0);
         assertEquals(Ir64BitfieldOp.SBFM, op.opcode());
         assertEquals(1, op.dst());
         assertEquals(2, op.src());
@@ -1221,7 +1227,7 @@ class Aarch64DecoderCorpusTest {
 
     @Test
     void sxtwAliasIsSbfmWideZeroToThirtyOne() {
-        Ir64Op.Bitfield op = (Ir64Op.Bitfield) DECODER.decode(memory, 0x1f4);
+        IntegerOp64.Bitfield op = (IntegerOp64.Bitfield) DECODER.decode(memory, 0x1f4);
         assertEquals(Ir64BitfieldOp.SBFM, op.opcode());
         assertEquals(3, op.dst());
         assertEquals(4, op.src());
@@ -1234,7 +1240,7 @@ class Aarch64DecoderCorpusTest {
     void csnegWithXzrAsSrc2() {
         // csneg x25, x26, xzr, eq: vetor real (assemblado, não inventado) para exercitar CSNEG
         // com src2=XZR na execução (ver Ir64BlockExecutorTest — CSNEG(XZR) dá 0, negação de zero).
-        Ir64Op.ConditionalSelect op = (Ir64Op.ConditionalSelect) DECODER.decode(memory, 0x1f8);
+        IntegerOp64.ConditionalSelect op = (IntegerOp64.ConditionalSelect) DECODER.decode(memory, 0x1f8);
         assertEquals(Ir64ConditionalSelectOp.CSNEG, op.opcode());
         assertEquals(25, op.dst());
         assertEquals(26, op.src1());
@@ -1268,8 +1274,8 @@ class Aarch64DecoderCorpusTest {
 
     @Test
     void madd() {
-        Ir64Op.MultiplyAccumulate op =
-                (Ir64Op.MultiplyAccumulate) DECODER.decode(memory, 0x1fc);
+        IntegerOp64.MultiplyAccumulate op =
+                (IntegerOp64.MultiplyAccumulate) DECODER.decode(memory, 0x1fc);
         assertFalse(op.subtract());
         assertEquals(0, op.dst());
         assertEquals(1, op.src1());
@@ -1280,8 +1286,8 @@ class Aarch64DecoderCorpusTest {
 
     @Test
     void msub() {
-        Ir64Op.MultiplyAccumulate op =
-                (Ir64Op.MultiplyAccumulate) DECODER.decode(memory, 0x200);
+        IntegerOp64.MultiplyAccumulate op =
+                (IntegerOp64.MultiplyAccumulate) DECODER.decode(memory, 0x200);
         assertTrue(op.subtract());
         assertEquals(4, op.dst());
         assertEquals(5, op.src1());
@@ -1294,8 +1300,8 @@ class Aarch64DecoderCorpusTest {
     void mulAliasIsMultiplyAccumulateWithXzrAccumulator() {
         // mul x8, x9, x10: alias sem case de decode dedicado — chega como MADD com accumulator=31
         // (XZR), ver Fatos de referência #1 da task.
-        Ir64Op.MultiplyAccumulate op =
-                (Ir64Op.MultiplyAccumulate) DECODER.decode(memory, 0x204);
+        IntegerOp64.MultiplyAccumulate op =
+                (IntegerOp64.MultiplyAccumulate) DECODER.decode(memory, 0x204);
         assertFalse(op.subtract());
         assertEquals(8, op.dst());
         assertEquals(9, op.src1());
@@ -1305,8 +1311,8 @@ class Aarch64DecoderCorpusTest {
 
     @Test
     void mnegAliasIsMultiplyAccumulateSubtractWithXzrAccumulator() {
-        Ir64Op.MultiplyAccumulate op =
-                (Ir64Op.MultiplyAccumulate) DECODER.decode(memory, 0x208);
+        IntegerOp64.MultiplyAccumulate op =
+                (IntegerOp64.MultiplyAccumulate) DECODER.decode(memory, 0x208);
         assertTrue(op.subtract());
         assertEquals(11, op.dst());
         assertEquals(12, op.src1());
@@ -1316,8 +1322,8 @@ class Aarch64DecoderCorpusTest {
 
     @Test
     void maddNarrowWidth() {
-        Ir64Op.MultiplyAccumulate op =
-                (Ir64Op.MultiplyAccumulate) DECODER.decode(memory, 0x20c);
+        IntegerOp64.MultiplyAccumulate op =
+                (IntegerOp64.MultiplyAccumulate) DECODER.decode(memory, 0x20c);
         assertFalse(op.subtract());
         assertEquals(14, op.dst());
         assertEquals(15, op.src1());
@@ -1328,8 +1334,8 @@ class Aarch64DecoderCorpusTest {
 
     @Test
     void msubNarrowWidth() {
-        Ir64Op.MultiplyAccumulate op =
-                (Ir64Op.MultiplyAccumulate) DECODER.decode(memory, 0x210);
+        IntegerOp64.MultiplyAccumulate op =
+                (IntegerOp64.MultiplyAccumulate) DECODER.decode(memory, 0x210);
         assertTrue(op.subtract());
         assertEquals(18, op.dst());
         assertEquals(19, op.src1());
@@ -1340,8 +1346,8 @@ class Aarch64DecoderCorpusTest {
 
     @Test
     void mulAliasNarrowWidth() {
-        Ir64Op.MultiplyAccumulate op =
-                (Ir64Op.MultiplyAccumulate) DECODER.decode(memory, 0x214);
+        IntegerOp64.MultiplyAccumulate op =
+                (IntegerOp64.MultiplyAccumulate) DECODER.decode(memory, 0x214);
         assertEquals(22, op.dst());
         assertEquals(23, op.src1());
         assertEquals(24, op.src2());
@@ -1351,8 +1357,8 @@ class Aarch64DecoderCorpusTest {
 
     @Test
     void mnegAliasNarrowWidth() {
-        Ir64Op.MultiplyAccumulate op =
-                (Ir64Op.MultiplyAccumulate) DECODER.decode(memory, 0x218);
+        IntegerOp64.MultiplyAccumulate op =
+                (IntegerOp64.MultiplyAccumulate) DECODER.decode(memory, 0x218);
         assertTrue(op.subtract());
         assertEquals(25, op.dst());
         assertEquals(26, op.src1());
@@ -1363,8 +1369,8 @@ class Aarch64DecoderCorpusTest {
 
     @Test
     void sdivWide() {
-        Ir64Op.Divide op =
-                (Ir64Op.Divide) DECODER.decode(memory, 0x21c);
+        IntegerOp64.Divide op =
+                (IntegerOp64.Divide) DECODER.decode(memory, 0x21c);
         assertTrue(op.signed());
         assertEquals(28, op.dst());
         assertEquals(29, op.src1());
@@ -1374,8 +1380,8 @@ class Aarch64DecoderCorpusTest {
 
     @Test
     void udivWide() {
-        Ir64Op.Divide op =
-                (Ir64Op.Divide) DECODER.decode(memory, 0x220);
+        IntegerOp64.Divide op =
+                (IntegerOp64.Divide) DECODER.decode(memory, 0x220);
         assertFalse(op.signed());
         assertEquals(0, op.dst());
         assertEquals(1, op.src1());
@@ -1385,8 +1391,8 @@ class Aarch64DecoderCorpusTest {
 
     @Test
     void sdivNarrow() {
-        Ir64Op.Divide op =
-                (Ir64Op.Divide) DECODER.decode(memory, 0x224);
+        IntegerOp64.Divide op =
+                (IntegerOp64.Divide) DECODER.decode(memory, 0x224);
         assertTrue(op.signed());
         assertEquals(3, op.dst());
         assertEquals(4, op.src1());
@@ -1396,8 +1402,8 @@ class Aarch64DecoderCorpusTest {
 
     @Test
     void udivNarrow() {
-        Ir64Op.Divide op =
-                (Ir64Op.Divide) DECODER.decode(memory, 0x228);
+        IntegerOp64.Divide op =
+                (IntegerOp64.Divide) DECODER.decode(memory, 0x228);
         assertFalse(op.signed());
         assertEquals(6, op.dst());
         assertEquals(7, op.src1());
@@ -1409,7 +1415,7 @@ class Aarch64DecoderCorpusTest {
 
     @Test
     void ldxrWord() {
-        Ir64Op.LoadExclusive op = (Ir64Op.LoadExclusive) DECODER.decode(memory, 0x22c);
+        MemoryOp64.LoadExclusive op = (MemoryOp64.LoadExclusive) DECODER.decode(memory, 0x22c);
         assertEquals(0, op.rt());
         assertEquals(1, op.rn());
         assertEquals(Ir64MemSize.WORD, op.size());
@@ -1418,7 +1424,7 @@ class Aarch64DecoderCorpusTest {
 
     @Test
     void ldxrDoubleword() {
-        Ir64Op.LoadExclusive op = (Ir64Op.LoadExclusive) DECODER.decode(memory, 0x230);
+        MemoryOp64.LoadExclusive op = (MemoryOp64.LoadExclusive) DECODER.decode(memory, 0x230);
         assertEquals(2, op.rt());
         assertEquals(3, op.rn());
         assertEquals(Ir64MemSize.DOUBLEWORD, op.size());
@@ -1427,7 +1433,7 @@ class Aarch64DecoderCorpusTest {
 
     @Test
     void ldxrByte() {
-        Ir64Op.LoadExclusive op = (Ir64Op.LoadExclusive) DECODER.decode(memory, 0x234);
+        MemoryOp64.LoadExclusive op = (MemoryOp64.LoadExclusive) DECODER.decode(memory, 0x234);
         assertEquals(4, op.rt());
         assertEquals(5, op.rn());
         assertEquals(Ir64MemSize.BYTE, op.size());
@@ -1436,7 +1442,7 @@ class Aarch64DecoderCorpusTest {
 
     @Test
     void ldxrHalf() {
-        Ir64Op.LoadExclusive op = (Ir64Op.LoadExclusive) DECODER.decode(memory, 0x238);
+        MemoryOp64.LoadExclusive op = (MemoryOp64.LoadExclusive) DECODER.decode(memory, 0x238);
         assertEquals(6, op.rt());
         assertEquals(7, op.rn());
         assertEquals(Ir64MemSize.HALF, op.size());
@@ -1445,7 +1451,7 @@ class Aarch64DecoderCorpusTest {
 
     @Test
     void ldaxrWordSetsAcquireRelease() {
-        Ir64Op.LoadExclusive op = (Ir64Op.LoadExclusive) DECODER.decode(memory, 0x23c);
+        MemoryOp64.LoadExclusive op = (MemoryOp64.LoadExclusive) DECODER.decode(memory, 0x23c);
         assertEquals(8, op.rt());
         assertEquals(9, op.rn());
         assertEquals(Ir64MemSize.WORD, op.size());
@@ -1454,7 +1460,7 @@ class Aarch64DecoderCorpusTest {
 
     @Test
     void ldaxrDoubleword() {
-        Ir64Op.LoadExclusive op = (Ir64Op.LoadExclusive) DECODER.decode(memory, 0x240);
+        MemoryOp64.LoadExclusive op = (MemoryOp64.LoadExclusive) DECODER.decode(memory, 0x240);
         assertEquals(10, op.rt());
         assertEquals(11, op.rn());
         assertEquals(Ir64MemSize.DOUBLEWORD, op.size());
@@ -1463,7 +1469,7 @@ class Aarch64DecoderCorpusTest {
 
     @Test
     void ldaxrByte() {
-        Ir64Op.LoadExclusive op = (Ir64Op.LoadExclusive) DECODER.decode(memory, 0x244);
+        MemoryOp64.LoadExclusive op = (MemoryOp64.LoadExclusive) DECODER.decode(memory, 0x244);
         assertEquals(12, op.rt());
         assertEquals(13, op.rn());
         assertEquals(Ir64MemSize.BYTE, op.size());
@@ -1472,7 +1478,7 @@ class Aarch64DecoderCorpusTest {
 
     @Test
     void ldaxrHalf() {
-        Ir64Op.LoadExclusive op = (Ir64Op.LoadExclusive) DECODER.decode(memory, 0x248);
+        MemoryOp64.LoadExclusive op = (MemoryOp64.LoadExclusive) DECODER.decode(memory, 0x248);
         assertEquals(14, op.rt());
         assertEquals(15, op.rn());
         assertEquals(Ir64MemSize.HALF, op.size());
@@ -1481,7 +1487,7 @@ class Aarch64DecoderCorpusTest {
 
     @Test
     void stxrWord() {
-        Ir64Op.StoreExclusive op = (Ir64Op.StoreExclusive) DECODER.decode(memory, 0x24c);
+        MemoryOp64.StoreExclusive op = (MemoryOp64.StoreExclusive) DECODER.decode(memory, 0x24c);
         assertEquals(16, op.rs());
         assertEquals(17, op.rt());
         assertEquals(18, op.rn());
@@ -1491,7 +1497,7 @@ class Aarch64DecoderCorpusTest {
 
     @Test
     void stxrDoubleword() {
-        Ir64Op.StoreExclusive op = (Ir64Op.StoreExclusive) DECODER.decode(memory, 0x250);
+        MemoryOp64.StoreExclusive op = (MemoryOp64.StoreExclusive) DECODER.decode(memory, 0x250);
         assertEquals(19, op.rs());
         assertEquals(20, op.rt());
         assertEquals(21, op.rn());
@@ -1501,7 +1507,7 @@ class Aarch64DecoderCorpusTest {
 
     @Test
     void stxrByte() {
-        Ir64Op.StoreExclusive op = (Ir64Op.StoreExclusive) DECODER.decode(memory, 0x254);
+        MemoryOp64.StoreExclusive op = (MemoryOp64.StoreExclusive) DECODER.decode(memory, 0x254);
         assertEquals(22, op.rs());
         assertEquals(23, op.rt());
         assertEquals(24, op.rn());
@@ -1511,7 +1517,7 @@ class Aarch64DecoderCorpusTest {
 
     @Test
     void stxrHalf() {
-        Ir64Op.StoreExclusive op = (Ir64Op.StoreExclusive) DECODER.decode(memory, 0x258);
+        MemoryOp64.StoreExclusive op = (MemoryOp64.StoreExclusive) DECODER.decode(memory, 0x258);
         assertEquals(25, op.rs());
         assertEquals(26, op.rt());
         assertEquals(27, op.rn());
@@ -1521,7 +1527,7 @@ class Aarch64DecoderCorpusTest {
 
     @Test
     void stlxrWordSetsAcquireRelease() {
-        Ir64Op.StoreExclusive op = (Ir64Op.StoreExclusive) DECODER.decode(memory, 0x25c);
+        MemoryOp64.StoreExclusive op = (MemoryOp64.StoreExclusive) DECODER.decode(memory, 0x25c);
         assertEquals(28, op.rs());
         assertEquals(29, op.rt());
         assertEquals(30, op.rn());
@@ -1531,7 +1537,7 @@ class Aarch64DecoderCorpusTest {
 
     @Test
     void stlxrDoubleword() {
-        Ir64Op.StoreExclusive op = (Ir64Op.StoreExclusive) DECODER.decode(memory, 0x260);
+        MemoryOp64.StoreExclusive op = (MemoryOp64.StoreExclusive) DECODER.decode(memory, 0x260);
         assertEquals(0, op.rs());
         assertEquals(1, op.rt());
         assertEquals(2, op.rn());
@@ -1541,7 +1547,7 @@ class Aarch64DecoderCorpusTest {
 
     @Test
     void stlxrByte() {
-        Ir64Op.StoreExclusive op = (Ir64Op.StoreExclusive) DECODER.decode(memory, 0x264);
+        MemoryOp64.StoreExclusive op = (MemoryOp64.StoreExclusive) DECODER.decode(memory, 0x264);
         assertEquals(3, op.rs());
         assertEquals(4, op.rt());
         assertEquals(5, op.rn());
@@ -1551,7 +1557,7 @@ class Aarch64DecoderCorpusTest {
 
     @Test
     void stlxrHalf() {
-        Ir64Op.StoreExclusive op = (Ir64Op.StoreExclusive) DECODER.decode(memory, 0x268);
+        MemoryOp64.StoreExclusive op = (MemoryOp64.StoreExclusive) DECODER.decode(memory, 0x268);
         assertEquals(6, op.rs());
         assertEquals(7, op.rt());
         assertEquals(8, op.rn());
@@ -1610,7 +1616,7 @@ class Aarch64DecoderCorpusTest {
 
     @Test
     void mrsSctlrEl1() {
-        Ir64Op.SystemRegister op = (Ir64Op.SystemRegister) DECODER.decode(memory, 0x26c);
+        SystemOp64.SystemRegister op = (SystemOp64.SystemRegister) DECODER.decode(memory, 0x26c);
         assertTrue(op.read());
         assertEquals(Aarch64SystemRegisterId.SCTLR_EL1, op.register());
         assertEquals(0, op.rt());
@@ -1618,7 +1624,7 @@ class Aarch64DecoderCorpusTest {
 
     @Test
     void msrSctlrEl1() {
-        Ir64Op.SystemRegister op = (Ir64Op.SystemRegister) DECODER.decode(memory, 0x270);
+        SystemOp64.SystemRegister op = (SystemOp64.SystemRegister) DECODER.decode(memory, 0x270);
         assertFalse(op.read());
         assertEquals(Aarch64SystemRegisterId.SCTLR_EL1, op.register());
         assertEquals(1, op.rt());
@@ -1626,7 +1632,7 @@ class Aarch64DecoderCorpusTest {
 
     @Test
     void mrsTtbr0El1() {
-        Ir64Op.SystemRegister op = (Ir64Op.SystemRegister) DECODER.decode(memory, 0x274);
+        SystemOp64.SystemRegister op = (SystemOp64.SystemRegister) DECODER.decode(memory, 0x274);
         assertTrue(op.read());
         assertEquals(Aarch64SystemRegisterId.TTBR0_EL1, op.register());
         assertEquals(2, op.rt());
@@ -1634,7 +1640,7 @@ class Aarch64DecoderCorpusTest {
 
     @Test
     void msrTtbr0El1() {
-        Ir64Op.SystemRegister op = (Ir64Op.SystemRegister) DECODER.decode(memory, 0x278);
+        SystemOp64.SystemRegister op = (SystemOp64.SystemRegister) DECODER.decode(memory, 0x278);
         assertFalse(op.read());
         assertEquals(Aarch64SystemRegisterId.TTBR0_EL1, op.register());
         assertEquals(3, op.rt());
@@ -1642,7 +1648,7 @@ class Aarch64DecoderCorpusTest {
 
     @Test
     void mrsVbarEl1() {
-        Ir64Op.SystemRegister op = (Ir64Op.SystemRegister) DECODER.decode(memory, 0x27c);
+        SystemOp64.SystemRegister op = (SystemOp64.SystemRegister) DECODER.decode(memory, 0x27c);
         assertTrue(op.read());
         assertEquals(Aarch64SystemRegisterId.VBAR_EL1, op.register());
         assertEquals(4, op.rt());
@@ -1650,7 +1656,7 @@ class Aarch64DecoderCorpusTest {
 
     @Test
     void msrVbarEl1() {
-        Ir64Op.SystemRegister op = (Ir64Op.SystemRegister) DECODER.decode(memory, 0x280);
+        SystemOp64.SystemRegister op = (SystemOp64.SystemRegister) DECODER.decode(memory, 0x280);
         assertFalse(op.read());
         assertEquals(Aarch64SystemRegisterId.VBAR_EL1, op.register());
         assertEquals(5, op.rt());
@@ -1660,31 +1666,31 @@ class Aarch64DecoderCorpusTest {
 
     @Test
     void tlbiVmalle1() {
-        Ir64Op.SystemInstruction op = (Ir64Op.SystemInstruction) DECODER.decode(memory, 0x284);
+        SystemOp64.SystemInstruction op = (SystemOp64.SystemInstruction) DECODER.decode(memory, 0x284);
         assertEquals(Ir64SystemInstructionOp.TLBI_ALL, op.opcode());
     }
 
     @Test
     void tlbiVmalle1Is() {
-        Ir64Op.SystemInstruction op = (Ir64Op.SystemInstruction) DECODER.decode(memory, 0x288);
+        SystemOp64.SystemInstruction op = (SystemOp64.SystemInstruction) DECODER.decode(memory, 0x288);
         assertEquals(Ir64SystemInstructionOp.TLBI_ALL, op.opcode());
     }
 
     @Test
     void dsbSy() {
-        Ir64Op.SystemInstruction op = (Ir64Op.SystemInstruction) DECODER.decode(memory, 0x28c);
+        SystemOp64.SystemInstruction op = (SystemOp64.SystemInstruction) DECODER.decode(memory, 0x28c);
         assertEquals(Ir64SystemInstructionOp.BARRIER, op.opcode());
     }
 
     @Test
     void isb() {
-        Ir64Op.SystemInstruction op = (Ir64Op.SystemInstruction) DECODER.decode(memory, 0x290);
+        SystemOp64.SystemInstruction op = (SystemOp64.SystemInstruction) DECODER.decode(memory, 0x290);
         assertEquals(Ir64SystemInstructionOp.BARRIER, op.opcode());
     }
 
     @Test
     void dmbSy() {
-        Ir64Op.SystemInstruction op = (Ir64Op.SystemInstruction) DECODER.decode(memory, 0x294);
+        SystemOp64.SystemInstruction op = (SystemOp64.SystemInstruction) DECODER.decode(memory, 0x294);
         assertEquals(Ir64SystemInstructionOp.BARRIER, op.opcode());
     }
 
@@ -1697,7 +1703,7 @@ class Aarch64DecoderCorpusTest {
         TestAddressSpace raw = new TestAddressSpace(4);
         raw.put32(0, word);
         AddressSpace64 scratch = AddressSpace64.wrapping(raw);
-        Ir64Op.SystemInstruction op = (Ir64Op.SystemInstruction) DECODER.decode(scratch, 0);
+        SystemOp64.SystemInstruction op = (SystemOp64.SystemInstruction) DECODER.decode(scratch, 0);
         assertEquals(Ir64SystemInstructionOp.TLBI_ALL, op.opcode());
     }
 
@@ -1750,7 +1756,7 @@ class Aarch64DecoderCorpusTest {
         TestAddressSpace raw = new TestAddressSpace(4);
         raw.put32(0, word);
         AddressSpace64 scratch = AddressSpace64.wrapping(raw);
-        Ir64Op.SystemInstruction op = (Ir64Op.SystemInstruction) DECODER.decode(scratch, 0);
+        SystemOp64.SystemInstruction op = (SystemOp64.SystemInstruction) DECODER.decode(scratch, 0);
         assertEquals(Ir64SystemInstructionOp.TLBI_ALL, op.opcode());
     }
 
@@ -1764,7 +1770,7 @@ class Aarch64DecoderCorpusTest {
         TestAddressSpace raw = new TestAddressSpace(4);
         raw.put32(0, word);
         AddressSpace64 scratch = AddressSpace64.wrapping(raw);
-        Ir64Op.SystemInstruction op = (Ir64Op.SystemInstruction) DECODER.decode(scratch, 0);
+        SystemOp64.SystemInstruction op = (SystemOp64.SystemInstruction) DECODER.decode(scratch, 0);
         assertEquals(Ir64SystemInstructionOp.MAINTENANCE_UNMODELED_NOP, op.opcode());
     }
 
@@ -1804,7 +1810,7 @@ class Aarch64DecoderCorpusTest {
         TestAddressSpace raw = new TestAddressSpace(4);
         raw.put32(0, word);
         AddressSpace64 scratch = AddressSpace64.wrapping(raw);
-        Ir64Op.SystemInstruction op = (Ir64Op.SystemInstruction) DECODER.decode(scratch, 0);
+        SystemOp64.SystemInstruction op = (SystemOp64.SystemInstruction) DECODER.decode(scratch, 0);
         assertEquals(Ir64SystemInstructionOp.MAINTENANCE_UNMODELED_NOP, op.opcode());
     }
 
@@ -1813,8 +1819,8 @@ class Aarch64DecoderCorpusTest {
 
     @Test
     void faddSingle() {
-        Ir64Op.Fp64Alu op = (Ir64Op.Fp64Alu) DECODER.decode(memory, 0x298);
-        assertEquals(Ir64Op.Fp64Operation.ADD, op.op());
+        FpOp64.Alu op = (FpOp64.Alu) DECODER.decode(memory, 0x298);
+        assertEquals(FpOp64.Fp64Operation.ADD, op.op());
         assertFalse(op.doublePrecision());
         assertEquals(0, op.vd());
         assertEquals(1, op.vn());
@@ -1823,8 +1829,8 @@ class Aarch64DecoderCorpusTest {
 
     @Test
     void faddDouble() {
-        Ir64Op.Fp64Alu op = (Ir64Op.Fp64Alu) DECODER.decode(memory, 0x29c);
-        assertEquals(Ir64Op.Fp64Operation.ADD, op.op());
+        FpOp64.Alu op = (FpOp64.Alu) DECODER.decode(memory, 0x29c);
+        assertEquals(FpOp64.Fp64Operation.ADD, op.op());
         assertTrue(op.doublePrecision());
         assertEquals(0, op.vd());
         assertEquals(1, op.vn());
@@ -1833,8 +1839,8 @@ class Aarch64DecoderCorpusTest {
 
     @Test
     void fsubSingle() {
-        Ir64Op.Fp64Alu op = (Ir64Op.Fp64Alu) DECODER.decode(memory, 0x2a0);
-        assertEquals(Ir64Op.Fp64Operation.SUB, op.op());
+        FpOp64.Alu op = (FpOp64.Alu) DECODER.decode(memory, 0x2a0);
+        assertEquals(FpOp64.Fp64Operation.SUB, op.op());
         assertFalse(op.doublePrecision());
         assertEquals(3, op.vd());
         assertEquals(4, op.vn());
@@ -1843,15 +1849,15 @@ class Aarch64DecoderCorpusTest {
 
     @Test
     void fsubDouble() {
-        Ir64Op.Fp64Alu op = (Ir64Op.Fp64Alu) DECODER.decode(memory, 0x2a4);
-        assertEquals(Ir64Op.Fp64Operation.SUB, op.op());
+        FpOp64.Alu op = (FpOp64.Alu) DECODER.decode(memory, 0x2a4);
+        assertEquals(FpOp64.Fp64Operation.SUB, op.op());
         assertTrue(op.doublePrecision());
     }
 
     @Test
     void fmulSingle() {
-        Ir64Op.Fp64Alu op = (Ir64Op.Fp64Alu) DECODER.decode(memory, 0x2a8);
-        assertEquals(Ir64Op.Fp64Operation.MUL, op.op());
+        FpOp64.Alu op = (FpOp64.Alu) DECODER.decode(memory, 0x2a8);
+        assertEquals(FpOp64.Fp64Operation.MUL, op.op());
         assertFalse(op.doublePrecision());
         assertEquals(6, op.vd());
         assertEquals(7, op.vn());
@@ -1860,15 +1866,15 @@ class Aarch64DecoderCorpusTest {
 
     @Test
     void fmulDouble() {
-        Ir64Op.Fp64Alu op = (Ir64Op.Fp64Alu) DECODER.decode(memory, 0x2ac);
-        assertEquals(Ir64Op.Fp64Operation.MUL, op.op());
+        FpOp64.Alu op = (FpOp64.Alu) DECODER.decode(memory, 0x2ac);
+        assertEquals(FpOp64.Fp64Operation.MUL, op.op());
         assertTrue(op.doublePrecision());
     }
 
     @Test
     void fdivSingle() {
-        Ir64Op.Fp64Alu op = (Ir64Op.Fp64Alu) DECODER.decode(memory, 0x2b0);
-        assertEquals(Ir64Op.Fp64Operation.DIV, op.op());
+        FpOp64.Alu op = (FpOp64.Alu) DECODER.decode(memory, 0x2b0);
+        assertEquals(FpOp64.Fp64Operation.DIV, op.op());
         assertFalse(op.doublePrecision());
         assertEquals(9, op.vd());
         assertEquals(10, op.vn());
@@ -1877,17 +1883,17 @@ class Aarch64DecoderCorpusTest {
 
     @Test
     void fdivDouble() {
-        Ir64Op.Fp64Alu op = (Ir64Op.Fp64Alu) DECODER.decode(memory, 0x2b4);
-        assertEquals(Ir64Op.Fp64Operation.DIV, op.op());
+        FpOp64.Alu op = (FpOp64.Alu) DECODER.decode(memory, 0x2b4);
+        assertEquals(FpOp64.Fp64Operation.DIV, op.op());
         assertTrue(op.doublePrecision());
     }
 
     @Test
     void fnegSingle() {
         // fneg s12, s13: 1-source (unário) — o operando único vem em `vm` (Rn do encoding),
-        // `vn` não é usado por esta forma (Fp64Alu javadoc).
-        Ir64Op.Fp64Alu op = (Ir64Op.Fp64Alu) DECODER.decode(memory, 0x2b8);
-        assertEquals(Ir64Op.Fp64Operation.NEG, op.op());
+        // `vn` não é usado por esta forma (FpOp64.Alu javadoc).
+        FpOp64.Alu op = (FpOp64.Alu) DECODER.decode(memory, 0x2b8);
+        assertEquals(FpOp64.Fp64Operation.NEG, op.op());
         assertFalse(op.doublePrecision());
         assertEquals(12, op.vd());
         assertEquals(13, op.vm());
@@ -1895,8 +1901,8 @@ class Aarch64DecoderCorpusTest {
 
     @Test
     void fnegDouble() {
-        Ir64Op.Fp64Alu op = (Ir64Op.Fp64Alu) DECODER.decode(memory, 0x2bc);
-        assertEquals(Ir64Op.Fp64Operation.NEG, op.op());
+        FpOp64.Alu op = (FpOp64.Alu) DECODER.decode(memory, 0x2bc);
+        assertEquals(FpOp64.Fp64Operation.NEG, op.op());
         assertTrue(op.doublePrecision());
         assertEquals(12, op.vd());
         assertEquals(13, op.vm());
@@ -1904,8 +1910,8 @@ class Aarch64DecoderCorpusTest {
 
     @Test
     void fabsSingle() {
-        Ir64Op.Fp64Alu op = (Ir64Op.Fp64Alu) DECODER.decode(memory, 0x2c0);
-        assertEquals(Ir64Op.Fp64Operation.ABS, op.op());
+        FpOp64.Alu op = (FpOp64.Alu) DECODER.decode(memory, 0x2c0);
+        assertEquals(FpOp64.Fp64Operation.ABS, op.op());
         assertFalse(op.doublePrecision());
         assertEquals(14, op.vd());
         assertEquals(15, op.vm());
@@ -1913,15 +1919,15 @@ class Aarch64DecoderCorpusTest {
 
     @Test
     void fabsDouble() {
-        Ir64Op.Fp64Alu op = (Ir64Op.Fp64Alu) DECODER.decode(memory, 0x2c4);
-        assertEquals(Ir64Op.Fp64Operation.ABS, op.op());
+        FpOp64.Alu op = (FpOp64.Alu) DECODER.decode(memory, 0x2c4);
+        assertEquals(FpOp64.Fp64Operation.ABS, op.op());
         assertTrue(op.doublePrecision());
     }
 
     @Test
     void fmovRegisterSingle() {
-        Ir64Op.Fp64Alu op = (Ir64Op.Fp64Alu) DECODER.decode(memory, 0x2c8);
-        assertEquals(Ir64Op.Fp64Operation.MOV, op.op());
+        FpOp64.Alu op = (FpOp64.Alu) DECODER.decode(memory, 0x2c8);
+        assertEquals(FpOp64.Fp64Operation.MOV, op.op());
         assertFalse(op.doublePrecision());
         assertEquals(16, op.vd());
         assertEquals(17, op.vm());
@@ -1929,8 +1935,8 @@ class Aarch64DecoderCorpusTest {
 
     @Test
     void fmovRegisterDouble() {
-        Ir64Op.Fp64Alu op = (Ir64Op.Fp64Alu) DECODER.decode(memory, 0x2cc);
-        assertEquals(Ir64Op.Fp64Operation.MOV, op.op());
+        FpOp64.Alu op = (FpOp64.Alu) DECODER.decode(memory, 0x2cc);
+        assertEquals(FpOp64.Fp64Operation.MOV, op.op());
         assertTrue(op.doublePrecision());
         assertEquals(16, op.vd());
         assertEquals(17, op.vm());
@@ -1938,7 +1944,7 @@ class Aarch64DecoderCorpusTest {
 
     @Test
     void fmovImmediateSingleOne() {
-        Ir64Op.Fp64MoveImmediate op = (Ir64Op.Fp64MoveImmediate) DECODER.decode(memory, 0x2d0);
+        FpOp64.MoveImmediate op = (FpOp64.MoveImmediate) DECODER.decode(memory, 0x2d0);
         assertFalse(op.doublePrecision());
         assertEquals(18, op.vd());
         assertEquals(1.0f, Float.intBitsToFloat((int) op.immediateBits()));
@@ -1946,25 +1952,25 @@ class Aarch64DecoderCorpusTest {
 
     @Test
     void fmovImmediateSingleTwo() {
-        Ir64Op.Fp64MoveImmediate op = (Ir64Op.Fp64MoveImmediate) DECODER.decode(memory, 0x2d4);
+        FpOp64.MoveImmediate op = (FpOp64.MoveImmediate) DECODER.decode(memory, 0x2d4);
         assertEquals(2.0f, Float.intBitsToFloat((int) op.immediateBits()));
     }
 
     @Test
     void fmovImmediateSingleNegativeOne() {
-        Ir64Op.Fp64MoveImmediate op = (Ir64Op.Fp64MoveImmediate) DECODER.decode(memory, 0x2d8);
+        FpOp64.MoveImmediate op = (FpOp64.MoveImmediate) DECODER.decode(memory, 0x2d8);
         assertEquals(-1.0f, Float.intBitsToFloat((int) op.immediateBits()));
     }
 
     @Test
     void fmovImmediateSingleEighth() {
-        Ir64Op.Fp64MoveImmediate op = (Ir64Op.Fp64MoveImmediate) DECODER.decode(memory, 0x2dc);
+        FpOp64.MoveImmediate op = (FpOp64.MoveImmediate) DECODER.decode(memory, 0x2dc);
         assertEquals(0.125f, Float.intBitsToFloat((int) op.immediateBits()));
     }
 
     @Test
     void fmovImmediateDoubleOne() {
-        Ir64Op.Fp64MoveImmediate op = (Ir64Op.Fp64MoveImmediate) DECODER.decode(memory, 0x2e0);
+        FpOp64.MoveImmediate op = (FpOp64.MoveImmediate) DECODER.decode(memory, 0x2e0);
         assertTrue(op.doublePrecision());
         assertEquals(18, op.vd());
         assertEquals(1.0, Double.longBitsToDouble(op.immediateBits()));
@@ -1972,25 +1978,25 @@ class Aarch64DecoderCorpusTest {
 
     @Test
     void fmovImmediateDoubleTwo() {
-        Ir64Op.Fp64MoveImmediate op = (Ir64Op.Fp64MoveImmediate) DECODER.decode(memory, 0x2e4);
+        FpOp64.MoveImmediate op = (FpOp64.MoveImmediate) DECODER.decode(memory, 0x2e4);
         assertEquals(2.0, Double.longBitsToDouble(op.immediateBits()));
     }
 
     @Test
     void fmovImmediateDoubleNegativeOne() {
-        Ir64Op.Fp64MoveImmediate op = (Ir64Op.Fp64MoveImmediate) DECODER.decode(memory, 0x2e8);
+        FpOp64.MoveImmediate op = (FpOp64.MoveImmediate) DECODER.decode(memory, 0x2e8);
         assertEquals(-1.0, Double.longBitsToDouble(op.immediateBits()));
     }
 
     @Test
     void fmovImmediateDoubleEighth() {
-        Ir64Op.Fp64MoveImmediate op = (Ir64Op.Fp64MoveImmediate) DECODER.decode(memory, 0x2ec);
+        FpOp64.MoveImmediate op = (FpOp64.MoveImmediate) DECODER.decode(memory, 0x2ec);
         assertEquals(0.125, Double.longBitsToDouble(op.immediateBits()));
     }
 
     @Test
     void fcmpSingle() {
-        Ir64Op.Fp64Compare op = (Ir64Op.Fp64Compare) DECODER.decode(memory, 0x2f0);
+        FpOp64.Compare op = (FpOp64.Compare) DECODER.decode(memory, 0x2f0);
         assertFalse(op.doublePrecision());
         assertFalse(op.compareWithZero());
         assertFalse(op.signalOnQuietNaN());
@@ -2000,7 +2006,7 @@ class Aarch64DecoderCorpusTest {
 
     @Test
     void fcmpDouble() {
-        Ir64Op.Fp64Compare op = (Ir64Op.Fp64Compare) DECODER.decode(memory, 0x2f4);
+        FpOp64.Compare op = (FpOp64.Compare) DECODER.decode(memory, 0x2f4);
         assertTrue(op.doublePrecision());
         assertFalse(op.compareWithZero());
         assertEquals(22, op.vn());
@@ -2009,7 +2015,7 @@ class Aarch64DecoderCorpusTest {
 
     @Test
     void fcmpSingleWithZero() {
-        Ir64Op.Fp64Compare op = (Ir64Op.Fp64Compare) DECODER.decode(memory, 0x2f8);
+        FpOp64.Compare op = (FpOp64.Compare) DECODER.decode(memory, 0x2f8);
         assertFalse(op.doublePrecision());
         assertTrue(op.compareWithZero());
         assertFalse(op.signalOnQuietNaN());
@@ -2018,7 +2024,7 @@ class Aarch64DecoderCorpusTest {
 
     @Test
     void fcmpDoubleWithZero() {
-        Ir64Op.Fp64Compare op = (Ir64Op.Fp64Compare) DECODER.decode(memory, 0x2fc);
+        FpOp64.Compare op = (FpOp64.Compare) DECODER.decode(memory, 0x2fc);
         assertTrue(op.doublePrecision());
         assertTrue(op.compareWithZero());
         assertEquals(24, op.vn());
@@ -2026,7 +2032,7 @@ class Aarch64DecoderCorpusTest {
 
     @Test
     void fcmpeSingle() {
-        Ir64Op.Fp64Compare op = (Ir64Op.Fp64Compare) DECODER.decode(memory, 0x300);
+        FpOp64.Compare op = (FpOp64.Compare) DECODER.decode(memory, 0x300);
         assertFalse(op.doublePrecision());
         assertFalse(op.compareWithZero());
         assertTrue(op.signalOnQuietNaN());
@@ -2036,7 +2042,7 @@ class Aarch64DecoderCorpusTest {
 
     @Test
     void fcmpeDouble() {
-        Ir64Op.Fp64Compare op = (Ir64Op.Fp64Compare) DECODER.decode(memory, 0x304);
+        FpOp64.Compare op = (FpOp64.Compare) DECODER.decode(memory, 0x304);
         assertTrue(op.doublePrecision());
         assertTrue(op.signalOnQuietNaN());
         assertEquals(25, op.vn());
@@ -2045,7 +2051,7 @@ class Aarch64DecoderCorpusTest {
 
     @Test
     void fcmpeSingleWithZero() {
-        Ir64Op.Fp64Compare op = (Ir64Op.Fp64Compare) DECODER.decode(memory, 0x308);
+        FpOp64.Compare op = (FpOp64.Compare) DECODER.decode(memory, 0x308);
         assertFalse(op.doublePrecision());
         assertTrue(op.compareWithZero());
         assertTrue(op.signalOnQuietNaN());
@@ -2054,7 +2060,7 @@ class Aarch64DecoderCorpusTest {
 
     @Test
     void fcmpeDoubleWithZero() {
-        Ir64Op.Fp64Compare op = (Ir64Op.Fp64Compare) DECODER.decode(memory, 0x30c);
+        FpOp64.Compare op = (FpOp64.Compare) DECODER.decode(memory, 0x30c);
         assertTrue(op.doublePrecision());
         assertTrue(op.compareWithZero());
         assertTrue(op.signalOnQuietNaN());
@@ -2063,16 +2069,16 @@ class Aarch64DecoderCorpusTest {
 
     @Test
     void fcvtSingleToDouble() {
-        Ir64Op.Fp64Convert op = (Ir64Op.Fp64Convert) DECODER.decode(memory, 0x310);
-        assertEquals(Ir64Op.Fp64Conversion.F32_TO_F64, op.conversion());
+        FpOp64.Convert op = (FpOp64.Convert) DECODER.decode(memory, 0x310);
+        assertEquals(FpOp64.Fp64Conversion.F32_TO_F64, op.conversion());
         assertEquals(28, op.vd());
         assertEquals(28, op.vm());
     }
 
     @Test
     void fcvtDoubleToSingle() {
-        Ir64Op.Fp64Convert op = (Ir64Op.Fp64Convert) DECODER.decode(memory, 0x314);
-        assertEquals(Ir64Op.Fp64Conversion.F64_TO_F32, op.conversion());
+        FpOp64.Convert op = (FpOp64.Convert) DECODER.decode(memory, 0x314);
+        assertEquals(FpOp64.Fp64Conversion.F64_TO_F32, op.conversion());
         assertEquals(29, op.vd());
         assertEquals(29, op.vm());
     }
@@ -2111,7 +2117,7 @@ class Aarch64DecoderCorpusTest {
         raw.put32(0, word);
         AddressSpace64 scratch = AddressSpace64.wrapping(raw);
         Ir64Op op = DECODER.decode(scratch, 0);
-        assertInstanceOf(Ir64Op.VectorFpArithmeticThreeSame.class, op);
+        assertInstanceOf(AdvSimdFpOp64.FpArithmeticThreeSame.class, op);
     }
 
     @Test
@@ -2125,7 +2131,7 @@ class Aarch64DecoderCorpusTest {
         TestAddressSpace raw = new TestAddressSpace(4);
         raw.put32(0, word);
         AddressSpace64 scratch = AddressSpace64.wrapping(raw);
-        Ir64Op.Fp64IntegerConvert op = (Ir64Op.Fp64IntegerConvert) DECODER.decode(scratch, 0);
+        FpOp64.IntegerConvert op = (FpOp64.IntegerConvert) DECODER.decode(scratch, 0);
         assertTrue(op.toFloat());
         assertTrue(op.signed());
         assertFalse(op.doublePrecision());
@@ -2143,7 +2149,7 @@ class Aarch64DecoderCorpusTest {
         TestAddressSpace raw = new TestAddressSpace(4);
         raw.put32(0, word);
         AddressSpace64 scratch = AddressSpace64.wrapping(raw);
-        Ir64Op.Fp64ConditionalSelect op = (Ir64Op.Fp64ConditionalSelect) DECODER.decode(scratch, 0);
+        FpOp64.ConditionalSelect op = (FpOp64.ConditionalSelect) DECODER.decode(scratch, 0);
         assertFalse(op.doublePrecision());
         assertEquals(6, op.vd());
         assertEquals(7, op.vn());
@@ -2163,8 +2169,8 @@ class Aarch64DecoderCorpusTest {
         TestAddressSpace raw = new TestAddressSpace(4);
         raw.put32(0, word);
         AddressSpace64 scratch = AddressSpace64.wrapping(raw);
-        Ir64Op.Fp64Alu op = (Ir64Op.Fp64Alu) DECODER.decode(scratch, 0);
-        assertEquals(Ir64Op.Fp64Operation.SQRT, op.op());
+        FpOp64.Alu op = (FpOp64.Alu) DECODER.decode(scratch, 0);
+        assertEquals(FpOp64.Fp64Operation.SQRT, op.op());
         assertFalse(op.doublePrecision());
         assertEquals(3, op.vd());
         assertEquals(4, op.vm());
@@ -2177,7 +2183,7 @@ class Aarch64DecoderCorpusTest {
         // bit26 no topo de decodeDataProcessingRegister não pode ter alterado nenhum resultado já
         // coberto pelos testes de csel()/madd()/etc. acima. Redecodifica um vetor já testado
         // (csel x0,x1,x2,eq, offset 0x188) como sanity extra deste apêndice.
-        Ir64Op.ConditionalSelect op = (Ir64Op.ConditionalSelect) DECODER.decode(memory, 0x188);
+        IntegerOp64.ConditionalSelect op = (IntegerOp64.ConditionalSelect) DECODER.decode(memory, 0x188);
         assertEquals(Ir64ConditionalSelectOp.CSEL, op.opcode());
         assertEquals(0, op.dst());
         assertEquals(1, op.src1());
@@ -2192,7 +2198,7 @@ class Aarch64DecoderCorpusTest {
 
     @Test
     void systemRegisterCurrentEl() {
-        Ir64Op.SystemRegister op = (Ir64Op.SystemRegister) DECODER.decode(memory, 0x318);
+        SystemOp64.SystemRegister op = (SystemOp64.SystemRegister) DECODER.decode(memory, 0x318);
         assertTrue(op.read());
         assertEquals(Aarch64SystemRegisterId.CURRENT_EL, op.register());
         assertEquals(0, op.rt());
@@ -2200,49 +2206,49 @@ class Aarch64DecoderCorpusTest {
 
     @Test
     void systemRegisterMpidrEl1() {
-        Ir64Op.SystemRegister op = (Ir64Op.SystemRegister) DECODER.decode(memory, 0x31c);
+        SystemOp64.SystemRegister op = (SystemOp64.SystemRegister) DECODER.decode(memory, 0x31c);
         assertEquals(Aarch64SystemRegisterId.MPIDR_EL1, op.register());
         assertEquals(1, op.rt());
     }
 
     @Test
     void systemRegisterMidrEl1() {
-        Ir64Op.SystemRegister op = (Ir64Op.SystemRegister) DECODER.decode(memory, 0x320);
+        SystemOp64.SystemRegister op = (SystemOp64.SystemRegister) DECODER.decode(memory, 0x320);
         assertEquals(Aarch64SystemRegisterId.MIDR_EL1, op.register());
         assertEquals(2, op.rt());
     }
 
     @Test
     void systemRegisterIdAa64Pfr0El1() {
-        Ir64Op.SystemRegister op = (Ir64Op.SystemRegister) DECODER.decode(memory, 0x324);
+        SystemOp64.SystemRegister op = (SystemOp64.SystemRegister) DECODER.decode(memory, 0x324);
         assertEquals(Aarch64SystemRegisterId.ID_AA64PFR0_EL1, op.register());
     }
 
     @Test
     void systemRegisterIdAa64Isar0El1() {
-        Ir64Op.SystemRegister op = (Ir64Op.SystemRegister) DECODER.decode(memory, 0x328);
+        SystemOp64.SystemRegister op = (SystemOp64.SystemRegister) DECODER.decode(memory, 0x328);
         assertEquals(Aarch64SystemRegisterId.ID_AA64ISAR0_EL1, op.register());
     }
 
     @Test
     void systemRegisterIdAa64Mmfr0El1() {
-        Ir64Op.SystemRegister op = (Ir64Op.SystemRegister) DECODER.decode(memory, 0x32c);
+        SystemOp64.SystemRegister op = (SystemOp64.SystemRegister) DECODER.decode(memory, 0x32c);
         assertEquals(Aarch64SystemRegisterId.ID_AA64MMFR0_EL1, op.register());
     }
 
     @Test
     void systemRegisterIdAa64Dfr0El1() {
-        Ir64Op.SystemRegister op = (Ir64Op.SystemRegister) DECODER.decode(memory, 0x330);
+        SystemOp64.SystemRegister op = (SystemOp64.SystemRegister) DECODER.decode(memory, 0x330);
         assertEquals(Aarch64SystemRegisterId.ID_AA64DFR0_EL1, op.register());
     }
 
     @Test
     void systemRegisterTpidrEl1ReadAndWrite() {
-        Ir64Op.SystemRegister read = (Ir64Op.SystemRegister) DECODER.decode(memory, 0x334);
+        SystemOp64.SystemRegister read = (SystemOp64.SystemRegister) DECODER.decode(memory, 0x334);
         assertTrue(read.read());
         assertEquals(Aarch64SystemRegisterId.TPIDR_EL1, read.register());
         assertEquals(7, read.rt());
-        Ir64Op.SystemRegister write = (Ir64Op.SystemRegister) DECODER.decode(memory, 0x338);
+        SystemOp64.SystemRegister write = (SystemOp64.SystemRegister) DECODER.decode(memory, 0x338);
         assertFalse(write.read());
         assertEquals(Aarch64SystemRegisterId.TPIDR_EL1, write.register());
         assertEquals(8, write.rt());
@@ -2251,39 +2257,39 @@ class Aarch64DecoderCorpusTest {
     @Test
     void systemRegisterGenericTimer() {
         assertEquals(Aarch64SystemRegisterId.CNTFRQ_EL0,
-                ((Ir64Op.SystemRegister) DECODER.decode(memory, 0x33c)).register());
+                ((SystemOp64.SystemRegister) DECODER.decode(memory, 0x33c)).register());
         assertEquals(Aarch64SystemRegisterId.CNTPCT_EL0,
-                ((Ir64Op.SystemRegister) DECODER.decode(memory, 0x340)).register());
+                ((SystemOp64.SystemRegister) DECODER.decode(memory, 0x340)).register());
         assertEquals(Aarch64SystemRegisterId.CNTP_TVAL_EL0,
-                ((Ir64Op.SystemRegister) DECODER.decode(memory, 0x344)).register());
+                ((SystemOp64.SystemRegister) DECODER.decode(memory, 0x344)).register());
         assertEquals(Aarch64SystemRegisterId.CNTP_TVAL_EL0,
-                ((Ir64Op.SystemRegister) DECODER.decode(memory, 0x348)).register());
+                ((SystemOp64.SystemRegister) DECODER.decode(memory, 0x348)).register());
         assertEquals(Aarch64SystemRegisterId.CNTP_CTL_EL0,
-                ((Ir64Op.SystemRegister) DECODER.decode(memory, 0x34c)).register());
+                ((SystemOp64.SystemRegister) DECODER.decode(memory, 0x34c)).register());
         assertEquals(Aarch64SystemRegisterId.CNTP_CTL_EL0,
-                ((Ir64Op.SystemRegister) DECODER.decode(memory, 0x350)).register());
+                ((SystemOp64.SystemRegister) DECODER.decode(memory, 0x350)).register());
         assertEquals(Aarch64SystemRegisterId.CNTP_CVAL_EL0,
-                ((Ir64Op.SystemRegister) DECODER.decode(memory, 0x354)).register());
+                ((SystemOp64.SystemRegister) DECODER.decode(memory, 0x354)).register());
         assertEquals(Aarch64SystemRegisterId.CNTP_CVAL_EL0,
-                ((Ir64Op.SystemRegister) DECODER.decode(memory, 0x358)).register());
+                ((SystemOp64.SystemRegister) DECODER.decode(memory, 0x358)).register());
     }
 
     @Test
     void hvcAndSmc() {
-        assertInstanceOf(Ir64Op.PrivilegedCall.class, DECODER.decode(memory, 0x35c));
-        assertInstanceOf(Ir64Op.PrivilegedCall.class, DECODER.decode(memory, 0x360));
+        assertInstanceOf(SystemOp64.PrivilegedCall.class, DECODER.decode(memory, 0x35c));
+        assertInstanceOf(SystemOp64.PrivilegedCall.class, DECODER.decode(memory, 0x360));
     }
 
     @Test
     void wfiDecodesAsSystemInstruction() {
-        Ir64Op.SystemInstruction op = (Ir64Op.SystemInstruction) DECODER.decode(memory, 0x364);
+        SystemOp64.SystemInstruction op = (SystemOp64.SystemInstruction) DECODER.decode(memory, 0x364);
         assertEquals(Ir64SystemInstructionOp.WFI, op.opcode());
     }
 
     @Test
     void nopHintYieldWfeSevSevl() {
         for (long offset : new long[] {0x368, 0x36c, 0x370, 0x374, 0x378}) {
-            Ir64Op.SystemInstruction op = (Ir64Op.SystemInstruction) DECODER.decode(memory, offset);
+            SystemOp64.SystemInstruction op = (SystemOp64.SystemInstruction) DECODER.decode(memory, offset);
             assertEquals(Ir64SystemInstructionOp.NOP_HINT, op.opcode());
         }
     }
@@ -2294,7 +2300,7 @@ class Aarch64DecoderCorpusTest {
     @Test
     void systemRegisterCtrEl0() {
         // mrs x3, CTR_EL0 (offset 0x448).
-        Ir64Op.SystemRegister op = (Ir64Op.SystemRegister) DECODER.decode(memory, 0x448);
+        SystemOp64.SystemRegister op = (SystemOp64.SystemRegister) DECODER.decode(memory, 0x448);
         assertTrue(op.read());
         assertEquals(Aarch64SystemRegisterId.CTR_EL0, op.register());
         assertEquals(3, op.rt());
@@ -2303,7 +2309,7 @@ class Aarch64DecoderCorpusTest {
     @Test
     void systemRegisterDczidEl0() {
         // mrs x4, DCZID_EL0 (offset 0x44c).
-        Ir64Op.SystemRegister op = (Ir64Op.SystemRegister) DECODER.decode(memory, 0x44c);
+        SystemOp64.SystemRegister op = (SystemOp64.SystemRegister) DECODER.decode(memory, 0x44c);
         assertTrue(op.read());
         assertEquals(Aarch64SystemRegisterId.DCZID_EL0, op.register());
         assertEquals(4, op.rt());
@@ -2314,7 +2320,7 @@ class Aarch64DecoderCorpusTest {
     // ── `lsl x2, x2, x3` = 0x9ac32042, achado em 0x38fd4 do kernel8.img real) ───────────────────
 
     private static void assertShiftVariable(
-            Ir64Op.ShiftVariable op, int dst, int src1, int src2,
+            IntegerOp64.ShiftVariable op, int dst, int src1, int src2,
             Ir64LogicalShiftType shiftType, boolean wide) {
         assertEquals(dst, op.dst());
         assertEquals(src1, op.src1());
@@ -2325,56 +2331,56 @@ class Aarch64DecoderCorpusTest {
 
     @Test
     void lslvWide() {
-        Ir64Op.ShiftVariable op = (Ir64Op.ShiftVariable) DECODER.decode(memory, 0x450);
+        IntegerOp64.ShiftVariable op = (IntegerOp64.ShiftVariable) DECODER.decode(memory, 0x450);
         assertShiftVariable(op, 1, 2, 3, Ir64LogicalShiftType.LSL, true);
     }
 
     @Test
     void lsrvWide() {
-        Ir64Op.ShiftVariable op = (Ir64Op.ShiftVariable) DECODER.decode(memory, 0x454);
+        IntegerOp64.ShiftVariable op = (IntegerOp64.ShiftVariable) DECODER.decode(memory, 0x454);
         assertShiftVariable(op, 4, 5, 6, Ir64LogicalShiftType.LSR, true);
     }
 
     @Test
     void asrvWide() {
-        Ir64Op.ShiftVariable op = (Ir64Op.ShiftVariable) DECODER.decode(memory, 0x458);
+        IntegerOp64.ShiftVariable op = (IntegerOp64.ShiftVariable) DECODER.decode(memory, 0x458);
         assertShiftVariable(op, 7, 8, 9, Ir64LogicalShiftType.ASR, true);
     }
 
     @Test
     void rorvWide() {
-        Ir64Op.ShiftVariable op = (Ir64Op.ShiftVariable) DECODER.decode(memory, 0x45c);
+        IntegerOp64.ShiftVariable op = (IntegerOp64.ShiftVariable) DECODER.decode(memory, 0x45c);
         assertShiftVariable(op, 10, 11, 12, Ir64LogicalShiftType.ROR, true);
     }
 
     @Test
     void lslvNarrow() {
-        Ir64Op.ShiftVariable op = (Ir64Op.ShiftVariable) DECODER.decode(memory, 0x460);
+        IntegerOp64.ShiftVariable op = (IntegerOp64.ShiftVariable) DECODER.decode(memory, 0x460);
         assertShiftVariable(op, 13, 14, 15, Ir64LogicalShiftType.LSL, false);
     }
 
     @Test
     void lsrvNarrow() {
-        Ir64Op.ShiftVariable op = (Ir64Op.ShiftVariable) DECODER.decode(memory, 0x464);
+        IntegerOp64.ShiftVariable op = (IntegerOp64.ShiftVariable) DECODER.decode(memory, 0x464);
         assertShiftVariable(op, 16, 17, 18, Ir64LogicalShiftType.LSR, false);
     }
 
     @Test
     void asrvNarrow() {
-        Ir64Op.ShiftVariable op = (Ir64Op.ShiftVariable) DECODER.decode(memory, 0x468);
+        IntegerOp64.ShiftVariable op = (IntegerOp64.ShiftVariable) DECODER.decode(memory, 0x468);
         assertShiftVariable(op, 19, 20, 21, Ir64LogicalShiftType.ASR, false);
     }
 
     @Test
     void rorvNarrow() {
-        Ir64Op.ShiftVariable op = (Ir64Op.ShiftVariable) DECODER.decode(memory, 0x46c);
+        IntegerOp64.ShiftVariable op = (IntegerOp64.ShiftVariable) DECODER.decode(memory, 0x46c);
         assertShiftVariable(op, 22, 23, 24, Ir64LogicalShiftType.ROR, false);
     }
 
     @Test
     void lslvLiteralVectorFromKernel8Img() {
         // lsl x2, x2, x3 (0x9ac32042) — vetor LITERAL da F11 (0x38fd4 do kernel8.img real).
-        Ir64Op.ShiftVariable op = (Ir64Op.ShiftVariable) DECODER.decode(memory, 0x470);
+        IntegerOp64.ShiftVariable op = (IntegerOp64.ShiftVariable) DECODER.decode(memory, 0x470);
         assertShiftVariable(op, 2, 2, 3, Ir64LogicalShiftType.LSL, true);
     }
 
@@ -2384,7 +2390,7 @@ class Aarch64DecoderCorpusTest {
     @Test
     void ccmpRegisterWide() {
         // ccmp x1, x2, #3, eq (offset 0x384).
-        Ir64Op.ConditionalCompare op = (Ir64Op.ConditionalCompare) DECODER.decode(memory, 0x384);
+        IntegerOp64.ConditionalCompare op = (IntegerOp64.ConditionalCompare) DECODER.decode(memory, 0x384);
         assertEquals(Ir64AluOp.SUB, op.opcode());
         assertEquals(1, op.rn());
         assertFalse(op.immediateForm());
@@ -2398,7 +2404,7 @@ class Aarch64DecoderCorpusTest {
     @Test
     void ccmpRegisterNarrow() {
         // ccmp w3, w4, #5, ne (offset 0x388).
-        Ir64Op.ConditionalCompare op = (Ir64Op.ConditionalCompare) DECODER.decode(memory, 0x388);
+        IntegerOp64.ConditionalCompare op = (IntegerOp64.ConditionalCompare) DECODER.decode(memory, 0x388);
         assertEquals(Ir64AluOp.SUB, op.opcode());
         assertFalse(op.wide());
         assertEquals(3, op.rn());
@@ -2410,7 +2416,7 @@ class Aarch64DecoderCorpusTest {
     @Test
     void ccmpImmediateWide() {
         // ccmp x5, #10, #7, cs (offset 0x38c).
-        Ir64Op.ConditionalCompare op = (Ir64Op.ConditionalCompare) DECODER.decode(memory, 0x38c);
+        IntegerOp64.ConditionalCompare op = (IntegerOp64.ConditionalCompare) DECODER.decode(memory, 0x38c);
         assertEquals(Ir64AluOp.SUB, op.opcode());
         assertEquals(5, op.rn());
         assertTrue(op.immediateForm());
@@ -2424,7 +2430,7 @@ class Aarch64DecoderCorpusTest {
     @Test
     void ccmpImmediateNarrow() {
         // ccmp w6, #21, #2, cc (offset 0x390).
-        Ir64Op.ConditionalCompare op = (Ir64Op.ConditionalCompare) DECODER.decode(memory, 0x390);
+        IntegerOp64.ConditionalCompare op = (IntegerOp64.ConditionalCompare) DECODER.decode(memory, 0x390);
         assertEquals(Ir64AluOp.SUB, op.opcode());
         assertFalse(op.wide());
         assertEquals(6, op.rn());
@@ -2437,7 +2443,7 @@ class Aarch64DecoderCorpusTest {
     @Test
     void ccmnRegisterWide() {
         // ccmn x7, x8, #1, mi (offset 0x394).
-        Ir64Op.ConditionalCompare op = (Ir64Op.ConditionalCompare) DECODER.decode(memory, 0x394);
+        IntegerOp64.ConditionalCompare op = (IntegerOp64.ConditionalCompare) DECODER.decode(memory, 0x394);
         assertEquals(Ir64AluOp.ADD, op.opcode());
         assertEquals(7, op.rn());
         assertFalse(op.immediateForm());
@@ -2450,7 +2456,7 @@ class Aarch64DecoderCorpusTest {
     @Test
     void ccmnRegisterNarrow() {
         // ccmn w9, w10, #12, pl (offset 0x398).
-        Ir64Op.ConditionalCompare op = (Ir64Op.ConditionalCompare) DECODER.decode(memory, 0x398);
+        IntegerOp64.ConditionalCompare op = (IntegerOp64.ConditionalCompare) DECODER.decode(memory, 0x398);
         assertEquals(Ir64AluOp.ADD, op.opcode());
         assertFalse(op.wide());
         assertEquals(9, op.rn());
@@ -2462,7 +2468,7 @@ class Aarch64DecoderCorpusTest {
     @Test
     void ccmnImmediateWide() {
         // ccmn x11, #31, #15, vs (offset 0x39c).
-        Ir64Op.ConditionalCompare op = (Ir64Op.ConditionalCompare) DECODER.decode(memory, 0x39c);
+        IntegerOp64.ConditionalCompare op = (IntegerOp64.ConditionalCompare) DECODER.decode(memory, 0x39c);
         assertEquals(Ir64AluOp.ADD, op.opcode());
         assertEquals(11, op.rn());
         assertTrue(op.immediateForm());
@@ -2475,7 +2481,7 @@ class Aarch64DecoderCorpusTest {
     @Test
     void ccmnImmediateNarrowAllZero() {
         // ccmn w12, #0, #0, vc (offset 0x3a0) — vetor de canto: imediato e nzcv ambos zero.
-        Ir64Op.ConditionalCompare op = (Ir64Op.ConditionalCompare) DECODER.decode(memory, 0x3a0);
+        IntegerOp64.ConditionalCompare op = (IntegerOp64.ConditionalCompare) DECODER.decode(memory, 0x3a0);
         assertEquals(Ir64AluOp.ADD, op.opcode());
         assertFalse(op.wide());
         assertEquals(12, op.rn());
@@ -2489,7 +2495,7 @@ class Aarch64DecoderCorpusTest {
     void ccmpLiteralVectorFromF11PolyglotKernelHeader() {
         // ccmp x18, #0, #0xd, pl (offset 0x3a4) — a PRIMEIRA instrução real de praticamente todo
         // `kernel8.img` distribuído (truque polyglot EFI "MZ"), o achado que abriu a task B6.8.
-        Ir64Op.ConditionalCompare op = (Ir64Op.ConditionalCompare) DECODER.decode(memory, 0x3a4);
+        IntegerOp64.ConditionalCompare op = (IntegerOp64.ConditionalCompare) DECODER.decode(memory, 0x3a4);
         assertEquals(Ir64AluOp.SUB, op.opcode());
         assertEquals(18, op.rn());
         assertTrue(op.immediateForm());
@@ -2503,7 +2509,7 @@ class Aarch64DecoderCorpusTest {
     // ── 0x3a8-0x444, incl. o vetor literal `mov x21, x0` (0xaa0003f5) que motivou a task ─────────
 
     private static void assertLogical(
-            Ir64Op.LogicalShiftedRegister op, Ir64AluOp opcode, int dst, int src1, int src2,
+            IntegerOp64.LogicalShiftedRegister op, Ir64AluOp opcode, int dst, int src1, int src2,
             Ir64LogicalShiftType shiftType, int shiftAmount, boolean invert, boolean wide,
             boolean setFlags) {
         assertEquals(opcode, op.opcode());
@@ -2519,257 +2525,257 @@ class Aarch64DecoderCorpusTest {
 
     @Test
     void andShiftedLsl() {
-        Ir64Op.LogicalShiftedRegister op =
-                (Ir64Op.LogicalShiftedRegister) DECODER.decode(memory, 0x3a8);
+        IntegerOp64.LogicalShiftedRegister op =
+                (IntegerOp64.LogicalShiftedRegister) DECODER.decode(memory, 0x3a8);
         assertLogical(op, Ir64AluOp.AND, 1, 2, 3, Ir64LogicalShiftType.LSL, 4, false, true, false);
     }
 
     @Test
     void andShiftedLsr() {
-        Ir64Op.LogicalShiftedRegister op =
-                (Ir64Op.LogicalShiftedRegister) DECODER.decode(memory, 0x3ac);
+        IntegerOp64.LogicalShiftedRegister op =
+                (IntegerOp64.LogicalShiftedRegister) DECODER.decode(memory, 0x3ac);
         assertLogical(op, Ir64AluOp.AND, 1, 2, 3, Ir64LogicalShiftType.LSR, 4, false, true, false);
     }
 
     @Test
     void andShiftedAsr() {
-        Ir64Op.LogicalShiftedRegister op =
-                (Ir64Op.LogicalShiftedRegister) DECODER.decode(memory, 0x3b0);
+        IntegerOp64.LogicalShiftedRegister op =
+                (IntegerOp64.LogicalShiftedRegister) DECODER.decode(memory, 0x3b0);
         assertLogical(op, Ir64AluOp.AND, 1, 2, 3, Ir64LogicalShiftType.ASR, 4, false, true, false);
     }
 
     @Test
     void andShiftedRor() {
         // and x1, x2, x3, ror #4 — ROR só existe nesta forma (RESERVADO em AluShiftedRegister).
-        Ir64Op.LogicalShiftedRegister op =
-                (Ir64Op.LogicalShiftedRegister) DECODER.decode(memory, 0x3b4);
+        IntegerOp64.LogicalShiftedRegister op =
+                (IntegerOp64.LogicalShiftedRegister) DECODER.decode(memory, 0x3b4);
         assertLogical(op, Ir64AluOp.AND, 1, 2, 3, Ir64LogicalShiftType.ROR, 4, false, true, false);
     }
 
     @Test
     void orrShiftedLsl() {
-        Ir64Op.LogicalShiftedRegister op =
-                (Ir64Op.LogicalShiftedRegister) DECODER.decode(memory, 0x3b8);
+        IntegerOp64.LogicalShiftedRegister op =
+                (IntegerOp64.LogicalShiftedRegister) DECODER.decode(memory, 0x3b8);
         assertLogical(op, Ir64AluOp.ORR, 4, 5, 6, Ir64LogicalShiftType.LSL, 8, false, true, false);
     }
 
     @Test
     void orrShiftedLsr() {
-        Ir64Op.LogicalShiftedRegister op =
-                (Ir64Op.LogicalShiftedRegister) DECODER.decode(memory, 0x3bc);
+        IntegerOp64.LogicalShiftedRegister op =
+                (IntegerOp64.LogicalShiftedRegister) DECODER.decode(memory, 0x3bc);
         assertLogical(op, Ir64AluOp.ORR, 4, 5, 6, Ir64LogicalShiftType.LSR, 8, false, true, false);
     }
 
     @Test
     void orrShiftedAsr() {
-        Ir64Op.LogicalShiftedRegister op =
-                (Ir64Op.LogicalShiftedRegister) DECODER.decode(memory, 0x3c0);
+        IntegerOp64.LogicalShiftedRegister op =
+                (IntegerOp64.LogicalShiftedRegister) DECODER.decode(memory, 0x3c0);
         assertLogical(op, Ir64AluOp.ORR, 4, 5, 6, Ir64LogicalShiftType.ASR, 8, false, true, false);
     }
 
     @Test
     void orrShiftedRor() {
-        Ir64Op.LogicalShiftedRegister op =
-                (Ir64Op.LogicalShiftedRegister) DECODER.decode(memory, 0x3c4);
+        IntegerOp64.LogicalShiftedRegister op =
+                (IntegerOp64.LogicalShiftedRegister) DECODER.decode(memory, 0x3c4);
         assertLogical(op, Ir64AluOp.ORR, 4, 5, 6, Ir64LogicalShiftType.ROR, 8, false, true, false);
     }
 
     @Test
     void eorShiftedLsl() {
-        Ir64Op.LogicalShiftedRegister op =
-                (Ir64Op.LogicalShiftedRegister) DECODER.decode(memory, 0x3c8);
+        IntegerOp64.LogicalShiftedRegister op =
+                (IntegerOp64.LogicalShiftedRegister) DECODER.decode(memory, 0x3c8);
         assertLogical(op, Ir64AluOp.EOR, 7, 8, 9, Ir64LogicalShiftType.LSL, 12, false, true, false);
     }
 
     @Test
     void eorShiftedLsr() {
-        Ir64Op.LogicalShiftedRegister op =
-                (Ir64Op.LogicalShiftedRegister) DECODER.decode(memory, 0x3cc);
+        IntegerOp64.LogicalShiftedRegister op =
+                (IntegerOp64.LogicalShiftedRegister) DECODER.decode(memory, 0x3cc);
         assertLogical(op, Ir64AluOp.EOR, 7, 8, 9, Ir64LogicalShiftType.LSR, 12, false, true, false);
     }
 
     @Test
     void eorShiftedAsr() {
-        Ir64Op.LogicalShiftedRegister op =
-                (Ir64Op.LogicalShiftedRegister) DECODER.decode(memory, 0x3d0);
+        IntegerOp64.LogicalShiftedRegister op =
+                (IntegerOp64.LogicalShiftedRegister) DECODER.decode(memory, 0x3d0);
         assertLogical(op, Ir64AluOp.EOR, 7, 8, 9, Ir64LogicalShiftType.ASR, 12, false, true, false);
     }
 
     @Test
     void eorShiftedRor() {
-        Ir64Op.LogicalShiftedRegister op =
-                (Ir64Op.LogicalShiftedRegister) DECODER.decode(memory, 0x3d4);
+        IntegerOp64.LogicalShiftedRegister op =
+                (IntegerOp64.LogicalShiftedRegister) DECODER.decode(memory, 0x3d4);
         assertLogical(op, Ir64AluOp.EOR, 7, 8, 9, Ir64LogicalShiftType.ROR, 12, false, true, false);
     }
 
     @Test
     void andsShiftedLsl() {
         // ands: opc=11 -> Ir64AluOp.AND com setFlags=true (D2, mesma decisão de B6.3.1 imediato).
-        Ir64Op.LogicalShiftedRegister op =
-                (Ir64Op.LogicalShiftedRegister) DECODER.decode(memory, 0x3d8);
+        IntegerOp64.LogicalShiftedRegister op =
+                (IntegerOp64.LogicalShiftedRegister) DECODER.decode(memory, 0x3d8);
         assertLogical(op, Ir64AluOp.AND, 10, 11, 12, Ir64LogicalShiftType.LSL, 16, false, true, true);
     }
 
     @Test
     void andsShiftedLsr() {
-        Ir64Op.LogicalShiftedRegister op =
-                (Ir64Op.LogicalShiftedRegister) DECODER.decode(memory, 0x3dc);
+        IntegerOp64.LogicalShiftedRegister op =
+                (IntegerOp64.LogicalShiftedRegister) DECODER.decode(memory, 0x3dc);
         assertLogical(op, Ir64AluOp.AND, 10, 11, 12, Ir64LogicalShiftType.LSR, 16, false, true, true);
     }
 
     @Test
     void andsShiftedAsr() {
-        Ir64Op.LogicalShiftedRegister op =
-                (Ir64Op.LogicalShiftedRegister) DECODER.decode(memory, 0x3e0);
+        IntegerOp64.LogicalShiftedRegister op =
+                (IntegerOp64.LogicalShiftedRegister) DECODER.decode(memory, 0x3e0);
         assertLogical(op, Ir64AluOp.AND, 10, 11, 12, Ir64LogicalShiftType.ASR, 16, false, true, true);
     }
 
     @Test
     void andsShiftedRor() {
-        Ir64Op.LogicalShiftedRegister op =
-                (Ir64Op.LogicalShiftedRegister) DECODER.decode(memory, 0x3e4);
+        IntegerOp64.LogicalShiftedRegister op =
+                (IntegerOp64.LogicalShiftedRegister) DECODER.decode(memory, 0x3e4);
         assertLogical(op, Ir64AluOp.AND, 10, 11, 12, Ir64LogicalShiftType.ROR, 16, false, true, true);
     }
 
     @Test
     void bicShiftedLsl() {
         // bic: mesmo opcode AND, invert=true (bit n=1) — Rm invertido ANTES de combinar.
-        Ir64Op.LogicalShiftedRegister op =
-                (Ir64Op.LogicalShiftedRegister) DECODER.decode(memory, 0x3e8);
+        IntegerOp64.LogicalShiftedRegister op =
+                (IntegerOp64.LogicalShiftedRegister) DECODER.decode(memory, 0x3e8);
         assertLogical(op, Ir64AluOp.AND, 13, 14, 15, Ir64LogicalShiftType.LSL, 4, true, true, false);
     }
 
     @Test
     void bicShiftedLsr() {
-        Ir64Op.LogicalShiftedRegister op =
-                (Ir64Op.LogicalShiftedRegister) DECODER.decode(memory, 0x3ec);
+        IntegerOp64.LogicalShiftedRegister op =
+                (IntegerOp64.LogicalShiftedRegister) DECODER.decode(memory, 0x3ec);
         assertLogical(op, Ir64AluOp.AND, 13, 14, 15, Ir64LogicalShiftType.LSR, 4, true, true, false);
     }
 
     @Test
     void bicShiftedAsr() {
-        Ir64Op.LogicalShiftedRegister op =
-                (Ir64Op.LogicalShiftedRegister) DECODER.decode(memory, 0x3f0);
+        IntegerOp64.LogicalShiftedRegister op =
+                (IntegerOp64.LogicalShiftedRegister) DECODER.decode(memory, 0x3f0);
         assertLogical(op, Ir64AluOp.AND, 13, 14, 15, Ir64LogicalShiftType.ASR, 4, true, true, false);
     }
 
     @Test
     void bicShiftedRor() {
-        Ir64Op.LogicalShiftedRegister op =
-                (Ir64Op.LogicalShiftedRegister) DECODER.decode(memory, 0x3f4);
+        IntegerOp64.LogicalShiftedRegister op =
+                (IntegerOp64.LogicalShiftedRegister) DECODER.decode(memory, 0x3f4);
         assertLogical(op, Ir64AluOp.AND, 13, 14, 15, Ir64LogicalShiftType.ROR, 4, true, true, false);
     }
 
     @Test
     void ornShiftedLsl() {
-        Ir64Op.LogicalShiftedRegister op =
-                (Ir64Op.LogicalShiftedRegister) DECODER.decode(memory, 0x3f8);
+        IntegerOp64.LogicalShiftedRegister op =
+                (IntegerOp64.LogicalShiftedRegister) DECODER.decode(memory, 0x3f8);
         assertLogical(op, Ir64AluOp.ORR, 16, 17, 18, Ir64LogicalShiftType.LSL, 8, true, true, false);
     }
 
     @Test
     void ornShiftedLsr() {
-        Ir64Op.LogicalShiftedRegister op =
-                (Ir64Op.LogicalShiftedRegister) DECODER.decode(memory, 0x3fc);
+        IntegerOp64.LogicalShiftedRegister op =
+                (IntegerOp64.LogicalShiftedRegister) DECODER.decode(memory, 0x3fc);
         assertLogical(op, Ir64AluOp.ORR, 16, 17, 18, Ir64LogicalShiftType.LSR, 8, true, true, false);
     }
 
     @Test
     void ornShiftedAsr() {
-        Ir64Op.LogicalShiftedRegister op =
-                (Ir64Op.LogicalShiftedRegister) DECODER.decode(memory, 0x400);
+        IntegerOp64.LogicalShiftedRegister op =
+                (IntegerOp64.LogicalShiftedRegister) DECODER.decode(memory, 0x400);
         assertLogical(op, Ir64AluOp.ORR, 16, 17, 18, Ir64LogicalShiftType.ASR, 8, true, true, false);
     }
 
     @Test
     void ornShiftedRor() {
-        Ir64Op.LogicalShiftedRegister op =
-                (Ir64Op.LogicalShiftedRegister) DECODER.decode(memory, 0x404);
+        IntegerOp64.LogicalShiftedRegister op =
+                (IntegerOp64.LogicalShiftedRegister) DECODER.decode(memory, 0x404);
         assertLogical(op, Ir64AluOp.ORR, 16, 17, 18, Ir64LogicalShiftType.ROR, 8, true, true, false);
     }
 
     @Test
     void eonShiftedLsl() {
-        Ir64Op.LogicalShiftedRegister op =
-                (Ir64Op.LogicalShiftedRegister) DECODER.decode(memory, 0x408);
+        IntegerOp64.LogicalShiftedRegister op =
+                (IntegerOp64.LogicalShiftedRegister) DECODER.decode(memory, 0x408);
         assertLogical(op, Ir64AluOp.EOR, 19, 20, 21, Ir64LogicalShiftType.LSL, 12, true, true, false);
     }
 
     @Test
     void eonShiftedLsr() {
-        Ir64Op.LogicalShiftedRegister op =
-                (Ir64Op.LogicalShiftedRegister) DECODER.decode(memory, 0x40c);
+        IntegerOp64.LogicalShiftedRegister op =
+                (IntegerOp64.LogicalShiftedRegister) DECODER.decode(memory, 0x40c);
         assertLogical(op, Ir64AluOp.EOR, 19, 20, 21, Ir64LogicalShiftType.LSR, 12, true, true, false);
     }
 
     @Test
     void eonShiftedAsr() {
-        Ir64Op.LogicalShiftedRegister op =
-                (Ir64Op.LogicalShiftedRegister) DECODER.decode(memory, 0x410);
+        IntegerOp64.LogicalShiftedRegister op =
+                (IntegerOp64.LogicalShiftedRegister) DECODER.decode(memory, 0x410);
         assertLogical(op, Ir64AluOp.EOR, 19, 20, 21, Ir64LogicalShiftType.ASR, 12, true, true, false);
     }
 
     @Test
     void eonShiftedRor() {
-        Ir64Op.LogicalShiftedRegister op =
-                (Ir64Op.LogicalShiftedRegister) DECODER.decode(memory, 0x414);
+        IntegerOp64.LogicalShiftedRegister op =
+                (IntegerOp64.LogicalShiftedRegister) DECODER.decode(memory, 0x414);
         assertLogical(op, Ir64AluOp.EOR, 19, 20, 21, Ir64LogicalShiftType.ROR, 12, true, true, false);
     }
 
     @Test
     void bicsShiftedLsl() {
-        Ir64Op.LogicalShiftedRegister op =
-                (Ir64Op.LogicalShiftedRegister) DECODER.decode(memory, 0x418);
+        IntegerOp64.LogicalShiftedRegister op =
+                (IntegerOp64.LogicalShiftedRegister) DECODER.decode(memory, 0x418);
         assertLogical(op, Ir64AluOp.AND, 22, 23, 24, Ir64LogicalShiftType.LSL, 16, true, true, true);
     }
 
     @Test
     void bicsShiftedLsr() {
-        Ir64Op.LogicalShiftedRegister op =
-                (Ir64Op.LogicalShiftedRegister) DECODER.decode(memory, 0x41c);
+        IntegerOp64.LogicalShiftedRegister op =
+                (IntegerOp64.LogicalShiftedRegister) DECODER.decode(memory, 0x41c);
         assertLogical(op, Ir64AluOp.AND, 22, 23, 24, Ir64LogicalShiftType.LSR, 16, true, true, true);
     }
 
     @Test
     void bicsShiftedAsr() {
-        Ir64Op.LogicalShiftedRegister op =
-                (Ir64Op.LogicalShiftedRegister) DECODER.decode(memory, 0x420);
+        IntegerOp64.LogicalShiftedRegister op =
+                (IntegerOp64.LogicalShiftedRegister) DECODER.decode(memory, 0x420);
         assertLogical(op, Ir64AluOp.AND, 22, 23, 24, Ir64LogicalShiftType.ASR, 16, true, true, true);
     }
 
     @Test
     void bicsShiftedRor() {
-        Ir64Op.LogicalShiftedRegister op =
-                (Ir64Op.LogicalShiftedRegister) DECODER.decode(memory, 0x424);
+        IntegerOp64.LogicalShiftedRegister op =
+                (IntegerOp64.LogicalShiftedRegister) DECODER.decode(memory, 0x424);
         assertLogical(op, Ir64AluOp.AND, 22, 23, 24, Ir64LogicalShiftType.ROR, 16, true, true, true);
     }
 
     @Test
     void andShiftedNarrow() {
         // and w1, w2, w3, lsl #4 (!wide) — mesma regra de zero-extensão de AluShiftedRegister.
-        Ir64Op.LogicalShiftedRegister op =
-                (Ir64Op.LogicalShiftedRegister) DECODER.decode(memory, 0x428);
+        IntegerOp64.LogicalShiftedRegister op =
+                (IntegerOp64.LogicalShiftedRegister) DECODER.decode(memory, 0x428);
         assertLogical(op, Ir64AluOp.AND, 1, 2, 3, Ir64LogicalShiftType.LSL, 4, false, false, false);
     }
 
     @Test
     void orrShiftedNarrow() {
-        Ir64Op.LogicalShiftedRegister op =
-                (Ir64Op.LogicalShiftedRegister) DECODER.decode(memory, 0x42c);
+        IntegerOp64.LogicalShiftedRegister op =
+                (IntegerOp64.LogicalShiftedRegister) DECODER.decode(memory, 0x42c);
         assertLogical(op, Ir64AluOp.ORR, 4, 5, 6, Ir64LogicalShiftType.LSR, 8, false, false, false);
     }
 
     @Test
     void eorShiftedNarrow() {
-        Ir64Op.LogicalShiftedRegister op =
-                (Ir64Op.LogicalShiftedRegister) DECODER.decode(memory, 0x430);
+        IntegerOp64.LogicalShiftedRegister op =
+                (IntegerOp64.LogicalShiftedRegister) DECODER.decode(memory, 0x430);
         assertLogical(op, Ir64AluOp.EOR, 7, 8, 9, Ir64LogicalShiftType.ASR, 12, false, false, false);
     }
 
     @Test
     void andsShiftedNarrow() {
-        Ir64Op.LogicalShiftedRegister op =
-                (Ir64Op.LogicalShiftedRegister) DECODER.decode(memory, 0x434);
+        IntegerOp64.LogicalShiftedRegister op =
+                (IntegerOp64.LogicalShiftedRegister) DECODER.decode(memory, 0x434);
         assertLogical(op, Ir64AluOp.AND, 10, 11, 12, Ir64LogicalShiftType.ROR, 16, false, false, true);
     }
 
@@ -2777,30 +2783,30 @@ class Aarch64DecoderCorpusTest {
     void movRegisterAliasIsOrrWithXzr() {
         // mov x21, x0 (0xaa0003f5) — vetor LITERAL da F11 (0x13ba9e8 do kernel8.img real).
         // D3/D4: nenhum case dedicado, o caminho geral de ORR com Rn=XZR já é correto.
-        Ir64Op.LogicalShiftedRegister op =
-                (Ir64Op.LogicalShiftedRegister) DECODER.decode(memory, 0x438);
+        IntegerOp64.LogicalShiftedRegister op =
+                (IntegerOp64.LogicalShiftedRegister) DECODER.decode(memory, 0x438);
         assertLogical(op, Ir64AluOp.ORR, 21, 31, 0, Ir64LogicalShiftType.LSL, 0, false, true, false);
     }
 
     @Test
     void mvnRegisterAliasIsOrnWithXzr() {
         // mvn x22, x1 (== orn x22, xzr, x1) — mesmo alias, com invert=true.
-        Ir64Op.LogicalShiftedRegister op =
-                (Ir64Op.LogicalShiftedRegister) DECODER.decode(memory, 0x43c);
+        IntegerOp64.LogicalShiftedRegister op =
+                (IntegerOp64.LogicalShiftedRegister) DECODER.decode(memory, 0x43c);
         assertLogical(op, Ir64AluOp.ORR, 22, 31, 1, Ir64LogicalShiftType.LSL, 0, true, true, false);
     }
 
     @Test
     void movRegisterAliasNarrow() {
-        Ir64Op.LogicalShiftedRegister op =
-                (Ir64Op.LogicalShiftedRegister) DECODER.decode(memory, 0x440);
+        IntegerOp64.LogicalShiftedRegister op =
+                (IntegerOp64.LogicalShiftedRegister) DECODER.decode(memory, 0x440);
         assertLogical(op, Ir64AluOp.ORR, 23, 31, 2, Ir64LogicalShiftType.LSL, 0, false, false, false);
     }
 
     @Test
     void mvnRegisterAliasNarrow() {
-        Ir64Op.LogicalShiftedRegister op =
-                (Ir64Op.LogicalShiftedRegister) DECODER.decode(memory, 0x444);
+        IntegerOp64.LogicalShiftedRegister op =
+                (IntegerOp64.LogicalShiftedRegister) DECODER.decode(memory, 0x444);
         assertLogical(op, Ir64AluOp.ORR, 24, 31, 3, Ir64LogicalShiftType.LSL, 0, true, false, false);
     }
 
@@ -2823,14 +2829,14 @@ class Aarch64DecoderCorpusTest {
     // ── vetor literal `dc ivac, x0` = 0xd5087620 achado em 0x39000 do kernel8.img real) ─────────
 
     private static void assertCacheMaintenanceNoop(long offset) {
-        Ir64Op.SystemInstruction op = (Ir64Op.SystemInstruction) DECODER.decode(memory, offset);
+        SystemOp64.SystemInstruction op = (SystemOp64.SystemInstruction) DECODER.decode(memory, offset);
         assertEquals(Ir64SystemInstructionOp.CACHE_MAINTENANCE_NOP, op.opcode());
     }
 
     /// `IC IALLUIS`/`IC IALLU`/`IC IVAU` NÃO são mais NOP (F11): o JIT precisa descartar o código
     /// compilado que o guest acabou de reescrever. O resto de `IC`/`DC` segue NOP (ver acima).
     private static void assertInstructionCacheInvalidate(long offset, Ir64SystemInstructionOp expected, int rt) {
-        Ir64Op.SystemInstruction op = (Ir64Op.SystemInstruction) DECODER.decode(memory, offset);
+        SystemOp64.SystemInstruction op = (SystemOp64.SystemInstruction) DECODER.decode(memory, offset);
         assertEquals(expected, op.opcode());
         assertEquals(rt, op.rt());
     }
@@ -2838,13 +2844,13 @@ class Aarch64DecoderCorpusTest {
     @Test
     void icIalluis() {
         assertInstructionCacheInvalidate(0x474, Ir64SystemInstructionOp.INSTRUCTION_CACHE_INVALIDATE_ALL,
-                Ir64Op.SystemInstruction.NO_REGISTER);
+                SystemOp64.SystemInstruction.NO_REGISTER);
     }
 
     @Test
     void icIallu() {
         assertInstructionCacheInvalidate(0x478, Ir64SystemInstructionOp.INSTRUCTION_CACHE_INVALIDATE_ALL,
-                Ir64Op.SystemInstruction.NO_REGISTER);
+                SystemOp64.SystemInstruction.NO_REGISTER);
     }
 
     @Test
@@ -2910,7 +2916,7 @@ class Aarch64DecoderCorpusTest {
     // ── — não representáveis pelo corpus (nunca gerados por este emulador). Achado real desta
     // ── task: ANTES do carve-out, essas palavras caíam incorretamente em CACHE_MAINTENANCE_NOP
     // ── (ver javadoc de Aarch64Decoder#decodeSystemInstructionSys) — os testes abaixo confirmam
-    // ── que agora viram Ir64Op.AddressTranslate de verdade.
+    // ── que agora viram SystemOp64.AddressTranslate de verdade.
 
     private static Ir64Op decodeAt(int word) {
         TestAddressSpace raw = new TestAddressSpace(4);
@@ -2922,7 +2928,7 @@ class Aarch64DecoderCorpusTest {
     @Test
     void atS1e1rX0() {
         // at s1e1r, x0 (0xd5087800: L=0,op0=1,op1=0,CRn=7,CRm=8,op2=0,rt=0)
-        Ir64Op.AddressTranslate op = (Ir64Op.AddressTranslate) decodeAt(0xd5087800);
+        SystemOp64.AddressTranslate op = (SystemOp64.AddressTranslate) decodeAt(0xd5087800);
         assertEquals(Aarch64AddressTranslateForm.S1E1R, op.form());
         assertEquals(0, op.rt());
     }
@@ -2930,21 +2936,21 @@ class Aarch64DecoderCorpusTest {
     @Test
     void atS1e1wX0() {
         // at s1e1w, x0 (0xd5087820: op2=1)
-        Ir64Op.AddressTranslate op = (Ir64Op.AddressTranslate) decodeAt(0xd5087820);
+        SystemOp64.AddressTranslate op = (SystemOp64.AddressTranslate) decodeAt(0xd5087820);
         assertEquals(Aarch64AddressTranslateForm.S1E1W, op.form());
     }
 
     @Test
     void atS1e0rX0() {
         // at s1e0r, x0 (0xd5087840: op2=2)
-        Ir64Op.AddressTranslate op = (Ir64Op.AddressTranslate) decodeAt(0xd5087840);
+        SystemOp64.AddressTranslate op = (SystemOp64.AddressTranslate) decodeAt(0xd5087840);
         assertEquals(Aarch64AddressTranslateForm.S1E0R, op.form());
     }
 
     @Test
     void atS1e0wXzr() {
         // at s1e0w, xzr (0xd508787f: op2=3, rt=31)
-        Ir64Op.AddressTranslate op = (Ir64Op.AddressTranslate) decodeAt(0xd508787f);
+        SystemOp64.AddressTranslate op = (SystemOp64.AddressTranslate) decodeAt(0xd508787f);
         assertEquals(Aarch64AddressTranslateForm.S1E0W, op.form());
         assertEquals(31, op.rt(), "rt=31 é XZR, mesma convenção de SystemRegister");
     }
@@ -2954,7 +2960,7 @@ class Aarch64DecoderCorpusTest {
         // Regressão do achado real: ic ialluis (CRm=1, != AT CRm=8) precisa continuar no bucket de
         // manutenção de cache, não ser afetada pelo carve-out de AT que também vive em CRn=0b0111
         // (agora decodificada como invalidação total do cache de instruções, F11).
-        Ir64Op.SystemInstruction op = (Ir64Op.SystemInstruction) decodeAt(0xd5087100);
+        SystemOp64.SystemInstruction op = (SystemOp64.SystemInstruction) decodeAt(0xd5087100);
         assertEquals(Ir64SystemInstructionOp.INSTRUCTION_CACHE_INVALIDATE_ALL, op.opcode());
     }
 
@@ -2966,7 +2972,7 @@ class Aarch64DecoderCorpusTest {
     void atS1e2rX0() {
         // at s1e2r, x0 (op1=4/0b100, CRm=8, op2=0)
         int word = 0xd5087800 | (0b100 << 16);
-        Ir64Op.AddressTranslate op = (Ir64Op.AddressTranslate) decodeAt(word);
+        SystemOp64.AddressTranslate op = (SystemOp64.AddressTranslate) decodeAt(word);
         assertEquals(Aarch64AddressTranslateForm.S1E2R, op.form());
         assertEquals(0, op.rt());
     }
@@ -2975,7 +2981,7 @@ class Aarch64DecoderCorpusTest {
     void atS1e2wX0() {
         // at s1e2w, x0 (op1=4, CRm=8, op2=1)
         int word = 0xd5087820 | (0b100 << 16);
-        Ir64Op.AddressTranslate op = (Ir64Op.AddressTranslate) decodeAt(word);
+        SystemOp64.AddressTranslate op = (SystemOp64.AddressTranslate) decodeAt(word);
         assertEquals(Aarch64AddressTranslateForm.S1E2W, op.form());
     }
 
@@ -2983,7 +2989,7 @@ class Aarch64DecoderCorpusTest {
     void atS1e3rX0() {
         // at s1e3r, x0 (op1=6/0b110, CRm=8, op2=0)
         int word = 0xd5087800 | (0b110 << 16);
-        Ir64Op.AddressTranslate op = (Ir64Op.AddressTranslate) decodeAt(word);
+        SystemOp64.AddressTranslate op = (SystemOp64.AddressTranslate) decodeAt(word);
         assertEquals(Aarch64AddressTranslateForm.S1E3R, op.form());
         assertEquals(0, op.rt());
     }
@@ -2992,7 +2998,7 @@ class Aarch64DecoderCorpusTest {
     void atS1e3wXzr() {
         // at s1e3w, xzr (op1=6, CRm=8, op2=1, rt=31)
         int word = 0xd508781f | (0b110 << 16) | (0b1 << 5);
-        Ir64Op.AddressTranslate op = (Ir64Op.AddressTranslate) decodeAt(word);
+        SystemOp64.AddressTranslate op = (SystemOp64.AddressTranslate) decodeAt(word);
         assertEquals(Aarch64AddressTranslateForm.S1E3W, op.form());
         assertEquals(31, op.rt());
     }
@@ -3013,7 +3019,7 @@ class Aarch64DecoderCorpusTest {
     void atS12e1rX0() {
         // at s12e1r, x0 (op1=4, CRm=8, op2=4, rt=0)
         int word = 0xd5087800 | (0b100 << 16) | (0b100 << 5);
-        Ir64Op.AddressTranslate op = (Ir64Op.AddressTranslate) decodeAt(word);
+        SystemOp64.AddressTranslate op = (SystemOp64.AddressTranslate) decodeAt(word);
         assertEquals(Aarch64AddressTranslateForm.S12E1R, op.form());
         assertEquals(0, op.rt());
     }
@@ -3022,7 +3028,7 @@ class Aarch64DecoderCorpusTest {
     void atS12e1wX0() {
         // at s12e1w, x0 (op1=4, CRm=8, op2=5)
         int word = 0xd5087800 | (0b100 << 16) | (0b101 << 5);
-        Ir64Op.AddressTranslate op = (Ir64Op.AddressTranslate) decodeAt(word);
+        SystemOp64.AddressTranslate op = (SystemOp64.AddressTranslate) decodeAt(word);
         assertEquals(Aarch64AddressTranslateForm.S12E1W, op.form());
     }
 
@@ -3030,7 +3036,7 @@ class Aarch64DecoderCorpusTest {
     void atS12e0rX0() {
         // at s12e0r, x0 (op1=4, CRm=8, op2=6)
         int word = 0xd5087800 | (0b100 << 16) | (0b110 << 5);
-        Ir64Op.AddressTranslate op = (Ir64Op.AddressTranslate) decodeAt(word);
+        SystemOp64.AddressTranslate op = (SystemOp64.AddressTranslate) decodeAt(word);
         assertEquals(Aarch64AddressTranslateForm.S12E0R, op.form());
     }
 
@@ -3038,7 +3044,7 @@ class Aarch64DecoderCorpusTest {
     void atS12e0wXzr() {
         // at s12e0w, xzr (op1=4, CRm=8, op2=7, rt=31)
         int word = 0xd508787f | (0b100 << 16) | (0b111 << 5);
-        Ir64Op.AddressTranslate op = (Ir64Op.AddressTranslate) decodeAt(word);
+        SystemOp64.AddressTranslate op = (SystemOp64.AddressTranslate) decodeAt(word);
         assertEquals(Aarch64AddressTranslateForm.S12E0W, op.form());
         assertEquals(31, op.rt());
     }
@@ -3067,7 +3073,7 @@ class Aarch64DecoderCorpusTest {
     void stnpNoAllocHintDoubleword() {
         // stnp x0, x1, [x2]: mesmo endereçamento funcional de STP offset (sem writeback) —
         // este emulador não modela cache/hints.
-        Ir64Op.LoadStorePair op = (Ir64Op.LoadStorePair) DECODER.decode(memory, 0x49c);
+        MemoryOp64.LoadStorePair op = (MemoryOp64.LoadStorePair) DECODER.decode(memory, 0x49c);
         assertFalse(op.load());
         assertEquals(0, op.rt());
         assertEquals(1, op.rt2());
@@ -3080,7 +3086,7 @@ class Aarch64DecoderCorpusTest {
 
     @Test
     void ldnpNoAllocHintDoubleword() {
-        Ir64Op.LoadStorePair op = (Ir64Op.LoadStorePair) DECODER.decode(memory, 0x4a0);
+        MemoryOp64.LoadStorePair op = (MemoryOp64.LoadStorePair) DECODER.decode(memory, 0x4a0);
         assertTrue(op.load());
         assertEquals(3, op.rt());
         assertEquals(4, op.rt2());
@@ -3090,21 +3096,21 @@ class Aarch64DecoderCorpusTest {
 
     @Test
     void stnpNoAllocHintWord() {
-        Ir64Op.LoadStorePair op = (Ir64Op.LoadStorePair) DECODER.decode(memory, 0x4a4);
+        MemoryOp64.LoadStorePair op = (MemoryOp64.LoadStorePair) DECODER.decode(memory, 0x4a4);
         assertFalse(op.load());
         assertFalse(op.wide());
     }
 
     @Test
     void ldnpNoAllocHintWord() {
-        Ir64Op.LoadStorePair op = (Ir64Op.LoadStorePair) DECODER.decode(memory, 0x4a8);
+        MemoryOp64.LoadStorePair op = (MemoryOp64.LoadStorePair) DECODER.decode(memory, 0x4a8);
         assertTrue(op.load());
         assertFalse(op.wide());
     }
 
     @Test
     void ldpswOffset() {
-        Ir64Op.LoadStorePair op = (Ir64Op.LoadStorePair) DECODER.decode(memory, 0x4ac);
+        MemoryOp64.LoadStorePair op = (MemoryOp64.LoadStorePair) DECODER.decode(memory, 0x4ac);
         assertTrue(op.load());
         assertEquals(0, op.rt());
         assertEquals(1, op.rt2());
@@ -3116,7 +3122,7 @@ class Aarch64DecoderCorpusTest {
 
     @Test
     void ldpswPreIndex() {
-        Ir64Op.LoadStorePair op = (Ir64Op.LoadStorePair) DECODER.decode(memory, 0x4b0);
+        MemoryOp64.LoadStorePair op = (MemoryOp64.LoadStorePair) DECODER.decode(memory, 0x4b0);
         assertTrue(op.signExtend());
         assertEquals(Ir64AddressingMode.PRE_INDEX, op.addressingMode());
         assertEquals(8L, op.immediate());
@@ -3124,14 +3130,14 @@ class Aarch64DecoderCorpusTest {
 
     @Test
     void ldpswPostIndex() {
-        Ir64Op.LoadStorePair op = (Ir64Op.LoadStorePair) DECODER.decode(memory, 0x4b4);
+        MemoryOp64.LoadStorePair op = (MemoryOp64.LoadStorePair) DECODER.decode(memory, 0x4b4);
         assertTrue(op.signExtend());
         assertEquals(Ir64AddressingMode.POST_INDEX, op.addressingMode());
         assertEquals(8L, op.immediate());
     }
 
     private static void assertPrfmNoop(long offset) {
-        Ir64Op.SystemInstruction op = (Ir64Op.SystemInstruction) DECODER.decode(memory, offset);
+        SystemOp64.SystemInstruction op = (SystemOp64.SystemInstruction) DECODER.decode(memory, offset);
         assertEquals(Ir64SystemInstructionOp.NOP_HINT, op.opcode());
     }
 
@@ -3155,7 +3161,7 @@ class Aarch64DecoderCorpusTest {
         // ldtr x0, [x1]: mesmo endereçamento funcional de LDUR (bug real corrigido pela B8.1 —
         // antes deste fix, idx=10+bit21=0 caía no ramo REGISTER_OFFSET, tratando o imm9 como
         // Rm/option/S).
-        Ir64Op.Load64 op = (Ir64Op.Load64) DECODER.decode(memory, 0x4c4);
+        MemoryOp64.Load64 op = (MemoryOp64.Load64) DECODER.decode(memory, 0x4c4);
         assertEquals(0, op.rt());
         assertEquals(1, op.rn());
         assertEquals(Ir64AddressingMode.OFFSET, op.addressingMode());
@@ -3166,7 +3172,7 @@ class Aarch64DecoderCorpusTest {
 
     @Test
     void sttrUnprivilegedDoubleword() {
-        Ir64Op.Store64 op = (Ir64Op.Store64) DECODER.decode(memory, 0x4c8);
+        MemoryOp64.Store64 op = (MemoryOp64.Store64) DECODER.decode(memory, 0x4c8);
         assertEquals(2, op.rt());
         assertEquals(3, op.rn());
         assertEquals(Ir64AddressingMode.OFFSET, op.addressingMode());
@@ -3174,20 +3180,20 @@ class Aarch64DecoderCorpusTest {
 
     @Test
     void ldtrUnprivilegedWord() {
-        Ir64Op.Load64 op = (Ir64Op.Load64) DECODER.decode(memory, 0x4cc);
+        MemoryOp64.Load64 op = (MemoryOp64.Load64) DECODER.decode(memory, 0x4cc);
         assertFalse(op.wide());
         assertFalse(op.signExtend());
     }
 
     @Test
     void sttrUnprivilegedWord() {
-        Ir64Op.Store64 op = (Ir64Op.Store64) DECODER.decode(memory, 0x4d0);
+        MemoryOp64.Store64 op = (MemoryOp64.Store64) DECODER.decode(memory, 0x4d0);
         assertFalse(op.wide());
     }
 
     @Test
     void ldtrsbSignExtendToX() {
-        Ir64Op.Load64 op = (Ir64Op.Load64) DECODER.decode(memory, 0x4d4);
+        MemoryOp64.Load64 op = (MemoryOp64.Load64) DECODER.decode(memory, 0x4d4);
         assertEquals(Ir64MemSize.BYTE, op.size());
         assertTrue(op.signExtend());
         assertTrue(op.wide());
@@ -3195,7 +3201,7 @@ class Aarch64DecoderCorpusTest {
 
     @Test
     void ldtrshSignExtendToX() {
-        Ir64Op.Load64 op = (Ir64Op.Load64) DECODER.decode(memory, 0x4d8);
+        MemoryOp64.Load64 op = (MemoryOp64.Load64) DECODER.decode(memory, 0x4d8);
         assertEquals(Ir64MemSize.HALF, op.size());
         assertTrue(op.signExtend());
         assertTrue(op.wide());
@@ -3203,7 +3209,7 @@ class Aarch64DecoderCorpusTest {
 
     @Test
     void ldtrswSignExtendToX() {
-        Ir64Op.Load64 op = (Ir64Op.Load64) DECODER.decode(memory, 0x4dc);
+        MemoryOp64.Load64 op = (MemoryOp64.Load64) DECODER.decode(memory, 0x4dc);
         assertEquals(Ir64MemSize.WORD, op.size());
         assertTrue(op.signExtend());
         assertTrue(op.wide());
@@ -3211,7 +3217,7 @@ class Aarch64DecoderCorpusTest {
 
     @Test
     void ldxpDoubleword() {
-        Ir64Op.LoadExclusivePair op = (Ir64Op.LoadExclusivePair) DECODER.decode(memory, 0x4e0);
+        MemoryOp64.LoadExclusivePair op = (MemoryOp64.LoadExclusivePair) DECODER.decode(memory, 0x4e0);
         assertEquals(0, op.rt());
         assertEquals(1, op.rt2());
         assertEquals(2, op.rn());
@@ -3223,7 +3229,7 @@ class Aarch64DecoderCorpusTest {
     void stxpDoublewordPair() {
         // stxp w3, x4, x5, [x6]: Rs=status É SEMPRE W (w3), independente da largura do par
         // (x4/x5 aqui) — o decoder deriva `wide` só de `sz` (doubleword, sz=3).
-        Ir64Op.StoreExclusivePair op = (Ir64Op.StoreExclusivePair) DECODER.decode(memory, 0x4e4);
+        MemoryOp64.StoreExclusivePair op = (MemoryOp64.StoreExclusivePair) DECODER.decode(memory, 0x4e4);
         assertEquals(3, op.rs());
         assertEquals(4, op.rt());
         assertEquals(5, op.rt2());
@@ -3233,7 +3239,7 @@ class Aarch64DecoderCorpusTest {
 
     @Test
     void ldaxpDoubleword() {
-        Ir64Op.LoadExclusivePair op = (Ir64Op.LoadExclusivePair) DECODER.decode(memory, 0x4e8);
+        MemoryOp64.LoadExclusivePair op = (MemoryOp64.LoadExclusivePair) DECODER.decode(memory, 0x4e8);
         assertEquals(7, op.rt());
         assertEquals(8, op.rt2());
         assertEquals(9, op.rn());
@@ -3242,7 +3248,7 @@ class Aarch64DecoderCorpusTest {
 
     @Test
     void stlxpDoubleword() {
-        Ir64Op.StoreExclusivePair op = (Ir64Op.StoreExclusivePair) DECODER.decode(memory, 0x4ec);
+        MemoryOp64.StoreExclusivePair op = (MemoryOp64.StoreExclusivePair) DECODER.decode(memory, 0x4ec);
         assertEquals(10, op.rs());
         assertEquals(11, op.rt());
         assertEquals(12, op.rt2());
@@ -3252,7 +3258,7 @@ class Aarch64DecoderCorpusTest {
 
     @Test
     void ldxpWord() {
-        Ir64Op.LoadExclusivePair op = (Ir64Op.LoadExclusivePair) DECODER.decode(memory, 0x4f0);
+        MemoryOp64.LoadExclusivePair op = (MemoryOp64.LoadExclusivePair) DECODER.decode(memory, 0x4f0);
         assertEquals(14, op.rt());
         assertEquals(15, op.rt2());
         assertEquals(16, op.rn());
@@ -3261,7 +3267,7 @@ class Aarch64DecoderCorpusTest {
 
     @Test
     void stxpWord() {
-        Ir64Op.StoreExclusivePair op = (Ir64Op.StoreExclusivePair) DECODER.decode(memory, 0x4f4);
+        MemoryOp64.StoreExclusivePair op = (MemoryOp64.StoreExclusivePair) DECODER.decode(memory, 0x4f4);
         assertEquals(17, op.rs());
         assertEquals(18, op.rt());
         assertEquals(19, op.rt2());
@@ -3273,7 +3279,7 @@ class Aarch64DecoderCorpusTest {
     void ldarDoubleword() {
         // ldar x0, [x1]: reaproveita Load64 diretamente (sem monitor de exclusividade) — ver
         // Aarch64Decoder#decodeOrderedSingle.
-        Ir64Op.Load64 op = (Ir64Op.Load64) DECODER.decode(memory, 0x4f8);
+        MemoryOp64.Load64 op = (MemoryOp64.Load64) DECODER.decode(memory, 0x4f8);
         assertEquals(0, op.rt());
         assertEquals(1, op.rn());
         assertEquals(Ir64AddressingMode.OFFSET, op.addressingMode());
@@ -3284,7 +3290,7 @@ class Aarch64DecoderCorpusTest {
 
     @Test
     void stlrDoubleword() {
-        Ir64Op.Store64 op = (Ir64Op.Store64) DECODER.decode(memory, 0x4fc);
+        MemoryOp64.Store64 op = (MemoryOp64.Store64) DECODER.decode(memory, 0x4fc);
         assertEquals(2, op.rt());
         assertEquals(3, op.rn());
         assertTrue(op.wide());
@@ -3292,40 +3298,40 @@ class Aarch64DecoderCorpusTest {
 
     @Test
     void ldarWord() {
-        Ir64Op.Load64 op = (Ir64Op.Load64) DECODER.decode(memory, 0x500);
+        MemoryOp64.Load64 op = (MemoryOp64.Load64) DECODER.decode(memory, 0x500);
         assertFalse(op.wide());
         assertEquals(Ir64MemSize.WORD, op.size());
     }
 
     @Test
     void stlrWord() {
-        Ir64Op.Store64 op = (Ir64Op.Store64) DECODER.decode(memory, 0x504);
+        MemoryOp64.Store64 op = (MemoryOp64.Store64) DECODER.decode(memory, 0x504);
         assertFalse(op.wide());
         assertEquals(Ir64MemSize.WORD, op.size());
     }
 
     @Test
     void ldarbByte() {
-        Ir64Op.Load64 op = (Ir64Op.Load64) DECODER.decode(memory, 0x508);
+        MemoryOp64.Load64 op = (MemoryOp64.Load64) DECODER.decode(memory, 0x508);
         assertEquals(Ir64MemSize.BYTE, op.size());
         assertFalse(op.signExtend());
     }
 
     @Test
     void stlrbByte() {
-        Ir64Op.Store64 op = (Ir64Op.Store64) DECODER.decode(memory, 0x50c);
+        MemoryOp64.Store64 op = (MemoryOp64.Store64) DECODER.decode(memory, 0x50c);
         assertEquals(Ir64MemSize.BYTE, op.size());
     }
 
     @Test
     void ldarhHalf() {
-        Ir64Op.Load64 op = (Ir64Op.Load64) DECODER.decode(memory, 0x510);
+        MemoryOp64.Load64 op = (MemoryOp64.Load64) DECODER.decode(memory, 0x510);
         assertEquals(Ir64MemSize.HALF, op.size());
     }
 
     @Test
     void stlrhHalf() {
-        Ir64Op.Store64 op = (Ir64Op.Store64) DECODER.decode(memory, 0x514);
+        MemoryOp64.Store64 op = (MemoryOp64.Store64) DECODER.decode(memory, 0x514);
         assertEquals(Ir64MemSize.HALF, op.size());
     }
 
@@ -3370,7 +3376,7 @@ class Aarch64DecoderCorpusTest {
 
     @Test
     void adc() {
-        Ir64Op.AluWithCarry op = (Ir64Op.AluWithCarry) DECODER.decode(memory, 0x530);
+        IntegerOp64.AluWithCarry op = (IntegerOp64.AluWithCarry) DECODER.decode(memory, 0x530);
         assertFalse(op.subtract());
         assertEquals(0, op.dst());
         assertEquals(1, op.src1());
@@ -3381,7 +3387,7 @@ class Aarch64DecoderCorpusTest {
 
     @Test
     void adcsSetsFlags() {
-        Ir64Op.AluWithCarry op = (Ir64Op.AluWithCarry) DECODER.decode(memory, 0x534);
+        IntegerOp64.AluWithCarry op = (IntegerOp64.AluWithCarry) DECODER.decode(memory, 0x534);
         assertFalse(op.subtract());
         assertEquals(3, op.dst());
         assertEquals(4, op.src1());
@@ -3391,7 +3397,7 @@ class Aarch64DecoderCorpusTest {
 
     @Test
     void sbc() {
-        Ir64Op.AluWithCarry op = (Ir64Op.AluWithCarry) DECODER.decode(memory, 0x538);
+        IntegerOp64.AluWithCarry op = (IntegerOp64.AluWithCarry) DECODER.decode(memory, 0x538);
         assertTrue(op.subtract());
         assertEquals(6, op.dst());
         assertEquals(7, op.src1());
@@ -3401,7 +3407,7 @@ class Aarch64DecoderCorpusTest {
 
     @Test
     void sbcsSetsFlags() {
-        Ir64Op.AluWithCarry op = (Ir64Op.AluWithCarry) DECODER.decode(memory, 0x53c);
+        IntegerOp64.AluWithCarry op = (IntegerOp64.AluWithCarry) DECODER.decode(memory, 0x53c);
         assertTrue(op.subtract());
         assertEquals(9, op.dst());
         assertTrue(op.setFlags());
@@ -3409,7 +3415,7 @@ class Aarch64DecoderCorpusTest {
 
     @Test
     void adcNarrow() {
-        Ir64Op.AluWithCarry op = (Ir64Op.AluWithCarry) DECODER.decode(memory, 0x540);
+        IntegerOp64.AluWithCarry op = (IntegerOp64.AluWithCarry) DECODER.decode(memory, 0x540);
         assertEquals(12, op.dst());
         assertEquals(13, op.src1());
         assertEquals(14, op.src2());
@@ -3418,7 +3424,7 @@ class Aarch64DecoderCorpusTest {
 
     @Test
     void sbcNarrow() {
-        Ir64Op.AluWithCarry op = (Ir64Op.AluWithCarry) DECODER.decode(memory, 0x544);
+        IntegerOp64.AluWithCarry op = (IntegerOp64.AluWithCarry) DECODER.decode(memory, 0x544);
         assertTrue(op.subtract());
         assertEquals(15, op.dst());
         assertFalse(op.wide());
@@ -3426,7 +3432,7 @@ class Aarch64DecoderCorpusTest {
 
     @Test
     void extrWide() {
-        Ir64Op.Extract op = (Ir64Op.Extract) DECODER.decode(memory, 0x548);
+        IntegerOp64.Extract op = (IntegerOp64.Extract) DECODER.decode(memory, 0x548);
         assertEquals(0, op.dst());
         assertEquals(1, op.src1());
         assertEquals(2, op.src2());
@@ -3436,7 +3442,7 @@ class Aarch64DecoderCorpusTest {
 
     @Test
     void extrNarrow() {
-        Ir64Op.Extract op = (Ir64Op.Extract) DECODER.decode(memory, 0x54c);
+        IntegerOp64.Extract op = (IntegerOp64.Extract) DECODER.decode(memory, 0x54c);
         assertEquals(3, op.dst());
         assertEquals(4, op.src1());
         assertEquals(5, op.src2());
@@ -3446,7 +3452,7 @@ class Aarch64DecoderCorpusTest {
 
     @Test
     void rbitWide() {
-        Ir64Op.DataProcessing1Source op = (Ir64Op.DataProcessing1Source) DECODER.decode(memory, 0x550);
+        IntegerOp64.DataProcessing1Source op = (IntegerOp64.DataProcessing1Source) DECODER.decode(memory, 0x550);
         assertEquals(Ir64OneSourceOp.RBIT, op.opcode());
         assertEquals(0, op.dst());
         assertEquals(1, op.src());
@@ -3455,7 +3461,7 @@ class Aarch64DecoderCorpusTest {
 
     @Test
     void rbitNarrow() {
-        Ir64Op.DataProcessing1Source op = (Ir64Op.DataProcessing1Source) DECODER.decode(memory, 0x554);
+        IntegerOp64.DataProcessing1Source op = (IntegerOp64.DataProcessing1Source) DECODER.decode(memory, 0x554);
         assertEquals(Ir64OneSourceOp.RBIT, op.opcode());
         assertEquals(2, op.dst());
         assertEquals(3, op.src());
@@ -3464,7 +3470,7 @@ class Aarch64DecoderCorpusTest {
 
     @Test
     void rev16Wide() {
-        Ir64Op.DataProcessing1Source op = (Ir64Op.DataProcessing1Source) DECODER.decode(memory, 0x558);
+        IntegerOp64.DataProcessing1Source op = (IntegerOp64.DataProcessing1Source) DECODER.decode(memory, 0x558);
         assertEquals(Ir64OneSourceOp.REV16, op.opcode());
         assertEquals(4, op.dst());
         assertEquals(5, op.src());
@@ -3473,7 +3479,7 @@ class Aarch64DecoderCorpusTest {
 
     @Test
     void rev16Narrow() {
-        Ir64Op.DataProcessing1Source op = (Ir64Op.DataProcessing1Source) DECODER.decode(memory, 0x55c);
+        IntegerOp64.DataProcessing1Source op = (IntegerOp64.DataProcessing1Source) DECODER.decode(memory, 0x55c);
         assertEquals(Ir64OneSourceOp.REV16, op.opcode());
         assertFalse(op.wide());
     }
@@ -3481,7 +3487,7 @@ class Aarch64DecoderCorpusTest {
     @Test
     void rev32() {
         // "rev32 x8,x9" — mesmo opcode de "rev w,w" (Ir64OneSourceOp#REV32), aqui na forma X.
-        Ir64Op.DataProcessing1Source op = (Ir64Op.DataProcessing1Source) DECODER.decode(memory, 0x560);
+        IntegerOp64.DataProcessing1Source op = (IntegerOp64.DataProcessing1Source) DECODER.decode(memory, 0x560);
         assertEquals(Ir64OneSourceOp.REV32, op.opcode());
         assertEquals(8, op.dst());
         assertEquals(9, op.src());
@@ -3491,7 +3497,7 @@ class Aarch64DecoderCorpusTest {
     @Test
     void revWideIsRev64() {
         // "rev x10,x11" (opcode=0b000011, sf=1) é o REV64 do encoding — só existe na forma X.
-        Ir64Op.DataProcessing1Source op = (Ir64Op.DataProcessing1Source) DECODER.decode(memory, 0x564);
+        IntegerOp64.DataProcessing1Source op = (IntegerOp64.DataProcessing1Source) DECODER.decode(memory, 0x564);
         assertEquals(Ir64OneSourceOp.REV64, op.opcode());
         assertEquals(10, op.dst());
         assertEquals(11, op.src());
@@ -3501,7 +3507,7 @@ class Aarch64DecoderCorpusTest {
     void revNarrowIsRev32Opcode() {
         // "rev w12,w13" — MESMO opcode de "rev32 x,x" (0b000010), aqui na forma W (única forma
         // possível: REV64 não existe com sf=0).
-        Ir64Op.DataProcessing1Source op = (Ir64Op.DataProcessing1Source) DECODER.decode(memory, 0x568);
+        IntegerOp64.DataProcessing1Source op = (IntegerOp64.DataProcessing1Source) DECODER.decode(memory, 0x568);
         assertEquals(Ir64OneSourceOp.REV32, op.opcode());
         assertEquals(12, op.dst());
         assertEquals(13, op.src());
@@ -3510,7 +3516,7 @@ class Aarch64DecoderCorpusTest {
 
     @Test
     void clzWide() {
-        Ir64Op.DataProcessing1Source op = (Ir64Op.DataProcessing1Source) DECODER.decode(memory, 0x56c);
+        IntegerOp64.DataProcessing1Source op = (IntegerOp64.DataProcessing1Source) DECODER.decode(memory, 0x56c);
         assertEquals(Ir64OneSourceOp.CLZ, op.opcode());
         assertEquals(14, op.dst());
         assertEquals(15, op.src());
@@ -3518,14 +3524,14 @@ class Aarch64DecoderCorpusTest {
 
     @Test
     void clzNarrow() {
-        Ir64Op.DataProcessing1Source op = (Ir64Op.DataProcessing1Source) DECODER.decode(memory, 0x570);
+        IntegerOp64.DataProcessing1Source op = (IntegerOp64.DataProcessing1Source) DECODER.decode(memory, 0x570);
         assertEquals(Ir64OneSourceOp.CLZ, op.opcode());
         assertFalse(op.wide());
     }
 
     @Test
     void clsWide() {
-        Ir64Op.DataProcessing1Source op = (Ir64Op.DataProcessing1Source) DECODER.decode(memory, 0x574);
+        IntegerOp64.DataProcessing1Source op = (IntegerOp64.DataProcessing1Source) DECODER.decode(memory, 0x574);
         assertEquals(Ir64OneSourceOp.CLS, op.opcode());
         assertEquals(18, op.dst());
         assertEquals(19, op.src());
@@ -3533,14 +3539,14 @@ class Aarch64DecoderCorpusTest {
 
     @Test
     void clsNarrow() {
-        Ir64Op.DataProcessing1Source op = (Ir64Op.DataProcessing1Source) DECODER.decode(memory, 0x578);
+        IntegerOp64.DataProcessing1Source op = (IntegerOp64.DataProcessing1Source) DECODER.decode(memory, 0x578);
         assertEquals(Ir64OneSourceOp.CLS, op.opcode());
         assertFalse(op.wide());
     }
 
     @Test
     void cntWide() {
-        Ir64Op.DataProcessing1Source op = (Ir64Op.DataProcessing1Source) DECODER.decode(memory, 0x57c);
+        IntegerOp64.DataProcessing1Source op = (IntegerOp64.DataProcessing1Source) DECODER.decode(memory, 0x57c);
         assertEquals(Ir64OneSourceOp.CNT, op.opcode());
         assertEquals(22, op.dst());
         assertEquals(23, op.src());
@@ -3548,14 +3554,14 @@ class Aarch64DecoderCorpusTest {
 
     @Test
     void cntNarrow() {
-        Ir64Op.DataProcessing1Source op = (Ir64Op.DataProcessing1Source) DECODER.decode(memory, 0x580);
+        IntegerOp64.DataProcessing1Source op = (IntegerOp64.DataProcessing1Source) DECODER.decode(memory, 0x580);
         assertEquals(Ir64OneSourceOp.CNT, op.opcode());
         assertFalse(op.wide());
     }
 
     @Test
     void smaddl() {
-        Ir64Op.MultiplyAccumulateLong op = (Ir64Op.MultiplyAccumulateLong) DECODER.decode(memory, 0x584);
+        IntegerOp64.MultiplyAccumulateLong op = (IntegerOp64.MultiplyAccumulateLong) DECODER.decode(memory, 0x584);
         assertFalse(op.subtract());
         assertTrue(op.signed());
         assertEquals(0, op.dst());
@@ -3566,7 +3572,7 @@ class Aarch64DecoderCorpusTest {
 
     @Test
     void smsubl() {
-        Ir64Op.MultiplyAccumulateLong op = (Ir64Op.MultiplyAccumulateLong) DECODER.decode(memory, 0x588);
+        IntegerOp64.MultiplyAccumulateLong op = (IntegerOp64.MultiplyAccumulateLong) DECODER.decode(memory, 0x588);
         assertTrue(op.subtract());
         assertTrue(op.signed());
         assertEquals(4, op.dst());
@@ -3575,7 +3581,7 @@ class Aarch64DecoderCorpusTest {
 
     @Test
     void umaddl() {
-        Ir64Op.MultiplyAccumulateLong op = (Ir64Op.MultiplyAccumulateLong) DECODER.decode(memory, 0x58c);
+        IntegerOp64.MultiplyAccumulateLong op = (IntegerOp64.MultiplyAccumulateLong) DECODER.decode(memory, 0x58c);
         assertFalse(op.subtract());
         assertFalse(op.signed());
         assertEquals(8, op.dst());
@@ -3584,7 +3590,7 @@ class Aarch64DecoderCorpusTest {
 
     @Test
     void umsubl() {
-        Ir64Op.MultiplyAccumulateLong op = (Ir64Op.MultiplyAccumulateLong) DECODER.decode(memory, 0x590);
+        IntegerOp64.MultiplyAccumulateLong op = (IntegerOp64.MultiplyAccumulateLong) DECODER.decode(memory, 0x590);
         assertTrue(op.subtract());
         assertFalse(op.signed());
         assertEquals(12, op.dst());
@@ -3593,7 +3599,7 @@ class Aarch64DecoderCorpusTest {
 
     @Test
     void smulh() {
-        Ir64Op.MultiplyHigh op = (Ir64Op.MultiplyHigh) DECODER.decode(memory, 0x594);
+        IntegerOp64.MultiplyHigh op = (IntegerOp64.MultiplyHigh) DECODER.decode(memory, 0x594);
         assertTrue(op.signed());
         assertEquals(16, op.dst());
         assertEquals(17, op.src1());
@@ -3602,7 +3608,7 @@ class Aarch64DecoderCorpusTest {
 
     @Test
     void umulh() {
-        Ir64Op.MultiplyHigh op = (Ir64Op.MultiplyHigh) DECODER.decode(memory, 0x598);
+        IntegerOp64.MultiplyHigh op = (IntegerOp64.MultiplyHigh) DECODER.decode(memory, 0x598);
         assertFalse(op.signed());
         assertEquals(19, op.dst());
         assertEquals(20, op.src1());
@@ -3665,25 +3671,25 @@ class Aarch64DecoderCorpusTest {
 
     @Test
     void clrex() {
-        Ir64Op.SystemInstruction op = (Ir64Op.SystemInstruction) DECODER.decode(memory, 0x5bc);
+        SystemOp64.SystemInstruction op = (SystemOp64.SystemInstruction) DECODER.decode(memory, 0x5bc);
         assertEquals(Ir64SystemInstructionOp.CLEAR_EXCLUSIVE, op.opcode());
     }
 
     @Test
     void sb() {
-        Ir64Op.SystemInstruction op = (Ir64Op.SystemInstruction) DECODER.decode(memory, 0x5c0);
+        SystemOp64.SystemInstruction op = (SystemOp64.SystemInstruction) DECODER.decode(memory, 0x5c0);
         assertEquals(Ir64SystemInstructionOp.BARRIER, op.opcode());
     }
 
     @Test
     void brk() {
-        Ir64Op.Breakpoint op = (Ir64Op.Breakpoint) DECODER.decode(memory, 0x5c4);
+        SystemOp64.Breakpoint op = (SystemOp64.Breakpoint) DECODER.decode(memory, 0x5c4);
         assertEquals(0x1234, op.immediate());
     }
 
     @Test
     void hlt() {
-        assertInstanceOf(Ir64Op.UndefinedInstructionTrap.class, DECODER.decode(memory, 0x5c8));
+        assertInstanceOf(SystemOp64.UndefinedInstructionTrap.class, DECODER.decode(memory, 0x5c8));
     }
 
     @Test
@@ -3702,7 +3708,7 @@ class Aarch64DecoderCorpusTest {
 
     @Test
     void msrSpsel() {
-        Ir64Op.SystemInstruction op = (Ir64Op.SystemInstruction) DECODER.decode(memory, 0x5d4);
+        SystemOp64.SystemInstruction op = (SystemOp64.SystemInstruction) DECODER.decode(memory, 0x5d4);
         assertEquals(Ir64SystemInstructionOp.PSTATE_FIELD_NOP, op.opcode());
     }
 
@@ -3710,13 +3716,13 @@ class Aarch64DecoderCorpusTest {
     void msrSsbs() {
         // "ssbs" é o mnemônico real do assembler para o campo que o QEMU (e este decoder) chama
         // internamente de SBSS.
-        Ir64Op.SystemInstruction op = (Ir64Op.SystemInstruction) DECODER.decode(memory, 0x5d8);
+        SystemOp64.SystemInstruction op = (SystemOp64.SystemInstruction) DECODER.decode(memory, 0x5d8);
         assertEquals(Ir64SystemInstructionOp.PSTATE_FIELD_NOP, op.opcode());
     }
 
     @Test
     void msrTco() {
-        Ir64Op.SystemInstruction op = (Ir64Op.SystemInstruction) DECODER.decode(memory, 0x5dc);
+        SystemOp64.SystemInstruction op = (SystemOp64.SystemInstruction) DECODER.decode(memory, 0x5dc);
         assertEquals(Ir64SystemInstructionOp.PSTATE_FIELD_NOP, op.opcode());
     }
 
@@ -3736,14 +3742,14 @@ class Aarch64DecoderCorpusTest {
 
     @Test
     void msrDaifSet() {
-        Ir64Op.InterruptMask op = (Ir64Op.InterruptMask) DECODER.decode(memory, 0x5e8);
+        SystemOp64.InterruptMask op = (SystemOp64.InterruptMask) DECODER.decode(memory, 0x5e8);
         assertTrue(op.set());
         assertEquals(0xF, op.mask());
     }
 
     @Test
     void msrDaifClear() {
-        Ir64Op.InterruptMask op = (Ir64Op.InterruptMask) DECODER.decode(memory, 0x5ec);
+        SystemOp64.InterruptMask op = (SystemOp64.InterruptMask) DECODER.decode(memory, 0x5ec);
         assertFalse(op.set());
         assertEquals(0xF, op.mask());
     }
@@ -3752,7 +3758,7 @@ class Aarch64DecoderCorpusTest {
     void tlbiVaePerVaFormDecodesAsInvalidateAll() {
         // tlbi vae1, x0 — B8.3 amplia TLBI para "qualquer forma do regime EL1", ver
         // decodeSystemInstructionSys.
-        Ir64Op.SystemInstruction op = (Ir64Op.SystemInstruction) DECODER.decode(memory, 0x5f0);
+        SystemOp64.SystemInstruction op = (SystemOp64.SystemInstruction) DECODER.decode(memory, 0x5f0);
         assertEquals(Ir64SystemInstructionOp.TLBI_ALL, op.opcode());
     }
 
@@ -3788,8 +3794,8 @@ class Aarch64DecoderCorpusTest {
 
     @Test
     void fmaxSingle() {
-        Ir64Op.Fp64Alu op = (Ir64Op.Fp64Alu) DECODER.decode(memory, 0x608);
-        assertEquals(Ir64Op.Fp64Operation.MAX, op.op());
+        FpOp64.Alu op = (FpOp64.Alu) DECODER.decode(memory, 0x608);
+        assertEquals(FpOp64.Fp64Operation.MAX, op.op());
         assertFalse(op.doublePrecision());
         assertEquals(4, op.vd());
         assertEquals(5, op.vn());
@@ -3798,15 +3804,15 @@ class Aarch64DecoderCorpusTest {
 
     @Test
     void fmaxDouble() {
-        Ir64Op.Fp64Alu op = (Ir64Op.Fp64Alu) DECODER.decode(memory, 0x60c);
-        assertEquals(Ir64Op.Fp64Operation.MAX, op.op());
+        FpOp64.Alu op = (FpOp64.Alu) DECODER.decode(memory, 0x60c);
+        assertEquals(FpOp64.Fp64Operation.MAX, op.op());
         assertTrue(op.doublePrecision());
     }
 
     @Test
     void fminSingle() {
-        Ir64Op.Fp64Alu op = (Ir64Op.Fp64Alu) DECODER.decode(memory, 0x610);
-        assertEquals(Ir64Op.Fp64Operation.MIN, op.op());
+        FpOp64.Alu op = (FpOp64.Alu) DECODER.decode(memory, 0x610);
+        assertEquals(FpOp64.Fp64Operation.MIN, op.op());
         assertFalse(op.doublePrecision());
         assertEquals(7, op.vd());
         assertEquals(8, op.vn());
@@ -3815,15 +3821,15 @@ class Aarch64DecoderCorpusTest {
 
     @Test
     void fminDouble() {
-        Ir64Op.Fp64Alu op = (Ir64Op.Fp64Alu) DECODER.decode(memory, 0x614);
-        assertEquals(Ir64Op.Fp64Operation.MIN, op.op());
+        FpOp64.Alu op = (FpOp64.Alu) DECODER.decode(memory, 0x614);
+        assertEquals(FpOp64.Fp64Operation.MIN, op.op());
         assertTrue(op.doublePrecision());
     }
 
     @Test
     void fmaxnmSingle() {
-        Ir64Op.Fp64Alu op = (Ir64Op.Fp64Alu) DECODER.decode(memory, 0x618);
-        assertEquals(Ir64Op.Fp64Operation.MAXNM, op.op());
+        FpOp64.Alu op = (FpOp64.Alu) DECODER.decode(memory, 0x618);
+        assertEquals(FpOp64.Fp64Operation.MAXNM, op.op());
         assertFalse(op.doublePrecision());
         assertEquals(10, op.vd());
         assertEquals(11, op.vn());
@@ -3832,15 +3838,15 @@ class Aarch64DecoderCorpusTest {
 
     @Test
     void fmaxnmDouble() {
-        Ir64Op.Fp64Alu op = (Ir64Op.Fp64Alu) DECODER.decode(memory, 0x61c);
-        assertEquals(Ir64Op.Fp64Operation.MAXNM, op.op());
+        FpOp64.Alu op = (FpOp64.Alu) DECODER.decode(memory, 0x61c);
+        assertEquals(FpOp64.Fp64Operation.MAXNM, op.op());
         assertTrue(op.doublePrecision());
     }
 
     @Test
     void fminnmSingle() {
-        Ir64Op.Fp64Alu op = (Ir64Op.Fp64Alu) DECODER.decode(memory, 0x620);
-        assertEquals(Ir64Op.Fp64Operation.MINNM, op.op());
+        FpOp64.Alu op = (FpOp64.Alu) DECODER.decode(memory, 0x620);
+        assertEquals(FpOp64.Fp64Operation.MINNM, op.op());
         assertFalse(op.doublePrecision());
         assertEquals(13, op.vd());
         assertEquals(14, op.vn());
@@ -3849,15 +3855,15 @@ class Aarch64DecoderCorpusTest {
 
     @Test
     void fminnmDouble() {
-        Ir64Op.Fp64Alu op = (Ir64Op.Fp64Alu) DECODER.decode(memory, 0x624);
-        assertEquals(Ir64Op.Fp64Operation.MINNM, op.op());
+        FpOp64.Alu op = (FpOp64.Alu) DECODER.decode(memory, 0x624);
+        assertEquals(FpOp64.Fp64Operation.MINNM, op.op());
         assertTrue(op.doublePrecision());
     }
 
     @Test
     void fnmulSingle() {
-        Ir64Op.Fp64Alu op = (Ir64Op.Fp64Alu) DECODER.decode(memory, 0x628);
-        assertEquals(Ir64Op.Fp64Operation.NMUL, op.op());
+        FpOp64.Alu op = (FpOp64.Alu) DECODER.decode(memory, 0x628);
+        assertEquals(FpOp64.Fp64Operation.NMUL, op.op());
         assertFalse(op.doublePrecision());
         assertEquals(1, op.vd());
         assertEquals(2, op.vn());
@@ -3866,8 +3872,8 @@ class Aarch64DecoderCorpusTest {
 
     @Test
     void fnmulDouble() {
-        Ir64Op.Fp64Alu op = (Ir64Op.Fp64Alu) DECODER.decode(memory, 0x62c);
-        assertEquals(Ir64Op.Fp64Operation.NMUL, op.op());
+        FpOp64.Alu op = (FpOp64.Alu) DECODER.decode(memory, 0x62c);
+        assertEquals(FpOp64.Fp64Operation.NMUL, op.op());
         assertTrue(op.doublePrecision());
     }
 
@@ -3875,8 +3881,8 @@ class Aarch64DecoderCorpusTest {
     void fsqrtSingle() {
         // fsqrt s16, s17 — 1-source (unário), operando único em `vm` (Rn do encoding), mesma
         // convenção de fnegSingle/fabsSingle.
-        Ir64Op.Fp64Alu op = (Ir64Op.Fp64Alu) DECODER.decode(memory, 0x630);
-        assertEquals(Ir64Op.Fp64Operation.SQRT, op.op());
+        FpOp64.Alu op = (FpOp64.Alu) DECODER.decode(memory, 0x630);
+        assertEquals(FpOp64.Fp64Operation.SQRT, op.op());
         assertFalse(op.doublePrecision());
         assertEquals(16, op.vd());
         assertEquals(17, op.vm());
@@ -3884,8 +3890,8 @@ class Aarch64DecoderCorpusTest {
 
     @Test
     void fsqrtDouble() {
-        Ir64Op.Fp64Alu op = (Ir64Op.Fp64Alu) DECODER.decode(memory, 0x634);
-        assertEquals(Ir64Op.Fp64Operation.SQRT, op.op());
+        FpOp64.Alu op = (FpOp64.Alu) DECODER.decode(memory, 0x634);
+        assertEquals(FpOp64.Fp64Operation.SQRT, op.op());
         assertTrue(op.doublePrecision());
         assertEquals(16, op.vd());
         assertEquals(17, op.vm());
@@ -3893,7 +3899,7 @@ class Aarch64DecoderCorpusTest {
 
     @Test
     void fmaddSingle() {
-        Ir64Op.Fp64MultiplyAdd op = (Ir64Op.Fp64MultiplyAdd) DECODER.decode(memory, 0x638);
+        FpOp64.MultiplyAdd op = (FpOp64.MultiplyAdd) DECODER.decode(memory, 0x638);
         assertFalse(op.doublePrecision());
         assertFalse(op.negateAddend());
         assertFalse(op.negateProduct());
@@ -3905,7 +3911,7 @@ class Aarch64DecoderCorpusTest {
 
     @Test
     void fmaddDouble() {
-        Ir64Op.Fp64MultiplyAdd op = (Ir64Op.Fp64MultiplyAdd) DECODER.decode(memory, 0x63c);
+        FpOp64.MultiplyAdd op = (FpOp64.MultiplyAdd) DECODER.decode(memory, 0x63c);
         assertTrue(op.doublePrecision());
         assertFalse(op.negateAddend());
         assertFalse(op.negateProduct());
@@ -3917,7 +3923,7 @@ class Aarch64DecoderCorpusTest {
 
     @Test
     void fmsubSingle() {
-        Ir64Op.Fp64MultiplyAdd op = (Ir64Op.Fp64MultiplyAdd) DECODER.decode(memory, 0x640);
+        FpOp64.MultiplyAdd op = (FpOp64.MultiplyAdd) DECODER.decode(memory, 0x640);
         assertFalse(op.doublePrecision());
         assertFalse(op.negateAddend());
         assertTrue(op.negateProduct());
@@ -3929,7 +3935,7 @@ class Aarch64DecoderCorpusTest {
 
     @Test
     void fmsubDouble() {
-        Ir64Op.Fp64MultiplyAdd op = (Ir64Op.Fp64MultiplyAdd) DECODER.decode(memory, 0x644);
+        FpOp64.MultiplyAdd op = (FpOp64.MultiplyAdd) DECODER.decode(memory, 0x644);
         assertTrue(op.doublePrecision());
         assertFalse(op.negateAddend());
         assertTrue(op.negateProduct());
@@ -3937,7 +3943,7 @@ class Aarch64DecoderCorpusTest {
 
     @Test
     void fnmaddSingle() {
-        Ir64Op.Fp64MultiplyAdd op = (Ir64Op.Fp64MultiplyAdd) DECODER.decode(memory, 0x648);
+        FpOp64.MultiplyAdd op = (FpOp64.MultiplyAdd) DECODER.decode(memory, 0x648);
         assertFalse(op.doublePrecision());
         assertTrue(op.negateAddend());
         assertTrue(op.negateProduct());
@@ -3949,7 +3955,7 @@ class Aarch64DecoderCorpusTest {
 
     @Test
     void fnmaddDouble() {
-        Ir64Op.Fp64MultiplyAdd op = (Ir64Op.Fp64MultiplyAdd) DECODER.decode(memory, 0x64c);
+        FpOp64.MultiplyAdd op = (FpOp64.MultiplyAdd) DECODER.decode(memory, 0x64c);
         assertTrue(op.doublePrecision());
         assertTrue(op.negateAddend());
         assertTrue(op.negateProduct());
@@ -3957,7 +3963,7 @@ class Aarch64DecoderCorpusTest {
 
     @Test
     void fnmsubSingle() {
-        Ir64Op.Fp64MultiplyAdd op = (Ir64Op.Fp64MultiplyAdd) DECODER.decode(memory, 0x650);
+        FpOp64.MultiplyAdd op = (FpOp64.MultiplyAdd) DECODER.decode(memory, 0x650);
         assertFalse(op.doublePrecision());
         assertTrue(op.negateAddend());
         assertFalse(op.negateProduct());
@@ -3969,7 +3975,7 @@ class Aarch64DecoderCorpusTest {
 
     @Test
     void fnmsubDouble() {
-        Ir64Op.Fp64MultiplyAdd op = (Ir64Op.Fp64MultiplyAdd) DECODER.decode(memory, 0x654);
+        FpOp64.MultiplyAdd op = (FpOp64.MultiplyAdd) DECODER.decode(memory, 0x654);
         assertTrue(op.doublePrecision());
         assertTrue(op.negateAddend());
         assertFalse(op.negateProduct());
@@ -3979,7 +3985,7 @@ class Aarch64DecoderCorpusTest {
 
     @Test
     void fcselDouble() {
-        Ir64Op.Fp64ConditionalSelect op = (Ir64Op.Fp64ConditionalSelect) DECODER.decode(memory, 0x65c);
+        FpOp64.ConditionalSelect op = (FpOp64.ConditionalSelect) DECODER.decode(memory, 0x65c);
         assertTrue(op.doublePrecision());
         assertEquals(1, op.vd());
         assertEquals(2, op.vn());
@@ -3990,7 +3996,7 @@ class Aarch64DecoderCorpusTest {
     @Test
     void fccmpSingle() {
         // fccmp s1, s2, #0xd, pl — nzcv=0xd quando a condição é falsa.
-        Ir64Op.Fp64ConditionalCompare op = (Ir64Op.Fp64ConditionalCompare) DECODER.decode(memory, 0x660);
+        FpOp64.ConditionalCompare op = (FpOp64.ConditionalCompare) DECODER.decode(memory, 0x660);
         assertFalse(op.doublePrecision());
         assertFalse(op.signalOnQuietNaN());
         assertEquals(1, op.vn());
@@ -4001,7 +4007,7 @@ class Aarch64DecoderCorpusTest {
 
     @Test
     void fccmpDouble() {
-        Ir64Op.Fp64ConditionalCompare op = (Ir64Op.Fp64ConditionalCompare) DECODER.decode(memory, 0x664);
+        FpOp64.ConditionalCompare op = (FpOp64.ConditionalCompare) DECODER.decode(memory, 0x664);
         assertTrue(op.doublePrecision());
         assertEquals(4, op.vn());
         assertEquals(5, op.vm());
@@ -4012,7 +4018,7 @@ class Aarch64DecoderCorpusTest {
     @Test
     void fccmpe() {
         // fccmpe s1, s2, #0x5, lt — só o bit `E` muda (sem efeito observável, ver Javadoc).
-        Ir64Op.Fp64ConditionalCompare op = (Ir64Op.Fp64ConditionalCompare) DECODER.decode(memory, 0x668);
+        FpOp64.ConditionalCompare op = (FpOp64.ConditionalCompare) DECODER.decode(memory, 0x668);
         assertTrue(op.signalOnQuietNaN());
         assertEquals(Ir64Condition.LT, op.condition());
         assertEquals(0x5, op.nzcv());
@@ -4022,8 +4028,8 @@ class Aarch64DecoderCorpusTest {
 
     @Test
     void frintnSingle() {
-        Ir64Op.Fp64Round op = (Ir64Op.Fp64Round) DECODER.decode(memory, 0x66c);
-        assertEquals(Ir64Op.Fp64RoundingDirection.NEAREST_TIES_EVEN, op.direction());
+        FpOp64.Round op = (FpOp64.Round) DECODER.decode(memory, 0x66c);
+        assertEquals(FpOp64.Fp64RoundingDirection.NEAREST_TIES_EVEN, op.direction());
         assertFalse(op.doublePrecision());
         assertEquals(0, op.vd());
         assertEquals(1, op.vn());
@@ -4031,54 +4037,54 @@ class Aarch64DecoderCorpusTest {
 
     @Test
     void frintnDouble() {
-        Ir64Op.Fp64Round op = (Ir64Op.Fp64Round) DECODER.decode(memory, 0x670);
-        assertEquals(Ir64Op.Fp64RoundingDirection.NEAREST_TIES_EVEN, op.direction());
+        FpOp64.Round op = (FpOp64.Round) DECODER.decode(memory, 0x670);
+        assertEquals(FpOp64.Fp64RoundingDirection.NEAREST_TIES_EVEN, op.direction());
         assertTrue(op.doublePrecision());
     }
 
     @Test
     void frintp() {
-        Ir64Op.Fp64Round op = (Ir64Op.Fp64Round) DECODER.decode(memory, 0x674);
-        assertEquals(Ir64Op.Fp64RoundingDirection.TOWARD_POSITIVE_INFINITY, op.direction());
+        FpOp64.Round op = (FpOp64.Round) DECODER.decode(memory, 0x674);
+        assertEquals(FpOp64.Fp64RoundingDirection.TOWARD_POSITIVE_INFINITY, op.direction());
     }
 
     @Test
     void frintm() {
-        Ir64Op.Fp64Round op = (Ir64Op.Fp64Round) DECODER.decode(memory, 0x678);
-        assertEquals(Ir64Op.Fp64RoundingDirection.TOWARD_NEGATIVE_INFINITY, op.direction());
+        FpOp64.Round op = (FpOp64.Round) DECODER.decode(memory, 0x678);
+        assertEquals(FpOp64.Fp64RoundingDirection.TOWARD_NEGATIVE_INFINITY, op.direction());
     }
 
     @Test
     void frintz() {
-        Ir64Op.Fp64Round op = (Ir64Op.Fp64Round) DECODER.decode(memory, 0x67c);
-        assertEquals(Ir64Op.Fp64RoundingDirection.TOWARD_ZERO, op.direction());
+        FpOp64.Round op = (FpOp64.Round) DECODER.decode(memory, 0x67c);
+        assertEquals(FpOp64.Fp64RoundingDirection.TOWARD_ZERO, op.direction());
     }
 
     @Test
     void frinta() {
-        Ir64Op.Fp64Round op = (Ir64Op.Fp64Round) DECODER.decode(memory, 0x680);
-        assertEquals(Ir64Op.Fp64RoundingDirection.NEAREST_TIES_AWAY, op.direction());
+        FpOp64.Round op = (FpOp64.Round) DECODER.decode(memory, 0x680);
+        assertEquals(FpOp64.Fp64RoundingDirection.NEAREST_TIES_AWAY, op.direction());
     }
 
     @Test
     void frintx() {
-        // frintx: MESMA direção de frintn — ver Javadoc de Ir64Op.Fp64Round (FPCR.RMode não
+        // frintx: MESMA direção de frintn — ver Javadoc de FpOp64.Round (FPCR.RMode não
         // modelado em A64).
-        Ir64Op.Fp64Round op = (Ir64Op.Fp64Round) DECODER.decode(memory, 0x684);
-        assertEquals(Ir64Op.Fp64RoundingDirection.NEAREST_TIES_EVEN, op.direction());
+        FpOp64.Round op = (FpOp64.Round) DECODER.decode(memory, 0x684);
+        assertEquals(FpOp64.Fp64RoundingDirection.NEAREST_TIES_EVEN, op.direction());
     }
 
     @Test
     void frinti() {
-        Ir64Op.Fp64Round op = (Ir64Op.Fp64Round) DECODER.decode(memory, 0x688);
-        assertEquals(Ir64Op.Fp64RoundingDirection.NEAREST_TIES_EVEN, op.direction());
+        FpOp64.Round op = (FpOp64.Round) DECODER.decode(memory, 0x688);
+        assertEquals(FpOp64.Fp64RoundingDirection.NEAREST_TIES_EVEN, op.direction());
     }
 
     // ── B8.5: conversão FP<->inteiro (registrador geral), sem escala ─────────────────────────
 
     @Test
     void scvtfDoubleX() {
-        Ir64Op.Fp64IntegerConvert op = (Ir64Op.Fp64IntegerConvert) DECODER.decode(memory, 0x690);
+        FpOp64.IntegerConvert op = (FpOp64.IntegerConvert) DECODER.decode(memory, 0x690);
         assertTrue(op.toFloat());
         assertTrue(op.signed());
         assertTrue(op.doublePrecision());
@@ -4090,7 +4096,7 @@ class Aarch64DecoderCorpusTest {
 
     @Test
     void ucvtfSingleW() {
-        Ir64Op.Fp64IntegerConvert op = (Ir64Op.Fp64IntegerConvert) DECODER.decode(memory, 0x694);
+        FpOp64.IntegerConvert op = (FpOp64.IntegerConvert) DECODER.decode(memory, 0x694);
         assertTrue(op.toFloat());
         assertFalse(op.signed());
         assertFalse(op.doublePrecision());
@@ -4101,81 +4107,81 @@ class Aarch64DecoderCorpusTest {
 
     @Test
     void fcvtnsSingleW() {
-        Ir64Op.Fp64IntegerConvert op = (Ir64Op.Fp64IntegerConvert) DECODER.decode(memory, 0x69c);
+        FpOp64.IntegerConvert op = (FpOp64.IntegerConvert) DECODER.decode(memory, 0x69c);
         assertFalse(op.toFloat());
         assertTrue(op.signed());
-        assertEquals(Ir64Op.Fp64RoundingDirection.NEAREST_TIES_EVEN, op.rounding());
+        assertEquals(FpOp64.Fp64RoundingDirection.NEAREST_TIES_EVEN, op.rounding());
         assertEquals(3, op.fpReg());
         assertEquals(3, op.gpReg());
     }
 
     @Test
     void fcvtnu() {
-        Ir64Op.Fp64IntegerConvert op = (Ir64Op.Fp64IntegerConvert) DECODER.decode(memory, 0x6a0);
+        FpOp64.IntegerConvert op = (FpOp64.IntegerConvert) DECODER.decode(memory, 0x6a0);
         assertFalse(op.signed());
-        assertEquals(Ir64Op.Fp64RoundingDirection.NEAREST_TIES_EVEN, op.rounding());
+        assertEquals(FpOp64.Fp64RoundingDirection.NEAREST_TIES_EVEN, op.rounding());
     }
 
     @Test
     void fcvtps() {
-        Ir64Op.Fp64IntegerConvert op = (Ir64Op.Fp64IntegerConvert) DECODER.decode(memory, 0x6a4);
+        FpOp64.IntegerConvert op = (FpOp64.IntegerConvert) DECODER.decode(memory, 0x6a4);
         assertTrue(op.signed());
-        assertEquals(Ir64Op.Fp64RoundingDirection.TOWARD_POSITIVE_INFINITY, op.rounding());
+        assertEquals(FpOp64.Fp64RoundingDirection.TOWARD_POSITIVE_INFINITY, op.rounding());
     }
 
     @Test
     void fcvtpu() {
-        Ir64Op.Fp64IntegerConvert op = (Ir64Op.Fp64IntegerConvert) DECODER.decode(memory, 0x6a8);
+        FpOp64.IntegerConvert op = (FpOp64.IntegerConvert) DECODER.decode(memory, 0x6a8);
         assertFalse(op.signed());
-        assertEquals(Ir64Op.Fp64RoundingDirection.TOWARD_POSITIVE_INFINITY, op.rounding());
+        assertEquals(FpOp64.Fp64RoundingDirection.TOWARD_POSITIVE_INFINITY, op.rounding());
     }
 
     @Test
     void fcvtms() {
-        Ir64Op.Fp64IntegerConvert op = (Ir64Op.Fp64IntegerConvert) DECODER.decode(memory, 0x6ac);
+        FpOp64.IntegerConvert op = (FpOp64.IntegerConvert) DECODER.decode(memory, 0x6ac);
         assertTrue(op.signed());
-        assertEquals(Ir64Op.Fp64RoundingDirection.TOWARD_NEGATIVE_INFINITY, op.rounding());
+        assertEquals(FpOp64.Fp64RoundingDirection.TOWARD_NEGATIVE_INFINITY, op.rounding());
     }
 
     @Test
     void fcvtmu() {
-        Ir64Op.Fp64IntegerConvert op = (Ir64Op.Fp64IntegerConvert) DECODER.decode(memory, 0x6b0);
+        FpOp64.IntegerConvert op = (FpOp64.IntegerConvert) DECODER.decode(memory, 0x6b0);
         assertFalse(op.signed());
-        assertEquals(Ir64Op.Fp64RoundingDirection.TOWARD_NEGATIVE_INFINITY, op.rounding());
+        assertEquals(FpOp64.Fp64RoundingDirection.TOWARD_NEGATIVE_INFINITY, op.rounding());
     }
 
     @Test
     void fcvtzsSingleW() {
-        Ir64Op.Fp64IntegerConvert op = (Ir64Op.Fp64IntegerConvert) DECODER.decode(memory, 0x6b4);
+        FpOp64.IntegerConvert op = (FpOp64.IntegerConvert) DECODER.decode(memory, 0x6b4);
         assertTrue(op.signed());
-        assertEquals(Ir64Op.Fp64RoundingDirection.TOWARD_ZERO, op.rounding());
+        assertEquals(FpOp64.Fp64RoundingDirection.TOWARD_ZERO, op.rounding());
         assertEquals(0, op.fixedPointFractionBits());
     }
 
     @Test
     void fcvtzu() {
-        Ir64Op.Fp64IntegerConvert op = (Ir64Op.Fp64IntegerConvert) DECODER.decode(memory, 0x6b8);
+        FpOp64.IntegerConvert op = (FpOp64.IntegerConvert) DECODER.decode(memory, 0x6b8);
         assertFalse(op.signed());
-        assertEquals(Ir64Op.Fp64RoundingDirection.TOWARD_ZERO, op.rounding());
+        assertEquals(FpOp64.Fp64RoundingDirection.TOWARD_ZERO, op.rounding());
     }
 
     @Test
     void fcvtas() {
-        Ir64Op.Fp64IntegerConvert op = (Ir64Op.Fp64IntegerConvert) DECODER.decode(memory, 0x6bc);
+        FpOp64.IntegerConvert op = (FpOp64.IntegerConvert) DECODER.decode(memory, 0x6bc);
         assertTrue(op.signed());
-        assertEquals(Ir64Op.Fp64RoundingDirection.NEAREST_TIES_AWAY, op.rounding());
+        assertEquals(FpOp64.Fp64RoundingDirection.NEAREST_TIES_AWAY, op.rounding());
     }
 
     @Test
     void fcvtau() {
-        Ir64Op.Fp64IntegerConvert op = (Ir64Op.Fp64IntegerConvert) DECODER.decode(memory, 0x6c0);
+        FpOp64.IntegerConvert op = (FpOp64.IntegerConvert) DECODER.decode(memory, 0x6c0);
         assertFalse(op.signed());
-        assertEquals(Ir64Op.Fp64RoundingDirection.NEAREST_TIES_AWAY, op.rounding());
+        assertEquals(FpOp64.Fp64RoundingDirection.NEAREST_TIES_AWAY, op.rounding());
     }
 
     @Test
     void fcvtzsDoubleX() {
-        Ir64Op.Fp64IntegerConvert op = (Ir64Op.Fp64IntegerConvert) DECODER.decode(memory, 0x6c4);
+        FpOp64.IntegerConvert op = (FpOp64.IntegerConvert) DECODER.decode(memory, 0x6c4);
         assertFalse(op.toFloat());
         assertTrue(op.signed());
         assertTrue(op.doublePrecision());
@@ -4186,7 +4192,7 @@ class Aarch64DecoderCorpusTest {
 
     @Test
     void fcvtzuDoubleX() {
-        Ir64Op.Fp64IntegerConvert op = (Ir64Op.Fp64IntegerConvert) DECODER.decode(memory, 0x6c8);
+        FpOp64.IntegerConvert op = (FpOp64.IntegerConvert) DECODER.decode(memory, 0x6c8);
         assertFalse(op.signed());
         assertTrue(op.wide());
     }
@@ -4196,7 +4202,7 @@ class Aarch64DecoderCorpusTest {
     @Test
     void scvtfFixedSingleW() {
         // scvtf s15, w15, #3 — shift = 32 - raw (raw=29 no encoding real).
-        Ir64Op.Fp64IntegerConvert op = (Ir64Op.Fp64IntegerConvert) DECODER.decode(memory, 0x6cc);
+        FpOp64.IntegerConvert op = (FpOp64.IntegerConvert) DECODER.decode(memory, 0x6cc);
         assertTrue(op.toFloat());
         assertTrue(op.signed());
         assertFalse(op.wide());
@@ -4207,7 +4213,7 @@ class Aarch64DecoderCorpusTest {
 
     @Test
     void scvtfFixedDoubleX() {
-        Ir64Op.Fp64IntegerConvert op = (Ir64Op.Fp64IntegerConvert) DECODER.decode(memory, 0x6d0);
+        FpOp64.IntegerConvert op = (FpOp64.IntegerConvert) DECODER.decode(memory, 0x6d0);
         assertTrue(op.toFloat());
         assertTrue(op.wide());
         assertEquals(10, op.fixedPointFractionBits());
@@ -4217,14 +4223,14 @@ class Aarch64DecoderCorpusTest {
 
     @Test
     void ucvtfFixedSingleW() {
-        Ir64Op.Fp64IntegerConvert op = (Ir64Op.Fp64IntegerConvert) DECODER.decode(memory, 0x6d4);
+        FpOp64.IntegerConvert op = (FpOp64.IntegerConvert) DECODER.decode(memory, 0x6d4);
         assertFalse(op.signed());
         assertEquals(5, op.fixedPointFractionBits());
     }
 
     @Test
     void ucvtfFixedDoubleX() {
-        Ir64Op.Fp64IntegerConvert op = (Ir64Op.Fp64IntegerConvert) DECODER.decode(memory, 0x6d8);
+        FpOp64.IntegerConvert op = (FpOp64.IntegerConvert) DECODER.decode(memory, 0x6d8);
         assertFalse(op.signed());
         assertTrue(op.wide());
         assertEquals(20, op.fixedPointFractionBits());
@@ -4232,10 +4238,10 @@ class Aarch64DecoderCorpusTest {
 
     @Test
     void fcvtzsFixedSingleW() {
-        Ir64Op.Fp64IntegerConvert op = (Ir64Op.Fp64IntegerConvert) DECODER.decode(memory, 0x6dc);
+        FpOp64.IntegerConvert op = (FpOp64.IntegerConvert) DECODER.decode(memory, 0x6dc);
         assertFalse(op.toFloat());
         assertTrue(op.signed());
-        assertEquals(Ir64Op.Fp64RoundingDirection.TOWARD_ZERO, op.rounding());
+        assertEquals(FpOp64.Fp64RoundingDirection.TOWARD_ZERO, op.rounding());
         assertEquals(7, op.fixedPointFractionBits());
         assertEquals(19, op.fpReg());
         assertEquals(19, op.gpReg());
@@ -4243,21 +4249,21 @@ class Aarch64DecoderCorpusTest {
 
     @Test
     void fcvtzuFixedSingleW() {
-        Ir64Op.Fp64IntegerConvert op = (Ir64Op.Fp64IntegerConvert) DECODER.decode(memory, 0x6e0);
+        FpOp64.IntegerConvert op = (FpOp64.IntegerConvert) DECODER.decode(memory, 0x6e0);
         assertFalse(op.signed());
         assertEquals(12, op.fixedPointFractionBits());
     }
 
     @Test
     void fcvtzsFixedDoubleX() {
-        Ir64Op.Fp64IntegerConvert op = (Ir64Op.Fp64IntegerConvert) DECODER.decode(memory, 0x6e4);
+        FpOp64.IntegerConvert op = (FpOp64.IntegerConvert) DECODER.decode(memory, 0x6e4);
         assertTrue(op.wide());
         assertEquals(30, op.fixedPointFractionBits());
     }
 
     @Test
     void fcvtzuFixedDoubleX() {
-        Ir64Op.Fp64IntegerConvert op = (Ir64Op.Fp64IntegerConvert) DECODER.decode(memory, 0x6e8);
+        FpOp64.IntegerConvert op = (FpOp64.IntegerConvert) DECODER.decode(memory, 0x6e8);
         assertTrue(op.wide());
         assertFalse(op.signed());
         assertEquals(40, op.fixedPointFractionBits());
@@ -4268,7 +4274,7 @@ class Aarch64DecoderCorpusTest {
     @Test
     void fmovToGpSingle() {
         // fmov w23, s23 — FP->GP (toFloat=false).
-        Ir64Op.Fp64GeneralRegisterMove op = (Ir64Op.Fp64GeneralRegisterMove) DECODER.decode(memory, 0x6ec);
+        FpOp64.GeneralRegisterMove op = (FpOp64.GeneralRegisterMove) DECODER.decode(memory, 0x6ec);
         assertFalse(op.toFloat());
         assertFalse(op.wide());
         assertEquals(23, op.fpReg());
@@ -4278,7 +4284,7 @@ class Aarch64DecoderCorpusTest {
     @Test
     void fmovToFpSingle() {
         // fmov s24, w24 — GP->FP (toFloat=true).
-        Ir64Op.Fp64GeneralRegisterMove op = (Ir64Op.Fp64GeneralRegisterMove) DECODER.decode(memory, 0x6f0);
+        FpOp64.GeneralRegisterMove op = (FpOp64.GeneralRegisterMove) DECODER.decode(memory, 0x6f0);
         assertTrue(op.toFloat());
         assertFalse(op.wide());
         assertEquals(24, op.fpReg());
@@ -4288,7 +4294,7 @@ class Aarch64DecoderCorpusTest {
     @Test
     void fmovToGpDouble() {
         // fmov x25, d25 — FP->GP, 64 bits.
-        Ir64Op.Fp64GeneralRegisterMove op = (Ir64Op.Fp64GeneralRegisterMove) DECODER.decode(memory, 0x6f4);
+        FpOp64.GeneralRegisterMove op = (FpOp64.GeneralRegisterMove) DECODER.decode(memory, 0x6f4);
         assertFalse(op.toFloat());
         assertTrue(op.wide());
         assertEquals(25, op.fpReg());
@@ -4298,7 +4304,7 @@ class Aarch64DecoderCorpusTest {
     @Test
     void fmovToFpDouble() {
         // fmov d26, x26 — GP->FP, 64 bits.
-        Ir64Op.Fp64GeneralRegisterMove op = (Ir64Op.Fp64GeneralRegisterMove) DECODER.decode(memory, 0x6f8);
+        FpOp64.GeneralRegisterMove op = (FpOp64.GeneralRegisterMove) DECODER.decode(memory, 0x6f8);
         assertTrue(op.toFloat());
         assertTrue(op.wide());
         assertEquals(26, op.fpReg());

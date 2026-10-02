@@ -3,7 +3,7 @@ package dev.vitorsilverio.armjitter.executor64;
 import dev.vitorsilverio.armjitter.core64.Aarch64Core;
 import dev.vitorsilverio.armjitter.core64.Aarch64ScalableRegisters;
 import dev.vitorsilverio.armjitter.core64.Aarch64UndefinedInstructionException;
-import dev.vitorsilverio.armjitter.ir64.Ir64Op;
+import dev.vitorsilverio.armjitter.ir64.SveMemoryOp64;
 import dev.vitorsilverio.armjitter.memory.AddressSpace64;
 import dev.vitorsilverio.armjitter.memory.mmu.MemoryTranslationException64;
 
@@ -43,7 +43,7 @@ final class SveLoadOps {
     }
 
     /// Executa uma instrução do grupo. `true` = a instrução já entrou numa exceção (acesso negado).
-    static boolean execute(Aarch64Core core, Ir64Op.SveLoad op) {
+    static boolean execute(Aarch64Core core, SveMemoryOp64.Load op) {
         if (op.nonStreaming()) {
             SvePredicateOps.requireNonStreaming(core);
         }
@@ -64,18 +64,18 @@ final class SveLoadOps {
 
     // ── Endereço ─────────────────────────────────────────────────────────────────────────────────
 
-    static long base(Aarch64Core core, Ir64Op.SveLoad op) {
+    static long base(Aarch64Core core, SveMemoryOp64.Load op) {
         return op.rn() == STACK_POINTER_ENCODING ? core.sp() : core.x(op.rn());
     }
 
     /// Endereço do primeiro elemento das formas `LD1`/`LD[234]`/`LDFF1`/`LDNF1`.
-    private static long contiguousAddress(Aarch64Core core, Ir64Op.SveLoad op) {
+    private static long contiguousAddress(Aarch64Core core, SveMemoryOp64.Load op) {
         long base = base(core, op);
         if (op.registerOffset()) {
             return base + (core.x(op.rm()) << op.msz());
         }
         long elements = core.vectorLengthBytes() >> op.esz();
-        long multiplier = op.op() == Ir64Op.SveLoad.Op.LD1 ? op.nreg() + 1 : 1;
+        long multiplier = op.op() == SveMemoryOp64.Load.Op.LD1 ? op.nreg() + 1 : 1;
         return base + ((op.immediate() * elements * multiplier) << op.msz());
     }
 
@@ -102,7 +102,7 @@ final class SveLoadOps {
 
     /// Lê UM elemento (`msz`/`esz`/extensão da instrução) de `address` e o grava no elemento `element` de `words`. Em
     /// `esz = 4` o elemento tem 128 bits: `LD1W`/`LD1D` `.Q` zero-estendem o dado até ele; `LD[234]Q` leem 128 bits.
-    private static void loadElement(AddressSpace64 memory, long address, Ir64Op.SveLoad op, long[] words, int element) {
+    private static void loadElement(AddressSpace64 memory, long address, SveMemoryOp64.Load op, long[] words, int element) {
         if (op.esz() == ESZ_QUAD) {
             long low = readMemory(memory, address, Math.min(op.msz(), MSZ_DOUBLE));
             long high = op.msz() == MSZ_QUAD ? memory.read64(address + WORD_BYTES) : 0L;
@@ -138,7 +138,7 @@ final class SveLoadOps {
 
     // ── LD1 / LD2 / LD3 / LD4 (e LDNT1) ──────────────────────────────────────────────────────────
 
-    private static void loadStructures(Aarch64Core core, Ir64Op.SveLoad op) {
+    private static void loadStructures(Aarch64Core core, SveMemoryOp64.Load op) {
         Aarch64ScalableRegisters regs = core.scalable();
         AddressSpace64 memory = core.memory();
         int registers = op.nreg() + 1;
@@ -162,7 +162,7 @@ final class SveLoadOps {
 
     // ── LDFF1 / LDNF1 ────────────────────────────────────────────────────────────────────────────
 
-    private static void loadFaultTolerant(Aarch64Core core, Ir64Op.SveLoad op) {
+    private static void loadFaultTolerant(Aarch64Core core, SveMemoryOp64.Load op) {
         Aarch64ScalableRegisters regs = core.scalable();
         AddressSpace64 memory = core.memory();
         int elements = core.vectorLengthBytes() >> op.esz();
@@ -178,7 +178,7 @@ final class SveLoadOps {
             try {
                 loadElement(memory, start + ((long) e << op.msz()), op, result, e);
             } catch (MemoryTranslationException64 fault) {
-                if (first && op.op() == Ir64Op.SveLoad.Op.LDFF1) {
+                if (first && op.op() == SveMemoryOp64.Load.Op.LDFF1) {
                     throw fault; // o primeiro elemento ativo de LDFF1 é um load normal: aborto real
                 }
                 faulted = e;
@@ -207,7 +207,7 @@ final class SveLoadOps {
 
     // ── LD1R* ────────────────────────────────────────────────────────────────────────────────────
 
-    private static void loadReplicate(Aarch64Core core, Ir64Op.SveLoad op) {
+    private static void loadReplicate(Aarch64Core core, SveMemoryOp64.Load op) {
         Aarch64ScalableRegisters regs = core.scalable();
         int elements = core.vectorLengthBytes() >> op.esz();
         long[] predicate = SvePredicateOps.read(regs, op.pg());
@@ -235,8 +235,8 @@ final class SveLoadOps {
     /// Carrega o primeiro quadword (`LD1RQ`) ou octaword (`LD1RO`) sob o predicado — só os bits do PRIMEIRO segmento
     /// contam — e o replica pelo vetor. No `LD1RO` a replicação é em unidades de 32 bytes e a sobra (VL que não é
     /// múltiplo de 32) fica zerada; com `VL < 256` a instrução é indefinida.
-    private static void loadBroadcast(Aarch64Core core, Ir64Op.SveLoad op) {
-        boolean octaword = op.op() == Ir64Op.SveLoad.Op.LD1RO;
+    private static void loadBroadcast(Aarch64Core core, SveMemoryOp64.Load op) {
+        boolean octaword = op.op() == SveMemoryOp64.Load.Op.LD1RO;
         int chunkBytes = octaword ? OCTAWORD_BYTES : QUADWORD_BYTES;
         int vectorBytes = core.vectorLengthBytes();
         if (vectorBytes < chunkBytes) {
@@ -265,7 +265,7 @@ final class SveLoadOps {
 
     // ── LDR de vetor e de predicado ──────────────────────────────────────────────────────────────
 
-    private static void loadVectorRegister(Aarch64Core core, Ir64Op.SveLoad op) {
+    private static void loadVectorRegister(Aarch64Core core, SveMemoryOp64.Load op) {
         int vectorBytes = core.vectorLengthBytes();
         long start = base(core, op) + op.immediate() * vectorBytes;
         long[] result = new long[vectorWords(core)];
@@ -275,7 +275,7 @@ final class SveLoadOps {
         commitVector(core, op.rd(), result);
     }
 
-    private static void loadPredicateRegister(Aarch64Core core, Ir64Op.SveLoad op) {
+    private static void loadPredicateRegister(Aarch64Core core, SveMemoryOp64.Load op) {
         Aarch64ScalableRegisters regs = core.scalable();
         int predicateBytes = core.vectorLengthBytes() / VECTOR_BYTES_PER_PREDICATE_BYTE;
         long start = base(core, op) + op.immediate() * predicateBytes;

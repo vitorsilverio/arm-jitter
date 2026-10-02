@@ -3,7 +3,7 @@ package dev.vitorsilverio.armjitter.executor64;
 import dev.vitorsilverio.armjitter.core64.Aarch64Core;
 import dev.vitorsilverio.armjitter.ir64.Ir64AtomicOp;
 import dev.vitorsilverio.armjitter.ir64.Ir64MemSize;
-import dev.vitorsilverio.armjitter.ir64.Ir64Op;
+import dev.vitorsilverio.armjitter.ir64.MemoryOp64;
 import dev.vitorsilverio.armjitter.memory.AddressSpace64;
 import dev.vitorsilverio.armjitter.support.TestAddressSpace;
 import org.junit.jupiter.api.Test;
@@ -11,8 +11,8 @@ import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
 /// B19.25 — semântica RMW de 128 bits de `LDCLRP`/`LDSETP`/`SWPP` (`FEAT_LSE128`) direto no
-/// executor (interpretador = oráculo, G1). Ver javadoc de {@link Ir64Op.AtomicMemoryOpPair}: ao
-/// contrário de {@link Ir64Op.AtomicMemoryOp} (`Rs` separado de `Rt`), aqui o PRÓPRIO par
+/// executor (interpretador = oráculo, G1). Ver javadoc de {@link MemoryOp64.AtomicMemoryOpPair}: ao
+/// contrário de {@link MemoryOp64.AtomicMemoryOp} (`Rs` separado de `Rt`), aqui o PRÓPRIO par
 /// `(Rt,Rt2)` é o operando de entrada E recebe o valor antigo lido — semântica in-place.
 class Ir64AtomicMemoryOpPairExecutorTest {
     private static final Ir64BlockExecutor EXECUTOR = new Ir64BlockExecutor();
@@ -24,8 +24,8 @@ class Ir64AtomicMemoryOpPairExecutorTest {
         return new Aarch64Core(AddressSpace64.wrapping(new TestAddressSpace(256)));
     }
 
-    private static Ir64Op.AtomicMemoryOpPair op(Ir64AtomicOp operation) {
-        return new Ir64Op.AtomicMemoryOpPair(RT, RT2, RN, operation, false, false);
+    private static MemoryOp64.AtomicMemoryOpPair op(Ir64AtomicOp operation) {
+        return new MemoryOp64.AtomicMemoryOpPair(RT, RT2, RN, operation, false, false);
     }
 
     @Test
@@ -90,7 +90,7 @@ class Ir64AtomicMemoryOpPairExecutorTest {
         core.memory().write64(0x88L, 7L);
         core.setX(RT, 1L);
         core.setX(RT2, 2L);
-        EXECUTOR.executeOp(core, new Ir64Op.AtomicMemoryOpPair(RT, RT2, 31, Ir64AtomicOp.SET, false, false));
+        EXECUTOR.executeOp(core, new MemoryOp64.AtomicMemoryOpPair(RT, RT2, 31, Ir64AtomicOp.SET, false, false));
         assertEquals(5L, core.memory().read64(0x80L));
         assertEquals(7L, core.memory().read64(0x88L));
     }
@@ -104,17 +104,17 @@ class Ir64AtomicMemoryOpPairExecutorTest {
 
         // Reserva em [0x40] (lo) — o RMW de 128 bits escreve os dois QWORDS incondicionalmente,
         // então a reserva pendente tem que cair, mesma disciplina de toda a família LSE (B19.1).
-        EXECUTOR.executeOp(core, new Ir64Op.LoadExclusive(3, RN, Ir64MemSize.DOUBLEWORD, false));
+        EXECUTOR.executeOp(core, new MemoryOp64.LoadExclusive(3, RN, Ir64MemSize.DOUBLEWORD, false));
         EXECUTOR.executeOp(core, op(Ir64AtomicOp.SET));
-        EXECUTOR.executeOp(core, new Ir64Op.StoreExclusive(4, 5, RN, Ir64MemSize.DOUBLEWORD, false));
+        EXECUTOR.executeOp(core, new MemoryOp64.StoreExclusive(4, 5, RN, Ir64MemSize.DOUBLEWORD, false));
         assertEquals(1L, core.x(4), "reserva em [Rn] derrubada pelo notifyOrdinaryWrite do RMW de 128 bits");
 
         // Mesma checagem para a metade alta ([Rn+8]) — precisa do PRÓPRIO notifyOrdinaryWrite,
         // não só o da metade baixa (achado: fácil esquecer o segundo `notifyOrdinaryWrite`).
         core.setX(6, 0x48L);
-        EXECUTOR.executeOp(core, new Ir64Op.LoadExclusive(7, 6, Ir64MemSize.DOUBLEWORD, false));
+        EXECUTOR.executeOp(core, new MemoryOp64.LoadExclusive(7, 6, Ir64MemSize.DOUBLEWORD, false));
         EXECUTOR.executeOp(core, op(Ir64AtomicOp.SET));
-        EXECUTOR.executeOp(core, new Ir64Op.StoreExclusive(8, 9, 6, Ir64MemSize.DOUBLEWORD, false));
+        EXECUTOR.executeOp(core, new MemoryOp64.StoreExclusive(8, 9, 6, Ir64MemSize.DOUBLEWORD, false));
         assertEquals(1L, core.x(8), "reserva em [Rn+8] também derrubada");
     }
 }

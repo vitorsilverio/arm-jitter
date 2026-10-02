@@ -2,7 +2,7 @@ package dev.vitorsilverio.armjitter.executor64;
 
 import dev.vitorsilverio.armjitter.core64.Aarch64Core;
 import dev.vitorsilverio.armjitter.core64.Aarch64FpRegisters;
-import dev.vitorsilverio.armjitter.ir64.Ir64Op;
+import dev.vitorsilverio.armjitter.ir64.AdvSimdFpOp64;
 import dev.vitorsilverio.armjitter.memory.AddressSpace64;
 import dev.vitorsilverio.armjitter.support.TestAddressSpace;
 import org.junit.jupiter.api.Test;
@@ -43,12 +43,12 @@ class Ir64BlockExecutorB1920Test {
         setComplexF32(fp, 1, 0, 2.0f, 3.0f); // Vn = 2+3i
         setComplexF32(fp, 2, 0, 4.0f, 5.0f); // Vm = 4+5i
 
-        EXECUTOR.executeOp(core, new Ir64Op.VectorFpComplexAdd(false, ESZ_SINGLE, 90, 0, 1, 2));
+        EXECUTOR.executeOp(core, new AdvSimdFpOp64.FpComplexAdd(false, ESZ_SINGLE, 90, 0, 1, 2));
         // rot90: (aRe-bIm) + (aIm+bRe)i = (2-5) + (3+4)i = -3+7i
         assertEquals(-3.0f, realOf(fp, 0, 0));
         assertEquals(7.0f, imagOf(fp, 0, 0));
 
-        EXECUTOR.executeOp(core, new Ir64Op.VectorFpComplexAdd(false, ESZ_SINGLE, 270, 3, 1, 2));
+        EXECUTOR.executeOp(core, new AdvSimdFpOp64.FpComplexAdd(false, ESZ_SINGLE, 270, 3, 1, 2));
         // rot270: (aRe+bIm) + (aIm-bRe)i = (2+5) + (3-4)i = 7-1i
         assertEquals(7.0f, realOf(fp, 3, 0));
         assertEquals(-1.0f, imagOf(fp, 3, 0));
@@ -61,7 +61,7 @@ class Ir64BlockExecutorB1920Test {
         setComplexF32(fp, 1, 0, 1.0f, 1.0f);
         setComplexF32(fp, 2, 0, 1.0f, 1.0f);
         fp.setQ(0, 0L, 0xFFFF_FFFF_FFFF_FFFFL); // sujar a metade alta antes
-        EXECUTOR.executeOp(core, new Ir64Op.VectorFpComplexAdd(false, ESZ_SINGLE, 90, 0, 1, 2));
+        EXECUTOR.executeOp(core, new AdvSimdFpOp64.FpComplexAdd(false, ESZ_SINGLE, 90, 0, 1, 2));
         assertEquals(0L, fp.word(1), "!q zera a metade alta");
     }
 
@@ -75,8 +75,8 @@ class Ir64BlockExecutorB1920Test {
         setComplexF32(fp, 2, 0, 4.0f, 5.0f); // b = 4+5i
         setComplexF32(fp, 0, 0, 0.0f, 0.0f); // acumulador zerado
 
-        EXECUTOR.executeOp(core, new Ir64Op.VectorFpComplexMultiplyAccumulate(false, ESZ_SINGLE, 0, 0, 1, 2));
-        EXECUTOR.executeOp(core, new Ir64Op.VectorFpComplexMultiplyAccumulate(false, ESZ_SINGLE, 90, 0, 1, 2));
+        EXECUTOR.executeOp(core, new AdvSimdFpOp64.FpComplexMultiplyAccumulate(false, ESZ_SINGLE, 0, 0, 1, 2));
+        EXECUTOR.executeOp(core, new AdvSimdFpOp64.FpComplexMultiplyAccumulate(false, ESZ_SINGLE, 90, 0, 1, 2));
 
         // (2+3i)*(4+5i) = (8-15) + (10+12)i = -7+22i
         assertEquals(-7.0f, realOf(fp, 0, 0));
@@ -91,8 +91,8 @@ class Ir64BlockExecutorB1920Test {
         setComplexF32(fp, 2, 0, 4.0f, 5.0f);
         setComplexF32(fp, 0, 0, 0.0f, 0.0f);
 
-        EXECUTOR.executeOp(core, new Ir64Op.VectorFpComplexMultiplyAccumulate(false, ESZ_SINGLE, 180, 0, 1, 2));
-        EXECUTOR.executeOp(core, new Ir64Op.VectorFpComplexMultiplyAccumulate(false, ESZ_SINGLE, 270, 0, 1, 2));
+        EXECUTOR.executeOp(core, new AdvSimdFpOp64.FpComplexMultiplyAccumulate(false, ESZ_SINGLE, 180, 0, 1, 2));
+        EXECUTOR.executeOp(core, new AdvSimdFpOp64.FpComplexMultiplyAccumulate(false, ESZ_SINGLE, 270, 0, 1, 2));
 
         // rot180+rot270 é exatamente o NEGATIVO de rot0+rot90 (fórmula direta do ARM DDI 0487
         // `FComplexMulAdd`: os 4 termos trocam de sinal em bloco entre {0,90} e {180,270}).
@@ -111,8 +111,8 @@ class Ir64BlockExecutorB1920Test {
         setComplexF32(fp, 0, 0, 0.0f, 0.0f);
         setComplexF32(fp, 0, 1, 0.0f, 0.0f);
 
-        EXECUTOR.executeOp(core, new Ir64Op.VectorFpComplexMultiplyAccumulate(true, ESZ_SINGLE, 0, 0, 1, 2));
-        EXECUTOR.executeOp(core, new Ir64Op.VectorFpComplexMultiplyAccumulate(true, ESZ_SINGLE, 90, 0, 1, 2));
+        EXECUTOR.executeOp(core, new AdvSimdFpOp64.FpComplexMultiplyAccumulate(true, ESZ_SINGLE, 0, 0, 1, 2));
+        EXECUTOR.executeOp(core, new AdvSimdFpOp64.FpComplexMultiplyAccumulate(true, ESZ_SINGLE, 90, 0, 1, 2));
 
         // par 0: (1+0i)*(2+0i) = 2+0i
         assertEquals(2.0f, realOf(fp, 0, 0));
@@ -135,9 +135,9 @@ class Ir64BlockExecutorB1920Test {
         setComplexF32(fp, 0, 0, 0.0f, 0.0f);
 
         EXECUTOR.executeOp(core,
-                new Ir64Op.VectorFpComplexMultiplyAccumulateByElement(false, ESZ_SINGLE, 0, 0, 1, 2, 1));
+                new AdvSimdFpOp64.FpComplexMultiplyAccumulateByElement(false, ESZ_SINGLE, 0, 0, 1, 2, 1));
         EXECUTOR.executeOp(core,
-                new Ir64Op.VectorFpComplexMultiplyAccumulateByElement(false, ESZ_SINGLE, 90, 0, 1, 2, 1));
+                new AdvSimdFpOp64.FpComplexMultiplyAccumulateByElement(false, ESZ_SINGLE, 90, 0, 1, 2, 1));
 
         // (2+3i)*(4+5i) = -7+22i — prova que o par 1 (não o par 0) de Vm foi usado.
         assertEquals(-7.0f, realOf(fp, 0, 0));
@@ -155,9 +155,9 @@ class Ir64BlockExecutorB1920Test {
         setComplexF32(fp, 0, 1, 0.0f, 0.0f);
 
         EXECUTOR.executeOp(core,
-                new Ir64Op.VectorFpComplexMultiplyAccumulateByElement(true, ESZ_SINGLE, 0, 0, 1, 2, 0));
+                new AdvSimdFpOp64.FpComplexMultiplyAccumulateByElement(true, ESZ_SINGLE, 0, 0, 1, 2, 0));
         EXECUTOR.executeOp(core,
-                new Ir64Op.VectorFpComplexMultiplyAccumulateByElement(true, ESZ_SINGLE, 90, 0, 1, 2, 0));
+                new AdvSimdFpOp64.FpComplexMultiplyAccumulateByElement(true, ESZ_SINGLE, 90, 0, 1, 2, 0));
 
         // par 0: (1+0i)*(3+4i) = 3+4i
         assertEquals(3.0f, realOf(fp, 0, 0));

@@ -1,6 +1,6 @@
 package dev.vitorsilverio.armjitter.ir64;
 
-/// Operação de {@link Ir64Op.CryptoSha512ThreeRegister} (`FEAT_SHA512`, ARMv8.2-A, B19.10) — mesma
+/// Operação de {@link CryptoOp64.Sha512ThreeRegister} (`FEAT_SHA512`, ARMv8.2-A, B19.10) — mesma
 /// extensão criptográfica opcional de {@link Ir64CryptoShaThreeRegisterOp} (SHA1/SHA256), mas
 /// operando em elementos de **64 bits** (SHA-512 usa palavras de 64, não 32).
 public enum Ir64CryptoSha512Op {

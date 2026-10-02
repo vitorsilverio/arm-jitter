@@ -1,6 +1,7 @@
 package dev.vitorsilverio.armjitter.core64;
 
-/// Sinaliza que o executor encontrou um `BRK` (`ir64/Ir64Op.Breakpoint`, B8.3) durante a execução
+
+/// Sinaliza que o executor encontrou um `BRK` (`ir64/SystemOp64.Breakpoint`, B8.3) durante a execução
 /// de um bloco — irmã de {@link dev.vitorsilverio.armjitter.memory.mmu.MemoryTranslationException64}
 /// (mesmo raciocínio: unchecked e sem stack trace, capturada no mesmo ponto de
 /// `Ir64BlockExecutor#step`/`#executeBlock` que já rastreia o endereço da instrução fetched mais

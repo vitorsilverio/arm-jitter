@@ -4,6 +4,7 @@ import dev.vitorsilverio.armjitter.arch64.Aarch64Architecture;
 import dev.vitorsilverio.armjitter.arch64.Aarch64Feature;
 import dev.vitorsilverio.armjitter.ir64.Ir64CryptoAesOp;
 import dev.vitorsilverio.armjitter.ir64.Ir64Op;
+import dev.vitorsilverio.armjitter.ir64.SveIntegerOp64;
 
 /// Decoder do "SVE2 Crypto Extensions" (B17.24, `sve.decode` linhas 1939-1952): `AESE`/`AESD`/`AESMC`/`AESIMC`
 /// (`FEAT_SVE_AES`), `SM4E`/`SM4EKEY` (`FEAT_SVE_SM4`) e `RAX1` (`FEAT_SVE_SHA3`) — as 7 linhas do prefixo `0x45`
@@ -65,17 +66,17 @@ final class Aarch64SveCryptoDecoder {
         }
         if ((word & SM4E_MASK) == SM4E_VALUE) {
             return architecture.has(Aarch64Feature.SVE_SM4)
-                    ? new Ir64Op.SveCryptoSm4Encrypt(rd, rdnRm(word), address)
+                    ? new SveIntegerOp64.CryptoSm4Encrypt(rd, rdnRm(word), address)
                     : null;
         }
         if ((word & SM4EKEY_MASK) == SM4EKEY_VALUE) {
             return architecture.has(Aarch64Feature.SVE_SM4)
-                    ? new Ir64Op.SveCryptoSm4KeyUpdate(rd, rrrRn(word), rrrRm(word), address)
+                    ? new SveIntegerOp64.CryptoSm4KeyUpdate(rd, rrrRn(word), rrrRm(word), address)
                     : null;
         }
         if ((word & RAX1_MASK) == RAX1_VALUE) {
             return architecture.has(Aarch64Feature.SVE_SHA3)
-                    ? new Ir64Op.SveCryptoRax1(rd, rrrRn(word), rrrRm(word), address)
+                    ? new SveIntegerOp64.CryptoRax1(rd, rrrRn(word), rrrRm(word), address)
                     : null;
         }
         return null;
@@ -97,6 +98,6 @@ final class Aarch64SveCryptoDecoder {
     }
 
     private Ir64Op aes(Ir64CryptoAesOp op, int rd, int rn, long address) {
-        return architecture.has(Aarch64Feature.SVE_AES) ? new Ir64Op.SveCryptoAes(op, rd, rn, address) : null;
+        return architecture.has(Aarch64Feature.SVE_AES) ? new SveIntegerOp64.CryptoAes(op, rd, rn, address) : null;
     }
 }

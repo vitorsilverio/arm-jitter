@@ -6,11 +6,11 @@ import dev.vitorsilverio.armjitter.advsimd.AdvSimdCryptoShaOp;
 import dev.vitorsilverio.armjitter.advsimd.AdvSimdCryptoShaThreeRegisterOp;
 import dev.vitorsilverio.armjitter.core64.Aarch64Core;
 import dev.vitorsilverio.armjitter.core64.Aarch64FpRegisters;
+import dev.vitorsilverio.armjitter.ir64.CryptoOp64;
 import dev.vitorsilverio.armjitter.ir64.Ir64CryptoAesOp;
 import dev.vitorsilverio.armjitter.ir64.Ir64CryptoShaThreeRegisterOp;
 import dev.vitorsilverio.armjitter.ir64.Ir64CryptoShaTwoRegisterOp;
 import dev.vitorsilverio.armjitter.ir64.Ir64CryptoSm3TtOp;
-import dev.vitorsilverio.armjitter.ir64.Ir64Op;
 
 import java.util.HexFormat;
 
@@ -47,7 +47,7 @@ final class Ir64CryptoExecutor {
         };
     }
 
-    static boolean executeAes(Aarch64Core core, Ir64Op.CryptoAes op) {
+    static boolean executeAes(Aarch64Core core, CryptoOp64.Aes op) {
         Aarch64FpRegisters fp = core.fp();
         AdvSimdCrypto.aes(fp, mapAesOp(op.op()),
                 op.rd() * Aarch64FpRegisters.WORDS_PER_REGISTER,
@@ -101,7 +101,7 @@ final class Ir64CryptoExecutor {
         };
     }
 
-    static boolean executeShaThreeRegister(Aarch64Core core, Ir64Op.CryptoShaThreeRegister op) {
+    static boolean executeShaThreeRegister(Aarch64Core core, CryptoOp64.ShaThreeRegister op) {
         Aarch64FpRegisters fp = core.fp();
         AdvSimdCrypto.shaThreeRegister(fp, mapShaThreeRegisterOp(op.op()),
                 op.rd() * Aarch64FpRegisters.WORDS_PER_REGISTER,
@@ -110,7 +110,7 @@ final class Ir64CryptoExecutor {
         return false;
     }
 
-    static boolean executeShaTwoRegister(Aarch64Core core, Ir64Op.CryptoShaTwoRegister op) {
+    static boolean executeShaTwoRegister(Aarch64Core core, CryptoOp64.ShaTwoRegister op) {
         Aarch64FpRegisters fp = core.fp();
         AdvSimdCrypto.shaTwoRegister(fp, mapShaTwoRegisterOp(op.op()),
                 op.rd() * Aarch64FpRegisters.WORDS_PER_REGISTER,
@@ -119,10 +119,10 @@ final class Ir64CryptoExecutor {
     }
 
     /// Quantidade de rotação à ESQUERDA fixa do `RAX1` (sem campo de imediato no encoding real —
-    /// ver {@link Ir64Op.CryptoSha3TwoSourceRotate} javadoc).
+    /// ver {@link CryptoOp64.Sha3TwoSourceRotate} javadoc).
     private static final int RAX1_FIXED_ROTATE_LEFT = 1;
 
-    static boolean executeSha3FourRegister(Aarch64Core core, Ir64Op.CryptoSha3FourRegister op) {
+    static boolean executeSha3FourRegister(Aarch64Core core, CryptoOp64.Sha3FourRegister op) {
         Aarch64FpRegisters fp = core.fp();
         long nLo = fp.low64(op.rn());
         long nHi = fp.high64(op.rn());
@@ -141,13 +141,13 @@ final class Ir64CryptoExecutor {
                 resultLo = nLo ^ (mLo & ~aLo);
                 resultHi = nHi ^ (mHi & ~aHi);
             }
-            default -> throw new IllegalStateException("CryptoSha3FourRegister.op inesperado: " + op.op());
+            default -> throw new IllegalStateException("CryptoOp64.Sha3FourRegister.op inesperado: " + op.op());
         }
         fp.setQ(op.rd(), resultLo, resultHi);
         return false;
     }
 
-    static boolean executeSha3TwoSourceRotate(Aarch64Core core, Ir64Op.CryptoSha3TwoSourceRotate op) {
+    static boolean executeSha3TwoSourceRotate(Aarch64Core core, CryptoOp64.Sha3TwoSourceRotate op) {
         Aarch64FpRegisters fp = core.fp();
         long nLo = fp.low64(op.rn());
         long nHi = fp.high64(op.rn());
@@ -164,7 +164,7 @@ final class Ir64CryptoExecutor {
                 resultLo = Long.rotateRight(nLo ^ mLo, op.rotateAmount());
                 resultHi = Long.rotateRight(nHi ^ mHi, op.rotateAmount());
             }
-            default -> throw new IllegalStateException("CryptoSha3TwoSourceRotate.op inesperado: " + op.op());
+            default -> throw new IllegalStateException("CryptoOp64.Sha3TwoSourceRotate.op inesperado: " + op.op());
         }
         fp.setQ(op.rd(), resultLo, resultHi);
         return false;
@@ -205,7 +205,7 @@ final class Ir64CryptoExecutor {
     /// implementa a pseudocódigo do `ARM DDI 0487`. `SHA512H`/`H2` leem `Rd` como estado corrente
     /// (`{a,b}`/`{c,d}` do algoritmo, ver `## Resultado` da task) e o atualizam; `Rn`/`Rm` nunca são
     /// escritos.
-    static boolean executeSha512ThreeRegister(Aarch64Core core, Ir64Op.CryptoSha512ThreeRegister op) {
+    static boolean executeSha512ThreeRegister(Aarch64Core core, CryptoOp64.Sha512ThreeRegister op) {
         Aarch64FpRegisters fp = core.fp();
         long rn0 = fp.low64(op.rn());
         long rn1 = fp.high64(op.rn());
@@ -234,7 +234,7 @@ final class Ir64CryptoExecutor {
     /// `SHA512SU0` (`FEAT_SHA512`, B19.10) — `crypto_sha512su0` do QEMU. As duas metades usam os
     /// valores ORIGINAIS de `Rd`/`Rn` (nenhuma depende da outra já atualizada, ao contrário de
     /// {@link #executeSha512ThreeRegister}).
-    static boolean executeSha512TwoRegister(Aarch64Core core, Ir64Op.CryptoSha512TwoRegister op) {
+    static boolean executeSha512TwoRegister(Aarch64Core core, CryptoOp64.Sha512TwoRegister op) {
         Aarch64FpRegisters fp = core.fp();
         long d0 = fp.low64(op.rd());
         long d1 = fp.high64(op.rd());
@@ -249,7 +249,7 @@ final class Ir64CryptoExecutor {
     /// `crypto_sm3partw1`/`crypto_sm3partw2` do QEMU. `PARTW1` encadeia (a última palavra usa a
     /// PRIMEIRA já atualizada nesta mesma execução — mutação em sequência, não paralela); `PARTW2`
     /// não encadeia (só reusa a variável `t` local).
-    static boolean executeSm3ThreeRegister(Aarch64Core core, Ir64Op.CryptoSm3ThreeRegister op) {
+    static boolean executeSm3ThreeRegister(Aarch64Core core, CryptoOp64.Sm3ThreeRegister op) {
         Aarch64FpRegisters fp = core.fp();
         int[] d = readWords(fp, op.rd());
         int[] n = readWords(fp, op.rn());
@@ -281,7 +281,7 @@ final class Ir64CryptoExecutor {
     /// `SM3SS1` (`FEAT_SM3`, B19.10) — `ARM DDI 0487`: `result = ROL(ROL(Vn[127:96],12) +
     /// Vm[127:96] + Va[127:96], 7)`, escrito só na palavra ALTA de `Rd` (elemento `3`); as 3
     /// palavras baixas são zeradas (função pura — `Rd` atual nunca é lido).
-    static boolean executeSm3FourRegister(Aarch64Core core, Ir64Op.CryptoSm3FourRegister op) {
+    static boolean executeSm3FourRegister(Aarch64Core core, CryptoOp64.Sm3FourRegister op) {
         Aarch64FpRegisters fp = core.fp();
         int n3 = (int) fp.element(op.rn(), 3, WORD_SIZE_LOG2);
         int m3 = (int) fp.element(op.rm(), 3, WORD_SIZE_LOG2);
@@ -296,7 +296,7 @@ final class Ir64CryptoExecutor {
     /// `enum`). `Par`/`Maj`/`Cho` reusam {@link #sha1Parity}/{@link #sha1Majority}/
     /// {@link #sha1Choose} (mesmas fórmulas do FIPS 180-4, a largura não muda). Mutação em
     /// SEQUÊNCIA (`d[0]`/`d[1]`/`d[2]`/`d[3]`, nesta ordem) — trocar a ordem lê valor já sobrescrito.
-    static boolean executeSm3ThreeRegisterImm2(Aarch64Core core, Ir64Op.CryptoSm3ThreeRegisterImm2 op) {
+    static boolean executeSm3ThreeRegisterImm2(Aarch64Core core, CryptoOp64.Sm3ThreeRegisterImm2 op) {
         Aarch64FpRegisters fp = core.fp();
         int[] d = readWords(fp, op.rd());
         int[] n = readWords(fp, op.rn());
@@ -349,10 +349,10 @@ final class Ir64CryptoExecutor {
     }
 
     /// `SM4E` (`FEAT_SM4`, B19.10) — fórmula transcrita de `do_crypto_sm4e` do QEMU: processa 4
-    /// rodadas de cifra de uma vez. {@link Ir64Op.CryptoSm4Encrypt#rd} é o estado ATUAL do bloco
+    /// rodadas de cifra de uma vez. {@link CryptoOp64.Sm4Encrypt#rd} é o estado ATUAL do bloco
     /// (lido E escrito, mesmo padrão destrutivo de {@link #executeAes} `AESE`/`AESD`);
-    /// {@link Ir64Op.CryptoSm4Encrypt#rn} carrega as 4 subchaves de rodada desta chamada.
-    static boolean executeSm4Encrypt(Aarch64Core core, Ir64Op.CryptoSm4Encrypt op) {
+    /// {@link CryptoOp64.Sm4Encrypt#rn} carrega as 4 subchaves de rodada desta chamada.
+    static boolean executeSm4Encrypt(Aarch64Core core, CryptoOp64.Sm4Encrypt op) {
         Aarch64FpRegisters fp = core.fp();
         int[] d = readWords(fp, op.rd());
         int[] roundKeys = readWords(fp, op.rn());
@@ -367,12 +367,12 @@ final class Ir64CryptoExecutor {
     }
 
     /// `SM4EKEY` (`FEAT_SM4`, B19.10) — fórmula transcrita de `do_crypto_sm4ekey` do QEMU: expansão
-    /// de chave, 4 rodadas de uma vez. Função PURA de {@link Ir64Op.CryptoSm4KeyUpdate#rn} (estado
-    /// atual da chave) e {@link Ir64Op.CryptoSm4KeyUpdate#rm} (constantes de rodada `CK`) — `Rd`
+    /// de chave, 4 rodadas de uma vez. Função PURA de {@link CryptoOp64.Sm4KeyUpdate#rn} (estado
+    /// atual da chave) e {@link CryptoOp64.Sm4KeyUpdate#rm} (constantes de rodada `CK`) — `Rd`
     /// atual NUNCA é lido (diferente de {@link #executeSm4Encrypt}), mesma rotação de 13/23 (não
     /// 2/10/18/24 de `SM4E` — algoritmos de expansão de chave e de cifra usam transformações
     /// lineares `L`/`L'` diferentes por design do padrão SM4).
-    static boolean executeSm4KeyUpdate(Aarch64Core core, Ir64Op.CryptoSm4KeyUpdate op) {
+    static boolean executeSm4KeyUpdate(Aarch64Core core, CryptoOp64.Sm4KeyUpdate op) {
         Aarch64FpRegisters fp = core.fp();
         int[] d = readWords(fp, op.rn());
         int[] roundConstants = readWords(fp, op.rm());

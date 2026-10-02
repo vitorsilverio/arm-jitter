@@ -4,6 +4,7 @@ import dev.vitorsilverio.armjitter.arch64.Aarch64Architecture;
 import dev.vitorsilverio.armjitter.ir64.Aarch64SystemRegisterId;
 import dev.vitorsilverio.armjitter.ir64.Ir64Op;
 import dev.vitorsilverio.armjitter.ir64.Ir64SystemInstructionOp;
+import dev.vitorsilverio.armjitter.ir64.SystemOp64;
 import dev.vitorsilverio.armjitter.memory.AddressSpace64;
 import dev.vitorsilverio.armjitter.support.TestAddressSpace;
 import org.junit.jupiter.api.Test;
@@ -45,21 +46,21 @@ class Aarch64NmiDecoderTest {
 
     @Test
     void msrImmediateAllintDecodesWithNmi() {
-        Ir64Op.SystemInstruction op =
-                (Ir64Op.SystemInstruction) decodeWord(NMI_DECODER, MSR_IMMEDIATE_ALLINT_WORD);
+        SystemOp64.SystemInstruction op =
+                (SystemOp64.SystemInstruction) decodeWord(NMI_DECODER, MSR_IMMEDIATE_ALLINT_WORD);
         assertEquals(Ir64SystemInstructionOp.PSTATE_FIELD_NOP, op.opcode());
     }
 
     @Test
     void mrsAllintDecodesWithNmi() {
-        Ir64Op.SystemRegister op = (Ir64Op.SystemRegister) decodeWord(NMI_DECODER, MRS_ALLINT_WORD);
+        SystemOp64.SystemRegister op = (SystemOp64.SystemRegister) decodeWord(NMI_DECODER, MRS_ALLINT_WORD);
         assertEquals(Aarch64SystemRegisterId.ALLINT, op.register());
     }
 
     @Test
     void msrRegisterAllintDecodesWithNmi() {
-        Ir64Op.SystemRegister op =
-                (Ir64Op.SystemRegister) decodeWord(NMI_DECODER, MSR_REGISTER_ALLINT_WORD);
+        SystemOp64.SystemRegister op =
+                (SystemOp64.SystemRegister) decodeWord(NMI_DECODER, MSR_REGISTER_ALLINT_WORD);
         assertEquals(Aarch64SystemRegisterId.ALLINT, op.register());
     }
 }

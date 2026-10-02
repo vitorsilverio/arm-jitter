@@ -1,6 +1,7 @@
 package dev.vitorsilverio.armjitter.core64;
 
-/// Sinaliza que o executor encontrou um `HLT` (`ir64/Ir64Op.UndefinedInstructionTrap`, B8.3)
+
+/// Sinaliza que o executor encontrou um `HLT` (`ir64/SystemOp64.UndefinedInstructionTrap`, B8.3)
 /// durante a execução de um bloco — sem estado de debug externo modelado, o pseudocódigo real do
 /// manual para `HLT` cai no caminho `UNDEFINED`. Irmã de {@link Aarch64BreakpointException} (mesmo
 /// raciocínio de captura no `Ir64BlockExecutor`, convertida em exceção síncrona real via

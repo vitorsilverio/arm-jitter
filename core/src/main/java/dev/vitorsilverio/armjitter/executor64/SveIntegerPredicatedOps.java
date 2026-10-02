@@ -3,13 +3,13 @@ package dev.vitorsilverio.armjitter.executor64;
 import dev.vitorsilverio.armjitter.advsimd.AdvSimdLanes;
 import dev.vitorsilverio.armjitter.core64.Aarch64Core;
 import dev.vitorsilverio.armjitter.core64.Aarch64ScalableRegisters;
-import dev.vitorsilverio.armjitter.ir64.Ir64Op;
+import dev.vitorsilverio.armjitter.ir64.SveIntegerOp64;
 
 /// Semântica das operações inteiras SVE **com predicado governante** (B17.6): aritmética binária,
 /// shifts (imediato, vetor e elemento largo) e unárias.
 ///
 /// Todas são **merging**: o elemento inativo de `Zd` fica byte a byte como estava — exceto nas unárias
-/// `_z` (`FEAT_SVE2p2`), que o zeram ({@link Ir64Op.SveIntegerPredicated#zeroing()}). Um elemento está
+/// `_z` (`FEAT_SVE2p2`), que o zeram ({@link SveIntegerOp64.IntegerPredicated#zeroing()}). Um elemento está
 /// ativo quando o bit do byte MAIS BAIXO dele em `P[pg]` está ligado (`P` guarda um bit por byte). Os
 /// auxiliares de elemento vêm de {@link SveIntegerOps} — cada operação vive num lugar só.
 ///
@@ -28,7 +28,7 @@ final class SveIntegerPredicatedOps {
     }
 
     /// Executa uma operação do grupo. `true` = a instrução já entrou numa exceção (acesso negado).
-    static boolean execute(Aarch64Core core, Ir64Op.SveIntegerPredicated op) {
+    static boolean execute(Aarch64Core core, SveIntegerOp64.IntegerPredicated op) {
         if (!SvePredicateOps.accessAllowed(core, op.instructionAddress())) {
             return true;
         }
@@ -70,7 +70,7 @@ final class SveIntegerPredicatedOps {
         return false;
     }
 
-    private static boolean isPairwise(Ir64Op.SveIntegerPredicated.Op op) {
+    private static boolean isPairwise(SveIntegerOp64.IntegerPredicated.Op op) {
         return switch (op) {
             case ADDP, SMAXP, UMAXP, SMINP, UMINP -> true;
             default -> false;
@@ -81,7 +81,7 @@ final class SveIntegerPredicatedOps {
     /// destino e os de `Zm` o `2k+1` — dentro de cada segmento de 128 bits, que tem sempre um número par de elementos.
     /// O predicado governa o elemento de DESTINO; o inativo é preservado. As quatro fontes do par são lidas ANTES de
     /// qualquer escrita (`Zm` e `Zn` podem ser o próprio `Zdn`).
-    private static void pairwise(Aarch64ScalableRegisters regs, Ir64Op.SveIntegerPredicated op, int elements) {
+    private static void pairwise(Aarch64ScalableRegisters regs, SveIntegerOp64.IntegerPredicated op, int elements) {
         int esz = op.esz();
         for (int e = 0; e < elements; e += 2) {
             long n0 = SveIntegerOps.get(regs, op.rn(), e, esz);
@@ -102,7 +102,7 @@ final class SveIntegerPredicatedOps {
         return ((regs.pWord(pg, bit >>> WORD_INDEX_SHIFT) >>> (bit & WORD_BIT_MASK)) & 1L) != 0L;
     }
 
-    private static long pair(Ir64Op.SveIntegerPredicated.Op kind, long a, long b, int esz) {
+    private static long pair(SveIntegerOp64.IntegerPredicated.Op kind, long a, long b, int esz) {
         long sa = SveIntegerOps.signExtend(a, esz);
         long sb = SveIntegerOps.signExtend(b, esz);
         return switch (kind) {
@@ -128,14 +128,14 @@ final class SveIntegerPredicatedOps {
         return low + high;
     }
 
-    private static boolean isWide(Ir64Op.SveIntegerPredicated.Op op) {
-        return op == Ir64Op.SveIntegerPredicated.Op.ASR_WIDE || op == Ir64Op.SveIntegerPredicated.Op.LSR_WIDE
-                || op == Ir64Op.SveIntegerPredicated.Op.LSL_WIDE;
+    private static boolean isWide(SveIntegerOp64.IntegerPredicated.Op op) {
+        return op == SveIntegerOp64.IntegerPredicated.Op.ASR_WIDE || op == SveIntegerOp64.IntegerPredicated.Op.LSR_WIDE
+                || op == SveIntegerOp64.IntegerPredicated.Op.LSL_WIDE;
     }
 
     // ── Binárias (inclui os shifts por vetor) ───────────────────────────────────────────────────
 
-    static long binary(Ir64Op.SveIntegerPredicated.Op kind, long n, long m, int esz) {
+    static long binary(SveIntegerOp64.IntegerPredicated.Op kind, long n, long m, int esz) {
         long sn = SveIntegerOps.signExtend(n, esz);
         long sm = SveIntegerOps.signExtend(m, esz);
         int bits = SveIntegerOps.elementBits(esz);
@@ -170,7 +170,7 @@ final class SveIntegerPredicatedOps {
     /// `amount` é sem sinal de até 64 bits; um valor com o bit 63 ligado aparece negativo e conta como
     /// "estoura o elemento" (`ASR` preenche com o sinal, `LSR`/`LSL` zeram) — todos os bits contam, não
     /// só os baixos (`DO_ASR`/`DO_LSR`/`DO_LSL` do QEMU).
-    private static long shift(Ir64Op.SveIntegerPredicated.Op kind, long value, long amount, int esz) {
+    private static long shift(SveIntegerOp64.IntegerPredicated.Op kind, long value, long amount, int esz) {
         int bits = SveIntegerOps.elementBits(esz);
         boolean overflow = amount < 0 || amount >= bits;
         return switch (kind) {
@@ -183,7 +183,7 @@ final class SveIntegerPredicatedOps {
 
     /// Shifts por imediato: `ASR`/`LSR`/`LSL` (shift por `esize` é válido: `ASR` clampa, `LSR` zera), `ASRD`
     /// (arredonda para zero) e as 5 formas SVE2 (saturantes e com arredondamento), sem efeito em `FPSR.QC`.
-    static long immediateShift(Ir64Op.SveIntegerPredicated.Op kind, long value, long amount, int esz) {
+    static long immediateShift(SveIntegerOp64.IntegerPredicated.Op kind, long value, long amount, int esz) {
         int bits = SveIntegerOps.elementBits(esz);
         long signed = SveIntegerOps.signExtend(value, esz);
         long unsignedMax = SveIntegerOps.elementMask(esz);
@@ -208,7 +208,7 @@ final class SveIntegerPredicatedOps {
 
     // ── Unárias ──────────────────────────────────────────────────────────────────────────────────
 
-    private static long unary(Ir64Op.SveIntegerPredicated.Op kind, long n, int esz) {
+    private static long unary(SveIntegerOp64.IntegerPredicated.Op kind, long n, int esz) {
         int bits = SveIntegerOps.elementBits(esz);
         long signed = SveIntegerOps.signExtend(n, esz);
         long signBit = 1L << (bits - 1);

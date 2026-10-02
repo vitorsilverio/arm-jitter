@@ -11,6 +11,8 @@ import dev.vitorsilverio.armjitter.ir64.Aarch64SystemRegisterId;
 import dev.vitorsilverio.armjitter.ir64.Ir64Block;
 import dev.vitorsilverio.armjitter.ir64.Ir64Op;
 import dev.vitorsilverio.armjitter.ir64.StandardIr64BlockLifter;
+import dev.vitorsilverio.armjitter.ir64.SveIntegerOp64;
+import dev.vitorsilverio.armjitter.ir64.SvePredicateOp64;
 import dev.vitorsilverio.armjitter.memory.AddressSpace64;
 import dev.vitorsilverio.armjitter.support.TestAddressSpace;
 import org.junit.jupiter.api.Test;
@@ -244,45 +246,45 @@ class Aarch64SvePredicateTest {
 
     static Stream<Arguments> decodeCases() {
         return Stream.of(
-                Arguments.of(AND, Ir64Op.SvePredicateLogical.class), Arguments.of(ANDS, Ir64Op.SvePredicateLogical.class),
-                Arguments.of(BIC, Ir64Op.SvePredicateLogical.class), Arguments.of(BICS, Ir64Op.SvePredicateLogical.class),
-                Arguments.of(EOR, Ir64Op.SvePredicateLogical.class), Arguments.of(EORS, Ir64Op.SvePredicateLogical.class),
-                Arguments.of(SEL, Ir64Op.SvePredicateLogical.class),
-                Arguments.of(ORR, Ir64Op.SvePredicateLogical.class), Arguments.of(ORRS, Ir64Op.SvePredicateLogical.class),
-                Arguments.of(ORN, Ir64Op.SvePredicateLogical.class), Arguments.of(ORNS, Ir64Op.SvePredicateLogical.class),
-                Arguments.of(NOR, Ir64Op.SvePredicateLogical.class), Arguments.of(NORS, Ir64Op.SvePredicateLogical.class),
-                Arguments.of(NAND, Ir64Op.SvePredicateLogical.class), Arguments.of(NANDS, Ir64Op.SvePredicateLogical.class),
-                Arguments.of(PTEST_P5_P6, Ir64Op.SvePredicateMisc.class),
-                Arguments.of(PTRUE_B_ALL_P1, Ir64Op.SvePredicateMisc.class),
-                Arguments.of(PFALSE_P3, Ir64Op.SvePredicateMisc.class),
-                Arguments.of(SETFFR, Ir64Op.SvePredicateMisc.class),
-                Arguments.of(RDFFR_P4, Ir64Op.SvePredicateMisc.class),
-                Arguments.of(RDFFR_P4_PG5, Ir64Op.SvePredicateMisc.class),
-                Arguments.of(RDFFRS_P4_PG5, Ir64Op.SvePredicateMisc.class),
-                Arguments.of(WRFFR_P6, Ir64Op.SvePredicateMisc.class),
-                Arguments.of(PFIRST_P1_PG2, Ir64Op.SvePredicateMisc.class),
-                Arguments.of(PNEXT_B, Ir64Op.SvePredicateMisc.class), Arguments.of(PNEXT_D, Ir64Op.SvePredicateMisc.class),
-                Arguments.of(BRKPA, Ir64Op.SvePartitionBreak.class), Arguments.of(BRKPAS, Ir64Op.SvePartitionBreak.class),
-                Arguments.of(BRKPB, Ir64Op.SvePartitionBreak.class), Arguments.of(BRKPBS, Ir64Op.SvePartitionBreak.class),
-                Arguments.of(BRKA_Z, Ir64Op.SvePartitionBreak.class), Arguments.of(BRKAS_Z, Ir64Op.SvePartitionBreak.class),
-                Arguments.of(BRKA_M, Ir64Op.SvePartitionBreak.class), Arguments.of(BRKB_Z, Ir64Op.SvePartitionBreak.class),
-                Arguments.of(BRKBS_Z, Ir64Op.SvePartitionBreak.class), Arguments.of(BRKB_M, Ir64Op.SvePartitionBreak.class),
-                Arguments.of(BRKN, Ir64Op.SvePartitionBreak.class), Arguments.of(BRKNS, Ir64Op.SvePartitionBreak.class),
-                Arguments.of(CNTP_B, Ir64Op.SvePredicateCount.class), Arguments.of(CNTP_D, Ir64Op.SvePredicateCount.class),
-                Arguments.of(INCP_X_B, Ir64Op.SvePredicateCount.class), Arguments.of(DECP_X_H, Ir64Op.SvePredicateCount.class),
-                Arguments.of(INCP_Z_H, Ir64Op.SvePredicateCount.class), Arguments.of(DECP_Z_D, Ir64Op.SvePredicateCount.class),
-                Arguments.of(SQINCP_X_W_B, Ir64Op.SvePredicateCount.class),
-                Arguments.of(UQINCP_W_H, Ir64Op.SvePredicateCount.class),
-                Arguments.of(SQINCP_X_B, Ir64Op.SvePredicateCount.class),
-                Arguments.of(UQDECP_X_D, Ir64Op.SvePredicateCount.class),
-                Arguments.of(SQINCP_Z_S, Ir64Op.SvePredicateCount.class),
-                Arguments.of(UQDECP_Z_H, Ir64Op.SvePredicateCount.class),
-                Arguments.of(CNTB, Ir64Op.SveElementCount.class), Arguments.of(CNTH_VL3_MUL4, Ir64Op.SveElementCount.class),
-                Arguments.of(INCB, Ir64Op.SveElementCount.class), Arguments.of(DECD_VL4_MUL3, Ir64Op.SveElementCount.class),
-                Arguments.of(INCH_Z, Ir64Op.SveElementCount.class),
-                Arguments.of(DECW_Z_MUL3_MUL2, Ir64Op.SveElementCount.class),
-                Arguments.of(SQINCB_X_W, Ir64Op.SveElementCount.class), Arguments.of(UQINCB_W, Ir64Op.SveElementCount.class),
-                Arguments.of(SQINCB_X, Ir64Op.SveElementCount.class), Arguments.of(SQINCH_Z, Ir64Op.SveElementCount.class));
+                Arguments.of(AND, SvePredicateOp64.PredicateLogical.class), Arguments.of(ANDS, SvePredicateOp64.PredicateLogical.class),
+                Arguments.of(BIC, SvePredicateOp64.PredicateLogical.class), Arguments.of(BICS, SvePredicateOp64.PredicateLogical.class),
+                Arguments.of(EOR, SvePredicateOp64.PredicateLogical.class), Arguments.of(EORS, SvePredicateOp64.PredicateLogical.class),
+                Arguments.of(SEL, SvePredicateOp64.PredicateLogical.class),
+                Arguments.of(ORR, SvePredicateOp64.PredicateLogical.class), Arguments.of(ORRS, SvePredicateOp64.PredicateLogical.class),
+                Arguments.of(ORN, SvePredicateOp64.PredicateLogical.class), Arguments.of(ORNS, SvePredicateOp64.PredicateLogical.class),
+                Arguments.of(NOR, SvePredicateOp64.PredicateLogical.class), Arguments.of(NORS, SvePredicateOp64.PredicateLogical.class),
+                Arguments.of(NAND, SvePredicateOp64.PredicateLogical.class), Arguments.of(NANDS, SvePredicateOp64.PredicateLogical.class),
+                Arguments.of(PTEST_P5_P6, SvePredicateOp64.PredicateMisc.class),
+                Arguments.of(PTRUE_B_ALL_P1, SvePredicateOp64.PredicateMisc.class),
+                Arguments.of(PFALSE_P3, SvePredicateOp64.PredicateMisc.class),
+                Arguments.of(SETFFR, SvePredicateOp64.PredicateMisc.class),
+                Arguments.of(RDFFR_P4, SvePredicateOp64.PredicateMisc.class),
+                Arguments.of(RDFFR_P4_PG5, SvePredicateOp64.PredicateMisc.class),
+                Arguments.of(RDFFRS_P4_PG5, SvePredicateOp64.PredicateMisc.class),
+                Arguments.of(WRFFR_P6, SvePredicateOp64.PredicateMisc.class),
+                Arguments.of(PFIRST_P1_PG2, SvePredicateOp64.PredicateMisc.class),
+                Arguments.of(PNEXT_B, SvePredicateOp64.PredicateMisc.class), Arguments.of(PNEXT_D, SvePredicateOp64.PredicateMisc.class),
+                Arguments.of(BRKPA, SvePredicateOp64.PartitionBreak.class), Arguments.of(BRKPAS, SvePredicateOp64.PartitionBreak.class),
+                Arguments.of(BRKPB, SvePredicateOp64.PartitionBreak.class), Arguments.of(BRKPBS, SvePredicateOp64.PartitionBreak.class),
+                Arguments.of(BRKA_Z, SvePredicateOp64.PartitionBreak.class), Arguments.of(BRKAS_Z, SvePredicateOp64.PartitionBreak.class),
+                Arguments.of(BRKA_M, SvePredicateOp64.PartitionBreak.class), Arguments.of(BRKB_Z, SvePredicateOp64.PartitionBreak.class),
+                Arguments.of(BRKBS_Z, SvePredicateOp64.PartitionBreak.class), Arguments.of(BRKB_M, SvePredicateOp64.PartitionBreak.class),
+                Arguments.of(BRKN, SvePredicateOp64.PartitionBreak.class), Arguments.of(BRKNS, SvePredicateOp64.PartitionBreak.class),
+                Arguments.of(CNTP_B, SvePredicateOp64.PredicateCount.class), Arguments.of(CNTP_D, SvePredicateOp64.PredicateCount.class),
+                Arguments.of(INCP_X_B, SvePredicateOp64.PredicateCount.class), Arguments.of(DECP_X_H, SvePredicateOp64.PredicateCount.class),
+                Arguments.of(INCP_Z_H, SvePredicateOp64.PredicateCount.class), Arguments.of(DECP_Z_D, SvePredicateOp64.PredicateCount.class),
+                Arguments.of(SQINCP_X_W_B, SvePredicateOp64.PredicateCount.class),
+                Arguments.of(UQINCP_W_H, SvePredicateOp64.PredicateCount.class),
+                Arguments.of(SQINCP_X_B, SvePredicateOp64.PredicateCount.class),
+                Arguments.of(UQDECP_X_D, SvePredicateOp64.PredicateCount.class),
+                Arguments.of(SQINCP_Z_S, SvePredicateOp64.PredicateCount.class),
+                Arguments.of(UQDECP_Z_H, SvePredicateOp64.PredicateCount.class),
+                Arguments.of(CNTB, SveIntegerOp64.ElementCount.class), Arguments.of(CNTH_VL3_MUL4, SveIntegerOp64.ElementCount.class),
+                Arguments.of(INCB, SveIntegerOp64.ElementCount.class), Arguments.of(DECD_VL4_MUL3, SveIntegerOp64.ElementCount.class),
+                Arguments.of(INCH_Z, SveIntegerOp64.ElementCount.class),
+                Arguments.of(DECW_Z_MUL3_MUL2, SveIntegerOp64.ElementCount.class),
+                Arguments.of(SQINCB_X_W, SveIntegerOp64.ElementCount.class), Arguments.of(UQINCB_W, SveIntegerOp64.ElementCount.class),
+                Arguments.of(SQINCB_X, SveIntegerOp64.ElementCount.class), Arguments.of(SQINCH_Z, SveIntegerOp64.ElementCount.class));
     }
 
     @ParameterizedTest
@@ -302,11 +304,11 @@ class Aarch64SvePredicateTest {
 
     @Test
     void decodedFieldsMatchTheAssemblerOperands() {
-        assertEquals(new Ir64Op.SvePredicateLogical(Ir64Op.SvePredicateLogical.Op.ORR, 1, 2, 3, 4, true, 0),
+        assertEquals(new SvePredicateOp64.PredicateLogical(SvePredicateOp64.PredicateLogical.Op.ORR, 1, 2, 3, 4, true, 0),
                 decode(Aarch64Architecture.ARMV9_0_A, ORRS));
-        assertEquals(new Ir64Op.SvePredicateMisc(Ir64Op.SvePredicateMisc.Op.PTRUE, 1, 1, 0, 0, false, 3, 0),
+        assertEquals(new SvePredicateOp64.PredicateMisc(SvePredicateOp64.PredicateMisc.Op.PTRUE, 1, 1, 0, 0, false, 3, 0),
                 decode(Aarch64Architecture.ARMV9_0_A, 0x2558e061)); // ptrue p1.h, vl3
-        assertEquals(new Ir64Op.SveElementCount(Ir64Op.SveElementCount.Op.CNT, 1, 1, 3, 4, false, true, 0),
+        assertEquals(new SveIntegerOp64.ElementCount(SveIntegerOp64.ElementCount.Op.CNT, 1, 1, 3, 4, false, true, 0),
                 decode(Aarch64Architecture.ARMV9_0_A, CNTH_VL3_MUL4));
     }
 
@@ -336,8 +338,8 @@ class Aarch64SvePredicateTest {
         assertThrows(UnsupportedOperationException.class, () -> decode(Aarch64Architecture.ARMV9_0_A, LASTP_B));
         Aarch64Architecture withSve22 = Aarch64Architecture.extending(
                 Aarch64Architecture.ARMV9_0_A, "teste-SVE2p2", Aarch64Feature.SVE2_2);
-        assertInstanceOf(Ir64Op.SvePredicateCount.class, decode(withSve22, FIRSTP_B));
-        assertInstanceOf(Ir64Op.SvePredicateCount.class, decode(withSve22, LASTP_B));
+        assertInstanceOf(SvePredicateOp64.PredicateCount.class, decode(withSve22, FIRSTP_B));
+        assertInstanceOf(SvePredicateOp64.PredicateCount.class, decode(withSve22, LASTP_B));
     }
 
     // ── Lógica de predicado ─────────────────────────────────────────────────────────────────────

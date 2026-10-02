@@ -1,6 +1,7 @@
 package dev.vitorsilverio.armjitter.decoder64;
 
 import dev.vitorsilverio.armjitter.arch64.Aarch64Architecture;
+import dev.vitorsilverio.armjitter.ir64.AdvSimdIntegerOp64;
 import dev.vitorsilverio.armjitter.ir64.Ir64Op;
 import dev.vitorsilverio.armjitter.ir64.Ir64VectorThreeSameOp;
 import dev.vitorsilverio.armjitter.memory.AddressSpace64;
@@ -51,8 +52,8 @@ class Aarch64AdvSimdRdmDecoderTest {
     @Test
     void sqrdmlahVector4h() {
         // 2e428420: sqrdmlah v0.4h, v1.4h, v2.4h
-        Ir64Op.VectorArithmeticThreeSame op =
-                (Ir64Op.VectorArithmeticThreeSame) decodeWord(RDM_DECODER, 0x2e428420);
+        AdvSimdIntegerOp64.ArithmeticThreeSame op =
+                (AdvSimdIntegerOp64.ArithmeticThreeSame) decodeWord(RDM_DECODER, 0x2e428420);
         assertEquals(Ir64VectorThreeSameOp.SQRDMLAH, op.op());
         assertEquals(false, op.scalar());
         assertEquals(false, op.q());
@@ -65,8 +66,8 @@ class Aarch64AdvSimdRdmDecoderTest {
     @Test
     void sqrdmlahVector8h() {
         // 6e458483: sqrdmlah v3.8h, v4.8h, v5.8h
-        Ir64Op.VectorArithmeticThreeSame op =
-                (Ir64Op.VectorArithmeticThreeSame) decodeWord(RDM_DECODER, 0x6e458483);
+        AdvSimdIntegerOp64.ArithmeticThreeSame op =
+                (AdvSimdIntegerOp64.ArithmeticThreeSame) decodeWord(RDM_DECODER, 0x6e458483);
         assertEquals(Ir64VectorThreeSameOp.SQRDMLAH, op.op());
         assertEquals(true, op.q());
         assertEquals(1, op.esz());
@@ -78,8 +79,8 @@ class Aarch64AdvSimdRdmDecoderTest {
     @Test
     void sqrdmlahVector2s() {
         // 2e8884e6: sqrdmlah v6.2s, v7.2s, v8.2s
-        Ir64Op.VectorArithmeticThreeSame op =
-                (Ir64Op.VectorArithmeticThreeSame) decodeWord(RDM_DECODER, 0x2e8884e6);
+        AdvSimdIntegerOp64.ArithmeticThreeSame op =
+                (AdvSimdIntegerOp64.ArithmeticThreeSame) decodeWord(RDM_DECODER, 0x2e8884e6);
         assertEquals(Ir64VectorThreeSameOp.SQRDMLAH, op.op());
         assertEquals(false, op.q());
         assertEquals(2, op.esz());
@@ -91,8 +92,8 @@ class Aarch64AdvSimdRdmDecoderTest {
     @Test
     void sqrdmlahVector4s() {
         // 6e8b8549: sqrdmlah v9.4s, v10.4s, v11.4s
-        Ir64Op.VectorArithmeticThreeSame op =
-                (Ir64Op.VectorArithmeticThreeSame) decodeWord(RDM_DECODER, 0x6e8b8549);
+        AdvSimdIntegerOp64.ArithmeticThreeSame op =
+                (AdvSimdIntegerOp64.ArithmeticThreeSame) decodeWord(RDM_DECODER, 0x6e8b8549);
         assertEquals(Ir64VectorThreeSameOp.SQRDMLAH, op.op());
         assertEquals(true, op.q());
         assertEquals(2, op.esz());
@@ -104,8 +105,8 @@ class Aarch64AdvSimdRdmDecoderTest {
     @Test
     void sqrdmlshVector4h() {
         // 2e428c20: sqrdmlsh v0.4h, v1.4h, v2.4h
-        Ir64Op.VectorArithmeticThreeSame op =
-                (Ir64Op.VectorArithmeticThreeSame) decodeWord(RDM_DECODER, 0x2e428c20);
+        AdvSimdIntegerOp64.ArithmeticThreeSame op =
+                (AdvSimdIntegerOp64.ArithmeticThreeSame) decodeWord(RDM_DECODER, 0x2e428c20);
         assertEquals(Ir64VectorThreeSameOp.SQRDMLSH, op.op());
         assertEquals(1, op.esz());
         assertEquals(0, op.rd());
@@ -116,8 +117,8 @@ class Aarch64AdvSimdRdmDecoderTest {
     @Test
     void sqrdmlshVector4s() {
         // 6e8b8d49: sqrdmlsh v9.4s, v10.4s, v11.4s
-        Ir64Op.VectorArithmeticThreeSame op =
-                (Ir64Op.VectorArithmeticThreeSame) decodeWord(RDM_DECODER, 0x6e8b8d49);
+        AdvSimdIntegerOp64.ArithmeticThreeSame op =
+                (AdvSimdIntegerOp64.ArithmeticThreeSame) decodeWord(RDM_DECODER, 0x6e8b8d49);
         assertEquals(Ir64VectorThreeSameOp.SQRDMLSH, op.op());
         assertEquals(true, op.q());
         assertEquals(2, op.esz());
@@ -131,8 +132,8 @@ class Aarch64AdvSimdRdmDecoderTest {
     @Test
     void sqrdmlahScalarHalfword() {
         // 7e428420: sqrdmlah h0, h1, h2
-        Ir64Op.VectorArithmeticThreeSame op =
-                (Ir64Op.VectorArithmeticThreeSame) decodeWord(RDM_DECODER, 0x7e428420);
+        AdvSimdIntegerOp64.ArithmeticThreeSame op =
+                (AdvSimdIntegerOp64.ArithmeticThreeSame) decodeWord(RDM_DECODER, 0x7e428420);
         assertEquals(Ir64VectorThreeSameOp.SQRDMLAH, op.op());
         assertEquals(true, op.scalar());
         assertEquals(1, op.esz());
@@ -144,8 +145,8 @@ class Aarch64AdvSimdRdmDecoderTest {
     @Test
     void sqrdmlahScalarWord() {
         // 7e858483: sqrdmlah s3, s4, s5
-        Ir64Op.VectorArithmeticThreeSame op =
-                (Ir64Op.VectorArithmeticThreeSame) decodeWord(RDM_DECODER, 0x7e858483);
+        AdvSimdIntegerOp64.ArithmeticThreeSame op =
+                (AdvSimdIntegerOp64.ArithmeticThreeSame) decodeWord(RDM_DECODER, 0x7e858483);
         assertEquals(Ir64VectorThreeSameOp.SQRDMLAH, op.op());
         assertEquals(true, op.scalar());
         assertEquals(2, op.esz());
@@ -157,8 +158,8 @@ class Aarch64AdvSimdRdmDecoderTest {
     @Test
     void sqrdmlshScalarHalfword() {
         // 7e428c20: sqrdmlsh h0, h1, h2
-        Ir64Op.VectorArithmeticThreeSame op =
-                (Ir64Op.VectorArithmeticThreeSame) decodeWord(RDM_DECODER, 0x7e428c20);
+        AdvSimdIntegerOp64.ArithmeticThreeSame op =
+                (AdvSimdIntegerOp64.ArithmeticThreeSame) decodeWord(RDM_DECODER, 0x7e428c20);
         assertEquals(Ir64VectorThreeSameOp.SQRDMLSH, op.op());
         assertEquals(true, op.scalar());
         assertEquals(1, op.esz());
@@ -167,8 +168,8 @@ class Aarch64AdvSimdRdmDecoderTest {
     @Test
     void sqrdmlshScalarWord() {
         // 7e858c83: sqrdmlsh s3, s4, s5
-        Ir64Op.VectorArithmeticThreeSame op =
-                (Ir64Op.VectorArithmeticThreeSame) decodeWord(RDM_DECODER, 0x7e858c83);
+        AdvSimdIntegerOp64.ArithmeticThreeSame op =
+                (AdvSimdIntegerOp64.ArithmeticThreeSame) decodeWord(RDM_DECODER, 0x7e858c83);
         assertEquals(Ir64VectorThreeSameOp.SQRDMLSH, op.op());
         assertEquals(true, op.scalar());
         assertEquals(2, op.esz());
@@ -179,8 +180,8 @@ class Aarch64AdvSimdRdmDecoderTest {
     @Test
     void sqrdmlahIndexedVector4h() {
         // 2f72d020: sqrdmlah v0.4h, v1.4h, v2.h[3]
-        Ir64Op.VectorArithmeticThreeSameByElement op =
-                (Ir64Op.VectorArithmeticThreeSameByElement) decodeWord(RDM_DECODER, 0x2f72d020);
+        AdvSimdIntegerOp64.ArithmeticThreeSameByElement op =
+                (AdvSimdIntegerOp64.ArithmeticThreeSameByElement) decodeWord(RDM_DECODER, 0x2f72d020);
         assertEquals(Ir64VectorThreeSameOp.SQRDMLAH, op.op());
         assertEquals(false, op.scalar());
         assertEquals(false, op.q());
@@ -194,8 +195,8 @@ class Aarch64AdvSimdRdmDecoderTest {
     @Test
     void sqrdmlahIndexedVector8h() {
         // 6f75d883: sqrdmlah v3.8h, v4.8h, v5.h[7]
-        Ir64Op.VectorArithmeticThreeSameByElement op =
-                (Ir64Op.VectorArithmeticThreeSameByElement) decodeWord(RDM_DECODER, 0x6f75d883);
+        AdvSimdIntegerOp64.ArithmeticThreeSameByElement op =
+                (AdvSimdIntegerOp64.ArithmeticThreeSameByElement) decodeWord(RDM_DECODER, 0x6f75d883);
         assertEquals(Ir64VectorThreeSameOp.SQRDMLAH, op.op());
         assertEquals(true, op.q());
         assertEquals(1, op.esz());
@@ -208,8 +209,8 @@ class Aarch64AdvSimdRdmDecoderTest {
     @Test
     void sqrdmlahIndexedVector2s() {
         // 2fa8d0e6: sqrdmlah v6.2s, v7.2s, v8.s[1]
-        Ir64Op.VectorArithmeticThreeSameByElement op =
-                (Ir64Op.VectorArithmeticThreeSameByElement) decodeWord(RDM_DECODER, 0x2fa8d0e6);
+        AdvSimdIntegerOp64.ArithmeticThreeSameByElement op =
+                (AdvSimdIntegerOp64.ArithmeticThreeSameByElement) decodeWord(RDM_DECODER, 0x2fa8d0e6);
         assertEquals(Ir64VectorThreeSameOp.SQRDMLAH, op.op());
         assertEquals(false, op.q());
         assertEquals(2, op.esz());
@@ -222,8 +223,8 @@ class Aarch64AdvSimdRdmDecoderTest {
     @Test
     void sqrdmlahIndexedVector4s() {
         // 6fabd949: sqrdmlah v9.4s, v10.4s, v11.s[3]
-        Ir64Op.VectorArithmeticThreeSameByElement op =
-                (Ir64Op.VectorArithmeticThreeSameByElement) decodeWord(RDM_DECODER, 0x6fabd949);
+        AdvSimdIntegerOp64.ArithmeticThreeSameByElement op =
+                (AdvSimdIntegerOp64.ArithmeticThreeSameByElement) decodeWord(RDM_DECODER, 0x6fabd949);
         assertEquals(Ir64VectorThreeSameOp.SQRDMLAH, op.op());
         assertEquals(true, op.q());
         assertEquals(2, op.esz());
@@ -236,8 +237,8 @@ class Aarch64AdvSimdRdmDecoderTest {
     @Test
     void sqrdmlshIndexedVector4h() {
         // 2f72f020: sqrdmlsh v0.4h, v1.4h, v2.h[3]
-        Ir64Op.VectorArithmeticThreeSameByElement op =
-                (Ir64Op.VectorArithmeticThreeSameByElement) decodeWord(RDM_DECODER, 0x2f72f020);
+        AdvSimdIntegerOp64.ArithmeticThreeSameByElement op =
+                (AdvSimdIntegerOp64.ArithmeticThreeSameByElement) decodeWord(RDM_DECODER, 0x2f72f020);
         assertEquals(Ir64VectorThreeSameOp.SQRDMLSH, op.op());
         assertEquals(1, op.esz());
         assertEquals(3, op.index());
@@ -246,8 +247,8 @@ class Aarch64AdvSimdRdmDecoderTest {
     @Test
     void sqrdmlshIndexedVector4s() {
         // 6fabf949: sqrdmlsh v9.4s, v10.4s, v11.s[3]
-        Ir64Op.VectorArithmeticThreeSameByElement op =
-                (Ir64Op.VectorArithmeticThreeSameByElement) decodeWord(RDM_DECODER, 0x6fabf949);
+        AdvSimdIntegerOp64.ArithmeticThreeSameByElement op =
+                (AdvSimdIntegerOp64.ArithmeticThreeSameByElement) decodeWord(RDM_DECODER, 0x6fabf949);
         assertEquals(Ir64VectorThreeSameOp.SQRDMLSH, op.op());
         assertEquals(true, op.q());
         assertEquals(2, op.esz());
@@ -262,8 +263,8 @@ class Aarch64AdvSimdRdmDecoderTest {
     @Test
     void sqrdmlahIndexedScalarHalfword() {
         // 7f72d020: sqrdmlah h0, h1, v2.h[3]
-        Ir64Op.VectorArithmeticThreeSameByElement op =
-                (Ir64Op.VectorArithmeticThreeSameByElement) decodeWord(RDM_DECODER, 0x7f72d020);
+        AdvSimdIntegerOp64.ArithmeticThreeSameByElement op =
+                (AdvSimdIntegerOp64.ArithmeticThreeSameByElement) decodeWord(RDM_DECODER, 0x7f72d020);
         assertEquals(Ir64VectorThreeSameOp.SQRDMLAH, op.op());
         assertEquals(true, op.scalar());
         assertEquals(1, op.esz());
@@ -276,8 +277,8 @@ class Aarch64AdvSimdRdmDecoderTest {
     @Test
     void sqrdmlahIndexedScalarWord() {
         // 7fa5d083: sqrdmlah s3, s4, v5.s[1]
-        Ir64Op.VectorArithmeticThreeSameByElement op =
-                (Ir64Op.VectorArithmeticThreeSameByElement) decodeWord(RDM_DECODER, 0x7fa5d083);
+        AdvSimdIntegerOp64.ArithmeticThreeSameByElement op =
+                (AdvSimdIntegerOp64.ArithmeticThreeSameByElement) decodeWord(RDM_DECODER, 0x7fa5d083);
         assertEquals(Ir64VectorThreeSameOp.SQRDMLAH, op.op());
         assertEquals(true, op.scalar());
         assertEquals(2, op.esz());
@@ -290,8 +291,8 @@ class Aarch64AdvSimdRdmDecoderTest {
     @Test
     void sqrdmlshIndexedScalarHalfword() {
         // 7f72f020: sqrdmlsh h0, h1, v2.h[3]
-        Ir64Op.VectorArithmeticThreeSameByElement op =
-                (Ir64Op.VectorArithmeticThreeSameByElement) decodeWord(RDM_DECODER, 0x7f72f020);
+        AdvSimdIntegerOp64.ArithmeticThreeSameByElement op =
+                (AdvSimdIntegerOp64.ArithmeticThreeSameByElement) decodeWord(RDM_DECODER, 0x7f72f020);
         assertEquals(Ir64VectorThreeSameOp.SQRDMLSH, op.op());
         assertEquals(true, op.scalar());
         assertEquals(1, op.esz());
@@ -301,8 +302,8 @@ class Aarch64AdvSimdRdmDecoderTest {
     @Test
     void sqrdmlshIndexedScalarWord() {
         // 7fa5f083: sqrdmlsh s3, s4, v5.s[1]
-        Ir64Op.VectorArithmeticThreeSameByElement op =
-                (Ir64Op.VectorArithmeticThreeSameByElement) decodeWord(RDM_DECODER, 0x7fa5f083);
+        AdvSimdIntegerOp64.ArithmeticThreeSameByElement op =
+                (AdvSimdIntegerOp64.ArithmeticThreeSameByElement) decodeWord(RDM_DECODER, 0x7fa5f083);
         assertEquals(Ir64VectorThreeSameOp.SQRDMLSH, op.op());
         assertEquals(true, op.scalar());
         assertEquals(2, op.esz());

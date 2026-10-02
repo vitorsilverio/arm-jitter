@@ -1,6 +1,8 @@
 package dev.vitorsilverio.armjitter.decoder64;
 
 import dev.vitorsilverio.armjitter.arch64.Aarch64Architecture;
+import dev.vitorsilverio.armjitter.ir64.AdvSimdFpOp64;
+import dev.vitorsilverio.armjitter.ir64.FpOp64;
 import dev.vitorsilverio.armjitter.ir64.Ir64Op;
 import dev.vitorsilverio.armjitter.ir64.Ir64VectorFpConvertPrecisionOp;
 import dev.vitorsilverio.armjitter.memory.AddressSpace64;
@@ -61,7 +63,7 @@ class Aarch64AdvSimdBFloat16DecoderTest {
 
     @Test
     void bfcvtScalar() {
-        Ir64Op.Fp64ConvertToBf16 op = (Ir64Op.Fp64ConvertToBf16) decode(BF16_DECODER, BFCVT_H0_S1);
+        FpOp64.ConvertToBf16 op = (FpOp64.ConvertToBf16) decode(BF16_DECODER, BFCVT_H0_S1);
         assertEquals(0, op.vd());
         assertEquals(1, op.vn());
     }
@@ -70,8 +72,8 @@ class Aarch64AdvSimdBFloat16DecoderTest {
 
     @Test
     void bfcvtnLowHalf() {
-        Ir64Op.VectorFpConvertPrecision op =
-                (Ir64Op.VectorFpConvertPrecision) decode(BF16_DECODER, BFCVTN_V0_4H_V1_4S);
+        AdvSimdFpOp64.FpConvertPrecision op =
+                (AdvSimdFpOp64.FpConvertPrecision) decode(BF16_DECODER, BFCVTN_V0_4H_V1_4S);
         assertEquals(Ir64VectorFpConvertPrecisionOp.BFCVTN, op.op());
         assertFalse(op.q());
         assertEquals(1, op.esz());
@@ -81,8 +83,8 @@ class Aarch64AdvSimdBFloat16DecoderTest {
 
     @Test
     void bfcvtn2HighHalf() {
-        Ir64Op.VectorFpConvertPrecision op =
-                (Ir64Op.VectorFpConvertPrecision) decode(BF16_DECODER, BFCVTN2_V0_8H_V1_4S);
+        AdvSimdFpOp64.FpConvertPrecision op =
+                (AdvSimdFpOp64.FpConvertPrecision) decode(BF16_DECODER, BFCVTN2_V0_8H_V1_4S);
         assertEquals(Ir64VectorFpConvertPrecisionOp.BFCVTN, op.op());
         assertTrue(op.q());
     }
@@ -91,8 +93,8 @@ class Aarch64AdvSimdBFloat16DecoderTest {
     void fcvtnUnaffectedByBFloat16Feature() {
         // Zero-diff: FCVTN_v (a=0) continua decodificando igual, feature presente ou não.
         int fcvtnV0_2s_v1_2d = 0x0e616820; // fcvtn v0.2s, v1.2d (golden devkitA64)
-        Ir64Op.VectorFpConvertPrecision op =
-                (Ir64Op.VectorFpConvertPrecision) decode(BF16_DECODER, fcvtnV0_2s_v1_2d);
+        AdvSimdFpOp64.FpConvertPrecision op =
+                (AdvSimdFpOp64.FpConvertPrecision) decode(BF16_DECODER, fcvtnV0_2s_v1_2d);
         assertEquals(Ir64VectorFpConvertPrecisionOp.FCVTN, op.op());
         assertEquals(2, op.esz());
     }
@@ -101,8 +103,8 @@ class Aarch64AdvSimdBFloat16DecoderTest {
 
     @Test
     void bfmlalbVector() {
-        Ir64Op.VectorFpMultiplyAddLongBFloat16 op =
-                (Ir64Op.VectorFpMultiplyAddLongBFloat16) decode(BF16_DECODER, BFMLALB_V0_4S_V1_8H_V2_8H);
+        AdvSimdFpOp64.FpMultiplyAddLongBFloat16 op =
+                (AdvSimdFpOp64.FpMultiplyAddLongBFloat16) decode(BF16_DECODER, BFMLALB_V0_4S_V1_8H_V2_8H);
         assertFalse(op.top());
         assertEquals(0, op.rd());
         assertEquals(1, op.rn());
@@ -111,15 +113,15 @@ class Aarch64AdvSimdBFloat16DecoderTest {
 
     @Test
     void bfmlaltVector() {
-        Ir64Op.VectorFpMultiplyAddLongBFloat16 op =
-                (Ir64Op.VectorFpMultiplyAddLongBFloat16) decode(BF16_DECODER, BFMLALT_V0_4S_V1_8H_V2_8H);
+        AdvSimdFpOp64.FpMultiplyAddLongBFloat16 op =
+                (AdvSimdFpOp64.FpMultiplyAddLongBFloat16) decode(BF16_DECODER, BFMLALT_V0_4S_V1_8H_V2_8H);
         assertTrue(op.top());
     }
 
     @Test
     void bfmlalbIndexed() {
-        Ir64Op.VectorFpMultiplyAddLongBFloat16ByElement op =
-                (Ir64Op.VectorFpMultiplyAddLongBFloat16ByElement) decode(BF16_DECODER, BFMLALB_V0_4S_V1_8H_V2_H3);
+        AdvSimdFpOp64.FpMultiplyAddLongBFloat16ByElement op =
+                (AdvSimdFpOp64.FpMultiplyAddLongBFloat16ByElement) decode(BF16_DECODER, BFMLALB_V0_4S_V1_8H_V2_H3);
         assertFalse(op.top());
         assertEquals(0, op.rd());
         assertEquals(1, op.rn());
@@ -129,8 +131,8 @@ class Aarch64AdvSimdBFloat16DecoderTest {
 
     @Test
     void bfmlaltIndexed() {
-        Ir64Op.VectorFpMultiplyAddLongBFloat16ByElement op =
-                (Ir64Op.VectorFpMultiplyAddLongBFloat16ByElement) decode(BF16_DECODER, BFMLALT_V0_4S_V1_8H_V2_H3);
+        AdvSimdFpOp64.FpMultiplyAddLongBFloat16ByElement op =
+                (AdvSimdFpOp64.FpMultiplyAddLongBFloat16ByElement) decode(BF16_DECODER, BFMLALT_V0_4S_V1_8H_V2_H3);
         assertTrue(op.top());
         assertEquals(3, op.index());
     }
@@ -139,8 +141,8 @@ class Aarch64AdvSimdBFloat16DecoderTest {
 
     @Test
     void bfdotVector2s() {
-        Ir64Op.VectorFpDotProductBFloat16 op =
-                (Ir64Op.VectorFpDotProductBFloat16) decode(BF16_DECODER, BFDOT_V0_2S_V1_4H_V2_4H);
+        AdvSimdFpOp64.FpDotProductBFloat16 op =
+                (AdvSimdFpOp64.FpDotProductBFloat16) decode(BF16_DECODER, BFDOT_V0_2S_V1_4H_V2_4H);
         assertFalse(op.q());
         assertEquals(0, op.rd());
         assertEquals(1, op.rn());
@@ -149,15 +151,15 @@ class Aarch64AdvSimdBFloat16DecoderTest {
 
     @Test
     void bfdotVector4s() {
-        Ir64Op.VectorFpDotProductBFloat16 op =
-                (Ir64Op.VectorFpDotProductBFloat16) decode(BF16_DECODER, BFDOT_V0_4S_V1_8H_V2_8H);
+        AdvSimdFpOp64.FpDotProductBFloat16 op =
+                (AdvSimdFpOp64.FpDotProductBFloat16) decode(BF16_DECODER, BFDOT_V0_4S_V1_8H_V2_8H);
         assertTrue(op.q());
     }
 
     @Test
     void bfdotIndexed2s() {
-        Ir64Op.VectorFpDotProductBFloat16ByElement op =
-                (Ir64Op.VectorFpDotProductBFloat16ByElement) decode(BF16_DECODER, BFDOT_V0_2S_V1_4H_V2_2H1);
+        AdvSimdFpOp64.FpDotProductBFloat16ByElement op =
+                (AdvSimdFpOp64.FpDotProductBFloat16ByElement) decode(BF16_DECODER, BFDOT_V0_2S_V1_4H_V2_2H1);
         assertFalse(op.q());
         assertEquals(0, op.rd());
         assertEquals(1, op.rn());
@@ -167,8 +169,8 @@ class Aarch64AdvSimdBFloat16DecoderTest {
 
     @Test
     void bfdotIndexed4s() {
-        Ir64Op.VectorFpDotProductBFloat16ByElement op =
-                (Ir64Op.VectorFpDotProductBFloat16ByElement) decode(BF16_DECODER, BFDOT_V0_4S_V1_8H_V2_2H1);
+        AdvSimdFpOp64.FpDotProductBFloat16ByElement op =
+                (AdvSimdFpOp64.FpDotProductBFloat16ByElement) decode(BF16_DECODER, BFDOT_V0_4S_V1_8H_V2_2H1);
         assertTrue(op.q());
         assertEquals(1, op.index());
     }
@@ -177,8 +179,8 @@ class Aarch64AdvSimdBFloat16DecoderTest {
 
     @Test
     void bfmmla() {
-        Ir64Op.VectorFpMatrixMultiplyAccumulateBFloat16 op =
-                (Ir64Op.VectorFpMatrixMultiplyAccumulateBFloat16) decode(BF16_DECODER, BFMMLA_V0_4S_V1_8H_V2_8H);
+        AdvSimdFpOp64.FpMatrixMultiplyAccumulateBFloat16 op =
+                (AdvSimdFpOp64.FpMatrixMultiplyAccumulateBFloat16) decode(BF16_DECODER, BFMMLA_V0_4S_V1_8H_V2_8H);
         assertEquals(0, op.rd());
         assertEquals(1, op.rn());
         assertEquals(2, op.rm());

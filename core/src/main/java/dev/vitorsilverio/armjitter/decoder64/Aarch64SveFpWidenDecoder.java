@@ -3,6 +3,7 @@ package dev.vitorsilverio.armjitter.decoder64;
 import dev.vitorsilverio.armjitter.arch64.Aarch64Architecture;
 import dev.vitorsilverio.armjitter.arch64.Aarch64Feature;
 import dev.vitorsilverio.armjitter.ir64.Ir64Op;
+import dev.vitorsilverio.armjitter.ir64.SveFpOp64;
 
 /// Decoder SVE2/SVE2.1 da B17.23: multiply-add-long `binary16`→`binary32`/`bfloat16`→`binary32`
 /// (`FMLALB`/`FMLALT`/`FMLSLB`/`FMLSLT`, `BFMLALB`/`BFMLALT`/`BFMLSLB`/`BFMLSLT`, vetorial `_zzzw` e indexado
@@ -86,13 +87,13 @@ final class Aarch64SveFpWidenDecoder {
         int rn = field(word, 5, REGISTER_MASK);
         int rm = field(word, MUL_ADD_RM_SHIFT, REGISTER_MASK);
         return bfloat16
-                ? new Ir64Op.SveFpMultiplyAddLongWidenBFloat16(
-                        subtract ? Ir64Op.SveFpMultiplyAddLongWidenBFloat16.Op.BFMLSL
-                                : Ir64Op.SveFpMultiplyAddLongWidenBFloat16.Op.BFMLAL,
+                ? new SveFpOp64.FpMultiplyAddLongWidenBFloat16(
+                        subtract ? SveFpOp64.FpMultiplyAddLongWidenBFloat16.Op.BFMLSL
+                                : SveFpOp64.FpMultiplyAddLongWidenBFloat16.Op.BFMLAL,
                         top, rd, rn, rm, false, 0, address)
-                : new Ir64Op.SveFpMultiplyAddLongWiden(
-                        subtract ? Ir64Op.SveFpMultiplyAddLongWiden.Op.FMLSL
-                                : Ir64Op.SveFpMultiplyAddLongWiden.Op.FMLAL,
+                : new SveFpOp64.FpMultiplyAddLongWiden(
+                        subtract ? SveFpOp64.FpMultiplyAddLongWiden.Op.FMLSL
+                                : SveFpOp64.FpMultiplyAddLongWiden.Op.FMLAL,
                         top, rd, rn, rm, false, 0, address);
     }
 
@@ -118,13 +119,13 @@ final class Aarch64SveFpWidenDecoder {
         int rn = field(word, 5, REGISTER_MASK);
         int rm = field(word, MUL_ADD_RM_SHIFT, REGISTER_LOW_MASK);
         return bfloat16
-                ? new Ir64Op.SveFpMultiplyAddLongWidenBFloat16(
-                        subtract ? Ir64Op.SveFpMultiplyAddLongWidenBFloat16.Op.BFMLSL
-                                : Ir64Op.SveFpMultiplyAddLongWidenBFloat16.Op.BFMLAL,
+                ? new SveFpOp64.FpMultiplyAddLongWidenBFloat16(
+                        subtract ? SveFpOp64.FpMultiplyAddLongWidenBFloat16.Op.BFMLSL
+                                : SveFpOp64.FpMultiplyAddLongWidenBFloat16.Op.BFMLAL,
                         top, rd, rn, rm, true, index, address)
-                : new Ir64Op.SveFpMultiplyAddLongWiden(
-                        subtract ? Ir64Op.SveFpMultiplyAddLongWiden.Op.FMLSL
-                                : Ir64Op.SveFpMultiplyAddLongWiden.Op.FMLAL,
+                : new SveFpOp64.FpMultiplyAddLongWiden(
+                        subtract ? SveFpOp64.FpMultiplyAddLongWiden.Op.FMLSL
+                                : SveFpOp64.FpMultiplyAddLongWiden.Op.FMLAL,
                         top, rd, rn, rm, true, index, address);
     }
 
@@ -145,10 +146,10 @@ final class Aarch64SveFpWidenDecoder {
         int rn = field(word, 5, REGISTER_MASK);
         int rm = field(word, 16, REGISTER_MASK);
         if ((word & DOT_VECTOR_MASK) == DOT_VECTOR_VALUE_REAL && architecture.has(Aarch64Feature.SVE2_1)) {
-            return new Ir64Op.SveFpDotProductWiden(rd, rn, rm, false, 0, address);
+            return new SveFpOp64.FpDotProductWiden(rd, rn, rm, false, 0, address);
         }
         if ((word & DOT_VECTOR_MASK) == DOT_VECTOR_VALUE_BFLOAT16 && architecture.has(Aarch64Feature.BFLOAT16)) {
-            return new Ir64Op.SveFpDotProductWidenBFloat16(rd, rn, rm, false, 0, address);
+            return new SveFpOp64.FpDotProductWidenBFloat16(rd, rn, rm, false, 0, address);
         }
         return null;
     }
@@ -159,10 +160,10 @@ final class Aarch64SveFpWidenDecoder {
         int rm = field(word, 16, REGISTER_LOW_MASK);
         int index = field(word, 19, 0b11);
         if ((word & DOT_INDEXED_MASK) == DOT_INDEXED_VALUE_REAL && architecture.has(Aarch64Feature.SVE2_1)) {
-            return new Ir64Op.SveFpDotProductWiden(rd, rn, rm, true, index, address);
+            return new SveFpOp64.FpDotProductWiden(rd, rn, rm, true, index, address);
         }
         if ((word & DOT_INDEXED_MASK) == DOT_INDEXED_VALUE_BFLOAT16 && architecture.has(Aarch64Feature.BFLOAT16)) {
-            return new Ir64Op.SveFpDotProductWidenBFloat16(rd, rn, rm, true, index, address);
+            return new SveFpOp64.FpDotProductWidenBFloat16(rd, rn, rm, true, index, address);
         }
         return null;
     }

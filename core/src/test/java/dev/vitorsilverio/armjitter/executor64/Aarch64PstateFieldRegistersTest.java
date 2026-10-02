@@ -2,7 +2,7 @@ package dev.vitorsilverio.armjitter.executor64;
 
 import dev.vitorsilverio.armjitter.core64.Aarch64Core;
 import dev.vitorsilverio.armjitter.ir64.Aarch64SystemRegisterId;
-import dev.vitorsilverio.armjitter.ir64.Ir64Op;
+import dev.vitorsilverio.armjitter.ir64.SystemOp64;
 import dev.vitorsilverio.armjitter.memory.AddressSpace64;
 import dev.vitorsilverio.armjitter.support.TestAddressSpace;
 import org.junit.jupiter.api.Test;
@@ -27,10 +27,10 @@ class Aarch64PstateFieldRegistersTest {
         return new Aarch64Core(AddressSpace64.wrapping(raw));
     }
 
-    private static Ir64Op.SystemRegister decode(int word) {
+    private static SystemOp64.SystemRegister decode(int word) {
         TestAddressSpace raw = new TestAddressSpace(4);
         raw.put32(0, word);
-        return (Ir64Op.SystemRegister) DECODER.decode(AddressSpace64.wrapping(raw), 0);
+        return (SystemOp64.SystemRegister) DECODER.decode(AddressSpace64.wrapping(raw), 0);
     }
 
     @Test
@@ -96,10 +96,10 @@ class Aarch64PstateFieldRegistersTest {
         };
         for (int i = 0; i < registers.length; i++) {
             core.setX(i, 0x1000L + i);
-            EXECUTOR.executeOp(core, new Ir64Op.SystemRegister(false, registers[i], i));
+            EXECUTOR.executeOp(core, new SystemOp64.SystemRegister(false, registers[i], i));
         }
         for (int i = 0; i < registers.length; i++) {
-            EXECUTOR.executeOp(core, new Ir64Op.SystemRegister(true, registers[i], 20));
+            EXECUTOR.executeOp(core, new SystemOp64.SystemRegister(true, registers[i], 20));
             assertEquals(0x1000L + i, core.x(20), "registro " + registers[i] + " vazou pra outro escaninho");
         }
     }

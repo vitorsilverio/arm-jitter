@@ -10,6 +10,7 @@ import dev.vitorsilverio.armjitter.ir64.Aarch64SystemRegisterId;
 import dev.vitorsilverio.armjitter.ir64.Ir64Block;
 import dev.vitorsilverio.armjitter.ir64.Ir64Op;
 import dev.vitorsilverio.armjitter.ir64.StandardIr64BlockLifter;
+import dev.vitorsilverio.armjitter.ir64.SveIntegerOp64;
 import dev.vitorsilverio.armjitter.memory.AddressSpace64;
 import dev.vitorsilverio.armjitter.support.TestAddressSpace;
 import org.junit.jupiter.api.Test;
@@ -251,47 +252,47 @@ class Aarch64SveIntegerTest {
 
     static Stream<Arguments> decodeCases() {
         return Stream.of(
-                Arguments.of(ADD_B, Ir64Op.SveIntegerUnpredicated.Op.ADD), Arguments.of(SUB_D, Ir64Op.SveIntegerUnpredicated.Op.SUB),
-                Arguments.of(SQADD_B, Ir64Op.SveIntegerUnpredicated.Op.SQADD),
-                Arguments.of(UQADD_H, Ir64Op.SveIntegerUnpredicated.Op.UQADD),
-                Arguments.of(SQSUB_B, Ir64Op.SveIntegerUnpredicated.Op.SQSUB),
-                Arguments.of(UQSUB_S, Ir64Op.SveIntegerUnpredicated.Op.UQSUB),
-                Arguments.of(AND_Z, Ir64Op.SveIntegerUnpredicated.Op.AND),
-                Arguments.of(ORR_Z, Ir64Op.SveIntegerUnpredicated.Op.ORR),
-                Arguments.of(EOR_Z, Ir64Op.SveIntegerUnpredicated.Op.EOR),
-                Arguments.of(BIC_Z, Ir64Op.SveIntegerUnpredicated.Op.BIC),
-                Arguments.of(XAR_B_1, Ir64Op.SveIntegerUnpredicated.Op.XAR),
-                Arguments.of(EOR3, Ir64Op.SveIntegerUnpredicated.Op.EOR3),
-                Arguments.of(BCAX, Ir64Op.SveIntegerUnpredicated.Op.BCAX),
-                Arguments.of(BSL, Ir64Op.SveIntegerUnpredicated.Op.BSL),
-                Arguments.of(BSL1N, Ir64Op.SveIntegerUnpredicated.Op.BSL1N),
-                Arguments.of(BSL2N, Ir64Op.SveIntegerUnpredicated.Op.BSL2N),
-                Arguments.of(NBSL, Ir64Op.SveIntegerUnpredicated.Op.NBSL),
-                Arguments.of(ASR_B_1, Ir64Op.SveIntegerUnpredicated.Op.ASR_IMM),
-                Arguments.of(LSR_B_3, Ir64Op.SveIntegerUnpredicated.Op.LSR_IMM),
-                Arguments.of(LSL_B_7, Ir64Op.SveIntegerUnpredicated.Op.LSL_IMM),
-                Arguments.of(ASR_WIDE_B, Ir64Op.SveIntegerUnpredicated.Op.ASR_WIDE),
-                Arguments.of(LSR_WIDE_B, Ir64Op.SveIntegerUnpredicated.Op.LSR_WIDE),
-                Arguments.of(LSL_WIDE_H, Ir64Op.SveIntegerUnpredicated.Op.LSL_WIDE),
-                Arguments.of(MLA_B, Ir64Op.SveIntegerUnpredicated.Op.MLA),
-                Arguments.of(MLS_S, Ir64Op.SveIntegerUnpredicated.Op.MLS),
-                Arguments.of(MAD_S, Ir64Op.SveIntegerUnpredicated.Op.MAD),
-                Arguments.of(MSB_H, Ir64Op.SveIntegerUnpredicated.Op.MSB),
-                Arguments.of(MOVPRFX, Ir64Op.SveIntegerUnpredicated.Op.MOVPRFX),
-                Arguments.of(FEXPA_H, Ir64Op.SveIntegerUnpredicated.Op.FEXPA),
-                Arguments.of(FTSSEL_D, Ir64Op.SveIntegerUnpredicated.Op.FTSSEL),
-                Arguments.of(INDEX_II_B, Ir64Op.SveIntegerUnpredicated.Op.INDEX_II),
-                Arguments.of(INDEX_IR_B, Ir64Op.SveIntegerUnpredicated.Op.INDEX_IR),
-                Arguments.of(INDEX_RI_S, Ir64Op.SveIntegerUnpredicated.Op.INDEX_RI),
-                Arguments.of(INDEX_RR_D, Ir64Op.SveIntegerUnpredicated.Op.INDEX_RR));
+                Arguments.of(ADD_B, SveIntegerOp64.IntegerUnpredicated.Op.ADD), Arguments.of(SUB_D, SveIntegerOp64.IntegerUnpredicated.Op.SUB),
+                Arguments.of(SQADD_B, SveIntegerOp64.IntegerUnpredicated.Op.SQADD),
+                Arguments.of(UQADD_H, SveIntegerOp64.IntegerUnpredicated.Op.UQADD),
+                Arguments.of(SQSUB_B, SveIntegerOp64.IntegerUnpredicated.Op.SQSUB),
+                Arguments.of(UQSUB_S, SveIntegerOp64.IntegerUnpredicated.Op.UQSUB),
+                Arguments.of(AND_Z, SveIntegerOp64.IntegerUnpredicated.Op.AND),
+                Arguments.of(ORR_Z, SveIntegerOp64.IntegerUnpredicated.Op.ORR),
+                Arguments.of(EOR_Z, SveIntegerOp64.IntegerUnpredicated.Op.EOR),
+                Arguments.of(BIC_Z, SveIntegerOp64.IntegerUnpredicated.Op.BIC),
+                Arguments.of(XAR_B_1, SveIntegerOp64.IntegerUnpredicated.Op.XAR),
+                Arguments.of(EOR3, SveIntegerOp64.IntegerUnpredicated.Op.EOR3),
+                Arguments.of(BCAX, SveIntegerOp64.IntegerUnpredicated.Op.BCAX),
+                Arguments.of(BSL, SveIntegerOp64.IntegerUnpredicated.Op.BSL),
+                Arguments.of(BSL1N, SveIntegerOp64.IntegerUnpredicated.Op.BSL1N),
+                Arguments.of(BSL2N, SveIntegerOp64.IntegerUnpredicated.Op.BSL2N),
+                Arguments.of(NBSL, SveIntegerOp64.IntegerUnpredicated.Op.NBSL),
+                Arguments.of(ASR_B_1, SveIntegerOp64.IntegerUnpredicated.Op.ASR_IMM),
+                Arguments.of(LSR_B_3, SveIntegerOp64.IntegerUnpredicated.Op.LSR_IMM),
+                Arguments.of(LSL_B_7, SveIntegerOp64.IntegerUnpredicated.Op.LSL_IMM),
+                Arguments.of(ASR_WIDE_B, SveIntegerOp64.IntegerUnpredicated.Op.ASR_WIDE),
+                Arguments.of(LSR_WIDE_B, SveIntegerOp64.IntegerUnpredicated.Op.LSR_WIDE),
+                Arguments.of(LSL_WIDE_H, SveIntegerOp64.IntegerUnpredicated.Op.LSL_WIDE),
+                Arguments.of(MLA_B, SveIntegerOp64.IntegerUnpredicated.Op.MLA),
+                Arguments.of(MLS_S, SveIntegerOp64.IntegerUnpredicated.Op.MLS),
+                Arguments.of(MAD_S, SveIntegerOp64.IntegerUnpredicated.Op.MAD),
+                Arguments.of(MSB_H, SveIntegerOp64.IntegerUnpredicated.Op.MSB),
+                Arguments.of(MOVPRFX, SveIntegerOp64.IntegerUnpredicated.Op.MOVPRFX),
+                Arguments.of(FEXPA_H, SveIntegerOp64.IntegerUnpredicated.Op.FEXPA),
+                Arguments.of(FTSSEL_D, SveIntegerOp64.IntegerUnpredicated.Op.FTSSEL),
+                Arguments.of(INDEX_II_B, SveIntegerOp64.IntegerUnpredicated.Op.INDEX_II),
+                Arguments.of(INDEX_IR_B, SveIntegerOp64.IntegerUnpredicated.Op.INDEX_IR),
+                Arguments.of(INDEX_RI_S, SveIntegerOp64.IntegerUnpredicated.Op.INDEX_RI),
+                Arguments.of(INDEX_RR_D, SveIntegerOp64.IntegerUnpredicated.Op.INDEX_RR));
     }
 
     @ParameterizedTest
     @MethodSource("decodeCases")
-    void wordsDecodeToTheirOperationUnderSve2(int word, Ir64Op.SveIntegerUnpredicated.Op expected) {
+    void wordsDecodeToTheirOperationUnderSve2(int word, SveIntegerOp64.IntegerUnpredicated.Op expected) {
         Ir64Op op = decode(SVE2, word);
-        assertInstanceOf(Ir64Op.SveIntegerUnpredicated.class, op);
-        assertEquals(expected, ((Ir64Op.SveIntegerUnpredicated) op).op());
+        assertInstanceOf(SveIntegerOp64.IntegerUnpredicated.class, op);
+        assertEquals(expected, ((SveIntegerOp64.IntegerUnpredicated) op).op());
     }
 
     @Test
@@ -299,13 +300,13 @@ class Aarch64SveIntegerTest {
         int[] words = {ADD_B, SUB_B, SQADD_B, UQADD_B, SQSUB_B, UQSUB_B, AND_Z, ORR_Z, EOR_Z, BIC_Z, XAR_B_1, EOR3,
                 BSL, BCAX, BSL1N, BSL2N, NBSL, ASR_B_1, LSR_B_3, LSL_B_7, ASR_WIDE_B, LSR_WIDE_B, LSL_WIDE_H, MLA_B,
                 MLS_S, MAD_S, MSB_H, MOVPRFX, FEXPA_H, FTSSEL_H, INDEX_II_B, INDEX_IR_B, INDEX_RI_S, INDEX_RR_B};
-        java.util.Set<Ir64Op.SveIntegerUnpredicated.Op> seen = new java.util.HashSet<>();
+        java.util.Set<SveIntegerOp64.IntegerUnpredicated.Op> seen = new java.util.HashSet<>();
         for (int word : words) {
-            seen.add(((Ir64Op.SveIntegerUnpredicated) decode(SVE2, word)).op());
+            seen.add(((SveIntegerOp64.IntegerUnpredicated) decode(SVE2, word)).op());
         }
         // As 6 constantes de multiply não-predicado (B17.20), as 14 de Accumulate (B17.21a) e as 42 de Widening/Narrowing
         // (B17.21b: 24 + 18) são SVE2, fora deste recorte de 34.
-        assertEquals(Ir64Op.SveIntegerUnpredicated.Op.values().length - 6 - 14 - 42, seen.size());
+        assertEquals(SveIntegerOp64.IntegerUnpredicated.Op.values().length - 6 - 14 - 42, seen.size());
         assertEquals(34, seen.size());
     }
 
@@ -313,13 +314,13 @@ class Aarch64SveIntegerTest {
     @ValueSource(ints = {XAR_B_1, EOR3, BCAX, BSL, BSL1N, BSL2N, NBSL})
     void theSevenTernaryAndRotateOperationsNeedFeatSve2(int word) {
         assertThrows(UnsupportedOperationException.class, () -> decode(SVE, word));
-        assertInstanceOf(Ir64Op.SveIntegerUnpredicated.class, decode(SVE2, word));
+        assertInstanceOf(SveIntegerOp64.IntegerUnpredicated.class, decode(SVE2, word));
     }
 
     @ParameterizedTest
     @ValueSource(ints = {ADD_B, AND_Z, ASR_B_1, ASR_WIDE_B, MLA_B, MOVPRFX, FEXPA_H, FTSSEL_H, INDEX_II_B})
     void baseSveOperationsDecodeWithSveAloneAndAreRefusedWithoutIt(int word) {
-        assertInstanceOf(Ir64Op.SveIntegerUnpredicated.class, decode(SVE, word));
+        assertInstanceOf(SveIntegerOp64.IntegerUnpredicated.class, decode(SVE, word));
         assertThrows(UnsupportedOperationException.class, () -> decode(Aarch64Architecture.ARMV8_5_A, word));
     }
 
@@ -349,12 +350,12 @@ class Aarch64SveIntegerTest {
 
     @Test
     void multiplyAddDecodesTheAccumulatorAndMultiplicandForms() {
-        Ir64Op.SveIntegerUnpredicated mla = (Ir64Op.SveIntegerUnpredicated) decode(SVE2, MLA_S);
+        SveIntegerOp64.IntegerUnpredicated mla = (SveIntegerOp64.IntegerUnpredicated) decode(SVE2, MLA_S);
         assertEquals(Z1, mla.rd());
         assertEquals(Z3, mla.rn());
         assertEquals(Z4, mla.rm());
         assertEquals(P2, mla.pg());
-        Ir64Op.SveIntegerUnpredicated mad = (Ir64Op.SveIntegerUnpredicated) decode(SVE2, MAD_S);
+        SveIntegerOp64.IntegerUnpredicated mad = (SveIntegerOp64.IntegerUnpredicated) decode(SVE2, MAD_S);
         assertEquals(Z1, mad.rd());
         assertEquals(Z1, mad.rn(), "MAD escreve o multiplicando: Zdn é a fonte");
         assertEquals(Z4, mad.rm());
@@ -370,7 +371,7 @@ class Aarch64SveIntegerTest {
                 new Expected(LSR_B_3, 0, 3), new Expected(LSR_H_16, 1, 16), new Expected(LSR_S_7, 2, 7),
                 new Expected(LSR_D_40, 3, 40), new Expected(LSL_B_7, 0, 7), new Expected(LSL_H_9, 1, 9),
                 new Expected(LSL_S_31, 2, 31), new Expected(LSL_D_63, 3, 63)}) {
-            Ir64Op.SveIntegerUnpredicated op = (Ir64Op.SveIntegerUnpredicated) decode(SVE2, e.word());
+            SveIntegerOp64.IntegerUnpredicated op = (SveIntegerOp64.IntegerUnpredicated) decode(SVE2, e.word());
             assertEquals(e.esz(), op.esz(), Integer.toHexString(e.word()));
             assertEquals(e.amount(), op.imm(), Integer.toHexString(e.word()));
         }
@@ -382,7 +383,7 @@ class Aarch64SveIntegerTest {
         }
         for (Expected e : new Expected[] {new Expected(XAR_B_1, 0, 1), new Expected(XAR_B_8, 0, 8),
                 new Expected(XAR_H_3, 1, 3), new Expected(XAR_S_17, 2, 17), new Expected(XAR_D_33, 3, 33)}) {
-            Ir64Op.SveIntegerUnpredicated op = (Ir64Op.SveIntegerUnpredicated) decode(SVE2, e.word());
+            SveIntegerOp64.IntegerUnpredicated op = (SveIntegerOp64.IntegerUnpredicated) decode(SVE2, e.word());
             assertEquals(e.esz(), op.esz());
             assertEquals(e.amount(), op.imm());
             assertEquals(Z1, op.rd());

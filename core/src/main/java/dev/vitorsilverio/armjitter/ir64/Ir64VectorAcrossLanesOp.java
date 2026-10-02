@@ -1,8 +1,8 @@
 package dev.vitorsilverio.armjitter.ir64;
 
-/// Operação de {@link Ir64Op.VectorAcrossLanes} (`ADDV`/`SADDLV`/`UADDLV`/`SMAXV`/`UMAXV`/`SMINV`/
+/// Operação de {@link AdvSimdIntegerOp64.AcrossLanes} (`ADDV`/`SADDLV`/`UADDLV`/`SMAXV`/`UMAXV`/`SMINV`/
 /// `UMINV`, B8.7) — reduz TODOS os elementos de `Rn` a um único escalar, escrito em `Rd` (tamanho
-/// {@link Ir64Op.VectorAcrossLanes#esz}, ou `esz+1` para as variantes "long" `SADDLV`/`UADDLV`).
+/// {@link AdvSimdIntegerOp64.AcrossLanes#esz}, ou `esz+1` para as variantes "long" `SADDLV`/`UADDLV`).
 public enum Ir64VectorAcrossLanesOp {
     /// Soma de todos os elementos (resultado no mesmo tamanho, trunca).
     ADDV,

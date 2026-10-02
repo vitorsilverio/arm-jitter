@@ -4,7 +4,7 @@ import dev.vitorsilverio.armjitter.core64.Aarch64Core;
 import dev.vitorsilverio.armjitter.core64.Aarch64MatrixRegisters;
 import dev.vitorsilverio.armjitter.core64.Aarch64MatrixTileAddressing;
 import dev.vitorsilverio.armjitter.core64.Aarch64ScalableRegisters;
-import dev.vitorsilverio.armjitter.ir64.Ir64Op;
+import dev.vitorsilverio.armjitter.ir64.SmeOp64;
 import dev.vitorsilverio.armjitter.memory.AddressSpace64;
 
 /// Semântica de `LD1`/`ST1` de slice de tile, `LDR`/`STR` de vetor de `ZA` e `LDR`/`STR` de `ZT0` (SME, B18.4).
@@ -35,7 +35,7 @@ final class SmeMemoryOps {
     // ── LD1 / ST1 ────────────────────────────────────────────────────────────────────────────────
 
     /// @return `true` = a instrução já entrou numa exceção (acesso negado)
-    static boolean execute(Aarch64Core core, Ir64Op.SmeTileLoadStore op) {
+    static boolean execute(Aarch64Core core, SmeOp64.TileLoadStore op) {
         if (!core.smeStreamingAndZaEnabledCheck(op.instructionAddress())) {
             return true;
         }
@@ -77,15 +77,15 @@ final class SmeMemoryOps {
 
     /// Linha de `ZA` e deslocamento (em bytes, dentro da linha) do elemento `e` da slice `slice`: no horizontal a
     /// slice É a linha e `e` varre as colunas; no vertical `e` varre as linhas e `slice` é a coluna.
-    private static int row(Ir64Op.SmeTileLoadStore op, int e, int slice) {
+    private static int row(SmeOp64.TileLoadStore op, int e, int slice) {
         return Aarch64MatrixTileAddressing.rowIndex(op.tile(), op.esz(), op.vertical() ? e : slice);
     }
 
-    private static int byteOffset(Ir64Op.SmeTileLoadStore op, int e, int slice) {
+    private static int byteOffset(SmeOp64.TileLoadStore op, int e, int slice) {
         return (op.vertical() ? slice : e) << op.esz();
     }
 
-    private static void writeTileElement(Aarch64MatrixRegisters matrix, Ir64Op.SmeTileLoadStore op, int e, int slice,
+    private static void writeTileElement(Aarch64MatrixRegisters matrix, SmeOp64.TileLoadStore op, int e, int slice,
             long low, long high) {
         int row = row(op, e, slice);
         int byteOffset = byteOffset(op, e, slice);
@@ -97,7 +97,7 @@ final class SmeMemoryOps {
         }
     }
 
-    private static void storeElement(AddressSpace64 memory, Aarch64MatrixRegisters matrix, Ir64Op.SmeTileLoadStore op,
+    private static void storeElement(AddressSpace64 memory, Aarch64MatrixRegisters matrix, SmeOp64.TileLoadStore op,
             long address, int e, int slice) {
         int row = row(op, e, slice);
         int byteOffset = byteOffset(op, e, slice);
@@ -115,7 +115,7 @@ final class SmeMemoryOps {
     /// `ZA[(W<rv> + imm) MOD SVL_B]` ↔ `X<rn>|SP + imm × SVL_B`: a linha é `ZA0H.B[(W + imm) MOD SVL_B]` (o QEMU
     /// usa `get_tile_rowcol` com `esz = byte`, a mesma resolução de {@link
     /// Aarch64MatrixTileAddressing#resolveSliceIndex}).
-    static boolean execute(Aarch64Core core, Ir64Op.SmeArrayLoadStore op) {
+    static boolean execute(Aarch64Core core, SmeOp64.ArrayLoadStore op) {
         if (!core.smeZaEnabledCheck(op.instructionAddress())) {
             return true;
         }
@@ -143,7 +143,7 @@ final class SmeMemoryOps {
 
     // ── LDR / STR de ZT0 ─────────────────────────────────────────────────────────────────────────
 
-    static boolean execute(Aarch64Core core, Ir64Op.SmeZt0LoadStore op) {
+    static boolean execute(Aarch64Core core, SmeOp64.Zt0LoadStore op) {
         if (!core.smeZt0EnabledCheck(op.instructionAddress())) {
             return true;
         }

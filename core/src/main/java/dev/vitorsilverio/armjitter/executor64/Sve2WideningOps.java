@@ -2,7 +2,7 @@ package dev.vitorsilverio.armjitter.executor64;
 
 import dev.vitorsilverio.armjitter.advsimd.AdvSimdLanes;
 import dev.vitorsilverio.armjitter.core64.Aarch64ScalableRegisters;
-import dev.vitorsilverio.armjitter.ir64.Ir64Op;
+import dev.vitorsilverio.armjitter.ir64.SveIntegerOp64;
 
 /// Semântica das 43 operações SVE2 de `#### SVE2 Widening Integer Arithmetic` (B17.21b).
 ///
@@ -28,7 +28,7 @@ final class Sve2WideningOps {
     private Sve2WideningOps() {
     }
 
-    static void execute(Aarch64ScalableRegisters regs, Ir64Op.SveIntegerUnpredicated op, int elements) {
+    static void execute(Aarch64ScalableRegisters regs, SveIntegerOp64.IntegerUnpredicated op, int elements) {
         switch (op.op()) {
             case SADDL, UADDL, SSUBL, USUBL, SABDL, UABDL, SQDMULL, SMULL, UMULL -> longOperation(regs, op, elements);
             case SADDW, UADDW, SSUBW, USUBW -> wideOperation(regs, op, elements);
@@ -40,7 +40,7 @@ final class Sve2WideningOps {
         }
     }
 
-    private static boolean signedOperation(Ir64Op.SveIntegerUnpredicated.Op operation) {
+    private static boolean signedOperation(SveIntegerOp64.IntegerUnpredicated.Op operation) {
         return switch (operation) {
             case SADDL, SSUBL, SABDL, SQDMULL, SMULL, SADDW, SSUBW, SSHLL -> true;
             default -> false;
@@ -54,7 +54,7 @@ final class Sve2WideningOps {
 
     /// `*ADDL`/`*SUBL`/`*ABDL`/`*MULL`/`SQDMULL`: as duas fontes estreitas (`2e + t`) são estendidas e operadas no tamanho
     /// largo. O produto de `*MULL` cabe no destino; só o dobro de `SQDMULL` pode estourar (e satura).
-    private static void longOperation(Aarch64ScalableRegisters regs, Ir64Op.SveIntegerUnpredicated op, int elements) {
+    private static void longOperation(Aarch64ScalableRegisters regs, SveIntegerOp64.IntegerUnpredicated op, int elements) {
         int esz = op.esz();
         int sourceEsz = esz - 1;
         boolean signed = signedOperation(op.op());
@@ -75,12 +75,12 @@ final class Sve2WideningOps {
     }
 
     /// `*ADDW`/`*SUBW`: `Zn` já é largo; só `Zm` é estreito (`2e + t`) e estendido.
-    private static void wideOperation(Aarch64ScalableRegisters regs, Ir64Op.SveIntegerUnpredicated op, int elements) {
+    private static void wideOperation(Aarch64ScalableRegisters regs, SveIntegerOp64.IntegerUnpredicated op, int elements) {
         int esz = op.esz();
         int sourceEsz = esz - 1;
         boolean signed = signedOperation(op.op());
-        boolean subtract = op.op() == Ir64Op.SveIntegerUnpredicated.Op.SSUBW
-                || op.op() == Ir64Op.SveIntegerUnpredicated.Op.USUBW;
+        boolean subtract = op.op() == SveIntegerOp64.IntegerUnpredicated.Op.SSUBW
+                || op.op() == SveIntegerOp64.IntegerUnpredicated.Op.USUBW;
         int mTop = (int) ((op.imm() >>> 1) & 1L);
         for (int e = 0; e < elements; e++) {
             long n = SveIntegerOps.get(regs, op.rn(), e, esz);
@@ -91,7 +91,7 @@ final class Sve2WideningOps {
 
     /// `PMULLB`/`PMULLT`: produto polinomial (sem vai-um) `.H` de `.B`, `.D` de `.S` ou — `FEAT_SVE_PMULL128`, `esz = 0` —
     /// `.Q` de `.D`.
-    private static void polynomialMultiplyLong(Aarch64ScalableRegisters regs, Ir64Op.SveIntegerUnpredicated op,
+    private static void polynomialMultiplyLong(Aarch64ScalableRegisters regs, SveIntegerOp64.IntegerUnpredicated op,
             int elements) {
         int esz = op.esz();
         int nTop = (int) (op.imm() & 1L);
@@ -124,10 +124,10 @@ final class Sve2WideningOps {
     }
 
     /// `SSHLLB`/`SSHLLT`/`USHLLB`/`USHLLT`: estende o elemento estreito `2e + t` e desloca à esquerda (`imm`) no destino.
-    private static void shiftLeftLong(Aarch64ScalableRegisters regs, Ir64Op.SveIntegerUnpredicated op, int elements) {
+    private static void shiftLeftLong(Aarch64ScalableRegisters regs, SveIntegerOp64.IntegerUnpredicated op, int elements) {
         int esz = op.esz();
         int sourceEsz = esz - 1;
-        boolean signed = op.op() == Ir64Op.SveIntegerUnpredicated.Op.SSHLL;
+        boolean signed = op.op() == SveIntegerOp64.IntegerUnpredicated.Op.SSHLL;
         int top = (int) op.imm2();
         int shift = (int) op.imm();
         for (int e = 0; e < elements; e++) {
@@ -138,7 +138,7 @@ final class Sve2WideningOps {
 
     /// `EORBT`/`EORTB`: em cada par `(2e, 2e+1)`, escreve UM elemento — o do lado de `Zn` — com `Zn ^ Zm` (lados opostos) e
     /// PRESERVA o outro elemento do par (semântica, não acidente: zerar seria o bug natural).
-    private static void exclusiveOrInterleaved(Aarch64ScalableRegisters regs, Ir64Op.SveIntegerUnpredicated op,
+    private static void exclusiveOrInterleaved(Aarch64ScalableRegisters regs, SveIntegerOp64.IntegerUnpredicated op,
             int elements) {
         int esz = op.esz();
         int nSide = (int) (op.imm() & 1L);
@@ -152,9 +152,9 @@ final class Sve2WideningOps {
     /// `SMMLA`/`USMMLA`/`UMMLA`: em cada segmento de 128 bits, `Zn` são DUAS linhas de 8 bytes, `Zm` DUAS colunas de 8 bytes
     /// e `Zda` a matriz 2×2 de words: `Zda[2·linha+coluna] += Σₖ n[8·linha+k] · m[8·coluna+k]`, com wrap (nunca satura).
     /// `USMMLA`: `Zn` sem sinal, `Zm` com sinal.
-    private static void matrixMultiply(Aarch64ScalableRegisters regs, Ir64Op.SveIntegerUnpredicated op, int elements) {
-        boolean signedN = op.op() == Ir64Op.SveIntegerUnpredicated.Op.SMMLA;
-        boolean signedM = op.op() != Ir64Op.SveIntegerUnpredicated.Op.UMMLA;
+    private static void matrixMultiply(Aarch64ScalableRegisters regs, SveIntegerOp64.IntegerUnpredicated op, int elements) {
+        boolean signedN = op.op() == SveIntegerOp64.IntegerUnpredicated.Op.SMMLA;
+        boolean signedM = op.op() != SveIntegerOp64.IntegerUnpredicated.Op.UMMLA;
         long[] results = new long[MATRIX_DIMENSION * MATRIX_DIMENSION];
         for (int segment = 0; segment < elements / MATRIX_SEGMENT_WORDS; segment++) {
             int byteBase = segment * QUADWORD_BYTES;
@@ -179,7 +179,7 @@ final class Sve2WideningOps {
     }
 
     /// `BEXT`/`BDEP`/`BGRP` (`FEAT_SVE_BitPerm`) por elemento: dados em `Zn`, máscara em `Zm`.
-    private static void bitPermute(Aarch64ScalableRegisters regs, Ir64Op.SveIntegerUnpredicated op, int elements) {
+    private static void bitPermute(Aarch64ScalableRegisters regs, SveIntegerOp64.IntegerUnpredicated op, int elements) {
         int esz = op.esz();
         int bits = SveIntegerOps.elementBits(esz);
         for (int e = 0; e < elements; e++) {

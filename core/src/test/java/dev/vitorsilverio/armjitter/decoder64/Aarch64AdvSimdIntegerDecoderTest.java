@@ -1,5 +1,6 @@
 package dev.vitorsilverio.armjitter.decoder64;
 
+import dev.vitorsilverio.armjitter.ir64.AdvSimdIntegerOp64;
 import dev.vitorsilverio.armjitter.ir64.Ir64Op;
 import dev.vitorsilverio.armjitter.ir64.Ir64VectorAcrossLanesOp;
 import dev.vitorsilverio.armjitter.ir64.Ir64VectorNarrowOp;
@@ -34,7 +35,7 @@ class Aarch64AdvSimdIntegerDecoderTest {
     @Test
     void addVector8b() {
         // 0e228420: add v0.8b, v1.8b, v2.8b
-        Ir64Op.VectorArithmeticThreeSame op = (Ir64Op.VectorArithmeticThreeSame) decodeWord(0x0e228420);
+        AdvSimdIntegerOp64.ArithmeticThreeSame op = (AdvSimdIntegerOp64.ArithmeticThreeSame) decodeWord(0x0e228420);
         assertEquals(Ir64VectorThreeSameOp.ADD, op.op());
         assertEquals(false, op.q());
         assertEquals(0, op.esz());
@@ -46,7 +47,7 @@ class Aarch64AdvSimdIntegerDecoderTest {
     @Test
     void subVector2d() {
         // 6ee28420: sub v0.2d, v1.2d, v2.2d
-        Ir64Op.VectorArithmeticThreeSame op = (Ir64Op.VectorArithmeticThreeSame) decodeWord(0x6ee28420);
+        AdvSimdIntegerOp64.ArithmeticThreeSame op = (AdvSimdIntegerOp64.ArithmeticThreeSame) decodeWord(0x6ee28420);
         assertEquals(Ir64VectorThreeSameOp.SUB, op.op());
         assertEquals(true, op.q());
         assertEquals(3, op.esz());
@@ -55,14 +56,14 @@ class Aarch64AdvSimdIntegerDecoderTest {
     @Test
     void cmhiVector8b() {
         // 2e223420: cmhi v0.8b, v1.8b, v2.8b
-        Ir64Op.VectorArithmeticThreeSame op = (Ir64Op.VectorArithmeticThreeSame) decodeWord(0x2e223420);
+        AdvSimdIntegerOp64.ArithmeticThreeSame op = (AdvSimdIntegerOp64.ArithmeticThreeSame) decodeWord(0x2e223420);
         assertEquals(Ir64VectorThreeSameOp.CMHI, op.op());
     }
 
     @Test
     void cmtstVector8b() {
         // 0e228c20: cmtst v0.8b, v1.8b, v2.8b
-        Ir64Op.VectorArithmeticThreeSame op = (Ir64Op.VectorArithmeticThreeSame) decodeWord(0x0e228c20);
+        AdvSimdIntegerOp64.ArithmeticThreeSame op = (AdvSimdIntegerOp64.ArithmeticThreeSame) decodeWord(0x0e228c20);
         assertEquals(Ir64VectorThreeSameOp.CMTST, op.op());
     }
 
@@ -70,40 +71,40 @@ class Aarch64AdvSimdIntegerDecoderTest {
     void shaddAndUhaddVector8b() {
         // 0e220420: shadd v0.8b, v1.8b, v2.8b / 2e220420: uhadd v0.8b, v1.8b, v2.8b
         assertEquals(Ir64VectorThreeSameOp.SHADD,
-                ((Ir64Op.VectorArithmeticThreeSame) decodeWord(0x0e220420)).op());
+                ((AdvSimdIntegerOp64.ArithmeticThreeSame) decodeWord(0x0e220420)).op());
         assertEquals(Ir64VectorThreeSameOp.UHADD,
-                ((Ir64Op.VectorArithmeticThreeSame) decodeWord(0x2e220420)).op());
+                ((AdvSimdIntegerOp64.ArithmeticThreeSame) decodeWord(0x2e220420)).op());
     }
 
     @Test
     void srhaddVector8b() {
         // 0e221420: srhadd v0.8b, v1.8b, v2.8b
         assertEquals(Ir64VectorThreeSameOp.SRHADD,
-                ((Ir64Op.VectorArithmeticThreeSame) decodeWord(0x0e221420)).op());
+                ((AdvSimdIntegerOp64.ArithmeticThreeSame) decodeWord(0x0e221420)).op());
     }
 
     @Test
     void smaxSminSabdSabaVector8b() {
         assertEquals(Ir64VectorThreeSameOp.SMAX,
-                ((Ir64Op.VectorArithmeticThreeSame) decodeWord(0x0e226420)).op()); // smax
+                ((AdvSimdIntegerOp64.ArithmeticThreeSame) decodeWord(0x0e226420)).op()); // smax
         assertEquals(Ir64VectorThreeSameOp.UMIN,
-                ((Ir64Op.VectorArithmeticThreeSame) decodeWord(0x2e226c20)).op()); // umin
+                ((AdvSimdIntegerOp64.ArithmeticThreeSame) decodeWord(0x2e226c20)).op()); // umin
         assertEquals(Ir64VectorThreeSameOp.SABD,
-                ((Ir64Op.VectorArithmeticThreeSame) decodeWord(0x0e227420)).op()); // sabd
+                ((AdvSimdIntegerOp64.ArithmeticThreeSame) decodeWord(0x0e227420)).op()); // sabd
         assertEquals(Ir64VectorThreeSameOp.UABA,
-                ((Ir64Op.VectorArithmeticThreeSame) decodeWord(0x2e227c20)).op()); // uaba
+                ((AdvSimdIntegerOp64.ArithmeticThreeSame) decodeWord(0x2e227c20)).op()); // uaba
     }
 
     @Test
     void mulPmulMlaMlsVector8b() {
         assertEquals(Ir64VectorThreeSameOp.MUL,
-                ((Ir64Op.VectorArithmeticThreeSame) decodeWord(0x0e229c20)).op()); // mul
+                ((AdvSimdIntegerOp64.ArithmeticThreeSame) decodeWord(0x0e229c20)).op()); // mul
         assertEquals(Ir64VectorThreeSameOp.PMUL,
-                ((Ir64Op.VectorArithmeticThreeSame) decodeWord(0x2e229c20)).op()); // pmul
+                ((AdvSimdIntegerOp64.ArithmeticThreeSame) decodeWord(0x2e229c20)).op()); // pmul
         assertEquals(Ir64VectorThreeSameOp.MLA,
-                ((Ir64Op.VectorArithmeticThreeSame) decodeWord(0x0e229420)).op()); // mla
+                ((AdvSimdIntegerOp64.ArithmeticThreeSame) decodeWord(0x0e229420)).op()); // mla
         assertEquals(Ir64VectorThreeSameOp.MLS,
-                ((Ir64Op.VectorArithmeticThreeSame) decodeWord(0x2e229420)).op()); // mls
+                ((AdvSimdIntegerOp64.ArithmeticThreeSame) decodeWord(0x2e229420)).op()); // mls
     }
 
     @Test
@@ -125,16 +126,16 @@ class Aarch64AdvSimdIntegerDecoderTest {
     @Test
     void addpSmaxpUminpVector8b() {
         // 0e22bc20: addp v0.8b, v1.8b, v2.8b
-        Ir64Op.VectorArithmeticPairwise addp = (Ir64Op.VectorArithmeticPairwise) decodeWord(0x0e22bc20);
+        AdvSimdIntegerOp64.ArithmeticPairwise addp = (AdvSimdIntegerOp64.ArithmeticPairwise) decodeWord(0x0e22bc20);
         assertEquals(Ir64VectorPairwiseOp.ADD, addp.op());
         assertEquals(1, addp.rn());
         assertEquals(2, addp.rm());
         // 0e22a420: smaxp v0.8b, v1.8b, v2.8b
         assertEquals(Ir64VectorPairwiseOp.SMAX,
-                ((Ir64Op.VectorArithmeticPairwise) decodeWord(0x0e22a420)).op());
+                ((AdvSimdIntegerOp64.ArithmeticPairwise) decodeWord(0x0e22a420)).op());
         // 2e22ac20: uminp v0.8b, v1.8b, v2.8b
         assertEquals(Ir64VectorPairwiseOp.UMIN,
-                ((Ir64Op.VectorArithmeticPairwise) decodeWord(0x2e22ac20)).op());
+                ((AdvSimdIntegerOp64.ArithmeticPairwise) decodeWord(0x2e22ac20)).op());
     }
 
     // ── Three different: alargando ──────────────────────────────────────────────────────────────
@@ -142,17 +143,17 @@ class Aarch64AdvSimdIntegerDecoderTest {
     @Test
     void smullUmullQSelectsHalf() {
         // 0e22c020: smull v0.8h, v1.8b, v2.8b (q=0, metade baixa)
-        Ir64Op.VectorArithmeticWidening low = (Ir64Op.VectorArithmeticWidening) decodeWord(0x0e22c020);
+        AdvSimdIntegerOp64.ArithmeticWidening low = (AdvSimdIntegerOp64.ArithmeticWidening) decodeWord(0x0e22c020);
         assertEquals(Ir64VectorWideningOp.SMULL, low.op());
         assertEquals(false, low.q());
         assertEquals(0, low.esz());
         // 4e22c020: smull2 v0.8h, v1.16b, v2.16b (q=1, metade alta)
-        Ir64Op.VectorArithmeticWidening high = (Ir64Op.VectorArithmeticWidening) decodeWord(0x4e22c020);
+        AdvSimdIntegerOp64.ArithmeticWidening high = (AdvSimdIntegerOp64.ArithmeticWidening) decodeWord(0x4e22c020);
         assertEquals(Ir64VectorWideningOp.SMULL, high.op());
         assertEquals(true, high.q());
         // 2e22c020: umull v0.8h, v1.8b, v2.8b
         assertEquals(Ir64VectorWideningOp.UMULL,
-                ((Ir64Op.VectorArithmeticWidening) decodeWord(0x2e22c020)).op());
+                ((AdvSimdIntegerOp64.ArithmeticWidening) decodeWord(0x2e22c020)).op());
     }
 
     @Test
@@ -165,27 +166,27 @@ class Aarch64AdvSimdIntegerDecoderTest {
         // o bit11 do word (fixo em `0` só em "three different"), não `Rm`. Corpus real
         // (`aarch64-none-elf-as`/`objdump`, devkitA64).
         // smull v0.8h, v1.8b, v0.8b (Rm=0, colide com o Rm fixo de ABS/two-reg-misc)
-        Ir64Op.VectorArithmeticWidening rm0 = (Ir64Op.VectorArithmeticWidening) decodeWord(0x0e20c020);
+        AdvSimdIntegerOp64.ArithmeticWidening rm0 = (AdvSimdIntegerOp64.ArithmeticWidening) decodeWord(0x0e20c020);
         assertEquals(Ir64VectorWideningOp.SMULL, rm0.op());
         assertEquals(0, rm0.rm());
         // smull v0.8h, v1.8b, v1.8b (Rm=1, colide com o Rm fixo de SQXTN/narrow-unário)
-        Ir64Op.VectorArithmeticWidening rm1 = (Ir64Op.VectorArithmeticWidening) decodeWord(0x0e21c020);
+        AdvSimdIntegerOp64.ArithmeticWidening rm1 = (AdvSimdIntegerOp64.ArithmeticWidening) decodeWord(0x0e21c020);
         assertEquals(Ir64VectorWideningOp.SMULL, rm1.op());
         assertEquals(1, rm1.rm());
         // smull v0.8h, v1.8b, v16.8b (Rm=0b10000, IDÊNTICO ao Rm fixo de SADDLV/across-lanes)
-        Ir64Op.VectorArithmeticWidening rm16 = (Ir64Op.VectorArithmeticWidening) decodeWord(0x0e30c020);
+        AdvSimdIntegerOp64.ArithmeticWidening rm16 = (AdvSimdIntegerOp64.ArithmeticWidening) decodeWord(0x0e30c020);
         assertEquals(Ir64VectorWideningOp.SMULL, rm16.op());
         assertEquals(16, rm16.rm());
         // smull v0.8h, v1.8b, v17.8b (Rm=0b10001, IDÊNTICO ao Rm fixo de ADDV/across-lanes)
-        Ir64Op.VectorArithmeticWidening rm17 = (Ir64Op.VectorArithmeticWidening) decodeWord(0x0e31c020);
+        AdvSimdIntegerOp64.ArithmeticWidening rm17 = (AdvSimdIntegerOp64.ArithmeticWidening) decodeWord(0x0e31c020);
         assertEquals(Ir64VectorWideningOp.SMULL, rm17.op());
         assertEquals(17, rm17.rm());
         // smull v0.8h, v1.8b, v24.8b (Rm=0b11000, caso original documentado na B8.11)
-        Ir64Op.VectorArithmeticWidening rm24 = (Ir64Op.VectorArithmeticWidening) decodeWord(0x0e38c020);
+        AdvSimdIntegerOp64.ArithmeticWidening rm24 = (AdvSimdIntegerOp64.ArithmeticWidening) decodeWord(0x0e38c020);
         assertEquals(Ir64VectorWideningOp.SMULL, rm24.op());
         assertEquals(24, rm24.rm());
         // smull v0.8h, v1.8b, v30.8b (Rm=0b11110, topo do intervalo)
-        Ir64Op.VectorArithmeticWidening rm30 = (Ir64Op.VectorArithmeticWidening) decodeWord(0x0e3ec020);
+        AdvSimdIntegerOp64.ArithmeticWidening rm30 = (AdvSimdIntegerOp64.ArithmeticWidening) decodeWord(0x0e3ec020);
         assertEquals(Ir64VectorWideningOp.SMULL, rm30.op());
         assertEquals(30, rm30.rm());
     }
@@ -193,25 +194,25 @@ class Aarch64AdvSimdIntegerDecoderTest {
     @Test
     void smlalUmlalSmlslUmlsl() {
         assertEquals(Ir64VectorWideningOp.SMLAL,
-                ((Ir64Op.VectorArithmeticWidening) decodeWord(0x0e228020)).op()); // smlal
+                ((AdvSimdIntegerOp64.ArithmeticWidening) decodeWord(0x0e228020)).op()); // smlal
         assertEquals(Ir64VectorWideningOp.UMLAL,
-                ((Ir64Op.VectorArithmeticWidening) decodeWord(0x2e228020)).op()); // umlal
+                ((AdvSimdIntegerOp64.ArithmeticWidening) decodeWord(0x2e228020)).op()); // umlal
         assertEquals(Ir64VectorWideningOp.SMLSL,
-                ((Ir64Op.VectorArithmeticWidening) decodeWord(0x0e22a020)).op()); // smlsl
+                ((AdvSimdIntegerOp64.ArithmeticWidening) decodeWord(0x0e22a020)).op()); // smlsl
         assertEquals(Ir64VectorWideningOp.UMLSL,
-                ((Ir64Op.VectorArithmeticWidening) decodeWord(0x2e22a020)).op()); // umlsl
+                ((AdvSimdIntegerOp64.ArithmeticWidening) decodeWord(0x2e22a020)).op()); // umlsl
     }
 
     @Test
     void saddlUsublSabalUabdl() {
         assertEquals(Ir64VectorWideningOp.SADDL,
-                ((Ir64Op.VectorArithmeticWidening) decodeWord(0x0e220020)).op()); // saddl
+                ((AdvSimdIntegerOp64.ArithmeticWidening) decodeWord(0x0e220020)).op()); // saddl
         assertEquals(Ir64VectorWideningOp.USUBL,
-                ((Ir64Op.VectorArithmeticWidening) decodeWord(0x2e222020)).op()); // usubl
+                ((AdvSimdIntegerOp64.ArithmeticWidening) decodeWord(0x2e222020)).op()); // usubl
         assertEquals(Ir64VectorWideningOp.SABAL,
-                ((Ir64Op.VectorArithmeticWidening) decodeWord(0x0e225020)).op()); // sabal
+                ((AdvSimdIntegerOp64.ArithmeticWidening) decodeWord(0x0e225020)).op()); // sabal
         assertEquals(Ir64VectorWideningOp.UABDL,
-                ((Ir64Op.VectorArithmeticWidening) decodeWord(0x2e227020)).op()); // uabdl
+                ((AdvSimdIntegerOp64.ArithmeticWidening) decodeWord(0x2e227020)).op()); // uabdl
     }
 
     // ── Three different: largo+estreito ─────────────────────────────────────────────────────────
@@ -219,12 +220,12 @@ class Aarch64AdvSimdIntegerDecoderTest {
     @Test
     void saddwUaddwSsubwUsubw() {
         // 0e221020: saddw v0.8h, v1.8h, v2.8b
-        Ir64Op.VectorArithmeticWide op = (Ir64Op.VectorArithmeticWide) decodeWord(0x0e221020);
+        AdvSimdIntegerOp64.ArithmeticWide op = (AdvSimdIntegerOp64.ArithmeticWide) decodeWord(0x0e221020);
         assertEquals(Ir64VectorWideOp.SADDW, op.op());
         assertEquals(0, op.esz());
-        assertEquals(Ir64VectorWideOp.UADDW, ((Ir64Op.VectorArithmeticWide) decodeWord(0x2e221020)).op());
-        assertEquals(Ir64VectorWideOp.SSUBW, ((Ir64Op.VectorArithmeticWide) decodeWord(0x0e223020)).op());
-        assertEquals(Ir64VectorWideOp.USUBW, ((Ir64Op.VectorArithmeticWide) decodeWord(0x2e223020)).op());
+        assertEquals(Ir64VectorWideOp.UADDW, ((AdvSimdIntegerOp64.ArithmeticWide) decodeWord(0x2e221020)).op());
+        assertEquals(Ir64VectorWideOp.SSUBW, ((AdvSimdIntegerOp64.ArithmeticWide) decodeWord(0x0e223020)).op());
+        assertEquals(Ir64VectorWideOp.USUBW, ((AdvSimdIntegerOp64.ArithmeticWide) decodeWord(0x2e223020)).op());
     }
 
     // ── Three different: estreitando ────────────────────────────────────────────────────────────
@@ -232,16 +233,16 @@ class Aarch64AdvSimdIntegerDecoderTest {
     @Test
     void addhnRaddhnSubhnRsubhn() {
         // 0e224020: addhn v0.8b, v1.8h, v2.8h (q=0, metade baixa)
-        Ir64Op.VectorArithmeticNarrow addhn = (Ir64Op.VectorArithmeticNarrow) decodeWord(0x0e224020);
+        AdvSimdIntegerOp64.ArithmeticNarrow addhn = (AdvSimdIntegerOp64.ArithmeticNarrow) decodeWord(0x0e224020);
         assertEquals(Ir64VectorNarrowOp.ADDHN, addhn.op());
         assertEquals(false, addhn.q());
         assertEquals(0, addhn.esz());
         assertEquals(Ir64VectorNarrowOp.RADDHN,
-                ((Ir64Op.VectorArithmeticNarrow) decodeWord(0x2e224020)).op());
+                ((AdvSimdIntegerOp64.ArithmeticNarrow) decodeWord(0x2e224020)).op());
         assertEquals(Ir64VectorNarrowOp.SUBHN,
-                ((Ir64Op.VectorArithmeticNarrow) decodeWord(0x0e226020)).op());
+                ((AdvSimdIntegerOp64.ArithmeticNarrow) decodeWord(0x0e226020)).op());
         assertEquals(Ir64VectorNarrowOp.RSUBHN,
-                ((Ir64Op.VectorArithmeticNarrow) decodeWord(0x2e226020)).op());
+                ((AdvSimdIntegerOp64.ArithmeticNarrow) decodeWord(0x2e226020)).op());
     }
 
     // ── Across lanes ─────────────────────────────────────────────────────────────────────────────
@@ -249,29 +250,29 @@ class Aarch64AdvSimdIntegerDecoderTest {
     @Test
     void addvSaddlvUaddlv() {
         // 0e31b820: addv b0, v1.8b
-        Ir64Op.VectorAcrossLanes addv = (Ir64Op.VectorAcrossLanes) decodeWord(0x0e31b820);
+        AdvSimdIntegerOp64.AcrossLanes addv = (AdvSimdIntegerOp64.AcrossLanes) decodeWord(0x0e31b820);
         assertEquals(Ir64VectorAcrossLanesOp.ADDV, addv.op());
         assertEquals(0, addv.esz());
         assertEquals(1, addv.rn());
         assertEquals(0, addv.rd());
         // 0e303820: saddlv h0, v1.8b / 2e303820: uaddlv h0, v1.8b
         assertEquals(Ir64VectorAcrossLanesOp.SADDLV,
-                ((Ir64Op.VectorAcrossLanes) decodeWord(0x0e303820)).op());
+                ((AdvSimdIntegerOp64.AcrossLanes) decodeWord(0x0e303820)).op());
         assertEquals(Ir64VectorAcrossLanesOp.UADDLV,
-                ((Ir64Op.VectorAcrossLanes) decodeWord(0x2e303820)).op());
+                ((AdvSimdIntegerOp64.AcrossLanes) decodeWord(0x2e303820)).op());
     }
 
     @Test
     void smaxvUminvSminvUmaxvShareOpcodeDistinguishedByRm() {
         // op=10101 nos 4 casos — só o bit baixo de Rm + U distingue.
         assertEquals(Ir64VectorAcrossLanesOp.SMAXV,
-                ((Ir64Op.VectorAcrossLanes) decodeWord(0x0e30a820)).op()); // smaxv b0, v1.8b
+                ((AdvSimdIntegerOp64.AcrossLanes) decodeWord(0x0e30a820)).op()); // smaxv b0, v1.8b
         assertEquals(Ir64VectorAcrossLanesOp.UMAXV,
-                ((Ir64Op.VectorAcrossLanes) decodeWord(0x2e30a820)).op()); // umaxv b0, v1.8b
+                ((AdvSimdIntegerOp64.AcrossLanes) decodeWord(0x2e30a820)).op()); // umaxv b0, v1.8b
         assertEquals(Ir64VectorAcrossLanesOp.SMINV,
-                ((Ir64Op.VectorAcrossLanes) decodeWord(0x0e31a820)).op()); // sminv b0, v1.8b
+                ((AdvSimdIntegerOp64.AcrossLanes) decodeWord(0x0e31a820)).op()); // sminv b0, v1.8b
         assertEquals(Ir64VectorAcrossLanesOp.UMINV,
-                ((Ir64Op.VectorAcrossLanes) decodeWord(0x2e31a820)).op()); // uminv b0, v1.8b
+                ((AdvSimdIntegerOp64.AcrossLanes) decodeWord(0x2e31a820)).op()); // uminv b0, v1.8b
     }
 
     // ── Two-register miscellaneous (vetorial) ───────────────────────────────────────────────────
@@ -279,37 +280,37 @@ class Aarch64AdvSimdIntegerDecoderTest {
     @Test
     void absNegVector8b() {
         // 0e20b820: abs v0.8b, v1.8b / 2e20b820: neg v0.8b, v1.8b
-        Ir64Op.VectorArithmeticUnary abs = (Ir64Op.VectorArithmeticUnary) decodeWord(0x0e20b820);
+        AdvSimdIntegerOp64.ArithmeticUnary abs = (AdvSimdIntegerOp64.ArithmeticUnary) decodeWord(0x0e20b820);
         assertEquals(Ir64VectorUnaryOp.ABS, abs.op());
         assertEquals(1, abs.rn());
-        assertEquals(Ir64VectorUnaryOp.NEG, ((Ir64Op.VectorArithmeticUnary) decodeWord(0x2e20b820)).op());
+        assertEquals(Ir64VectorUnaryOp.NEG, ((AdvSimdIntegerOp64.ArithmeticUnary) decodeWord(0x2e20b820)).op());
     }
 
     @Test
     void compareAgainstZeroVector8b() {
         assertEquals(Ir64VectorUnaryOp.CMEQ0,
-                ((Ir64Op.VectorArithmeticUnary) decodeWord(0x0e209820)).op()); // cmeq #0
+                ((AdvSimdIntegerOp64.ArithmeticUnary) decodeWord(0x0e209820)).op()); // cmeq #0
         assertEquals(Ir64VectorUnaryOp.CMGT0,
-                ((Ir64Op.VectorArithmeticUnary) decodeWord(0x0e208820)).op()); // cmgt #0
+                ((AdvSimdIntegerOp64.ArithmeticUnary) decodeWord(0x0e208820)).op()); // cmgt #0
         assertEquals(Ir64VectorUnaryOp.CMGE0,
-                ((Ir64Op.VectorArithmeticUnary) decodeWord(0x2e208820)).op()); // cmge #0
+                ((AdvSimdIntegerOp64.ArithmeticUnary) decodeWord(0x2e208820)).op()); // cmge #0
         assertEquals(Ir64VectorUnaryOp.CMLT0,
-                ((Ir64Op.VectorArithmeticUnary) decodeWord(0x0e20a820)).op()); // cmlt #0
+                ((AdvSimdIntegerOp64.ArithmeticUnary) decodeWord(0x0e20a820)).op()); // cmlt #0
         assertEquals(Ir64VectorUnaryOp.CMLE0,
-                ((Ir64Op.VectorArithmeticUnary) decodeWord(0x2e209820)).op()); // cmle #0
+                ((AdvSimdIntegerOp64.ArithmeticUnary) decodeWord(0x2e209820)).op()); // cmle #0
     }
 
     @Test
     void saddlpUaddlpSadalpUadalp() {
         // 0e202820: saddlp v0.4h, v1.8b
-        Ir64Op.VectorArithmeticUnary saddlp = (Ir64Op.VectorArithmeticUnary) decodeWord(0x0e202820);
+        AdvSimdIntegerOp64.ArithmeticUnary saddlp = (AdvSimdIntegerOp64.ArithmeticUnary) decodeWord(0x0e202820);
         assertEquals(Ir64VectorUnaryOp.SADDLP, saddlp.op());
         assertEquals(Ir64VectorUnaryOp.UADDLP,
-                ((Ir64Op.VectorArithmeticUnary) decodeWord(0x2e202820)).op());
+                ((AdvSimdIntegerOp64.ArithmeticUnary) decodeWord(0x2e202820)).op());
         assertEquals(Ir64VectorUnaryOp.SADALP,
-                ((Ir64Op.VectorArithmeticUnary) decodeWord(0x0e206820)).op());
+                ((AdvSimdIntegerOp64.ArithmeticUnary) decodeWord(0x0e206820)).op());
         assertEquals(Ir64VectorUnaryOp.UADALP,
-                ((Ir64Op.VectorArithmeticUnary) decodeWord(0x2e206820)).op());
+                ((AdvSimdIntegerOp64.ArithmeticUnary) decodeWord(0x2e206820)).op());
     }
 
     // ── Formas escalares (D-only, esz=3/q=false forçados pelo decoder) ─────────────────────────────
@@ -317,28 +318,28 @@ class Aarch64AdvSimdIntegerDecoderTest {
     @Test
     void addSubScalarD() {
         // 5ee28420: add d0, d1, d2 / 7ee28420: sub d0, d1, d2
-        Ir64Op.VectorArithmeticThreeSame add = (Ir64Op.VectorArithmeticThreeSame) decodeWord(0x5ee28420);
+        AdvSimdIntegerOp64.ArithmeticThreeSame add = (AdvSimdIntegerOp64.ArithmeticThreeSame) decodeWord(0x5ee28420);
         assertEquals(Ir64VectorThreeSameOp.ADD, add.op());
         assertEquals(false, add.q());
         assertEquals(3, add.esz());
         assertEquals(Ir64VectorThreeSameOp.SUB,
-                ((Ir64Op.VectorArithmeticThreeSame) decodeWord(0x7ee28420)).op());
+                ((AdvSimdIntegerOp64.ArithmeticThreeSame) decodeWord(0x7ee28420)).op());
     }
 
     @Test
     void compareScalarD() {
         assertEquals(Ir64VectorThreeSameOp.CMGT,
-                ((Ir64Op.VectorArithmeticThreeSame) decodeWord(0x5ee23420)).op()); // cmgt d0,d1,d2
+                ((AdvSimdIntegerOp64.ArithmeticThreeSame) decodeWord(0x5ee23420)).op()); // cmgt d0,d1,d2
         assertEquals(Ir64VectorThreeSameOp.CMHI,
-                ((Ir64Op.VectorArithmeticThreeSame) decodeWord(0x7ee23420)).op()); // cmhi d0,d1,d2
+                ((AdvSimdIntegerOp64.ArithmeticThreeSame) decodeWord(0x7ee23420)).op()); // cmhi d0,d1,d2
         assertEquals(Ir64VectorThreeSameOp.CMGE,
-                ((Ir64Op.VectorArithmeticThreeSame) decodeWord(0x5ee23c20)).op()); // cmge d0,d1,d2
+                ((AdvSimdIntegerOp64.ArithmeticThreeSame) decodeWord(0x5ee23c20)).op()); // cmge d0,d1,d2
         assertEquals(Ir64VectorThreeSameOp.CMHS,
-                ((Ir64Op.VectorArithmeticThreeSame) decodeWord(0x7ee23c20)).op()); // cmhs d0,d1,d2
+                ((AdvSimdIntegerOp64.ArithmeticThreeSame) decodeWord(0x7ee23c20)).op()); // cmhs d0,d1,d2
         assertEquals(Ir64VectorThreeSameOp.CMTST,
-                ((Ir64Op.VectorArithmeticThreeSame) decodeWord(0x5ee28c20)).op()); // cmtst d0,d1,d2
+                ((AdvSimdIntegerOp64.ArithmeticThreeSame) decodeWord(0x5ee28c20)).op()); // cmtst d0,d1,d2
         assertEquals(Ir64VectorThreeSameOp.CMEQ,
-                ((Ir64Op.VectorArithmeticThreeSame) decodeWord(0x7ee28c20)).op()); // cmeq d0,d1,d2
+                ((AdvSimdIntegerOp64.ArithmeticThreeSame) decodeWord(0x7ee28c20)).op()); // cmeq d0,d1,d2
     }
 
     @Test
@@ -352,24 +353,24 @@ class Aarch64AdvSimdIntegerDecoderTest {
     @Test
     void absNegCompareZeroScalarD() {
         // 5ee0b820: abs d0, d1 / 7ee0b820: neg d0, d1
-        assertEquals(Ir64VectorUnaryOp.ABS, ((Ir64Op.VectorArithmeticUnary) decodeWord(0x5ee0b820)).op());
-        assertEquals(Ir64VectorUnaryOp.NEG, ((Ir64Op.VectorArithmeticUnary) decodeWord(0x7ee0b820)).op());
+        assertEquals(Ir64VectorUnaryOp.ABS, ((AdvSimdIntegerOp64.ArithmeticUnary) decodeWord(0x5ee0b820)).op());
+        assertEquals(Ir64VectorUnaryOp.NEG, ((AdvSimdIntegerOp64.ArithmeticUnary) decodeWord(0x7ee0b820)).op());
         assertEquals(Ir64VectorUnaryOp.CMEQ0,
-                ((Ir64Op.VectorArithmeticUnary) decodeWord(0x5ee09820)).op()); // cmeq d0,d1,#0
+                ((AdvSimdIntegerOp64.ArithmeticUnary) decodeWord(0x5ee09820)).op()); // cmeq d0,d1,#0
         assertEquals(Ir64VectorUnaryOp.CMGT0,
-                ((Ir64Op.VectorArithmeticUnary) decodeWord(0x5ee08820)).op()); // cmgt d0,d1,#0
+                ((AdvSimdIntegerOp64.ArithmeticUnary) decodeWord(0x5ee08820)).op()); // cmgt d0,d1,#0
         assertEquals(Ir64VectorUnaryOp.CMGE0,
-                ((Ir64Op.VectorArithmeticUnary) decodeWord(0x7ee08820)).op()); // cmge d0,d1,#0
+                ((AdvSimdIntegerOp64.ArithmeticUnary) decodeWord(0x7ee08820)).op()); // cmge d0,d1,#0
         assertEquals(Ir64VectorUnaryOp.CMLT0,
-                ((Ir64Op.VectorArithmeticUnary) decodeWord(0x5ee0a820)).op()); // cmlt d0,d1,#0
+                ((AdvSimdIntegerOp64.ArithmeticUnary) decodeWord(0x5ee0a820)).op()); // cmlt d0,d1,#0
         assertEquals(Ir64VectorUnaryOp.CMLE0,
-                ((Ir64Op.VectorArithmeticUnary) decodeWord(0x7ee09820)).op()); // cmle d0,d1,#0
+                ((AdvSimdIntegerOp64.ArithmeticUnary) decodeWord(0x7ee09820)).op()); // cmle d0,d1,#0
     }
 
     @Test
     void addpScalarD() {
         // 5ef1b820: addp d0, v1.2d
-        Ir64Op.VectorScalarPairwiseAdd op = (Ir64Op.VectorScalarPairwiseAdd) decodeWord(0x5ef1b820);
+        AdvSimdIntegerOp64.ScalarPairwiseAdd op = (AdvSimdIntegerOp64.ScalarPairwiseAdd) decodeWord(0x5ef1b820);
         assertEquals(0, op.rd());
         assertEquals(1, op.rn());
     }

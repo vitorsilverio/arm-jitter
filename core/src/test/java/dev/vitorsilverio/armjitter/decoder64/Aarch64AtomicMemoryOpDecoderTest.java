@@ -5,6 +5,7 @@ import dev.vitorsilverio.armjitter.ir64.Ir64AddressingMode;
 import dev.vitorsilverio.armjitter.ir64.Ir64AtomicOp;
 import dev.vitorsilverio.armjitter.ir64.Ir64MemSize;
 import dev.vitorsilverio.armjitter.ir64.Ir64Op;
+import dev.vitorsilverio.armjitter.ir64.MemoryOp64;
 import dev.vitorsilverio.armjitter.memory.AddressSpace64;
 import dev.vitorsilverio.armjitter.support.TestAddressSpace;
 import org.junit.jupiter.api.Test;
@@ -74,21 +75,21 @@ class Aarch64AtomicMemoryOpDecoderTest {
     @Test
     void lseGatesTheNineButNotLdapr() {
         for (int word : ALL_NINE_LSE) {
-            assertTrue(decode(LSE_DECODER, word) instanceof Ir64Op.AtomicMemoryOp);
+            assertTrue(decode(LSE_DECODER, word) instanceof MemoryOp64.AtomicMemoryOp);
         }
         assertThrows(UnsupportedOperationException.class, () -> decode(LSE_NO_RCPC_DECODER, LDAPR_X0_X1));
     }
 
     @Test
     void lrcpcGatesLdapr() {
-        assertTrue(decode(RCPC_DECODER, LDAPR_X0_X1) instanceof Ir64Op.Load64);
+        assertTrue(decode(RCPC_DECODER, LDAPR_X0_X1) instanceof MemoryOp64.Load64);
     }
 
     // ── Decode das 9 operações LSE ──────────────────────────────────────────────────────────────
 
     @Test
     void ldaddWordFields() {
-        Ir64Op.AtomicMemoryOp op = (Ir64Op.AtomicMemoryOp) decode(LSE_DECODER, LDADD_W0_W1_X2);
+        MemoryOp64.AtomicMemoryOp op = (MemoryOp64.AtomicMemoryOp) decode(LSE_DECODER, LDADD_W0_W1_X2);
         assertEquals(Ir64AtomicOp.ADD, op.operation());
         assertEquals(Ir64MemSize.WORD, op.size());
         assertEquals(0, op.rs());
@@ -100,7 +101,7 @@ class Aarch64AtomicMemoryOpDecoderTest {
 
     @Test
     void ldaddAcquireDoubleword() {
-        Ir64Op.AtomicMemoryOp op = (Ir64Op.AtomicMemoryOp) decode(LSE_DECODER, LDADDA_X3_X4_X5);
+        MemoryOp64.AtomicMemoryOp op = (MemoryOp64.AtomicMemoryOp) decode(LSE_DECODER, LDADDA_X3_X4_X5);
         assertEquals(Ir64AtomicOp.ADD, op.operation());
         assertEquals(Ir64MemSize.DOUBLEWORD, op.size());
         assertTrue(op.acquire());
@@ -112,17 +113,17 @@ class Aarch64AtomicMemoryOpDecoderTest {
 
     @Test
     void ldaddReleaseAndAcquireRelease() {
-        Ir64Op.AtomicMemoryOp rel = (Ir64Op.AtomicMemoryOp) decode(LSE_DECODER, LDADDL_W6_W7_X8);
+        MemoryOp64.AtomicMemoryOp rel = (MemoryOp64.AtomicMemoryOp) decode(LSE_DECODER, LDADDL_W6_W7_X8);
         assertFalse(rel.acquire());
         assertTrue(rel.release());
-        Ir64Op.AtomicMemoryOp acqRel = (Ir64Op.AtomicMemoryOp) decode(LSE_DECODER, LDADDAL_X9_X10_X11);
+        MemoryOp64.AtomicMemoryOp acqRel = (MemoryOp64.AtomicMemoryOp) decode(LSE_DECODER, LDADDAL_X9_X10_X11);
         assertTrue(acqRel.acquire());
         assertTrue(acqRel.release());
     }
 
     @Test
     void staddlIsLdaddWithXzrDestination() {
-        Ir64Op.AtomicMemoryOp op = (Ir64Op.AtomicMemoryOp) decode(LSE_DECODER, STADDL_W12_X13);
+        MemoryOp64.AtomicMemoryOp op = (MemoryOp64.AtomicMemoryOp) decode(LSE_DECODER, STADDL_W12_X13);
         assertEquals(Ir64AtomicOp.ADD, op.operation());
         assertEquals(31, op.rt(), "alias ST<op> = Rt XZR");
         assertEquals(12, op.rs());
@@ -131,28 +132,28 @@ class Aarch64AtomicMemoryOpDecoderTest {
 
     @Test
     void operationByOpcField() {
-        assertEquals(Ir64AtomicOp.CLR, ((Ir64Op.AtomicMemoryOp) decode(LSE_DECODER, LDCLR_W0_W1_X2)).operation());
-        assertEquals(Ir64AtomicOp.EOR, ((Ir64Op.AtomicMemoryOp) decode(LSE_DECODER, LDEOR_X9_X10_SP)).operation());
-        assertEquals(Ir64AtomicOp.SET, ((Ir64Op.AtomicMemoryOp) decode(LSE_DECODER, LDSET_W0_W1_X2)).operation());
-        assertEquals(Ir64AtomicOp.SMAX, ((Ir64Op.AtomicMemoryOp) decode(LSE_DECODER, LDSMAX_W3_W4_X5)).operation());
-        assertEquals(Ir64AtomicOp.SMIN, ((Ir64Op.AtomicMemoryOp) decode(LSE_DECODER, LDSMIN_X9_X10_X11)).operation());
-        assertEquals(Ir64AtomicOp.UMAX, ((Ir64Op.AtomicMemoryOp) decode(LSE_DECODER, LDUMAX_W0_W1_X2)).operation());
-        assertEquals(Ir64AtomicOp.UMIN, ((Ir64Op.AtomicMemoryOp) decode(LSE_DECODER, LDUMIN_X3_X4_X5)).operation());
-        assertEquals(Ir64AtomicOp.SWP, ((Ir64Op.AtomicMemoryOp) decode(LSE_DECODER, SWP_W0_W1_X2)).operation());
+        assertEquals(Ir64AtomicOp.CLR, ((MemoryOp64.AtomicMemoryOp) decode(LSE_DECODER, LDCLR_W0_W1_X2)).operation());
+        assertEquals(Ir64AtomicOp.EOR, ((MemoryOp64.AtomicMemoryOp) decode(LSE_DECODER, LDEOR_X9_X10_SP)).operation());
+        assertEquals(Ir64AtomicOp.SET, ((MemoryOp64.AtomicMemoryOp) decode(LSE_DECODER, LDSET_W0_W1_X2)).operation());
+        assertEquals(Ir64AtomicOp.SMAX, ((MemoryOp64.AtomicMemoryOp) decode(LSE_DECODER, LDSMAX_W3_W4_X5)).operation());
+        assertEquals(Ir64AtomicOp.SMIN, ((MemoryOp64.AtomicMemoryOp) decode(LSE_DECODER, LDSMIN_X9_X10_X11)).operation());
+        assertEquals(Ir64AtomicOp.UMAX, ((MemoryOp64.AtomicMemoryOp) decode(LSE_DECODER, LDUMAX_W0_W1_X2)).operation());
+        assertEquals(Ir64AtomicOp.UMIN, ((MemoryOp64.AtomicMemoryOp) decode(LSE_DECODER, LDUMIN_X3_X4_X5)).operation());
+        assertEquals(Ir64AtomicOp.SWP, ((MemoryOp64.AtomicMemoryOp) decode(LSE_DECODER, SWP_W0_W1_X2)).operation());
     }
 
     @Test
     void sizeByField() {
-        assertEquals(Ir64MemSize.BYTE, ((Ir64Op.AtomicMemoryOp) decode(LSE_DECODER, LDCLRB_W3_W4_X5)).size());
-        assertEquals(Ir64MemSize.HALF, ((Ir64Op.AtomicMemoryOp) decode(LSE_DECODER, LDCLRH_W6_W7_X8)).size());
-        assertEquals(Ir64MemSize.WORD, ((Ir64Op.AtomicMemoryOp) decode(LSE_DECODER, LDADD_W0_W1_X2)).size());
-        assertEquals(Ir64MemSize.DOUBLEWORD, ((Ir64Op.AtomicMemoryOp) decode(LSE_DECODER, LDUMIN_X3_X4_X5)).size());
+        assertEquals(Ir64MemSize.BYTE, ((MemoryOp64.AtomicMemoryOp) decode(LSE_DECODER, LDCLRB_W3_W4_X5)).size());
+        assertEquals(Ir64MemSize.HALF, ((MemoryOp64.AtomicMemoryOp) decode(LSE_DECODER, LDCLRH_W6_W7_X8)).size());
+        assertEquals(Ir64MemSize.WORD, ((MemoryOp64.AtomicMemoryOp) decode(LSE_DECODER, LDADD_W0_W1_X2)).size());
+        assertEquals(Ir64MemSize.DOUBLEWORD, ((MemoryOp64.AtomicMemoryOp) decode(LSE_DECODER, LDUMIN_X3_X4_X5)).size());
     }
 
     @Test
     void swpbAndSwpalCarryO3Bit() {
-        assertEquals(Ir64AtomicOp.SWP, ((Ir64Op.AtomicMemoryOp) decode(LSE_DECODER, SWPB_W3_W4_X5)).operation());
-        Ir64Op.AtomicMemoryOp swpal = (Ir64Op.AtomicMemoryOp) decode(LSE_DECODER, SWPAL_X9_X10_X11);
+        assertEquals(Ir64AtomicOp.SWP, ((MemoryOp64.AtomicMemoryOp) decode(LSE_DECODER, SWPB_W3_W4_X5)).operation());
+        MemoryOp64.AtomicMemoryOp swpal = (MemoryOp64.AtomicMemoryOp) decode(LSE_DECODER, SWPAL_X9_X10_X11);
         assertEquals(Ir64AtomicOp.SWP, swpal.operation());
         assertTrue(swpal.acquire());
         assertTrue(swpal.release());
@@ -160,13 +161,13 @@ class Aarch64AtomicMemoryOpDecoderTest {
 
     @Test
     void rsXzrDecodesAsRegister31() {
-        Ir64Op.AtomicMemoryOp op = (Ir64Op.AtomicMemoryOp) decode(LSE_DECODER, LDADD_WZR_W1_X2);
+        MemoryOp64.AtomicMemoryOp op = (MemoryOp64.AtomicMemoryOp) decode(LSE_DECODER, LDADD_WZR_W1_X2);
         assertEquals(31, op.rs());
     }
 
     @Test
     void staddIsLdaddWithXzrDestination() {
-        Ir64Op.AtomicMemoryOp op = (Ir64Op.AtomicMemoryOp) decode(LSE_DECODER, STADD_W0_X2);
+        MemoryOp64.AtomicMemoryOp op = (MemoryOp64.AtomicMemoryOp) decode(LSE_DECODER, STADD_W0_X2);
         assertEquals(31, op.rt());
         assertEquals(0, op.rs());
     }
@@ -175,7 +176,7 @@ class Aarch64AtomicMemoryOpDecoderTest {
 
     @Test
     void ldaprDecodesAsPlainLoadNoWriteback() {
-        Ir64Op.Load64 op = (Ir64Op.Load64) decode(RCPC_DECODER, LDAPR_X0_X1);
+        MemoryOp64.Load64 op = (MemoryOp64.Load64) decode(RCPC_DECODER, LDAPR_X0_X1);
         assertEquals(0, op.rt());
         assertEquals(1, op.rn());
         assertEquals(Ir64MemSize.DOUBLEWORD, op.size());
@@ -187,12 +188,12 @@ class Aarch64AtomicMemoryOpDecoderTest {
 
     @Test
     void ldaprbAndLdaprhSizes() {
-        Ir64Op.Load64 b = (Ir64Op.Load64) decode(RCPC_DECODER, LDAPRB_W2_X3);
+        MemoryOp64.Load64 b = (MemoryOp64.Load64) decode(RCPC_DECODER, LDAPRB_W2_X3);
         assertEquals(Ir64MemSize.BYTE, b.size());
         assertFalse(b.wide());
         assertEquals(2, b.rt());
         assertEquals(3, b.rn());
-        Ir64Op.Load64 h = (Ir64Op.Load64) decode(RCPC_DECODER, LDAPRH_W4_X5);
+        MemoryOp64.Load64 h = (MemoryOp64.Load64) decode(RCPC_DECODER, LDAPRH_W4_X5);
         assertEquals(Ir64MemSize.HALF, h.size());
         assertFalse(h.wide());
     }
@@ -232,7 +233,7 @@ class Aarch64AtomicMemoryOpDecoderTest {
         // Todos os vetores acima têm bit21=1: o ramo LDUR/STUR (bit21=0) nunca pode produzi-los.
         for (int word : ALL_NINE_LSE) {
             Ir64Op op = decode(RCPC_DECODER, word);
-            assertTrue(op instanceof Ir64Op.AtomicMemoryOp);
+            assertTrue(op instanceof MemoryOp64.AtomicMemoryOp);
         }
     }
 }

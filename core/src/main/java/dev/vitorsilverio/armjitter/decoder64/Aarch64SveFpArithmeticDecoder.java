@@ -3,6 +3,7 @@ package dev.vitorsilverio.armjitter.decoder64;
 import dev.vitorsilverio.armjitter.arch64.Aarch64Architecture;
 import dev.vitorsilverio.armjitter.arch64.Aarch64Feature;
 import dev.vitorsilverio.armjitter.ir64.Ir64Op;
+import dev.vitorsilverio.armjitter.ir64.SveFpOp64;
 
 /// Decoder SVE da aritmética de ponto flutuante da B17.13 (prefixo `0x65`): as 32 linhas de `### SVE Floating Point
 /// Arithmetic - Unpredicated Group`, `### SVE FP Arithmetic Predicated Group` (com as 8 de imediato e `FTMAD`) e
@@ -99,14 +100,14 @@ final class Aarch64SveFpArithmeticDecoder {
             return decodeUnpredicated(word, esz, address);
         }
         if ((word & UNARY_MASK) == UNARY_VALUE) {
-            Ir64Op.SveFpArithmetic.Op op = bit(word, UNARY_RSQRTE_BIT)
-                    ? Ir64Op.SveFpArithmetic.Op.RSQRTE : Ir64Op.SveFpArithmetic.Op.RECPE;
-            return new Ir64Op.SveFpArithmetic(op, esz, field(word, 0, REGISTER_MASK), field(word, RN_SHIFT, REGISTER_MASK),
+            SveFpOp64.FpArithmetic.Op op = bit(word, UNARY_RSQRTE_BIT)
+                    ? SveFpOp64.FpArithmetic.Op.RSQRTE : SveFpOp64.FpArithmetic.Op.RECPE;
+            return new SveFpOp64.FpArithmetic(op, esz, field(word, 0, REGISTER_MASK), field(word, RN_SHIFT, REGISTER_MASK),
                     0, 0, false, false, false, 0, address);
         }
         if ((word & TMAD_MASK) == TMAD_VALUE) {
             int rd = field(word, 0, REGISTER_MASK);
-            return new Ir64Op.SveFpArithmetic(Ir64Op.SveFpArithmetic.Op.TMAD, esz, rd, rd,
+            return new SveFpOp64.FpArithmetic(SveFpOp64.FpArithmetic.Op.TMAD, esz, rd, rd,
                     field(word, RM_LOW_SHIFT, REGISTER_MASK), 0, false, false, false,
                     field(word, RM_SHIFT, IMM3_MASK), address);
         }
@@ -120,79 +121,79 @@ final class Aarch64SveFpArithmeticDecoder {
     }
 
     private Ir64Op decodeUnpredicated(int word, int esz, long address) {
-        Ir64Op.SveFpArithmetic.Op op = switch (field(word, UNPREDICATED_OPCODE_SHIFT, UNPREDICATED_OPCODE_MASK)) {
-            case UNPRED_FADD -> Ir64Op.SveFpArithmetic.Op.ADD;
-            case UNPRED_FSUB -> Ir64Op.SveFpArithmetic.Op.SUB;
-            case UNPRED_FMUL -> Ir64Op.SveFpArithmetic.Op.MUL;
-            case UNPRED_FTSMUL -> Ir64Op.SveFpArithmetic.Op.TSMUL;
-            case UNPRED_FRECPS -> Ir64Op.SveFpArithmetic.Op.RECPS;
-            case UNPRED_FRSQRTS -> Ir64Op.SveFpArithmetic.Op.RSQRTS;
+        SveFpOp64.FpArithmetic.Op op = switch (field(word, UNPREDICATED_OPCODE_SHIFT, UNPREDICATED_OPCODE_MASK)) {
+            case UNPRED_FADD -> SveFpOp64.FpArithmetic.Op.ADD;
+            case UNPRED_FSUB -> SveFpOp64.FpArithmetic.Op.SUB;
+            case UNPRED_FMUL -> SveFpOp64.FpArithmetic.Op.MUL;
+            case UNPRED_FTSMUL -> SveFpOp64.FpArithmetic.Op.TSMUL;
+            case UNPRED_FRECPS -> SveFpOp64.FpArithmetic.Op.RECPS;
+            case UNPRED_FRSQRTS -> SveFpOp64.FpArithmetic.Op.RSQRTS;
             default -> null; // 100/101: não alocados neste grupo
         };
         if (op == null) {
             return null;
         }
-        return new Ir64Op.SveFpArithmetic(op, esz, field(word, 0, REGISTER_MASK), field(word, RN_SHIFT, REGISTER_MASK),
+        return new SveFpOp64.FpArithmetic(op, esz, field(word, 0, REGISTER_MASK), field(word, RN_SHIFT, REGISTER_MASK),
                 field(word, RM_SHIFT, REGISTER_MASK), 0, false, false, false, 0, address);
     }
 
     private Ir64Op decodeImmediate(int word, int esz, long address) {
-        Ir64Op.SveFpArithmetic.Op op;
+        SveFpOp64.FpArithmetic.Op op;
         boolean reversed = false;
         switch (field(word, OPCODE_SHIFT, IMM_OPCODE_MASK)) {
-            case IMM_FADD -> op = Ir64Op.SveFpArithmetic.Op.ADD;
-            case IMM_FSUB -> op = Ir64Op.SveFpArithmetic.Op.SUB;
-            case IMM_FMUL -> op = Ir64Op.SveFpArithmetic.Op.MUL;
+            case IMM_FADD -> op = SveFpOp64.FpArithmetic.Op.ADD;
+            case IMM_FSUB -> op = SveFpOp64.FpArithmetic.Op.SUB;
+            case IMM_FMUL -> op = SveFpOp64.FpArithmetic.Op.MUL;
             case IMM_FSUBR -> {
-                op = Ir64Op.SveFpArithmetic.Op.SUB;
+                op = SveFpOp64.FpArithmetic.Op.SUB;
                 reversed = true;
             }
-            case IMM_FMAXNM -> op = Ir64Op.SveFpArithmetic.Op.MAXNM;
-            case IMM_FMINNM -> op = Ir64Op.SveFpArithmetic.Op.MINNM;
-            case IMM_FMAX -> op = Ir64Op.SveFpArithmetic.Op.MAX;
-            default -> op = Ir64Op.SveFpArithmetic.Op.MIN; // IMM_FMIN: os 8 opcodes existem
+            case IMM_FMAXNM -> op = SveFpOp64.FpArithmetic.Op.MAXNM;
+            case IMM_FMINNM -> op = SveFpOp64.FpArithmetic.Op.MINNM;
+            case IMM_FMAX -> op = SveFpOp64.FpArithmetic.Op.MAX;
+            default -> op = SveFpOp64.FpArithmetic.Op.MIN; // IMM_FMIN: os 8 opcodes existem
         }
         int rd = field(word, 0, REGISTER_MASK);
-        return new Ir64Op.SveFpArithmetic(op, esz, rd, rd, 0, field(word, PG_SHIFT, PREDICATE_MASK), true, reversed,
+        return new SveFpOp64.FpArithmetic(op, esz, rd, rd, 0, field(word, PG_SHIFT, PREDICATE_MASK), true, reversed,
                 true, bit(word, IMM_BIT) ? 1 : 0, address);
     }
 
     private Ir64Op decodePredicated(int word, int esz, long address) {
-        Ir64Op.SveFpArithmetic.Op op;
+        SveFpOp64.FpArithmetic.Op op;
         boolean reversed = false;
         switch (field(word, OPCODE_SHIFT, OPCODE_MASK)) {
-            case PRED_FADD -> op = Ir64Op.SveFpArithmetic.Op.ADD;
-            case PRED_FSUB -> op = Ir64Op.SveFpArithmetic.Op.SUB;
-            case PRED_FMUL -> op = Ir64Op.SveFpArithmetic.Op.MUL;
+            case PRED_FADD -> op = SveFpOp64.FpArithmetic.Op.ADD;
+            case PRED_FSUB -> op = SveFpOp64.FpArithmetic.Op.SUB;
+            case PRED_FMUL -> op = SveFpOp64.FpArithmetic.Op.MUL;
             case PRED_FSUBR -> {
-                op = Ir64Op.SveFpArithmetic.Op.SUB;
+                op = SveFpOp64.FpArithmetic.Op.SUB;
                 reversed = true;
             }
-            case PRED_FMAXNM -> op = Ir64Op.SveFpArithmetic.Op.MAXNM;
-            case PRED_FMINNM -> op = Ir64Op.SveFpArithmetic.Op.MINNM;
-            case PRED_FMAX -> op = Ir64Op.SveFpArithmetic.Op.MAX;
-            case PRED_FMIN -> op = Ir64Op.SveFpArithmetic.Op.MIN;
-            case PRED_FABD -> op = Ir64Op.SveFpArithmetic.Op.ABD;
-            case PRED_FSCALE -> op = Ir64Op.SveFpArithmetic.Op.SCALE;
-            case PRED_FMULX -> op = Ir64Op.SveFpArithmetic.Op.MULX;
+            case PRED_FMAXNM -> op = SveFpOp64.FpArithmetic.Op.MAXNM;
+            case PRED_FMINNM -> op = SveFpOp64.FpArithmetic.Op.MINNM;
+            case PRED_FMAX -> op = SveFpOp64.FpArithmetic.Op.MAX;
+            case PRED_FMIN -> op = SveFpOp64.FpArithmetic.Op.MIN;
+            case PRED_FABD -> op = SveFpOp64.FpArithmetic.Op.ABD;
+            case PRED_FSCALE -> op = SveFpOp64.FpArithmetic.Op.SCALE;
+            case PRED_FMULX -> op = SveFpOp64.FpArithmetic.Op.MULX;
             case PRED_FDIVR -> {
-                op = Ir64Op.SveFpArithmetic.Op.DIV;
+                op = SveFpOp64.FpArithmetic.Op.DIV;
                 reversed = true;
             }
-            case PRED_FDIV -> op = Ir64Op.SveFpArithmetic.Op.DIV;
+            case PRED_FDIV -> op = SveFpOp64.FpArithmetic.Op.DIV;
             case PRED_FAMAX, PRED_FAMIN -> {
                 if (!architecture.has(Aarch64Feature.FP_ABSOLUTE_MAX_MIN)) {
                     return null;
                 }
                 op = field(word, OPCODE_SHIFT, OPCODE_MASK) == PRED_FAMAX
-                        ? Ir64Op.SveFpArithmetic.Op.AMAX : Ir64Op.SveFpArithmetic.Op.AMIN;
+                        ? SveFpOp64.FpArithmetic.Op.AMAX : SveFpOp64.FpArithmetic.Op.AMIN;
             }
             default -> {
                 return null; // 1011: não alocado
             }
         }
         int rd = field(word, 0, REGISTER_MASK);
-        return new Ir64Op.SveFpArithmetic(op, esz, rd, rd, field(word, RN_SHIFT, REGISTER_MASK),
+        return new SveFpOp64.FpArithmetic(op, esz, rd, rd, field(word, RN_SHIFT, REGISTER_MASK),
                 field(word, PG_SHIFT, PREDICATE_MASK), true, reversed, false, 0, address);
     }
 
@@ -213,18 +214,18 @@ final class Aarch64SveFpArithmeticDecoder {
         }
         if ((word & UNPREDICATED_MASK) == UNPREDICATED_VALUE) {
             Ir64Op op = decodeUnpredicated(word, ESZ_RESERVED, address);
-            return op instanceof Ir64Op.SveFpArithmetic arithmetic && isBFloat16CapableUnpredicated(arithmetic.op())
+            return op instanceof SveFpOp64.FpArithmetic arithmetic && isBFloat16CapableUnpredicated(arithmetic.op())
                     ? op : null;
         }
         if ((word & PREDICATED_MASK) == PREDICATED_VALUE) {
             Ir64Op op = decodePredicated(word, ESZ_RESERVED, address);
-            return op instanceof Ir64Op.SveFpArithmetic arithmetic && isBFloat16CapablePredicated(arithmetic)
+            return op instanceof SveFpOp64.FpArithmetic arithmetic && isBFloat16CapablePredicated(arithmetic)
                     ? op : null;
         }
         return null; // unária/`FTMAD`/imediato: `esz = 0` não alocado mesmo com a feature
     }
 
-    private static boolean isBFloat16CapableUnpredicated(Ir64Op.SveFpArithmetic.Op op) {
+    private static boolean isBFloat16CapableUnpredicated(SveFpOp64.FpArithmetic.Op op) {
         return switch (op) {
             case ADD, SUB, MUL -> true;
             default -> false;
@@ -232,8 +233,8 @@ final class Aarch64SveFpArithmeticDecoder {
     }
 
     /// `FSUBR` chega aqui como `Op.SUB` com `reversed = true` — undefined em BFloat16 mesmo a forma direta valendo.
-    private static boolean isBFloat16CapablePredicated(Ir64Op.SveFpArithmetic arithmetic) {
-        if (arithmetic.op() == Ir64Op.SveFpArithmetic.Op.SUB && arithmetic.reversed()) {
+    private static boolean isBFloat16CapablePredicated(SveFpOp64.FpArithmetic arithmetic) {
+        if (arithmetic.op() == SveFpOp64.FpArithmetic.Op.SUB && arithmetic.reversed()) {
             return false;
         }
         return switch (arithmetic.op()) {

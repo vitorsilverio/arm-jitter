@@ -23,7 +23,7 @@ Título, dependências e status de cada task da trilha. Quando o status diz "ver
 | [E14](e14-neon-cobertura-execute-block-e-asmnativepolicy.md) | 🆕 Cobertura de teste de NEON em `IrBlockExecutor#execute`/`AsmNativePolicy` — toda entrada `NEON_*` amostrada aparece `nc` (não coberta) no relatório JaCoCo; achado ao fechar a B13.23, mas pré-existente desde B13.4 (lacuna estrutural do épico B13 inteiro, não regressão) | — | ✅ (2026-10-02) — absorvida pela [E15.1](e15.1-rede-de-seguranca-contrato-e-catraca.md); ver **Resultado** lá |
 | [E15](e15-quebrar-arquivos-gigantes.md) | **Épico** — simplificação estrutural: arquivos ≤ 800 linhas, `op.execute()` no lugar dos `switch` de dispatch, decoder por tabela com feature como coluna, JaCoCo 100% com catraca. Replanejado 2026-10-02 (a versão de 2026-09-27 só dividia arquivos). Escada E15.1–E15.22 no arquivo do épico | — | 🟡 |
 | [E15.1](e15.1-rede-de-seguranca-contrato-e-catraca.md) | Rede de segurança: testes de contrato por `record` do IR (absorve a E14), catraca `jacoco:check`, guarda de tamanho de fonte. Zero mudança em `src/main` | — | ✅ (2026-10-02) — ver **Resultado** na task |
-| [E15.2](e15.2-ir64op-por-familia.md) | `Ir64Op` (5784 linhas) em sub-interfaces seladas por família | E15.1 | ⬜ |
+| [E15.2](e15.2-ir64op-por-familia.md) | `Ir64Op` (5784 linhas) em sub-interfaces seladas por família | E15.1 | ✅ (2026-10-02) — ver **Resultado** na task |
 | [E15.3](e15.3-irop-por-familia.md) | `IrOp` (5036 linhas) em sub-interfaces seladas por família | E15.2 | ⬜ |
 | [E16](e16-a64-eret-em-el0-derruba-o-host.md) | 🆕 A64: `ERET` executado em `EL0` lança `IllegalArgumentException` no host em vez de entrar na exceção de instrução indefinida (achado da E15.1, reproduzido via `step`) | — | ⬜ |
 

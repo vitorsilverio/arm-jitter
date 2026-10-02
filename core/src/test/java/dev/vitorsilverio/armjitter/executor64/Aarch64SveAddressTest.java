@@ -7,6 +7,7 @@ import dev.vitorsilverio.armjitter.core64.Aarch64SystemRegisterBus;
 import dev.vitorsilverio.armjitter.decoder64.Aarch64Decoder;
 import dev.vitorsilverio.armjitter.ir64.Aarch64SystemRegisterId;
 import dev.vitorsilverio.armjitter.ir64.Ir64Op;
+import dev.vitorsilverio.armjitter.ir64.SveIntegerOp64;
 import dev.vitorsilverio.armjitter.memory.AddressSpace64;
 import dev.vitorsilverio.armjitter.support.TestAddressSpace;
 import org.junit.jupiter.api.Test;
@@ -33,14 +34,14 @@ class Aarch64SveAddressTest {
     private static final Aarch64Architecture SME = Aarch64Architecture.ARMV9_2_A;
     private static final long INITIAL_SP = 0x10_0000L;
 
-    private record Row(int word, String asm, Ir64Op.SveAddress.Op op, int rd, int rn, int rm, int imm, int msz) {
-        Ir64Op.SveAddress expected() {
-            return new Ir64Op.SveAddress(op, rd, rn, rm, imm, msz, 0L);
+    private record Row(int word, String asm, SveIntegerOp64.Address.Op op, int rd, int rn, int rm, int imm, int msz) {
+        SveIntegerOp64.Address expected() {
+            return new SveIntegerOp64.Address(op, rd, rn, rm, imm, msz, 0L);
         }
     }
 
     private static Row row(int word, String asm, String op, int rd, int rn, int rm, int imm, int msz) {
-        return new Row(word, asm, Ir64Op.SveAddress.Op.valueOf(op), rd, rn, rm, imm, msz);
+        return new Row(word, asm, SveIntegerOp64.Address.Op.valueOf(op), rd, rn, rm, imm, msz);
     }
 
     private static Stream<Row> rows() {

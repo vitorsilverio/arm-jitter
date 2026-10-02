@@ -4,7 +4,8 @@ import dev.vitorsilverio.armjitter.advsimd.AdvSimdLanes;
 import dev.vitorsilverio.armjitter.core64.Aarch64Core;
 import dev.vitorsilverio.armjitter.core64.Aarch64FpRegisters;
 import dev.vitorsilverio.armjitter.ir64.Aarch64SystemRegisterId;
-import dev.vitorsilverio.armjitter.ir64.Ir64Op;
+import dev.vitorsilverio.armjitter.ir64.AdvSimdFpOp64;
+import dev.vitorsilverio.armjitter.ir64.SystemOp64;
 import dev.vitorsilverio.armjitter.memory.AddressSpace64;
 import dev.vitorsilverio.armjitter.support.TestAddressSpace;
 import org.junit.jupiter.api.Test;
@@ -28,7 +29,7 @@ class Ir64VectorFpArithmeticExecutorFp8FusedMultiplyAddTest {
 
     private static void writeFpmr(Aarch64Core core, long value) {
         core.setX(0, value);
-        EXECUTOR.executeOp(core, new Ir64Op.SystemRegister(false, Aarch64SystemRegisterId.FPMR, 0));
+        EXECUTOR.executeOp(core, new SystemOp64.SystemRegister(false, Aarch64SystemRegisterId.FPMR, 0));
     }
 
     private static final long FPMR_F8S1_E4M3 = 0b001L;
@@ -52,7 +53,7 @@ class Ir64VectorFpArithmeticExecutorFp8FusedMultiplyAddTest {
             fp.setElement(2, 2 * i, 0, fp8(2.0f));
             fp.setElement(0, i, 1, AdvSimdLanes.halfBits(0.0f));
         }
-        EXECUTOR.executeOp(core, new Ir64Op.VectorFp8FusedMultiplyAddLong(false, 0, 0, 1, 2));
+        EXECUTOR.executeOp(core, new AdvSimdFpOp64.Fp8FusedMultiplyAddLong(false, 0, 0, 1, 2));
         for (int i = 0; i < 8; i++) {
             assertEquals(2.0f * (1.0f + i), AdvSimdLanes.halfToFloat(fp.element(0, i, 1)));
         }
@@ -70,13 +71,13 @@ class Ir64VectorFpArithmeticExecutorFp8FusedMultiplyAddTest {
             fp.setElement(2, 2 * i, 0, fp8(1.0f));
             fp.setElement(2, 2 * i + 1, 0, fp8(1.0f));
         }
-        EXECUTOR.executeOp(core, new Ir64Op.VectorFp8FusedMultiplyAddLong(false, 0, 0, 1, 2));
+        EXECUTOR.executeOp(core, new AdvSimdFpOp64.Fp8FusedMultiplyAddLong(false, 0, 0, 1, 2));
         assertEquals(10.0f, AdvSimdLanes.halfToFloat(fp.element(0, 0, 1)));
 
         for (int i = 0; i < 8; i++) {
             fp.setElement(0, i, 1, AdvSimdLanes.halfBits(0.0f));
         }
-        EXECUTOR.executeOp(core, new Ir64Op.VectorFp8FusedMultiplyAddLong(false, 1, 0, 1, 2));
+        EXECUTOR.executeOp(core, new AdvSimdFpOp64.Fp8FusedMultiplyAddLong(false, 1, 0, 1, 2));
         assertEquals(20.0f, AdvSimdLanes.halfToFloat(fp.element(0, 0, 1)));
     }
 
@@ -91,7 +92,7 @@ class Ir64VectorFpArithmeticExecutorFp8FusedMultiplyAddTest {
         fp.setElement(1, 0, 0, fp8(4.0f));
         fp.setElement(2, 0, 0, fp8(1.0f));
         fp.setElement(0, 0, 1, AdvSimdLanes.halfBits(0.0f));
-        EXECUTOR.executeOp(core, new Ir64Op.VectorFp8FusedMultiplyAddLong(false, 0, 0, 1, 2));
+        EXECUTOR.executeOp(core, new AdvSimdFpOp64.Fp8FusedMultiplyAddLong(false, 0, 0, 1, 2));
         assertEquals(4.0f, AdvSimdLanes.halfToFloat(fp.element(0, 0, 1)));
     }
 
@@ -107,7 +108,7 @@ class Ir64VectorFpArithmeticExecutorFp8FusedMultiplyAddTest {
             fp.setElement(2, 4 * i, 0, fp8(2.0f));
             fp.setElement(0, i, 2, AdvSimdLanes.floatBits(0.0f));
         }
-        EXECUTOR.executeOp(core, new Ir64Op.VectorFp8FusedMultiplyAddLong(true, 0, 0, 1, 2));
+        EXECUTOR.executeOp(core, new AdvSimdFpOp64.Fp8FusedMultiplyAddLong(true, 0, 0, 1, 2));
         for (int i = 0; i < 4; i++) {
             assertEquals(2.0f * (1.0f + i), Float.intBitsToFloat((int) fp.element(0, i, 2)));
         }
@@ -124,7 +125,7 @@ class Ir64VectorFpArithmeticExecutorFp8FusedMultiplyAddTest {
         fp.setElement(1, 0, 0, fp8(4.0f));
         fp.setElement(2, 0, 0, fp8(1.0f));
         fp.setElement(0, 0, 2, AdvSimdLanes.floatBits(0.0f));
-        EXECUTOR.executeOp(core, new Ir64Op.VectorFp8FusedMultiplyAddLong(true, 0, 0, 1, 2));
+        EXECUTOR.executeOp(core, new AdvSimdFpOp64.Fp8FusedMultiplyAddLong(true, 0, 0, 1, 2));
         float result = Float.intBitsToFloat((int) fp.element(0, 0, 2));
         assertNotEquals(4.0f, result);
         assertEquals(Math.scalb(4.0, -0x50), result, 0.0);
@@ -141,7 +142,7 @@ class Ir64VectorFpArithmeticExecutorFp8FusedMultiplyAddTest {
         }
         for (int select = 0; select < 4; select++) {
             fp.setElement(0, 0, 2, AdvSimdLanes.floatBits(0.0f));
-            EXECUTOR.executeOp(core, new Ir64Op.VectorFp8FusedMultiplyAddLong(true, select, 0, 1, 2));
+            EXECUTOR.executeOp(core, new AdvSimdFpOp64.Fp8FusedMultiplyAddLong(true, select, 0, 1, 2));
             assertEquals(10.0f + select, Float.intBitsToFloat((int) fp.element(0, 0, 2)));
         }
     }
@@ -156,7 +157,7 @@ class Ir64VectorFpArithmeticExecutorFp8FusedMultiplyAddTest {
         fp.setElement(1, 0, 0, fp8(448.0f));
         fp.setElement(2, 0, 0, fp8(448.0f));
         fp.setElement(0, 0, 1, AdvSimdLanes.halfBits(0.0f));
-        EXECUTOR.executeOp(core, new Ir64Op.VectorFp8FusedMultiplyAddLong(false, 0, 0, 1, 2));
+        EXECUTOR.executeOp(core, new AdvSimdFpOp64.Fp8FusedMultiplyAddLong(false, 0, 0, 1, 2));
         assertEquals(65504f, AdvSimdLanes.halfToFloat(fp.element(0, 0, 1)));
     }
 
@@ -174,7 +175,7 @@ class Ir64VectorFpArithmeticExecutorFp8FusedMultiplyAddTest {
             fp.setElement(0, 2 * i, 0, fp8(1.0f + i)); // Rd também é Rn (largura mista, mesmo reg)
         }
         fp.setElement(2, 0, 0, fp8(1.0f));
-        EXECUTOR.executeOp(core, new Ir64Op.VectorFp8FusedMultiplyAddLong(false, 0, 0, 0, 2));
+        EXECUTOR.executeOp(core, new AdvSimdFpOp64.Fp8FusedMultiplyAddLong(false, 0, 0, 0, 2));
         assertEquals(1.0f, AdvSimdLanes.halfToFloat(fp.element(0, 0, 1)));
     }
 
@@ -187,7 +188,7 @@ class Ir64VectorFpArithmeticExecutorFp8FusedMultiplyAddTest {
             fp.setElement(0, 4 * i, 0, fp8(2.0f + i));
         }
         fp.setElement(3, 0, 0, fp8(3.0f));
-        EXECUTOR.executeOp(core, new Ir64Op.VectorFp8FusedMultiplyAddLongByElement(true, 0, 0, 0, 3, 0));
+        EXECUTOR.executeOp(core, new AdvSimdFpOp64.Fp8FusedMultiplyAddLongByElement(true, 0, 0, 0, 3, 0));
         assertEquals(6.0f, Float.intBitsToFloat((int) fp.element(0, 0, 2)));
     }
 
@@ -203,7 +204,7 @@ class Ir64VectorFpArithmeticExecutorFp8FusedMultiplyAddTest {
             fp.setElement(0, i, 1, AdvSimdLanes.halfBits(0.0f));
         }
         fp.setElement(3, 5, 0, fp8(10.0f)); // índice 5, resto do registrador irrelevante
-        EXECUTOR.executeOp(core, new Ir64Op.VectorFp8FusedMultiplyAddLongByElement(false, 0, 0, 1, 3, 5));
+        EXECUTOR.executeOp(core, new AdvSimdFpOp64.Fp8FusedMultiplyAddLongByElement(false, 0, 0, 1, 3, 5));
         for (int i = 0; i < 8; i++) {
             assertEquals(10.0f * (1.0f + i), AdvSimdLanes.halfToFloat(fp.element(0, i, 1)));
         }
@@ -219,7 +220,7 @@ class Ir64VectorFpArithmeticExecutorFp8FusedMultiplyAddTest {
             fp.setElement(0, i, 2, AdvSimdLanes.floatBits(0.0f));
         }
         fp.setElement(2, 0, 0, fp8(5.0f));
-        EXECUTOR.executeOp(core, new Ir64Op.VectorFp8FusedMultiplyAddLongByElement(true, 0, 0, 1, 2, 0));
+        EXECUTOR.executeOp(core, new AdvSimdFpOp64.Fp8FusedMultiplyAddLongByElement(true, 0, 0, 1, 2, 0));
         for (int i = 0; i < 4; i++) {
             assertEquals(5.0f * (1.0f + i), Float.intBitsToFloat((int) fp.element(0, i, 2)));
         }

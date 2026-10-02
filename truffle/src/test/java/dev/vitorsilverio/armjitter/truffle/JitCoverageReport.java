@@ -160,9 +160,7 @@ public final class JitCoverageReport {
     static List<Row32> measure32() {
         List<Row32> rows = new ArrayList<>();
         List<String> anomalies = new ArrayList<>();
-        for (Class<?> permitted : IrOp.class.getPermittedSubclasses()) {
-            @SuppressWarnings("unchecked")
-            Class<? extends IrOp> recordClass = (Class<? extends IrOp>) permitted;
+        for (Class<? extends IrOp> recordClass : recordsOf(IrOp.class)) {
             IrOp primary = instantiate(recordClass);
             int kind = primary.kind();
 
@@ -197,9 +195,7 @@ public final class JitCoverageReport {
     /// Linhas de 64 bits, ordenadas por `Kind`.
     static List<Row64> measure64() {
         Map<Integer, Row64> byKind = new TreeMap<>();
-        for (Class<?> permitted : Ir64Op.class.getPermittedSubclasses()) {
-            @SuppressWarnings("unchecked")
-            Class<? extends Ir64Op> recordClass = (Class<? extends Ir64Op>) permitted;
+        for (Class<? extends Ir64Op> recordClass : recordsOf(Ir64Op.class)) {
             Ir64Op primary = instantiate(recordClass);
             int kind = primary.kind();
             Emission asm = Ir64NativePolicy.supports(primary) ? Emission.NATIVE : Emission.INTERPRETED;
@@ -212,6 +208,25 @@ public final class JitCoverageReport {
     // ---------------------------------------------------------------------------------------------
     // Instanciação reflexiva
     // ---------------------------------------------------------------------------------------------
+
+    /// Todos os `record` permitidos de uma interface selada, na ordem do `permits`, descendo as
+    /// sub-interfaces seladas por família (task E15.2: `Ir64Op` → `SveOp64` → `SveFpOp64` → records).
+    static <T> List<Class<? extends T>> recordsOf(Class<T> sealedType) {
+        List<Class<? extends T>> records = new ArrayList<>();
+        collectRecords(sealedType, records);
+        return records;
+    }
+
+    @SuppressWarnings("unchecked")
+    private static <T> void collectRecords(Class<?> sealedType, List<Class<? extends T>> into) {
+        for (Class<?> permitted : sealedType.getPermittedSubclasses()) {
+            if (permitted.isRecord()) {
+                into.add((Class<? extends T>) permitted);
+            } else {
+                collectRecords(permitted, into);
+            }
+        }
+    }
 
     /// Instancia um `record` selado pelo construtor canônico, preenchendo cada componente com o
     /// valor default do seu tipo (`0`/`0L`/`false`/primeira constante de enum/`Immediate(0)`).

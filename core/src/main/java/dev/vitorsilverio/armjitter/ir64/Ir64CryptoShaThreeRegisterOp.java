@@ -1,6 +1,6 @@
 package dev.vitorsilverio.armjitter.ir64;
 
-/// Operação de {@link Ir64Op.CryptoShaThreeRegister} ("Cryptographic three-register SHA", B8.11b —
+/// Operação de {@link CryptoOp64.ShaThreeRegister} ("Cryptographic three-register SHA", B8.11b —
 /// mesma ARMv8-A Cryptographic Extension de {@link Ir64CryptoAesOp}, opcional mas presente no
 /// Cortex-A53 do raspi3).
 public enum Ir64CryptoShaThreeRegisterOp {

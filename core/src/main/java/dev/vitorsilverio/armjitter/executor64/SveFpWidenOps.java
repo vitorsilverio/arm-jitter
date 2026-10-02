@@ -3,7 +3,7 @@ package dev.vitorsilverio.armjitter.executor64;
 import dev.vitorsilverio.armjitter.advsimd.AdvSimdLanes;
 import dev.vitorsilverio.armjitter.core64.Aarch64Core;
 import dev.vitorsilverio.armjitter.core64.Aarch64ScalableRegisters;
-import dev.vitorsilverio.armjitter.ir64.Ir64Op;
+import dev.vitorsilverio.armjitter.ir64.SveFpOp64;
 
 /// Semântica de `FMLALB`/`FMLALT`/`FMLSLB`/`FMLSLT` e `BFMLALB`/`BFMLALT`/`BFMLSLB`/`BFMLSLT` (multiply-add-long
 /// `binary16`/`bfloat16` → `binary32`) e `FDOT_zzzz`/`BFDOT_zzzz` (produto escalar de duas vias), vetorial e
@@ -21,22 +21,22 @@ final class SveFpWidenOps {
     }
 
     /// `FMLALB`/`FMLALT`/`FMLSLB`/`FMLSLT`. `true` = a instrução já entrou numa exceção (acesso negado).
-    static boolean executeMultiplyAddLong(Aarch64Core core, Ir64Op.SveFpMultiplyAddLongWiden op) {
+    static boolean executeMultiplyAddLong(Aarch64Core core, SveFpOp64.FpMultiplyAddLongWiden op) {
         if (!SvePredicateOps.accessAllowed(core, op.instructionAddress())) {
             return true;
         }
-        boolean subtract = op.op() == Ir64Op.SveFpMultiplyAddLongWiden.Op.FMLSL;
+        boolean subtract = op.op() == SveFpOp64.FpMultiplyAddLongWiden.Op.FMLSL;
         multiplyAddLong(core, op.rd(), op.rn(), op.rm(), op.top(), op.indexed(), op.index(), subtract,
                 AdvSimdLanes::halfToFloat);
         return false;
     }
 
     /// `BFMLALB`/`BFMLALT`/`BFMLSLB`/`BFMLSLT`. `true` = a instrução já entrou numa exceção (acesso negado).
-    static boolean executeMultiplyAddLongBFloat16(Aarch64Core core, Ir64Op.SveFpMultiplyAddLongWidenBFloat16 op) {
+    static boolean executeMultiplyAddLongBFloat16(Aarch64Core core, SveFpOp64.FpMultiplyAddLongWidenBFloat16 op) {
         if (!SvePredicateOps.accessAllowed(core, op.instructionAddress())) {
             return true;
         }
-        boolean subtract = op.op() == Ir64Op.SveFpMultiplyAddLongWidenBFloat16.Op.BFMLSL;
+        boolean subtract = op.op() == SveFpOp64.FpMultiplyAddLongWidenBFloat16.Op.BFMLSL;
         multiplyAddLong(core, op.rd(), op.rn(), op.rm(), op.top(), op.indexed(), op.index(), subtract,
                 AdvSimdLanes::bf16ToFloat);
         return false;
@@ -72,7 +72,7 @@ final class SveFpWidenOps {
     }
 
     /// `FDOT_zzzz`/`FDOT_zzxz`. `true` = a instrução já entrou numa exceção (acesso negado).
-    static boolean executeDotProduct(Aarch64Core core, Ir64Op.SveFpDotProductWiden op) {
+    static boolean executeDotProduct(Aarch64Core core, SveFpOp64.FpDotProductWiden op) {
         if (!SvePredicateOps.accessAllowed(core, op.instructionAddress())) {
             return true;
         }
@@ -81,7 +81,7 @@ final class SveFpWidenOps {
     }
 
     /// `BFDOT_zzzz`/`BFDOT_zzxz`. `true` = a instrução já entrou numa exceção (acesso negado).
-    static boolean executeDotProductBFloat16(Aarch64Core core, Ir64Op.SveFpDotProductWidenBFloat16 op) {
+    static boolean executeDotProductBFloat16(Aarch64Core core, SveFpOp64.FpDotProductWidenBFloat16 op) {
         if (!SvePredicateOps.accessAllowed(core, op.instructionAddress())) {
             return true;
         }

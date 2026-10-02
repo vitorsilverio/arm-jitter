@@ -3,7 +3,7 @@ package dev.vitorsilverio.armjitter.executor64;
 import dev.vitorsilverio.armjitter.core64.Aarch64Core;
 import dev.vitorsilverio.armjitter.core64.Aarch64SystemRegisterBus;
 import dev.vitorsilverio.armjitter.ir64.Aarch64SystemRegisterId;
-import dev.vitorsilverio.armjitter.ir64.Ir64Op;
+import dev.vitorsilverio.armjitter.ir64.SystemOp64;
 import dev.vitorsilverio.armjitter.memory.AddressSpace64;
 import dev.vitorsilverio.armjitter.support.TestAddressSpace;
 import org.junit.jupiter.api.Test;
@@ -54,7 +54,7 @@ class Aarch64SystemRegisterTest {
     void mrsWithoutBusInstalledThrows() {
         Aarch64Core core = newCore();
         Ir64BlockExecutor executor = new Ir64BlockExecutor();
-        Ir64Op.SystemRegister mrs = new Ir64Op.SystemRegister(true, Aarch64SystemRegisterId.SCTLR_EL1, 0);
+        SystemOp64.SystemRegister mrs = new SystemOp64.SystemRegister(true, Aarch64SystemRegisterId.SCTLR_EL1, 0);
         assertThrows(UnsupportedOperationException.class, () -> executor.executeOp(core, mrs));
     }
 
@@ -62,7 +62,7 @@ class Aarch64SystemRegisterTest {
     void msrWithoutBusInstalledThrows() {
         Aarch64Core core = newCore();
         Ir64BlockExecutor executor = new Ir64BlockExecutor();
-        Ir64Op.SystemRegister msr = new Ir64Op.SystemRegister(false, Aarch64SystemRegisterId.SCTLR_EL1, 1);
+        SystemOp64.SystemRegister msr = new SystemOp64.SystemRegister(false, Aarch64SystemRegisterId.SCTLR_EL1, 1);
         assertThrows(UnsupportedOperationException.class, () -> executor.executeOp(core, msr));
     }
 
@@ -72,7 +72,7 @@ class Aarch64SystemRegisterTest {
         Aarch64Core core = newCore();
         core.setSystemRegisterBus(new FakeSystemRegisterBus(EnumSet.of(Aarch64SystemRegisterId.TTBR0_EL1)));
         Ir64BlockExecutor executor = new Ir64BlockExecutor();
-        Ir64Op.SystemRegister mrs = new Ir64Op.SystemRegister(true, Aarch64SystemRegisterId.SCTLR_EL1, 0);
+        SystemOp64.SystemRegister mrs = new SystemOp64.SystemRegister(true, Aarch64SystemRegisterId.SCTLR_EL1, 0);
         assertThrows(UnsupportedOperationException.class, () -> executor.executeOp(core, mrs));
     }
 
@@ -83,10 +83,10 @@ class Aarch64SystemRegisterTest {
         core.setX(1, 0x123L);
         Ir64BlockExecutor executor = new Ir64BlockExecutor();
 
-        Ir64Op.SystemRegister msr = new Ir64Op.SystemRegister(false, Aarch64SystemRegisterId.SCTLR_EL1, 1);
+        SystemOp64.SystemRegister msr = new SystemOp64.SystemRegister(false, Aarch64SystemRegisterId.SCTLR_EL1, 1);
         executor.executeOp(core, msr);
 
-        Ir64Op.SystemRegister mrs = new Ir64Op.SystemRegister(true, Aarch64SystemRegisterId.SCTLR_EL1, 2);
+        SystemOp64.SystemRegister mrs = new SystemOp64.SystemRegister(true, Aarch64SystemRegisterId.SCTLR_EL1, 2);
         executor.executeOp(core, mrs);
 
         assertEquals(0x123L, core.x(2), "MRS deve ler de volta o mesmo valor escrito por MSR");
@@ -98,11 +98,11 @@ class Aarch64SystemRegisterTest {
         core.setSystemRegisterBus(new FakeSystemRegisterBus(EnumSet.of(Aarch64SystemRegisterId.VBAR_EL1)));
         core.setX(0, 0xDEADBEEFL); // valor a ser escrito via MSR antes do MRS a XZR
         Ir64BlockExecutor executor = new Ir64BlockExecutor();
-        executor.executeOp(core, new Ir64Op.SystemRegister(false, Aarch64SystemRegisterId.VBAR_EL1, 0));
+        executor.executeOp(core, new SystemOp64.SystemRegister(false, Aarch64SystemRegisterId.VBAR_EL1, 0));
 
         // mrs xzr, vbar_el1 (rt=31): a leitura acontece (chama bus.read), mas a escrita em XZR é
         // descartada — Aarch64Core#setX(31,...) já é NOP.
-        executor.executeOp(core, new Ir64Op.SystemRegister(true, Aarch64SystemRegisterId.VBAR_EL1, 31));
+        executor.executeOp(core, new SystemOp64.SystemRegister(true, Aarch64SystemRegisterId.VBAR_EL1, 31));
         assertEquals(0L, core.x(31));
     }
 
@@ -114,7 +114,7 @@ class Aarch64SystemRegisterTest {
         Ir64BlockExecutor executor = new Ir64BlockExecutor();
 
         // msr vbar_el1, xzr (rt=31): Aarch64Core#x(31) já devolve 0.
-        executor.executeOp(core, new Ir64Op.SystemRegister(false, Aarch64SystemRegisterId.VBAR_EL1, 31));
+        executor.executeOp(core, new SystemOp64.SystemRegister(false, Aarch64SystemRegisterId.VBAR_EL1, 31));
         assertEquals(0L, bus.read(Aarch64SystemRegisterId.VBAR_EL1));
     }
 }

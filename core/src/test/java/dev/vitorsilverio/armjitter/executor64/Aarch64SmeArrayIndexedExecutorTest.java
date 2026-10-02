@@ -4,7 +4,7 @@ import dev.vitorsilverio.armjitter.arch64.Aarch64Architecture;
 import dev.vitorsilverio.armjitter.arch64.Aarch64Feature;
 import dev.vitorsilverio.armjitter.core64.Aarch64Core;
 import dev.vitorsilverio.armjitter.core64.Aarch64ExceptionLevel;
-import dev.vitorsilverio.armjitter.ir64.Ir64Op.SmeArrayMultiVector.Op;
+import dev.vitorsilverio.armjitter.ir64.SmeOp64.ArrayMultiVector.Op;
 import dev.vitorsilverio.armjitter.memory.AddressSpace64;
 import dev.vitorsilverio.armjitter.support.SmeArrayIndexedWords;
 import dev.vitorsilverio.armjitter.support.SmeArrayIndexedWords.Word;

@@ -1,6 +1,7 @@
 package dev.vitorsilverio.armjitter.decoder64;
 
 import dev.vitorsilverio.armjitter.arch64.Aarch64Architecture;
+import dev.vitorsilverio.armjitter.ir64.AdvSimdMoveOp64;
 import dev.vitorsilverio.armjitter.ir64.Ir64Op;
 import dev.vitorsilverio.armjitter.memory.AddressSpace64;
 import dev.vitorsilverio.armjitter.support.TestAddressSpace;
@@ -70,7 +71,7 @@ class Aarch64LutiDecoderTest {
         // tbl v0.8b, {v1.16b}, v2.8b (len=0, tbx=0, q=0) — regressão da B8.10, mesmo espaço de
         // encoding que este gate agora intercepta primeiro.
         Ir64Op op = decodeWord(LUT_DECODER, 0x0e020020);
-        assertTrue(op instanceof Ir64Op.VectorTableLookup);
+        assertTrue(op instanceof AdvSimdMoveOp64.TableLookup);
     }
 
     @Test
@@ -80,7 +81,7 @@ class Aarch64LutiDecoderTest {
 
     @Test
     void luti2_1b() {
-        Ir64Op.VectorLookupTable op = (Ir64Op.VectorLookupTable) decodeWord(LUT_DECODER, LUTI2_1B_IDX3);
+        AdvSimdMoveOp64.LookupTable op = (AdvSimdMoveOp64.LookupTable) decodeWord(LUT_DECODER, LUTI2_1B_IDX3);
         assertFalse(op.four());
         assertEquals(0, op.esz());
         assertEquals(3, op.idx());
@@ -88,7 +89,7 @@ class Aarch64LutiDecoderTest {
         assertEquals(1, op.rn());
         assertEquals(2, op.rm());
 
-        Ir64Op.VectorLookupTable op0 = (Ir64Op.VectorLookupTable) decodeWord(LUT_DECODER, LUTI2_1B_IDX0);
+        AdvSimdMoveOp64.LookupTable op0 = (AdvSimdMoveOp64.LookupTable) decodeWord(LUT_DECODER, LUTI2_1B_IDX0);
         assertEquals(0, op0.idx());
         assertEquals(12, op0.rd());
         assertEquals(13, op0.rn());
@@ -97,7 +98,7 @@ class Aarch64LutiDecoderTest {
 
     @Test
     void luti2_1h() {
-        Ir64Op.VectorLookupTable op = (Ir64Op.VectorLookupTable) decodeWord(LUT_DECODER, LUTI2_1H_IDX7);
+        AdvSimdMoveOp64.LookupTable op = (AdvSimdMoveOp64.LookupTable) decodeWord(LUT_DECODER, LUTI2_1H_IDX7);
         assertFalse(op.four());
         assertEquals(1, op.esz());
         assertEquals(7, op.idx());
@@ -105,7 +106,7 @@ class Aarch64LutiDecoderTest {
         assertEquals(4, op.rn());
         assertEquals(5, op.rm());
 
-        Ir64Op.VectorLookupTable op2 = (Ir64Op.VectorLookupTable) decodeWord(LUT_DECODER, LUTI2_1H_IDX2);
+        AdvSimdMoveOp64.LookupTable op2 = (AdvSimdMoveOp64.LookupTable) decodeWord(LUT_DECODER, LUTI2_1H_IDX2);
         assertEquals(2, op2.idx());
         assertEquals(15, op2.rd());
         assertEquals(16, op2.rn());
@@ -114,7 +115,7 @@ class Aarch64LutiDecoderTest {
 
     @Test
     void luti4_1b() {
-        Ir64Op.VectorLookupTable op = (Ir64Op.VectorLookupTable) decodeWord(LUT_DECODER, LUTI4_1B_IDX1);
+        AdvSimdMoveOp64.LookupTable op = (AdvSimdMoveOp64.LookupTable) decodeWord(LUT_DECODER, LUTI4_1B_IDX1);
         assertTrue(op.four());
         assertEquals(0, op.esz());
         assertEquals(1, op.idx());
@@ -122,7 +123,7 @@ class Aarch64LutiDecoderTest {
         assertEquals(7, op.rn());
         assertEquals(8, op.rm());
 
-        Ir64Op.VectorLookupTable op0 = (Ir64Op.VectorLookupTable) decodeWord(LUT_DECODER, LUTI4_1B_IDX0);
+        AdvSimdMoveOp64.LookupTable op0 = (AdvSimdMoveOp64.LookupTable) decodeWord(LUT_DECODER, LUTI4_1B_IDX0);
         assertEquals(0, op0.idx());
         assertEquals(18, op0.rd());
         assertEquals(19, op0.rn());
@@ -133,7 +134,7 @@ class Aarch64LutiDecoderTest {
     void luti4_2h() {
         // Armadilha 1 da task: bits[23:22] são "01" (idênticos a LUTI4_1b) — distinguir por
         // bits[14:10], nunca pelo campo de tamanho.
-        Ir64Op.VectorLookupTable op = (Ir64Op.VectorLookupTable) decodeWord(LUT_DECODER, LUTI4_2H_IDX3);
+        AdvSimdMoveOp64.LookupTable op = (AdvSimdMoveOp64.LookupTable) decodeWord(LUT_DECODER, LUTI4_2H_IDX3);
         assertTrue(op.four());
         assertEquals(1, op.esz());
         assertEquals(3, op.idx());
@@ -141,7 +142,7 @@ class Aarch64LutiDecoderTest {
         assertEquals(10, op.rn());
         assertEquals(11, op.rm());
 
-        Ir64Op.VectorLookupTable op1 = (Ir64Op.VectorLookupTable) decodeWord(LUT_DECODER, LUTI4_2H_IDX1);
+        AdvSimdMoveOp64.LookupTable op1 = (AdvSimdMoveOp64.LookupTable) decodeWord(LUT_DECODER, LUTI4_2H_IDX1);
         assertEquals(1, op1.idx());
         assertEquals(21, op1.rd());
         assertEquals(22, op1.rn());

@@ -3,6 +3,8 @@ package dev.vitorsilverio.armjitter.decoder64;
 import dev.vitorsilverio.armjitter.arch64.Aarch64Architecture;
 import dev.vitorsilverio.armjitter.arch64.Aarch64Feature;
 import dev.vitorsilverio.armjitter.ir64.Ir64Op;
+import dev.vitorsilverio.armjitter.ir64.SveIntegerOp64;
+import dev.vitorsilverio.armjitter.ir64.SvePredicateOp64;
 
 /// Decoder do "resto" do SVE2 (B17.22): `MATCH`/`NMATCH`, `HISTCNT`/`HISTSEG`, `LUTI2`/`LUTI4` (prefixo `0x45`,
 /// `bit 21 = 1` — depois do {@link Aarch64Sve2IntegerDecoder}, que já reivindica esse mesmo espaço para o
@@ -129,7 +131,7 @@ final class Aarch64Sve2MiscDecoder {
         }
         boolean invert = (word & BIT_MATCH_INVERT) != 0;
         int pd = word & REGISTER4_MASK;
-        return new Ir64Op.SveMatch(invert, esz, pd, pg, rn, rm, address);
+        return new SvePredicateOp64.Match(invert, esz, pd, pg, rn, rm, address);
     }
 
     /// `HISTCNT` (`esz ∈ {2, 3}`, vetor inteiro) / `HISTSEG` (byte, por segmento, sem predicado — `esz` é
@@ -141,14 +143,14 @@ final class Aarch64Sve2MiscDecoder {
         if (!architecture.has(Aarch64Feature.SVE2)) {
             return null;
         }
-        return new Ir64Op.SveHistogram(counting, esz, rd, pg, rn, rm, address);
+        return new SveIntegerOp64.Histogram(counting, esz, rd, pg, rn, rm, address);
     }
 
     /// `LUTI2`/`LUTI4` (`FEAT_LUT`, {@link Aarch64Feature#LOOKUP_TABLE}).
     private Ir64Op lookupTable(boolean four, int esz, int rd, int rn, int rm, int index, int tableRegisters,
             long address) {
         return architecture.has(Aarch64Feature.LOOKUP_TABLE)
-                ? new Ir64Op.SveLookupTable(four, esz, rd, rn, rm, index, tableRegisters, address)
+                ? new SveIntegerOp64.LookupTable(four, esz, rd, rn, rm, index, tableRegisters, address)
                 : null;
     }
 
@@ -186,7 +188,7 @@ final class Aarch64Sve2MiscDecoder {
         int pn = (word >>> PSEL_PN_SHIFT) & PSEL_PREDICATE_MASK;
         int pm = (word >>> PSEL_PM_SHIFT) & PSEL_PREDICATE_MASK;
         int pd = (word >>> PSEL_PD_SHIFT) & PSEL_PREDICATE_MASK;
-        return new Ir64Op.SvePredicateSelect(esz, pd, pn, pm, rv, imm, address);
+        return new SvePredicateOp64.PredicateSelect(esz, pd, pn, pm, rv, imm, address);
     }
 
     /// `FCLAMP` (prefixo `0x64`): `esz ∈ {1, 2, 3}` (`H`/`S`/`D`, `FEAT_SME2`/`FEAT_SVE2p1`); `esz = 0` codifica
@@ -208,6 +210,6 @@ final class Aarch64Sve2MiscDecoder {
         int rm = (word >>> RM_SHIFT) & REGISTER5_MASK;
         int rn = (word >>> RN_SHIFT) & REGISTER5_MASK;
         int rd = word & REGISTER5_MASK;
-        return new Ir64Op.SveClamp(Ir64Op.SveClamp.Op.FCLAMP, esz, rd, rn, rm, address);
+        return new SveIntegerOp64.Clamp(SveIntegerOp64.Clamp.Op.FCLAMP, esz, rd, rn, rm, address);
     }
 }

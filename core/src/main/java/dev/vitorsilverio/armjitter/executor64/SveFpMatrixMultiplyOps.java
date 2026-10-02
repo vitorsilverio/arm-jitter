@@ -4,7 +4,7 @@ import dev.vitorsilverio.armjitter.advsimd.AdvSimdLanes;
 import dev.vitorsilverio.armjitter.core64.Aarch64Core;
 import dev.vitorsilverio.armjitter.core64.Aarch64Fp8Format;
 import dev.vitorsilverio.armjitter.core64.Aarch64ScalableRegisters;
-import dev.vitorsilverio.armjitter.ir64.Ir64Op;
+import dev.vitorsilverio.armjitter.ir64.SveFpOp64;
 
 /// Semântica de `BFMMLA`/`FMMLA_s`/`FMMLA_d`/`FMMLA_sb`/`FMMLA_hb` (B17.23) — multiplicação de matriz `2×2`
 /// acumulada por bloco (`Zda += Zn × Zm`). **`FMMLA_s`/`FMMLA_d` NÃO são fundidas** (cada produto e a soma dos
@@ -25,7 +25,7 @@ final class SveFpMatrixMultiplyOps {
     }
 
     /// Executa uma operação do grupo. `true` = a instrução já entrou numa exceção (acesso negado).
-    static boolean execute(Aarch64Core core, Ir64Op.SveFpMatrixMultiply op) {
+    static boolean execute(Aarch64Core core, SveFpOp64.FpMatrixMultiply op) {
         if (!SvePredicateOps.accessAllowed(core, op.instructionAddress())) {
             return true;
         }
@@ -39,7 +39,7 @@ final class SveFpMatrixMultiplyOps {
     }
 
     /// `BFMMLA`: fonte `bf16`, acumulador `f32`, `K = 4`, UM segmento de 128 bits por bloco.
-    private static void executeBFloat16(Aarch64Core core, Ir64Op.SveFpMatrixMultiply op) {
+    private static void executeBFloat16(Aarch64Core core, SveFpOp64.FpMatrixMultiply op) {
         Aarch64ScalableRegisters regs = core.scalable();
         int segments = core.vectorLengthBytes() / 16;
         int destEsz = 2; // `f32`
@@ -67,7 +67,7 @@ final class SveFpMatrixMultiplyOps {
     /// `FMMLA_s`/`FMMLA_d`: `K = 2`, SEM fusão — cada produto e a soma final arredondam separadamente.
     /// `FMMLA_s` usa segmento de 128 bits (4 elementos `f32`); `FMMLA_d` usa 256 bits (4 elementos `f64`, o
     /// dobro do segmento normal — medido contra `simd_oprsz(desc) / (sizeof(float64) * 4)` do QEMU real).
-    private static void executeUnfused(Aarch64Core core, Ir64Op.SveFpMatrixMultiply op) {
+    private static void executeUnfused(Aarch64Core core, SveFpOp64.FpMatrixMultiply op) {
         Aarch64ScalableRegisters regs = core.scalable();
         int esz = op.esz();
         SveFloat.Env env = SveFloat.Env.of(core, esz);
@@ -105,7 +105,7 @@ final class SveFpMatrixMultiplyOps {
     /// núcleo do produto escalar `fp8`, `f8dotadd_s`/`f8dotadd_h` do QEMU real). `groupEsz` = tamanho, em log2
     /// de bytes, do grupo de `elementsPerLane` bytes `fp8` lido de uma vez (`3` = 8 bytes/`sb`, `2` = 4
     /// bytes/`hb`) — sempre `destEsz + 1`.
-    private static void executeFp8(Aarch64Core core, Ir64Op.SveFpMatrixMultiply op, int elementsPerLane, int groupEsz,
+    private static void executeFp8(Aarch64Core core, SveFpOp64.FpMatrixMultiply op, int elementsPerLane, int groupEsz,
             boolean wideDestination) {
         Aarch64ScalableRegisters regs = core.scalable();
         boolean nE4m3 = core.fp8SourceFormat1() == Aarch64Fp8Format.E4M3;

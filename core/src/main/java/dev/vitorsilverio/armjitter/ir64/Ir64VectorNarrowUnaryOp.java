@@ -1,6 +1,6 @@
 package dev.vitorsilverio.armjitter.ir64;
 
-/// Operação de {@link Ir64Op.VectorArithmeticNarrowUnary} (AdvSIMD "narrow unary", B8.8) — reduz um
+/// Operação de {@link AdvSimdIntegerOp64.ArithmeticNarrowUnary} (AdvSIMD "narrow unary", B8.8) — reduz um
 /// elemento de `esz+1` bytes (`Rn`) para `esz` bytes (`Rd`). Vive no MESMO slot de encoding
 /// `Rm=00001` ("two-register misc narrow/widen") que B8.7 deixou explicitamente de fora
 /// (`ADVSIMD_INT_RM_NARROW_UNARY`, compartilhado com `FCVTXN`/outras conversões FP, fora de escopo

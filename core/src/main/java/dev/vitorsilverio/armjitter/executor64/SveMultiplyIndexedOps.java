@@ -2,7 +2,7 @@ package dev.vitorsilverio.armjitter.executor64;
 
 import dev.vitorsilverio.armjitter.core64.Aarch64Core;
 import dev.vitorsilverio.armjitter.core64.Aarch64ScalableRegisters;
-import dev.vitorsilverio.armjitter.ir64.Ir64Op;
+import dev.vitorsilverio.armjitter.ir64.SveIntegerOp64;
 
 import java.math.BigInteger;
 
@@ -16,7 +16,7 @@ import java.math.BigInteger;
 /// **B17.22 reusa esta classe para as 21 linhas de multiply-add long NÃO-indexado** (`op.indexed() = false`):
 /// mesma matemática, só a leitura de `Zm` muda de "elemento `index` do segmento" para "elemento `e` direto"
 /// (`sameSize`/`complexMultiplyAdd`) ou "`2e + index()`" nas alargantes (`widening`, onde `index()` é reusado como
-/// o bit `B`/`T` do lado de `Zm` — ver o javadoc do campo em {@link dev.vitorsilverio.armjitter.ir64.Ir64Op.SveMultiplyIndexed}).
+/// o bit `B`/`T` do lado de `Zm` — ver o javadoc do campo em {@link dev.vitorsilverio.armjitter.ir64.SveIntegerOp64.MultiplyIndexed}).
 ///
 /// Todas as fontes (`Zn`, `Zm` e o acumulador `Zda` = `Zd`) são lidas de um **instantâneo** tirado antes da
 /// primeira escrita, então o resultado é função só dos valores antigos mesmo com `Zd == Zn` ou `Zd == Zm` — que é
@@ -40,7 +40,7 @@ final class SveMultiplyIndexedOps {
     }
 
     /// Executa uma operação do grupo. `true` = a instrução já entrou numa exceção (acesso negado).
-    static boolean execute(Aarch64Core core, Ir64Op.SveMultiplyIndexed op) {
+    static boolean execute(Aarch64Core core, SveIntegerOp64.MultiplyIndexed op) {
         if (!SvePredicateOps.accessAllowed(core, op.instructionAddress())) {
             return true;
         }
@@ -82,15 +82,15 @@ final class SveMultiplyIndexedOps {
 
     // ── Dot-product (4 e 2 vias, vetorial e indexado) ────────────────────────────────────────────
 
-    private static void dot(Aarch64Core core, Aarch64ScalableRegisters regs, Ir64Op.SveMultiplyIndexed op, long[] n,
+    private static void dot(Aarch64Core core, Aarch64ScalableRegisters regs, SveIntegerOp64.MultiplyIndexed op, long[] n,
             long[] m, long[] a) {
         int esz = op.esz();
         int destBits = Byte.SIZE << esz;
         int sourceBits = destBits / op.ways();
         int elements = core.vectorLengthBytes() >> esz;
         int perSegment = SEGMENT_BYTES >> esz;
-        boolean signedN = op.op() == Ir64Op.SveMultiplyIndexed.Op.SDOT || op.op() == Ir64Op.SveMultiplyIndexed.Op.SUDOT;
-        boolean signedM = op.op() == Ir64Op.SveMultiplyIndexed.Op.SDOT || op.op() == Ir64Op.SveMultiplyIndexed.Op.USDOT;
+        boolean signedN = op.op() == SveIntegerOp64.MultiplyIndexed.Op.SDOT || op.op() == SveIntegerOp64.MultiplyIndexed.Op.SUDOT;
+        boolean signedM = op.op() == SveIntegerOp64.MultiplyIndexed.Op.SDOT || op.op() == SveIntegerOp64.MultiplyIndexed.Op.USDOT;
         for (int e = 0; e < elements; e++) {
             long sum = element(a, e, destBits);
             for (int k = 0; k < op.ways(); k++) {
@@ -105,7 +105,7 @@ final class SveMultiplyIndexedOps {
     }
 
     /// `CDOT`: cada elemento de destino acumula 2 produtos complexos de 4 elementos estreitos (`re`, `im` × 2).
-    private static void complexDot(Aarch64Core core, Aarch64ScalableRegisters regs, Ir64Op.SveMultiplyIndexed op,
+    private static void complexDot(Aarch64Core core, Aarch64ScalableRegisters regs, SveIntegerOp64.MultiplyIndexed op,
             long[] n, long[] m, long[] a) {
         int esz = op.esz();
         int destBits = Byte.SIZE << esz;
@@ -137,7 +137,7 @@ final class SveMultiplyIndexedOps {
     /// par de `Zn` contribui `elt1_a * elt2_a` para o real e `elt1_a * elt2_b` para o imaginário, com os sinais
     /// da rotação (`sub_r = rot in {1,2}`, `sub_i = rot >= 2`). `esz` é o tamanho do elemento (half ou word).
     private static void complexMultiplyAdd(Aarch64Core core, Aarch64ScalableRegisters regs,
-            Ir64Op.SveMultiplyIndexed op, long[] n, long[] m, long[] a) {
+            SveIntegerOp64.MultiplyIndexed op, long[] n, long[] m, long[] a) {
         int esz = op.esz();
         int bits = Byte.SIZE << esz;
         int elements = core.vectorLengthBytes() >> esz;
@@ -146,7 +146,7 @@ final class SveMultiplyIndexedOps {
         int selB = selA ^ 1;
         boolean subtractReal = op.rot() == ROTATION_SUBTRACT_REAL_LOW || op.rot() == ROTATION_SUBTRACT_REAL_HIGH;
         boolean subtractImaginary = op.rot() >= ROTATION_SUBTRACT_IMAGINARY_FROM;
-        boolean saturating = op.op() == Ir64Op.SveMultiplyIndexed.Op.SQRDCMLAH;
+        boolean saturating = op.op() == SveIntegerOp64.MultiplyIndexed.Op.SQRDCMLAH;
         // Indexado: `m2a`/`m2b` são FIXOS por segmento (o par escolhido por `op.index()`). Não-indexado
         // (`CMLA_zzzz`/`SQRDCMLAH_zzzz`): `Zm` é lido elemento a elemento, junto com `Zn` (mesmo `j`).
         long fixedM2a = 0;
@@ -181,15 +181,15 @@ final class SveMultiplyIndexedOps {
 
     /// `*MLAL`/`*MLSL`/`*MULL`/`SQDML*L`: o elemento de destino `e` usa o elemento estreito `2e + top` de `Zn` e o
     /// elemento estreito `index` do segmento de `Zm` (o mesmo para as duas metades, `B` e `T`).
-    private static void widening(Aarch64Core core, Aarch64ScalableRegisters regs, Ir64Op.SveMultiplyIndexed op,
+    private static void widening(Aarch64Core core, Aarch64ScalableRegisters regs, SveIntegerOp64.MultiplyIndexed op,
             long[] n, long[] m, long[] a) {
         int esz = op.esz();
         int destBits = Byte.SIZE << esz;
         int narrowBits = destBits / 2;
         int elements = core.vectorLengthBytes() >> esz;
         int perSegment = SEGMENT_BYTES >> esz;
-        boolean unsigned = op.op() == Ir64Op.SveMultiplyIndexed.Op.UMLAL
-                || op.op() == Ir64Op.SveMultiplyIndexed.Op.UMLSL || op.op() == Ir64Op.SveMultiplyIndexed.Op.UMULL;
+        boolean unsigned = op.op() == SveIntegerOp64.MultiplyIndexed.Op.UMLAL
+                || op.op() == SveIntegerOp64.MultiplyIndexed.Op.UMLSL || op.op() == SveIntegerOp64.MultiplyIndexed.Op.UMULL;
         for (int e = 0; e < elements; e++) {
             // `Zn` usa sempre `top()` (B/T normal). `Zm`: forma indexada usa o índice por segmento; não-indexada
             // usa `2e + index()` — para `SQDMLAL*BT`/`SQDMLSL*BT` o decoder força `top()=0` (base) e `index()=1`
@@ -241,7 +241,7 @@ final class SveMultiplyIndexedOps {
 
     // ── Operações no tamanho do elemento ─────────────────────────────────────────────────────────
 
-    private static void sameSize(Aarch64Core core, Aarch64ScalableRegisters regs, Ir64Op.SveMultiplyIndexed op,
+    private static void sameSize(Aarch64Core core, Aarch64ScalableRegisters regs, SveIntegerOp64.MultiplyIndexed op,
             long[] n, long[] m, long[] a) {
         int esz = op.esz();
         int bits = Byte.SIZE << esz;

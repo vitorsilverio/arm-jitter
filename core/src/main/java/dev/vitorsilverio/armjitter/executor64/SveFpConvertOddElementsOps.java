@@ -3,7 +3,7 @@ package dev.vitorsilverio.armjitter.executor64;
 import dev.vitorsilverio.armjitter.advsimd.AdvSimdLanes;
 import dev.vitorsilverio.armjitter.core64.Aarch64Core;
 import dev.vitorsilverio.armjitter.core64.Aarch64ScalableRegisters;
-import dev.vitorsilverio.armjitter.ir64.Ir64Op;
+import dev.vitorsilverio.armjitter.ir64.SveFpOp64;
 
 /// Semântica de `FCVTNT_sh`/`FCVTLT_hs`/`FCVTNT_ds`/`FCVTLT_sd`/`FCVTXNT_ds`/`BFCVTNT` (B17.23) — as 12
 /// conversões "odd elements". Predicado testado na granularidade LARGA (`op.wideEsz()`, medido contra
@@ -19,7 +19,7 @@ final class SveFpConvertOddElementsOps {
     }
 
     /// Executa uma operação do grupo. `true` = a instrução já entrou numa exceção (acesso negado).
-    static boolean execute(Aarch64Core core, Ir64Op.SveFpConvertOddElements op) {
+    static boolean execute(Aarch64Core core, SveFpOp64.FpConvertOddElements op) {
         if (!SvePredicateOps.accessAllowed(core, op.instructionAddress())) {
             return true;
         }
@@ -27,7 +27,7 @@ final class SveFpConvertOddElementsOps {
         int wideEsz = op.wideEsz();
         int narrowEsz = wideEsz - 1;
         int elements = core.vectorLengthBytes() >> wideEsz;
-        boolean narrowing = op.op() != Ir64Op.SveFpConvertOddElements.Op.FCVTLT;
+        boolean narrowing = op.op() != SveFpOp64.FpConvertOddElements.Op.FCVTLT;
         SveFloat.Env destinationEnv = SveFloat.Env.of(core, narrowing ? narrowEsz : wideEsz);
         SveFloat.Env sourceEnv = SveFloat.Env.ofConversionSource(core, narrowing ? wideEsz : narrowEsz);
         for (int e = 0; e < elements; e++) {

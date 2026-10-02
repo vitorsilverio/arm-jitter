@@ -2,7 +2,7 @@ package dev.vitorsilverio.armjitter.executor64;
 
 import dev.vitorsilverio.armjitter.core64.Aarch64Core;
 import dev.vitorsilverio.armjitter.core64.Aarch64ScalableRegisters;
-import dev.vitorsilverio.armjitter.ir64.Ir64Op;
+import dev.vitorsilverio.armjitter.ir64.SveFpOp64;
 
 /// Semântica das unárias de ponto flutuante SVE predicadas (B17.16): conversões de precisão, FP↔inteiro, `FRINT*`,
 /// `FRINT32/64{X,Z}`, `FRECPX` e `FSQRT`, nas formas merging (`_m`) e zeroing (`_z`). A matemática vive em
@@ -27,7 +27,7 @@ final class SveFpUnaryOps {
     }
 
     /// Executa uma operação do grupo. `true` = a instrução já entrou numa exceção (acesso negado).
-    static boolean execute(Aarch64Core core, Ir64Op.SveFpUnary op) {
+    static boolean execute(Aarch64Core core, SveFpOp64.FpUnary op) {
         if (!SvePredicateOps.accessAllowed(core, op.instructionAddress())) {
             return true;
         }
@@ -53,13 +53,13 @@ final class SveFpUnaryOps {
 
     /// Ambientes FP da instrução, montados uma vez (o `FPCR` é lido uma vez) e o cálculo de UM elemento.
     private static final class Context {
-        private final Ir64Op.SveFpUnary op;
+        private final SveFpOp64.FpUnary op;
         /// Ambiente cujas flags são gravadas: o do formato de destino (FP) ou de origem (FP→inteiro, `FRINT*`, …).
         private final SveFloat.Env env;
         /// Só nas conversões de precisão: origem sem `FZ16`.
         private final SveFloat.Env conversionSource;
 
-        Context(Aarch64Core core, Ir64Op.SveFpUnary op) {
+        Context(Aarch64Core core, SveFpOp64.FpUnary op) {
             this.op = op;
             switch (op.op()) {
                 case FCVT, FCVTX, BFCVT -> {

@@ -5,8 +5,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import dev.vitorsilverio.armjitter.core64.Aarch64Core;
 import dev.vitorsilverio.armjitter.core64.Aarch64InstructionCacheListener;
-import dev.vitorsilverio.armjitter.ir64.Ir64Op;
 import dev.vitorsilverio.armjitter.ir64.Ir64SystemInstructionOp;
+import dev.vitorsilverio.armjitter.ir64.SystemOp64;
 import dev.vitorsilverio.armjitter.memory.AddressSpace64;
 import dev.vitorsilverio.armjitter.support.TestAddressSpace;
 import java.util.ArrayList;
@@ -42,7 +42,7 @@ class Aarch64InstructionCacheInvalidationExecutionTest {
         Recorder recorder = new Recorder();
         core.setInstructionCacheListener(recorder);
 
-        EXECUTOR.executeOp(core, new Ir64Op.SystemInstruction(Ir64SystemInstructionOp.INSTRUCTION_CACHE_INVALIDATE_ALL));
+        EXECUTOR.executeOp(core, new SystemOp64.SystemInstruction(Ir64SystemInstructionOp.INSTRUCTION_CACHE_INVALIDATE_ALL));
 
         assertEquals(List.of("all"), recorder.events);
         assertTrue(core.instructionCacheListener() == recorder);
@@ -55,7 +55,7 @@ class Aarch64InstructionCacheInvalidationExecutionTest {
         core.setInstructionCacheListener(recorder);
         core.setX(7, 0x3_4567L);
 
-        EXECUTOR.executeOp(core, new Ir64Op.SystemInstruction(
+        EXECUTOR.executeOp(core, new SystemOp64.SystemInstruction(
                 Ir64SystemInstructionOp.INSTRUCTION_CACHE_INVALIDATE_BY_VA, 7));
 
         assertEquals(List.of("page:" + 0x34), recorder.events, "sem MMU o VA é o próprio endereço físico");
@@ -66,8 +66,8 @@ class Aarch64InstructionCacheInvalidationExecutionTest {
         Aarch64Core core = newCore();
         core.setX(7, 0x40);
 
-        EXECUTOR.executeOp(core, new Ir64Op.SystemInstruction(Ir64SystemInstructionOp.INSTRUCTION_CACHE_INVALIDATE_ALL));
-        EXECUTOR.executeOp(core, new Ir64Op.SystemInstruction(
+        EXECUTOR.executeOp(core, new SystemOp64.SystemInstruction(Ir64SystemInstructionOp.INSTRUCTION_CACHE_INVALIDATE_ALL));
+        EXECUTOR.executeOp(core, new SystemOp64.SystemInstruction(
                 Ir64SystemInstructionOp.INSTRUCTION_CACHE_INVALIDATE_BY_VA, 7));
 
         assertEquals(null, core.instructionCacheListener());

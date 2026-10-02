@@ -2,6 +2,7 @@ package dev.vitorsilverio.armjitter.decoder64;
 
 import dev.vitorsilverio.armjitter.arch64.Aarch64Architecture;
 import dev.vitorsilverio.armjitter.ir64.Ir64Op;
+import dev.vitorsilverio.armjitter.ir64.MemoryOp64;
 import dev.vitorsilverio.armjitter.memory.AddressSpace64;
 import dev.vitorsilverio.armjitter.support.TestAddressSpace;
 import org.junit.jupiter.api.Test;
@@ -59,52 +60,52 @@ class Aarch64MemoryCopySetDecoderTest {
 
     @Test
     void decodesSetPhasesWithCorrectRegisters() {
-        Ir64Op.MemorySet p = (Ir64Op.MemorySet) decode(MOPS_DECODER, SETP);
-        assertEquals(Ir64Op.Ir64MopsPhase.PROLOGUE, p.phase());
+        MemoryOp64.MemorySet p = (MemoryOp64.MemorySet) decode(MOPS_DECODER, SETP);
+        assertEquals(MemoryOp64.Ir64MopsPhase.PROLOGUE, p.phase());
         assertEquals(0, p.rd());
         assertEquals(1, p.rn());
         assertEquals(2, p.rs());
 
-        Ir64Op.MemorySet m = (Ir64Op.MemorySet) decode(MOPS_DECODER, SETM);
-        assertEquals(Ir64Op.Ir64MopsPhase.MAIN, m.phase());
+        MemoryOp64.MemorySet m = (MemoryOp64.MemorySet) decode(MOPS_DECODER, SETM);
+        assertEquals(MemoryOp64.Ir64MopsPhase.MAIN, m.phase());
 
-        Ir64Op.MemorySet e = (Ir64Op.MemorySet) decode(MOPS_DECODER, SETE);
-        assertEquals(Ir64Op.Ir64MopsPhase.EPILOGUE, e.phase());
+        MemoryOp64.MemorySet e = (MemoryOp64.MemorySet) decode(MOPS_DECODER, SETE);
+        assertEquals(MemoryOp64.Ir64MopsPhase.EPILOGUE, e.phase());
     }
 
     @Test
     void decodesForwardOnlyCopyPhasesWithCorrectRegisters() {
-        Ir64Op.MemoryCopy p = (Ir64Op.MemoryCopy) decode(MOPS_DECODER, CPYFP);
-        assertEquals(Ir64Op.Ir64MopsPhase.PROLOGUE, p.phase());
+        MemoryOp64.MemoryCopy p = (MemoryOp64.MemoryCopy) decode(MOPS_DECODER, CPYFP);
+        assertEquals(MemoryOp64.Ir64MopsPhase.PROLOGUE, p.phase());
         assertTrue(p.forwardOnly());
         assertEquals(0, p.rd());
         assertEquals(1, p.rs());
         assertEquals(2, p.rn());
 
-        Ir64Op.MemoryCopy m = (Ir64Op.MemoryCopy) decode(MOPS_DECODER, CPYFM);
-        assertEquals(Ir64Op.Ir64MopsPhase.MAIN, m.phase());
+        MemoryOp64.MemoryCopy m = (MemoryOp64.MemoryCopy) decode(MOPS_DECODER, CPYFM);
+        assertEquals(MemoryOp64.Ir64MopsPhase.MAIN, m.phase());
         assertTrue(m.forwardOnly());
 
-        Ir64Op.MemoryCopy e = (Ir64Op.MemoryCopy) decode(MOPS_DECODER, CPYFE);
-        assertEquals(Ir64Op.Ir64MopsPhase.EPILOGUE, e.phase());
+        MemoryOp64.MemoryCopy e = (MemoryOp64.MemoryCopy) decode(MOPS_DECODER, CPYFE);
+        assertEquals(MemoryOp64.Ir64MopsPhase.EPILOGUE, e.phase());
         assertTrue(e.forwardOnly());
     }
 
     @Test
     void decodesGenericDirectionCopyPhasesWithCorrectRegisters() {
-        Ir64Op.MemoryCopy p = (Ir64Op.MemoryCopy) decode(MOPS_DECODER, CPYP);
-        assertEquals(Ir64Op.Ir64MopsPhase.PROLOGUE, p.phase());
+        MemoryOp64.MemoryCopy p = (MemoryOp64.MemoryCopy) decode(MOPS_DECODER, CPYP);
+        assertEquals(MemoryOp64.Ir64MopsPhase.PROLOGUE, p.phase());
         assertFalse(p.forwardOnly());
         assertEquals(0, p.rd());
         assertEquals(1, p.rs());
         assertEquals(2, p.rn());
 
-        Ir64Op.MemoryCopy m = (Ir64Op.MemoryCopy) decode(MOPS_DECODER, CPYM);
-        assertEquals(Ir64Op.Ir64MopsPhase.MAIN, m.phase());
+        MemoryOp64.MemoryCopy m = (MemoryOp64.MemoryCopy) decode(MOPS_DECODER, CPYM);
+        assertEquals(MemoryOp64.Ir64MopsPhase.MAIN, m.phase());
         assertFalse(m.forwardOnly());
 
-        Ir64Op.MemoryCopy e = (Ir64Op.MemoryCopy) decode(MOPS_DECODER, CPYE);
-        assertEquals(Ir64Op.Ir64MopsPhase.EPILOGUE, e.phase());
+        MemoryOp64.MemoryCopy e = (MemoryOp64.MemoryCopy) decode(MOPS_DECODER, CPYE);
+        assertEquals(MemoryOp64.Ir64MopsPhase.EPILOGUE, e.phase());
         assertFalse(e.forwardOnly());
     }
 
@@ -120,18 +121,18 @@ class Aarch64MemoryCopySetDecoderTest {
         // MOPS_DECODER (ARMV8_8_A) já herda FEAT_MTE2 (ARMv8.5-A é ancestral na cadeia de presets
         // deste projeto) — SETGP/SETGM/SETGE (B19.14) decodificam de verdade, sempre SEPARADAS de
         // SETP/SETM/SETE (bit26 as discrimina), nunca confundidas nem caindo no misdecode antigo
-        // (FpLoadLiteral64) que a B19.16 já corrigiu para a família sem tag.
-        Ir64Op.MemorySetTagged p = (Ir64Op.MemorySetTagged) decode(MOPS_DECODER, SETGP);
-        assertEquals(Ir64Op.Ir64MopsPhase.PROLOGUE, p.phase());
+        // (FpOp64.LoadLiteral64) que a B19.16 já corrigiu para a família sem tag.
+        MemoryOp64.MemorySetTagged p = (MemoryOp64.MemorySetTagged) decode(MOPS_DECODER, SETGP);
+        assertEquals(MemoryOp64.Ir64MopsPhase.PROLOGUE, p.phase());
         assertEquals(0, p.rd());
         assertEquals(1, p.rn());
         assertEquals(2, p.rs());
 
-        Ir64Op.MemorySetTagged m = (Ir64Op.MemorySetTagged) decode(MOPS_DECODER, SETGM);
-        assertEquals(Ir64Op.Ir64MopsPhase.MAIN, m.phase());
+        MemoryOp64.MemorySetTagged m = (MemoryOp64.MemorySetTagged) decode(MOPS_DECODER, SETGM);
+        assertEquals(MemoryOp64.Ir64MopsPhase.MAIN, m.phase());
 
-        Ir64Op.MemorySetTagged e = (Ir64Op.MemorySetTagged) decode(MOPS_DECODER, SETGE);
-        assertEquals(Ir64Op.Ir64MopsPhase.EPILOGUE, e.phase());
+        MemoryOp64.MemorySetTagged e = (MemoryOp64.MemorySetTagged) decode(MOPS_DECODER, SETGE);
+        assertEquals(MemoryOp64.Ir64MopsPhase.EPILOGUE, e.phase());
     }
 
     @Test
@@ -141,16 +142,16 @@ class Aarch64MemoryCopySetDecoderTest {
         // campo, LDAPURB (opc=01) misdecodificaria como CPYFM (achado real da B19.16). `MOPS_DECODER`
         // (`ARMV8_8_A`) inclui `LRCPC2` (`ARMv8.4-A`) por composição, então os 3 decodificam de
         // verdade aqui — ver `Aarch64Lrcpc2DecoderTest` para a cobertura completa de B19.19.
-        Ir64Op.Load64 x = (Ir64Op.Load64) decode(MOPS_DECODER, LDAPUR_X);
+        MemoryOp64.Load64 x = (MemoryOp64.Load64) decode(MOPS_DECODER, LDAPUR_X);
         assertEquals(0, x.rt());
         assertEquals(1, x.rn());
         assertEquals(8L, x.immediate());
 
-        Ir64Op.Load64 b = (Ir64Op.Load64) decode(MOPS_DECODER, LDAPURB_W);
+        MemoryOp64.Load64 b = (MemoryOp64.Load64) decode(MOPS_DECODER, LDAPURB_W);
         assertEquals(0, b.rt());
         assertEquals(1, b.rn());
 
-        Ir64Op.Store64 s = (Ir64Op.Store64) decode(MOPS_DECODER, STLUR_X);
+        MemoryOp64.Store64 s = (MemoryOp64.Store64) decode(MOPS_DECODER, STLUR_X);
         assertEquals(0, s.rt());
         assertEquals(1, s.rn());
         assertEquals(8L, s.immediate());

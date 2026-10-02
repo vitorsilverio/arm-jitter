@@ -1,9 +1,9 @@
 package dev.vitorsilverio.armjitter.ir64;
 
-/// Operação de {@link Ir64Op.VectorShiftNarrowImmediate} (AdvSIMD "shift by immediate" estreitando,
+/// Operação de {@link AdvSimdIntegerOp64.ShiftNarrowImmediate} (AdvSIMD "shift by immediate" estreitando,
 /// B8.8) — `Rn` tem elementos de `esz+1` bytes, `Rd` recebe elementos de `esz` bytes (metade
 /// selecionada por `q`, mesma convenção "SIMD&FP destructive write" de
-/// {@link Ir64Op.VectorArithmeticNarrow}). {@link #SHRN}/{@link #RSHRN} NÃO têm forma escalar real
+/// {@link AdvSimdIntegerOp64.ArithmeticNarrow}). {@link #SHRN}/{@link #RSHRN} NÃO têm forma escalar real
 /// (só vetorial); os demais aceitam escalar com `esz` `0`-`2` (nunca `3` — não existe estreitamento
 /// de `Q` para `D`).
 public enum Ir64VectorShiftNarrowOp {

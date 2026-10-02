@@ -3,6 +3,7 @@ package dev.vitorsilverio.armjitter.decoder64;
 import dev.vitorsilverio.armjitter.arch64.Aarch64Architecture;
 import dev.vitorsilverio.armjitter.arch64.Aarch64Feature;
 import dev.vitorsilverio.armjitter.ir64.Ir64Op;
+import dev.vitorsilverio.armjitter.ir64.SveIntegerOp64;
 
 /// Decoder SVE2 inteiro I (B17.20) — as 21 linhas de `#### SVE2 Support` de `sve.decode` que cobrem o multiply
 /// não-predicado, `SADALP`/`UADALP`, as unárias predicadas (`URECPE`/`URSQRTE`/`SQABS`/`SQNEG`) e o pairwise predicado.
@@ -113,19 +114,19 @@ final class Aarch64Sve2IntegerDecoder {
             return null;
         }
         int esz = (word >>> ESZ_SHIFT) & ESZ_MASK;
-        Ir64Op.SveIntegerUnpredicated.Op op = switch ((word >>> UNPREDICATED_OPCODE_SHIFT) & UNPREDICATED_OPCODE_MASK) {
-            case UNPREDICATED_MUL -> Ir64Op.SveIntegerUnpredicated.Op.MUL;
-            case UNPREDICATED_SMULH -> Ir64Op.SveIntegerUnpredicated.Op.SMULH;
-            case UNPREDICATED_UMULH -> Ir64Op.SveIntegerUnpredicated.Op.UMULH;
-            case UNPREDICATED_PMUL -> esz == ESZ_BYTE ? Ir64Op.SveIntegerUnpredicated.Op.PMUL : null;
-            case UNPREDICATED_SQDMULH -> Ir64Op.SveIntegerUnpredicated.Op.SQDMULH;
-            case UNPREDICATED_SQRDMULH -> Ir64Op.SveIntegerUnpredicated.Op.SQRDMULH;
+        SveIntegerOp64.IntegerUnpredicated.Op op = switch ((word >>> UNPREDICATED_OPCODE_SHIFT) & UNPREDICATED_OPCODE_MASK) {
+            case UNPREDICATED_MUL -> SveIntegerOp64.IntegerUnpredicated.Op.MUL;
+            case UNPREDICATED_SMULH -> SveIntegerOp64.IntegerUnpredicated.Op.SMULH;
+            case UNPREDICATED_UMULH -> SveIntegerOp64.IntegerUnpredicated.Op.UMULH;
+            case UNPREDICATED_PMUL -> esz == ESZ_BYTE ? SveIntegerOp64.IntegerUnpredicated.Op.PMUL : null;
+            case UNPREDICATED_SQDMULH -> SveIntegerOp64.IntegerUnpredicated.Op.SQDMULH;
+            case UNPREDICATED_SQRDMULH -> SveIntegerOp64.IntegerUnpredicated.Op.SQRDMULH;
             default -> null;
         };
         if (op == null) {
             return null;
         }
-        return new Ir64Op.SveIntegerUnpredicated(op, esz, word & RD_MASK, (word >>> RN_SHIFT) & RN_MASK,
+        return new SveIntegerOp64.IntegerUnpredicated(op, esz, word & RD_MASK, (word >>> RN_SHIFT) & RN_MASK,
                 (word >>> RM_SHIFT) & RM_MASK, 0, 0, 0, 0, address);
     }
 
@@ -143,48 +144,48 @@ final class Aarch64Sve2IntegerDecoder {
         int field = (word >>> RN_SHIFT) & RN_MASK;
         int pg = (word >>> PG_SHIFT) & PG_MASK;
         return switch ((word >>> PREDICATED_OPCODE_SHIFT) & PREDICATED_OPCODE_MASK) {
-            case PRED_SADALP -> accumulate(Ir64Op.SveIntegerPredicated.Op.SADALP, esz, rd, field, pg, address);
-            case PRED_UADALP -> accumulate(Ir64Op.SveIntegerPredicated.Op.UADALP, esz, rd, field, pg, address);
-            case PRED_URECPE_M -> unary(Ir64Op.SveIntegerPredicated.Op.URECPE, esz, rd, field, pg, false, address);
-            case PRED_URSQRTE_M -> unary(Ir64Op.SveIntegerPredicated.Op.URSQRTE, esz, rd, field, pg, false, address);
-            case PRED_URECPE_Z -> unary(Ir64Op.SveIntegerPredicated.Op.URECPE, esz, rd, field, pg, true, address);
-            case PRED_URSQRTE_Z -> unary(Ir64Op.SveIntegerPredicated.Op.URSQRTE, esz, rd, field, pg, true, address);
-            case PRED_SQABS_M -> unary(Ir64Op.SveIntegerPredicated.Op.SQABS, esz, rd, field, pg, false, address);
-            case PRED_SQNEG_M -> unary(Ir64Op.SveIntegerPredicated.Op.SQNEG, esz, rd, field, pg, false, address);
-            case PRED_SQABS_Z -> unary(Ir64Op.SveIntegerPredicated.Op.SQABS, esz, rd, field, pg, true, address);
-            case PRED_SQNEG_Z -> unary(Ir64Op.SveIntegerPredicated.Op.SQNEG, esz, rd, field, pg, true, address);
-            case PRED_ADDP -> pairwise(Ir64Op.SveIntegerPredicated.Op.ADDP, esz, rd, field, pg, address);
-            case PRED_SMAXP -> pairwise(Ir64Op.SveIntegerPredicated.Op.SMAXP, esz, rd, field, pg, address);
-            case PRED_UMAXP -> pairwise(Ir64Op.SveIntegerPredicated.Op.UMAXP, esz, rd, field, pg, address);
-            case PRED_SMINP -> pairwise(Ir64Op.SveIntegerPredicated.Op.SMINP, esz, rd, field, pg, address);
-            case PRED_UMINP -> pairwise(Ir64Op.SveIntegerPredicated.Op.UMINP, esz, rd, field, pg, address);
+            case PRED_SADALP -> accumulate(SveIntegerOp64.IntegerPredicated.Op.SADALP, esz, rd, field, pg, address);
+            case PRED_UADALP -> accumulate(SveIntegerOp64.IntegerPredicated.Op.UADALP, esz, rd, field, pg, address);
+            case PRED_URECPE_M -> unary(SveIntegerOp64.IntegerPredicated.Op.URECPE, esz, rd, field, pg, false, address);
+            case PRED_URSQRTE_M -> unary(SveIntegerOp64.IntegerPredicated.Op.URSQRTE, esz, rd, field, pg, false, address);
+            case PRED_URECPE_Z -> unary(SveIntegerOp64.IntegerPredicated.Op.URECPE, esz, rd, field, pg, true, address);
+            case PRED_URSQRTE_Z -> unary(SveIntegerOp64.IntegerPredicated.Op.URSQRTE, esz, rd, field, pg, true, address);
+            case PRED_SQABS_M -> unary(SveIntegerOp64.IntegerPredicated.Op.SQABS, esz, rd, field, pg, false, address);
+            case PRED_SQNEG_M -> unary(SveIntegerOp64.IntegerPredicated.Op.SQNEG, esz, rd, field, pg, false, address);
+            case PRED_SQABS_Z -> unary(SveIntegerOp64.IntegerPredicated.Op.SQABS, esz, rd, field, pg, true, address);
+            case PRED_SQNEG_Z -> unary(SveIntegerOp64.IntegerPredicated.Op.SQNEG, esz, rd, field, pg, true, address);
+            case PRED_ADDP -> pairwise(SveIntegerOp64.IntegerPredicated.Op.ADDP, esz, rd, field, pg, address);
+            case PRED_SMAXP -> pairwise(SveIntegerOp64.IntegerPredicated.Op.SMAXP, esz, rd, field, pg, address);
+            case PRED_UMAXP -> pairwise(SveIntegerOp64.IntegerPredicated.Op.UMAXP, esz, rd, field, pg, address);
+            case PRED_SMINP -> pairwise(SveIntegerOp64.IntegerPredicated.Op.SMINP, esz, rd, field, pg, address);
+            case PRED_UMINP -> pairwise(SveIntegerOp64.IntegerPredicated.Op.UMINP, esz, rd, field, pg, address);
             default -> null;
         };
     }
 
     /// `@rdm_pg_rn`: `Zn` em `bits[9:5]`; o destino `Zda` é também o acumulador (`rm = rd`). `esz = 0` não existe.
-    private static Ir64Op accumulate(Ir64Op.SveIntegerPredicated.Op op, int esz, int rd, int rn, int pg,
+    private static Ir64Op accumulate(SveIntegerOp64.IntegerPredicated.Op op, int esz, int rd, int rn, int pg,
             long address) {
         if (esz == ESZ_BYTE) {
             return null;
         }
-        return new Ir64Op.SveIntegerPredicated(op, esz, rd, rn, rd, pg, 0, false, address);
+        return new SveIntegerOp64.IntegerPredicated(op, esz, rd, rn, rd, pg, 0, false, address);
     }
 
     /// `@rd_pg_rn`. As estimativas só existem com `esz = 2`; `_z` (`FEAT_SVE2p2`) zera o elemento inativo.
-    private Ir64Op unary(Ir64Op.SveIntegerPredicated.Op op, int esz, int rd, int rn, int pg, boolean zeroing,
+    private Ir64Op unary(SveIntegerOp64.IntegerPredicated.Op op, int esz, int rd, int rn, int pg, boolean zeroing,
             long address) {
-        boolean estimate = op == Ir64Op.SveIntegerPredicated.Op.URECPE || op == Ir64Op.SveIntegerPredicated.Op.URSQRTE;
+        boolean estimate = op == SveIntegerOp64.IntegerPredicated.Op.URECPE || op == SveIntegerOp64.IntegerPredicated.Op.URSQRTE;
         if (estimate && esz != ESZ_WORD || zeroing && !architecture.has(Aarch64Feature.SVE2_2)) {
             return null;
         }
-        return new Ir64Op.SveIntegerPredicated(op, esz, rd, rn, 0, pg, 0, zeroing, address);
+        return new SveIntegerOp64.IntegerPredicated(op, esz, rd, rn, 0, pg, 0, zeroing, address);
     }
 
     /// `@rdn_pg_rm`: `Zm` em `bits[9:5]`, destrutiva em `Zdn` (`rn = rd`).
-    private static Ir64Op pairwise(Ir64Op.SveIntegerPredicated.Op op, int esz, int rd, int rm, int pg,
+    private static Ir64Op pairwise(SveIntegerOp64.IntegerPredicated.Op op, int esz, int rd, int rm, int pg,
             long address) {
-        return new Ir64Op.SveIntegerPredicated(op, esz, rd, rd, rm, pg, 0, false, address);
+        return new SveIntegerOp64.IntegerPredicated(op, esz, rd, rd, rm, pg, 0, false, address);
     }
 
     /// B17.21a: as 28 linhas predicadas de `bits[15:13] = 100` (`@rdn_pg_rm`, `@rdm_pg_rn` nas reversas — o decoder entrega
@@ -194,7 +195,7 @@ final class Aarch64Sve2IntegerDecoder {
             return null;
         }
         int opcode = (word >>> PREDICATED_OPCODE_SHIFT) & PREDICATED_OPCODE_MASK;
-        Ir64Op.SveIntegerPredicated.Op op = vectorOperation(opcode);
+        SveIntegerOp64.IntegerPredicated.Op op = vectorOperation(opcode);
         if (op == null) {
             return null;
         }
@@ -203,30 +204,30 @@ final class Aarch64Sve2IntegerDecoder {
         int field = (word >>> RN_SHIFT) & RN_MASK;
         int pg = (word >>> PG_SHIFT) & PG_MASK;
         return isReversed(opcode)
-                ? new Ir64Op.SveIntegerPredicated(op, esz, rd, field, rd, pg, 0, false, address)
-                : new Ir64Op.SveIntegerPredicated(op, esz, rd, rd, field, pg, 0, false, address);
+                ? new SveIntegerOp64.IntegerPredicated(op, esz, rd, field, rd, pg, 0, false, address)
+                : new SveIntegerOp64.IntegerPredicated(op, esz, rd, rd, field, pg, 0, false, address);
     }
 
-    private static Ir64Op.SveIntegerPredicated.Op vectorOperation(int opcode) {
+    private static SveIntegerOp64.IntegerPredicated.Op vectorOperation(int opcode) {
         return switch (opcode) {
-            case 0b000010, 0b000110 -> Ir64Op.SveIntegerPredicated.Op.SRSHL;
-            case 0b000011, 0b000111 -> Ir64Op.SveIntegerPredicated.Op.URSHL;
-            case 0b001000, 0b001100 -> Ir64Op.SveIntegerPredicated.Op.SQSHL_VECTOR;
-            case 0b001001, 0b001101 -> Ir64Op.SveIntegerPredicated.Op.UQSHL_VECTOR;
-            case 0b001010, 0b001110 -> Ir64Op.SveIntegerPredicated.Op.SQRSHL;
-            case 0b001011, 0b001111 -> Ir64Op.SveIntegerPredicated.Op.UQRSHL;
-            case 0b010000 -> Ir64Op.SveIntegerPredicated.Op.SHADD;
-            case 0b010001 -> Ir64Op.SveIntegerPredicated.Op.UHADD;
-            case 0b010010, 0b010110 -> Ir64Op.SveIntegerPredicated.Op.SHSUB;
-            case 0b010011, 0b010111 -> Ir64Op.SveIntegerPredicated.Op.UHSUB;
-            case 0b010100 -> Ir64Op.SveIntegerPredicated.Op.SRHADD;
-            case 0b010101 -> Ir64Op.SveIntegerPredicated.Op.URHADD;
-            case 0b011000 -> Ir64Op.SveIntegerPredicated.Op.SQADD;
-            case 0b011001 -> Ir64Op.SveIntegerPredicated.Op.UQADD;
-            case 0b011010, 0b011110 -> Ir64Op.SveIntegerPredicated.Op.SQSUB;
-            case 0b011011, 0b011111 -> Ir64Op.SveIntegerPredicated.Op.UQSUB;
-            case 0b011100 -> Ir64Op.SveIntegerPredicated.Op.SUQADD;
-            case 0b011101 -> Ir64Op.SveIntegerPredicated.Op.USQADD;
+            case 0b000010, 0b000110 -> SveIntegerOp64.IntegerPredicated.Op.SRSHL;
+            case 0b000011, 0b000111 -> SveIntegerOp64.IntegerPredicated.Op.URSHL;
+            case 0b001000, 0b001100 -> SveIntegerOp64.IntegerPredicated.Op.SQSHL_VECTOR;
+            case 0b001001, 0b001101 -> SveIntegerOp64.IntegerPredicated.Op.UQSHL_VECTOR;
+            case 0b001010, 0b001110 -> SveIntegerOp64.IntegerPredicated.Op.SQRSHL;
+            case 0b001011, 0b001111 -> SveIntegerOp64.IntegerPredicated.Op.UQRSHL;
+            case 0b010000 -> SveIntegerOp64.IntegerPredicated.Op.SHADD;
+            case 0b010001 -> SveIntegerOp64.IntegerPredicated.Op.UHADD;
+            case 0b010010, 0b010110 -> SveIntegerOp64.IntegerPredicated.Op.SHSUB;
+            case 0b010011, 0b010111 -> SveIntegerOp64.IntegerPredicated.Op.UHSUB;
+            case 0b010100 -> SveIntegerOp64.IntegerPredicated.Op.SRHADD;
+            case 0b010101 -> SveIntegerOp64.IntegerPredicated.Op.URHADD;
+            case 0b011000 -> SveIntegerOp64.IntegerPredicated.Op.SQADD;
+            case 0b011001 -> SveIntegerOp64.IntegerPredicated.Op.UQADD;
+            case 0b011010, 0b011110 -> SveIntegerOp64.IntegerPredicated.Op.SQSUB;
+            case 0b011011, 0b011111 -> SveIntegerOp64.IntegerPredicated.Op.UQSUB;
+            case 0b011100 -> SveIntegerOp64.IntegerPredicated.Op.SUQADD;
+            case 0b011101 -> SveIntegerOp64.IntegerPredicated.Op.USQADD;
             default -> null;
         };
     }
@@ -259,8 +260,8 @@ final class Aarch64Sve2IntegerDecoder {
             if (!sve2) {
                 return null;
             }
-            Ir64Op.SveIntegerUnpredicated.Op op = (word & COMPLEX_SATURATE_BIT) != 0
-                    ? Ir64Op.SveIntegerUnpredicated.Op.SQCADD : Ir64Op.SveIntegerUnpredicated.Op.CADD;
+            SveIntegerOp64.IntegerUnpredicated.Op op = (word & COMPLEX_SATURATE_BIT) != 0
+                    ? SveIntegerOp64.IntegerUnpredicated.Op.SQCADD : SveIntegerOp64.IntegerUnpredicated.Op.CADD;
             // `@rdn_rm`: `Zm` em `bits[9:5]`, destrutiva em `Zdn`. `bit 10` = rotação 270.
             return unpredicated(op, esz, rd, rd, rn, top, address);
         }
@@ -276,22 +277,22 @@ final class Aarch64Sve2IntegerDecoder {
                 return null;
             }
             // `bit 23` escolhe ADC/SBC e `bit 22` o tamanho (`.S`/`.D`) — o oposto do que a spec da task dizia.
-            Ir64Op.SveIntegerUnpredicated.Op op = (word & SUBTRACT_BIT) != 0
-                    ? Ir64Op.SveIntegerUnpredicated.Op.SBCL : Ir64Op.SveIntegerUnpredicated.Op.ADCL;
+            SveIntegerOp64.IntegerUnpredicated.Op op = (word & SUBTRACT_BIT) != 0
+                    ? SveIntegerOp64.IntegerUnpredicated.Op.SBCL : SveIntegerOp64.IntegerUnpredicated.Op.ADCL;
             int size = (word & CARRY_SIZE_BIT) != 0 ? ESZ_ADCL_DOUBLEWORD : ESZ_ADCL_WORD;
             return unpredicated(op, size, rd, rn, rm, top, address);
         }
         if (fiveBitFamily == ABS_DIFF_VALUE) {
-            return sve2 ? unpredicated(top != 0 ? Ir64Op.SveIntegerUnpredicated.Op.UABA
-                    : Ir64Op.SveIntegerUnpredicated.Op.SABA, esz, rd, rn, rm, 0, address) : null;
+            return sve2 ? unpredicated(top != 0 ? SveIntegerOp64.IntegerUnpredicated.Op.UABA
+                    : SveIntegerOp64.IntegerUnpredicated.Op.SABA, esz, rd, rn, rm, 0, address) : null;
         }
         if (fiveBitFamily == INSERT_VALUE) {
             return sve2 ? shiftInsert(word, rd, rn, top != 0, address) : null;
         }
         return switch (word & ACCUMULATE_FAMILY_MASK) {
             case FAMILY_ABS_DIFF_LONG -> !sve2 || esz == 0 ? null : unpredicated(
-                    (word & UNSIGNED_BIT) != 0 ? Ir64Op.SveIntegerUnpredicated.Op.UABAL
-                            : Ir64Op.SveIntegerUnpredicated.Op.SABAL,
+                    (word & UNSIGNED_BIT) != 0 ? SveIntegerOp64.IntegerUnpredicated.Op.UABAL
+                            : SveIntegerOp64.IntegerUnpredicated.Op.SABAL,
                     esz, rd, rn, rm, top, address);
             case FAMILY_SHIFT_ACCUMULATE -> sve2 ? shiftAccumulate(word, rd, rn, address) : null;
             // B17.21b: `#### SVE2 Widening Integer Arithmetic` — EXCETO `SMMLA`/`USMMLA`/`UMMLA`, que não exigem
@@ -300,9 +301,9 @@ final class Aarch64Sve2IntegerDecoder {
         };
     }
 
-    private static Ir64Op unpredicated(Ir64Op.SveIntegerUnpredicated.Op op, int esz, int rd, int rn, int rm, long imm,
+    private static Ir64Op unpredicated(SveIntegerOp64.IntegerUnpredicated.Op op, int esz, int rd, int rn, int rm, long imm,
             long address) {
-        return new Ir64Op.SveIntegerUnpredicated(op, esz, rd, rn, rm, 0, 0, imm, 0, address);
+        return new SveIntegerOp64.IntegerUnpredicated(op, esz, rd, rn, rm, 0, 0, imm, 0, address);
     }
 
     /// `SSRA`/`USRA`/`SRSRA`/`URSRA` (`bits[11:10]` = `U`,`R`): acumulam o shift à direita de `Zn` em `Zda`.
@@ -311,11 +312,11 @@ final class Aarch64Sve2IntegerDecoder {
         if (tsz == 0) {
             return null;
         }
-        Ir64Op.SveIntegerUnpredicated.Op op = switch ((word >>> SHIFT_FLAGS_SHIFT) & SHIFT_FLAGS_MASK) {
-            case 0b00 -> Ir64Op.SveIntegerUnpredicated.Op.SSRA;
-            case 0b01 -> Ir64Op.SveIntegerUnpredicated.Op.USRA;
-            case 0b10 -> Ir64Op.SveIntegerUnpredicated.Op.SRSRA;
-            default -> Ir64Op.SveIntegerUnpredicated.Op.URSRA;
+        SveIntegerOp64.IntegerUnpredicated.Op op = switch ((word >>> SHIFT_FLAGS_SHIFT) & SHIFT_FLAGS_MASK) {
+            case 0b00 -> SveIntegerOp64.IntegerUnpredicated.Op.SSRA;
+            case 0b01 -> SveIntegerOp64.IntegerUnpredicated.Op.USRA;
+            case 0b10 -> SveIntegerOp64.IntegerUnpredicated.Op.SRSRA;
+            default -> SveIntegerOp64.IntegerUnpredicated.Op.URSRA;
         };
         int esz = tszEsz(tsz);
         return unpredicated(op, esz, rd, rn, 0, rightShift(word, esz), address);
@@ -329,8 +330,8 @@ final class Aarch64Sve2IntegerDecoder {
         }
         int esz = tszEsz(tsz);
         return left
-                ? unpredicated(Ir64Op.SveIntegerUnpredicated.Op.SLI, esz, rd, rn, 0, leftShift(word, esz), address)
-                : unpredicated(Ir64Op.SveIntegerUnpredicated.Op.SRI, esz, rd, rn, 0, rightShift(word, esz), address);
+                ? unpredicated(SveIntegerOp64.IntegerUnpredicated.Op.SLI, esz, rd, rn, 0, leftShift(word, esz), address)
+                : unpredicated(SveIntegerOp64.IntegerUnpredicated.Op.SRI, esz, rd, rn, 0, rightShift(word, esz), address);
     }
 
     /// `tsz` = `bits[23:22]`:`bits[20:19]` (o `imm3` são `bits[18:16]`).

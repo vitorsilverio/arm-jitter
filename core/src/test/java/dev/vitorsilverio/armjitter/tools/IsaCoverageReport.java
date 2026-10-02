@@ -827,7 +827,7 @@ public final class IsaCoverageReport {
                 (`LDRA`, `SETGP`/`SETGM`/`SETGE`, `CPYP`/`CPYM`/`CPYE`, `FAMAX`/`FAMIN`/`FSCALE`)
                 estavam em `docs/isa-nao-aplicavel.tsv` medindo `·` nas 16 colunas; ao migrar a
                 curadoria para o mapa de versão elas mediriam `✅`, e a sondagem direta mostrou que o
-                decoder devolve OUTRA instrução (`FpLoadLiteral64`, `SystemInstruction[NOP_HINT]`,
+                decoder devolve OUTRA instrução (`FpOp64.LoadLiteral64`, `SystemInstruction[NOP_HINT]`,
                 `VectorInsert*`). São dívida do invariante **G8**, listadas em
                 `IsaCoverageReport.AARCH64_MISDECODED`. As ocorrências antigas de 32 bits
                 (`VMOV_half` em MPCore/v7-A) seguem eliminadas pela B22.2.
@@ -1118,7 +1118,7 @@ public final class IsaCoverageReport {
         // espaço `bit21=0`; corrigido interceptando ANTES do fallback EXT/permute/copy. Ambas as
         // ocorrências decodificam de verdade agora — fora da lista de MISDECODE.
         // `FEAT_FAMINMAX` (ARMv9.4-A) sofria da MESMA classe de bug (B19.24, 2026-09-12): `FAMAX_h`/
-        // `FAMIN_h` (1ª ocorrência de cada) colidiam com `INS_element`/`VectorInsertGeneral` por
+        // `FAMIN_h` (1ª ocorrência de cada) colidiam com `INS_element`/`AdvSimdMoveOp64.InsertGeneral` por
         // falta de decode dedicado no MESMO espaço `bit21=0`; corrigido interceptando ANTES do
         // fallback EXT/permute/copy, mesma disciplina de `FSCALE_h`. As formas `_sd` (2ª ocorrência)
         // já mediam `❌` honestamente (decode ausente em `decodeVectorFpThreeSameOpcode`, nunca
