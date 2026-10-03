@@ -5,6 +5,7 @@ import dev.vitorsilverio.armjitter.decoder64.DecodeRow.WordDecoder;
 import dev.vitorsilverio.armjitter.ir64.AdvSimdFpOp64;
 import dev.vitorsilverio.armjitter.ir64.AdvSimdIntegerOp64;
 import dev.vitorsilverio.armjitter.ir64.Ir64Op;
+import dev.vitorsilverio.armjitter.ir64.Ir64VectorFpPairwiseOp;
 import dev.vitorsilverio.armjitter.ir64.Ir64VectorFpThreeSameOp;
 import dev.vitorsilverio.armjitter.ir64.Ir64VectorThreeSameOp;
 
@@ -19,9 +20,8 @@ import java.util.List;
 /// Prefixo `01110` = vetorial; `11110` com `bit30=1` = escalar (D-only, sem `Q`). O que não cai
 /// em nenhuma linha segue para EXT/permute/TBL/copy/SHA no chamador.
 ///
-/// `bit31` fica LIVRE (`.`) de propósito: o teste de prefixo do chamador ainda não o checa (bug G8
-/// da E15.9b). Fixá-lo aqui antes disso só trocaria o destino errado da palavra (EXT/copy em vez de
-/// um op desta tabela); a E15.9b corrige o prefixo e passa estas linhas a `0`.
+/// `bit31` é `0` em toda linha: AdvSIMD nunca tem `bit31=1` (E15.9b; o chamador também recusa antes
+/// de chegar aqui, a coluna fixa só deixa o padrão igual ao do ARM ARM).
 ///
 /// Origem de cada família (os achados de encoding estão no `## Resultado` de cada task):
 ///
@@ -31,6 +31,8 @@ import java.util.List;
 ///   forma `_sd` com `opcode_h = 00ooo` (`opcode_sd = 11ooo`). `bits[15:14]=00` fixos: a versão em
 ///   cascata ignorava o `bit14` e aceitava `01ooo` (bug G8 corrigido na E15.9, `0x4e405400` é
 ///   `undefined` no `objdump`). Escalar só para as 9 operações com forma escalar real.
+///   **E15.9b**: as pareadas `FADDP`/`FMAXP`/`FMINP`/`FMAXNMP`/`FMINNMP` `_h` (`U=1`, `a` separa
+///   MAX de MIN), que antes caíam no copy e saíam como `INS`.
 /// - **B19.11 `FEAT_FP8`** — `FCVTN_bh`/`FCVTN_bs` (o `bit22` é a largura de ORIGEM, não um
 ///   `sz`); **B19.11e** `FSCALE_h`.
 /// - **B19.24 `FEAT_FAMINMAX`** — `FAMAX_h` (`U=0`)/`FAMIN_h` (`U=1`).
@@ -66,66 +68,72 @@ final class AdvSimdBit21ZeroRows {
     /// As 53 linhas do piloto. Colunas do padrão: `b31 Q U prefixo a b22 b21 Rm opcode b10 Rn Rd`.
     static final List<DecodeRow<Ir64Op>> ROWS = List.of(
             // RDM — vetorial e escalar, esz H/S
-            row(". . 1 01110 01 0 ..... 10000 1 ..... .....", RDM, rdm(Ir64VectorThreeSameOp.SQRDMLAH)),
-            row(". . 1 01110 10 0 ..... 10000 1 ..... .....", RDM, rdm(Ir64VectorThreeSameOp.SQRDMLAH)),
-            row(". . 1 01110 01 0 ..... 10001 1 ..... .....", RDM, rdm(Ir64VectorThreeSameOp.SQRDMLSH)),
-            row(". . 1 01110 10 0 ..... 10001 1 ..... .....", RDM, rdm(Ir64VectorThreeSameOp.SQRDMLSH)),
-            row(". 1 1 11110 01 0 ..... 10000 1 ..... .....", RDM, rdm(Ir64VectorThreeSameOp.SQRDMLAH)),
-            row(". 1 1 11110 10 0 ..... 10000 1 ..... .....", RDM, rdm(Ir64VectorThreeSameOp.SQRDMLAH)),
-            row(". 1 1 11110 01 0 ..... 10001 1 ..... .....", RDM, rdm(Ir64VectorThreeSameOp.SQRDMLSH)),
-            row(". 1 1 11110 10 0 ..... 10001 1 ..... .....", RDM, rdm(Ir64VectorThreeSameOp.SQRDMLSH)),
+            row("0 . 1 01110 01 0 ..... 10000 1 ..... .....", RDM, rdm(Ir64VectorThreeSameOp.SQRDMLAH)),
+            row("0 . 1 01110 10 0 ..... 10000 1 ..... .....", RDM, rdm(Ir64VectorThreeSameOp.SQRDMLAH)),
+            row("0 . 1 01110 01 0 ..... 10001 1 ..... .....", RDM, rdm(Ir64VectorThreeSameOp.SQRDMLSH)),
+            row("0 . 1 01110 10 0 ..... 10001 1 ..... .....", RDM, rdm(Ir64VectorThreeSameOp.SQRDMLSH)),
+            row("0 1 1 11110 01 0 ..... 10000 1 ..... .....", RDM, rdm(Ir64VectorThreeSameOp.SQRDMLAH)),
+            row("0 1 1 11110 10 0 ..... 10000 1 ..... .....", RDM, rdm(Ir64VectorThreeSameOp.SQRDMLAH)),
+            row("0 1 1 11110 01 0 ..... 10001 1 ..... .....", RDM, rdm(Ir64VectorThreeSameOp.SQRDMLSH)),
+            row("0 1 1 11110 10 0 ..... 10001 1 ..... .....", RDM, rdm(Ir64VectorThreeSameOp.SQRDMLSH)),
             // FP16 three same — vetorial (U, a, opcode 00ooo)
-            row(". . 0 01110 0 1 0 ..... 00010 1 ..... .....", FP16, fp16(Ir64VectorFpThreeSameOp.ADD)),
-            row(". . 0 01110 1 1 0 ..... 00010 1 ..... .....", FP16, fp16(Ir64VectorFpThreeSameOp.SUB)),
-            row(". . 1 01110 1 1 0 ..... 00010 1 ..... .....", FP16, fp16(Ir64VectorFpThreeSameOp.ABD)),
-            row(". . 1 01110 0 1 0 ..... 00111 1 ..... .....", FP16, fp16(Ir64VectorFpThreeSameOp.DIV)),
-            row(". . 0 01110 0 1 0 ..... 00111 1 ..... .....", FP16, fp16(Ir64VectorFpThreeSameOp.RECPS)),
-            row(". . 0 01110 1 1 0 ..... 00111 1 ..... .....", FP16, fp16(Ir64VectorFpThreeSameOp.RSQRTS)),
-            row(". . 1 01110 0 1 0 ..... 00011 1 ..... .....", FP16, fp16(Ir64VectorFpThreeSameOp.MUL)),
-            row(". . 0 01110 0 1 0 ..... 00011 1 ..... .....", FP16, fp16(Ir64VectorFpThreeSameOp.MULX)),
-            row(". . 0 01110 0 1 0 ..... 00110 1 ..... .....", FP16, fp16(Ir64VectorFpThreeSameOp.MAX)),
-            row(". . 0 01110 1 1 0 ..... 00110 1 ..... .....", FP16, fp16(Ir64VectorFpThreeSameOp.MIN)),
-            row(". . 0 01110 0 1 0 ..... 00000 1 ..... .....", FP16, fp16(Ir64VectorFpThreeSameOp.MAXNM)),
-            row(". . 0 01110 1 1 0 ..... 00000 1 ..... .....", FP16, fp16(Ir64VectorFpThreeSameOp.MINNM)),
-            row(". . 0 01110 0 1 0 ..... 00001 1 ..... .....", FP16, fp16(Ir64VectorFpThreeSameOp.MLA)),
-            row(". . 0 01110 1 1 0 ..... 00001 1 ..... .....", FP16, fp16(Ir64VectorFpThreeSameOp.MLS)),
-            row(". . 0 01110 0 1 0 ..... 00100 1 ..... .....", FP16, fp16(Ir64VectorFpThreeSameOp.CMEQ)),
-            row(". . 1 01110 0 1 0 ..... 00100 1 ..... .....", FP16, fp16(Ir64VectorFpThreeSameOp.CMGE)),
-            row(". . 1 01110 1 1 0 ..... 00100 1 ..... .....", FP16, fp16(Ir64VectorFpThreeSameOp.CMGT)),
-            row(". . 1 01110 0 1 0 ..... 00101 1 ..... .....", FP16, fp16(Ir64VectorFpThreeSameOp.FACGE)),
-            row(". . 1 01110 1 1 0 ..... 00101 1 ..... .....", FP16, fp16(Ir64VectorFpThreeSameOp.FACGT)),
+            row("0 . 0 01110 0 1 0 ..... 00010 1 ..... .....", FP16, fp16(Ir64VectorFpThreeSameOp.ADD)),
+            row("0 . 0 01110 1 1 0 ..... 00010 1 ..... .....", FP16, fp16(Ir64VectorFpThreeSameOp.SUB)),
+            row("0 . 1 01110 1 1 0 ..... 00010 1 ..... .....", FP16, fp16(Ir64VectorFpThreeSameOp.ABD)),
+            row("0 . 1 01110 0 1 0 ..... 00111 1 ..... .....", FP16, fp16(Ir64VectorFpThreeSameOp.DIV)),
+            row("0 . 0 01110 0 1 0 ..... 00111 1 ..... .....", FP16, fp16(Ir64VectorFpThreeSameOp.RECPS)),
+            row("0 . 0 01110 1 1 0 ..... 00111 1 ..... .....", FP16, fp16(Ir64VectorFpThreeSameOp.RSQRTS)),
+            row("0 . 1 01110 0 1 0 ..... 00011 1 ..... .....", FP16, fp16(Ir64VectorFpThreeSameOp.MUL)),
+            row("0 . 0 01110 0 1 0 ..... 00011 1 ..... .....", FP16, fp16(Ir64VectorFpThreeSameOp.MULX)),
+            row("0 . 0 01110 0 1 0 ..... 00110 1 ..... .....", FP16, fp16(Ir64VectorFpThreeSameOp.MAX)),
+            row("0 . 0 01110 1 1 0 ..... 00110 1 ..... .....", FP16, fp16(Ir64VectorFpThreeSameOp.MIN)),
+            row("0 . 0 01110 0 1 0 ..... 00000 1 ..... .....", FP16, fp16(Ir64VectorFpThreeSameOp.MAXNM)),
+            row("0 . 0 01110 1 1 0 ..... 00000 1 ..... .....", FP16, fp16(Ir64VectorFpThreeSameOp.MINNM)),
+            row("0 . 0 01110 0 1 0 ..... 00001 1 ..... .....", FP16, fp16(Ir64VectorFpThreeSameOp.MLA)),
+            row("0 . 0 01110 1 1 0 ..... 00001 1 ..... .....", FP16, fp16(Ir64VectorFpThreeSameOp.MLS)),
+            row("0 . 0 01110 0 1 0 ..... 00100 1 ..... .....", FP16, fp16(Ir64VectorFpThreeSameOp.CMEQ)),
+            row("0 . 1 01110 0 1 0 ..... 00100 1 ..... .....", FP16, fp16(Ir64VectorFpThreeSameOp.CMGE)),
+            row("0 . 1 01110 1 1 0 ..... 00100 1 ..... .....", FP16, fp16(Ir64VectorFpThreeSameOp.CMGT)),
+            row("0 . 1 01110 0 1 0 ..... 00101 1 ..... .....", FP16, fp16(Ir64VectorFpThreeSameOp.FACGE)),
+            row("0 . 1 01110 1 1 0 ..... 00101 1 ..... .....", FP16, fp16(Ir64VectorFpThreeSameOp.FACGT)),
+            // FP16 three same pairwise — só vetorial (a escalar mora em "scalar pairwise", bit10=0)
+            row("0 . 1 01110 0 1 0 ..... 00010 1 ..... .....", FP16, fp16Pairwise(Ir64VectorFpPairwiseOp.ADD)),
+            row("0 . 1 01110 0 1 0 ..... 00110 1 ..... .....", FP16, fp16Pairwise(Ir64VectorFpPairwiseOp.MAX)),
+            row("0 . 1 01110 1 1 0 ..... 00110 1 ..... .....", FP16, fp16Pairwise(Ir64VectorFpPairwiseOp.MIN)),
+            row("0 . 1 01110 0 1 0 ..... 00000 1 ..... .....", FP16, fp16Pairwise(Ir64VectorFpPairwiseOp.MAXNM)),
+            row("0 . 1 01110 1 1 0 ..... 00000 1 ..... .....", FP16, fp16Pairwise(Ir64VectorFpPairwiseOp.MINNM)),
             // FP16 three same — escalar (só as operações com forma escalar real)
-            row(". 1 0 11110 0 1 0 ..... 00011 1 ..... .....", FP16, fp16(Ir64VectorFpThreeSameOp.MULX)),
-            row(". 1 1 11110 1 1 0 ..... 00010 1 ..... .....", FP16, fp16(Ir64VectorFpThreeSameOp.ABD)),
-            row(". 1 0 11110 0 1 0 ..... 00111 1 ..... .....", FP16, fp16(Ir64VectorFpThreeSameOp.RECPS)),
-            row(". 1 0 11110 1 1 0 ..... 00111 1 ..... .....", FP16, fp16(Ir64VectorFpThreeSameOp.RSQRTS)),
-            row(". 1 0 11110 0 1 0 ..... 00100 1 ..... .....", FP16, fp16(Ir64VectorFpThreeSameOp.CMEQ)),
-            row(". 1 1 11110 0 1 0 ..... 00100 1 ..... .....", FP16, fp16(Ir64VectorFpThreeSameOp.CMGE)),
-            row(". 1 1 11110 1 1 0 ..... 00100 1 ..... .....", FP16, fp16(Ir64VectorFpThreeSameOp.CMGT)),
-            row(". 1 1 11110 0 1 0 ..... 00101 1 ..... .....", FP16, fp16(Ir64VectorFpThreeSameOp.FACGE)),
-            row(". 1 1 11110 1 1 0 ..... 00101 1 ..... .....", FP16, fp16(Ir64VectorFpThreeSameOp.FACGT)),
+            row("0 1 0 11110 0 1 0 ..... 00011 1 ..... .....", FP16, fp16(Ir64VectorFpThreeSameOp.MULX)),
+            row("0 1 1 11110 1 1 0 ..... 00010 1 ..... .....", FP16, fp16(Ir64VectorFpThreeSameOp.ABD)),
+            row("0 1 0 11110 0 1 0 ..... 00111 1 ..... .....", FP16, fp16(Ir64VectorFpThreeSameOp.RECPS)),
+            row("0 1 0 11110 1 1 0 ..... 00111 1 ..... .....", FP16, fp16(Ir64VectorFpThreeSameOp.RSQRTS)),
+            row("0 1 0 11110 0 1 0 ..... 00100 1 ..... .....", FP16, fp16(Ir64VectorFpThreeSameOp.CMEQ)),
+            row("0 1 1 11110 0 1 0 ..... 00100 1 ..... .....", FP16, fp16(Ir64VectorFpThreeSameOp.CMGE)),
+            row("0 1 1 11110 1 1 0 ..... 00100 1 ..... .....", FP16, fp16(Ir64VectorFpThreeSameOp.CMGT)),
+            row("0 1 1 11110 0 1 0 ..... 00101 1 ..... .....", FP16, fp16(Ir64VectorFpThreeSameOp.FACGE)),
+            row("0 1 1 11110 1 1 0 ..... 00101 1 ..... .....", FP16, fp16(Ir64VectorFpThreeSameOp.FACGT)),
             // FP8: FCVTN_bh/_bs (b22 = largura de origem) e FSCALE_h
-            row(". . 0 01110 0 . 0 ..... 11110 1 ..... .....", FP8, AdvSimdBit21ZeroRows::convertToFp8),
-            row(". . 1 01110 1 1 0 ..... 00111 1 ..... .....", FP8, AdvSimdBit21ZeroRows::scaleHalf),
+            row("0 . 0 01110 0 . 0 ..... 11110 1 ..... .....", FP8, AdvSimdBit21ZeroRows::convertToFp8),
+            row("0 . 1 01110 1 1 0 ..... 00111 1 ..... .....", FP8, AdvSimdBit21ZeroRows::scaleHalf),
             // FAMINMAX: FAMAX_h (U=0) / FAMIN_h (U=1)
-            row(". . 0 01110 1 1 0 ..... 00011 1 ..... .....", FAMINMAX, absoluteMaxMin(true)),
-            row(". . 1 01110 1 1 0 ..... 00011 1 ..... .....", FAMINMAX, absoluteMaxMin(false)),
+            row("0 . 0 01110 1 1 0 ..... 00011 1 ..... .....", FAMINMAX, absoluteMaxMin(true)),
+            row("0 . 1 01110 1 1 0 ..... 00011 1 ..... .....", FAMINMAX, absoluteMaxMin(false)),
             // FP8FMA: FMLAL_hb_v (idxn = bit30) / FMLALL_sb_v (idxn = bit30:bit22)
-            row(". . 0 01110 1 1 0 ..... 11111 1 ..... .....", FP8FMA, AdvSimdBit21ZeroRows::multiplyAddHalf),
-            row(". . 0 01110 0 . 0 ..... 11000 1 ..... .....", FP8FMA, AdvSimdBit21ZeroRows::multiplyAddSingle),
+            row("0 . 0 01110 1 1 0 ..... 11111 1 ..... .....", FP8FMA, AdvSimdBit21ZeroRows::multiplyAddHalf),
+            row("0 . 0 01110 0 . 0 ..... 11000 1 ..... .....", FP8FMA, AdvSimdBit21ZeroRows::multiplyAddSingle),
             // FP8DOT2 / FP8DOT4: FDOT_hb_v (b22=1) / FDOT_sb_v (b22=0)
-            row(". . 0 01110 0 1 0 ..... 11111 1 ..... .....", FP8DOT2, dot(false)),
-            row(". . 0 01110 0 0 0 ..... 11111 1 ..... .....", FP8DOT4, dot(true)),
+            row("0 . 0 01110 0 1 0 ..... 11111 1 ..... .....", FP8DOT2, dot(false)),
+            row("0 . 0 01110 0 0 0 ..... 11111 1 ..... .....", FP8DOT4, dot(true)),
             // FCMA: esz 01 / 10 / 11 (este só com Q=1)
-            row(". . 1 01110 01 0 ..... 110.. 1 ..... .....", FCMA, AdvSimdBit21ZeroRows::complexMultiplyAccumulate),
-            row(". . 1 01110 10 0 ..... 110.. 1 ..... .....", FCMA, AdvSimdBit21ZeroRows::complexMultiplyAccumulate),
-            row(". 1 1 01110 11 0 ..... 110.. 1 ..... .....", FCMA, AdvSimdBit21ZeroRows::complexMultiplyAccumulate),
-            row(". . 1 01110 01 0 ..... 11100 1 ..... .....", FCMA, complexAdd(ROTATION_UNIT_DEGREES)),
-            row(". . 1 01110 10 0 ..... 11100 1 ..... .....", FCMA, complexAdd(ROTATION_UNIT_DEGREES)),
-            row(". 1 1 01110 11 0 ..... 11100 1 ..... .....", FCMA, complexAdd(ROTATION_UNIT_DEGREES)),
-            row(". . 1 01110 01 0 ..... 11110 1 ..... .....", FCMA, complexAdd(FCADD_270_DEGREES)),
-            row(". . 1 01110 10 0 ..... 11110 1 ..... .....", FCMA, complexAdd(FCADD_270_DEGREES)),
-            row(". 1 1 01110 11 0 ..... 11110 1 ..... .....", FCMA, complexAdd(FCADD_270_DEGREES))
+            row("0 . 1 01110 01 0 ..... 110.. 1 ..... .....", FCMA, AdvSimdBit21ZeroRows::complexMultiplyAccumulate),
+            row("0 . 1 01110 10 0 ..... 110.. 1 ..... .....", FCMA, AdvSimdBit21ZeroRows::complexMultiplyAccumulate),
+            row("0 1 1 01110 11 0 ..... 110.. 1 ..... .....", FCMA, AdvSimdBit21ZeroRows::complexMultiplyAccumulate),
+            row("0 . 1 01110 01 0 ..... 11100 1 ..... .....", FCMA, complexAdd(ROTATION_UNIT_DEGREES)),
+            row("0 . 1 01110 10 0 ..... 11100 1 ..... .....", FCMA, complexAdd(ROTATION_UNIT_DEGREES)),
+            row("0 1 1 01110 11 0 ..... 11100 1 ..... .....", FCMA, complexAdd(ROTATION_UNIT_DEGREES)),
+            row("0 . 1 01110 01 0 ..... 11110 1 ..... .....", FCMA, complexAdd(FCADD_270_DEGREES)),
+            row("0 . 1 01110 10 0 ..... 11110 1 ..... .....", FCMA, complexAdd(FCADD_270_DEGREES)),
+            row("0 1 1 01110 11 0 ..... 11110 1 ..... .....", FCMA, complexAdd(FCADD_270_DEGREES))
     );
 
     private AdvSimdBit21ZeroRows() {
@@ -142,6 +150,11 @@ final class AdvSimdBit21ZeroRows {
 
     private static WordDecoder<Ir64Op> fp16(Ir64VectorFpThreeSameOp op) {
         return word -> new AdvSimdFpOp64.FpArithmeticThreeSame(op, scalar(word), q(word), ESZ_HALFWORD,
+                rd(word), rn(word), rm(word));
+    }
+
+    private static WordDecoder<Ir64Op> fp16Pairwise(Ir64VectorFpPairwiseOp op) {
+        return word -> new AdvSimdFpOp64.FpArithmeticPairwise(op, false, q(word), ESZ_HALFWORD,
                 rd(word), rn(word), rm(word));
     }
 

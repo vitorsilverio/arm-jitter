@@ -70,18 +70,18 @@ final class Aarch64Fp16VersionCurationTest {
         }
     }
 
-    // ─────────────────────────── contagem: 96 entradas (88 FP16 + 8 FHM) ───────────────────────
+    // ──────── contagem: 115 entradas (88 FP16 da B19.5.2 + 19 FP16 da E15.9b + 8 FHM) ────────
 
     @Test
-    void occurrenceMap_has96Entries_88Fp16_and_8Fhm() {
+    void occurrenceMap_has115Entries_107Fp16_and_8Fhm() {
         Map<String, Aarch64Feature> map = IsaCoverageReport.AARCH64_VERSION_REQUIREMENTS_BY_OCCURRENCE;
-        assertEquals(96, map.size(), "88 FEAT_FP16 + 8 FEAT_FHM");
+        assertEquals(115, map.size(), "107 FEAT_FP16 + 8 FEAT_FHM");
 
         long fp16 = map.values().stream().filter(f -> f == Aarch64Feature.FP16).count();
         long fhm = map.values().stream().filter(f -> f == Aarch64Feature.FP16_FUSED_MULTIPLY_ADD_LONG).count();
-        assertEquals(88, fp16);
+        assertEquals(107, fp16, "88 da B19.5.2 + 19 da E15.9b");
         assertEquals(8, fhm);
-        assertEquals(96, fp16 + fhm, "nenhuma outra feature entra nesta curadoria");
+        assertEquals(115, fp16 + fhm, "nenhuma outra feature entra nesta curadoria");
 
         for (String key : map.keySet()) {
             assertTrue(key.matches("[A-Za-z0-9_]+#\\d+"), "chave malformada: " + key);

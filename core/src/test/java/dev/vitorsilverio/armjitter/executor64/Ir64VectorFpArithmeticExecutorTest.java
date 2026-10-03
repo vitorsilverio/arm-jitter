@@ -870,6 +870,43 @@ class Ir64VectorFpArithmeticExecutorTest {
     }
 
     @Test
+    void halfPrecisionVectorPairwiseConcatenatesRnAndRm() {
+        // E15.9b: `FADDP`/`FMAXP`/`FMAXNMP` `_v` de meia precisão — pares adjacentes de `Rn:Rm`
+        // (ARM ARM `FADDP (vector)`: a metade baixa do resultado vem de `Rn`, a alta de `Rm`).
+        Aarch64Core core = newCore();
+        Aarch64FpRegisters fp = core.fp();
+        float[] rn = {1.0f, 2.0f, -3.5f, 0.5f, 8.0f, -8.0f, 1.5f, 1.25f};
+        float[] rm = {10.0f, 0.25f, -1.0f, -2.0f, 4.0f, 4.5f, Float.NaN, 6.0f};
+        for (int lane = 0; lane < rn.length; lane++) {
+            setHalf(fp, 1, lane, rn[lane]);
+            setHalf(fp, 2, lane, rm[lane]);
+        }
+        fp.setQ(0, -1L, -1L);
+
+        // FADDP v0.4h, v1.4h, v2.4h — 64 bits: 2 pares de cada fonte, metade alta zerada.
+        EXECUTOR.executeOp(core, new AdvSimdFpOp64.FpArithmeticPairwise(
+                Ir64VectorFpPairwiseOp.ADD, false, false, 1, 0, 1, 2));
+        assertEquals(3.0f, readHalf(fp, 0, 0));
+        assertEquals(-3.0f, readHalf(fp, 0, 1));
+        assertEquals(10.25f, readHalf(fp, 0, 2));
+        assertEquals(-3.0f, readHalf(fp, 0, 3));
+        assertEquals(0L, fp.high64(0), "Q=0 zera os 64 bits altos");
+
+        // FMAXP v0.8h, v1.8h, v2.8h — o par (NaN, 6.0) propaga NaN.
+        EXECUTOR.executeOp(core, new AdvSimdFpOp64.FpArithmeticPairwise(
+                Ir64VectorFpPairwiseOp.MAX, false, true, 1, 0, 1, 2));
+        float[] max = {2.0f, 0.5f, 8.0f, 1.5f, 10.0f, -1.0f, 4.5f, Float.NaN};
+        for (int lane = 0; lane < max.length; lane++) {
+            assertEquals(max[lane], readHalf(fp, 0, lane), "FMAXP lane " + lane);
+        }
+
+        // FMAXNMP v0.8h — o mesmo par devolve o número.
+        EXECUTOR.executeOp(core, new AdvSimdFpOp64.FpArithmeticPairwise(
+                Ir64VectorFpPairwiseOp.MAXNM, false, true, 1, 0, 1, 2));
+        assertEquals(6.0f, readHalf(fp, 0, 7), "FMAXNMP ignora NaN de um operando");
+    }
+
+    @Test
     void halfPrecisionAcrossLanesReadsQAndDistinguishesMaxFromMaxNm() {
         Aarch64Core core = newCore();
         Aarch64FpRegisters fp = core.fp();

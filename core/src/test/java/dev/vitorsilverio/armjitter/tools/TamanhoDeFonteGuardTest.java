@@ -48,9 +48,11 @@ class TamanhoDeFonteGuardTest {
     /// ficaram `public` e os que não tinham Javadoc ganharam uma linha (G7):
     /// `Ir64VectorArithmeticExecutor` +5 e `Ir64VectorFpArithmeticExecutor` +4. Na E15.7 saíram
     /// `AsmBlockCompiler` (2580) e `AsmRuntimeHelpers` (1161), divididos por família; na E15.8,
-    /// `IrSystemExecutor` (2516), com o MVE indo para executores por família.
+    /// `IrSystemExecutor` (2516), com o MVE indo para executores por família. Na E15.9b
+    /// `Aarch64Decoder` +18 (checagens G8 de `bit31` e do copy, com constantes nomeadas; o usuário
+    /// escolheu subir na medida — o arquivo encolhe nas E15.10–E15.15).
     private static final Map<String, Integer> EXCEPTIONS = Map.ofEntries(
-            entry("decoder64/Aarch64Decoder.java", 7377),
+            entry("decoder64/Aarch64Decoder.java", 7395),
             entry("advsimd/AdvSimdLanes.java", 3677),
             entry("core64/Aarch64Core.java", 1848),
             entry("ir/StandardIrBuilder.java", 1352),

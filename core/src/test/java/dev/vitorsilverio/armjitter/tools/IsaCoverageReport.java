@@ -463,7 +463,7 @@ public final class IsaCoverageReport {
     }
 
     static {
-        // ── B19.5.2 — `FEAT_FP16` (aritmética de meia precisão), 88 linhas ──────────────────────
+        // ── B19.5.2 — `FEAT_FP16` (aritmética de meia precisão), 88 linhas (+19 da E15.9b) ─────────
         // Ver a tabela "As 96 linhas" da task; a ordem/agrupamento aqui espelha os templates de
         // `a64.decode`. Todas occ=1 salvo as 4 de `@fcvt_fixed_h` (occ=3).
         // @rrr_h — three-same FP escalar (bit21=0)
@@ -476,6 +476,14 @@ public final class IsaCoverageReport {
                 "FRECPE_s", "FRECPX_s", "FRSQRTE_s");
         // @qrrr_h — three-same FP vetorial (bit21=0)
         requireFirst(Aarch64Feature.FP16, "FADD_v", "FSUB_v", "FMAX_v", "FMIN_v", "FCMEQ_v");
+        // E15.9b: as outras 14 three-same `_h` e as 5 pareadas `_h` ficaram fora da B19.5.2 porque já
+        // mediam `✅` — falso: sem `FEAT_FP16` a palavra caía no "AdvSIMD copy" e saía como `INS`.
+        // Com o copy conferindo `bits[23:22]`, elas recusam antes da ARMv8.2-A, como as 5 acima.
+        requireFirst(Aarch64Feature.FP16, "FDIV_v", "FMUL_v", "FMAXNM_v", "FMINNM_v", "FMULX_v",
+                "FMLA_v", "FMLS_v", "FCMGE_v", "FCMGT_v", "FACGE_v", "FACGT_v", "FABD_v", "FRECPS_v",
+                "FRSQRTS_v");
+        // @qrrr_h — three-same pairwise FP vetorial (E15.9b)
+        requireFirst(Aarch64Feature.FP16, "FADDP_v", "FMAXP_v", "FMINP_v", "FMAXNMP_v", "FMINNMP_v");
         // @qrr_h — reduções across-lanes de meia precisão (U=0; hoje escondidas pela TSV)
         requireFirst(Aarch64Feature.FP16, "FMAXNMV_h", "FMINNMV_h", "FMAXV_h", "FMINV_h");
         // @qrr_h — two-register-miscellaneous vetorial (unário)

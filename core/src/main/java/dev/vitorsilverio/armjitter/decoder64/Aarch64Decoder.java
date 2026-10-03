@@ -1286,6 +1286,10 @@ public final class Aarch64Decoder {
     private static final int ADVSIMD_INT_PREFIX_VECTOR_PATTERN = 0b0_1110;
     private static final int ADVSIMD_INT_PREFIX_SCALAR_PATTERN = 0b1_1110;
     private static final int ADVSIMD_INT_SCALAR_BIT30_SHIFT = 30;
+    // ── E15.9b: `bit31` (o bit alto de `op0` em "Data Processing — Scalar FP and Advanced SIMD")
+    // ── é `0` em TODA classe AdvSIMD (`op0 = 0xx0`/`01x1`); com `bit31=1` estes prefixos são cripto
+    // ── (`11001110`, já desviado antes por `CRYPTO_SHA3_PREFIX_PATTERN`) ou não alocados.
+    private static final int ADVSIMD_INT_BIT31_SHIFT = 31;
     private static final int ADVSIMD_INT_Q_SHIFT = 30;
     private static final int ADVSIMD_INT_U_SHIFT = 29;
     private static final int ADVSIMD_INT_BIT21_SHIFT = 21;
@@ -1539,6 +1543,9 @@ public final class Aarch64Decoder {
     private static final int ADVSIMD_COPY_INS_GENERAL = 0b0011;
     private static final int ADVSIMD_COPY_SMOV = 0b0101;
     private static final int ADVSIMD_COPY_UMOV = 0b0111;
+    /// E15.9b: "AdvSIMD copy" é `0 Q op 01110000 imm5 0 imm4 1` — `bits[23:22]` (o campo `size` do
+    /// resto do espaço) fixos em `00`; qualquer outro valor que chegue ao copy é reservado (G8).
+    private static final int ADVSIMD_COPY_BITS23_22_PATTERN = 0b00;
 
     /// B19.8 (`FEAT_LUT`): `LUTI2`/`LUTI4` vivem no MESMO espaço `bit21=0`/`u=0`/`bit10=0`/`bit15=0`
     /// de {@link #decodeAdvancedSimdExtractPermuteTable} que `EXT`(`u=1`)/permute(`bit11=1`)/`TBL`
@@ -3961,6 +3968,12 @@ public final class Aarch64Decoder {
     /// "three same"/"three same pairwise" (`1`) de "three different"/"across lanes"/"two-register
     /// miscellaneous" (`0`, sub-roteado por `Rm`, ver as constantes `ADVSIMD_INT_RM_*`).
     private Ir64Op decodeAdvancedSimdInteger(int word, long address) {
+        // E15.9b: um ponto só, antes de qualquer desvio (shift/indexed, `bit21=0`/`1`) — toda forma
+        // AdvSIMD tem `bit31=0`; sem isto metade do espaço `bit31=1` saía como a instrução de
+        // `bit31=0` correspondente (G8).
+        if (((word >>> ADVSIMD_INT_BIT31_SHIFT) & 1) != 0) {
+            throw unsupported(word, address);
+        }
         int prefix = (word >>> ADVSIMD_INT_PREFIX_SHIFT) & ADVSIMD_INT_PREFIX_MASK;
         // B8.8: "Advanced SIMD shift by immediate" tem prefixo PRÓPRIO (bits[28:24], um bit a mais
         // que o das tabelas acima: `01111` vetorial/`11111` escalar, contra `01110`/`11110` das
@@ -4609,6 +4622,11 @@ public final class Aarch64Decoder {
     }
 
     private Ir64Op decodeAdvancedSimdCopy(int word, long address, boolean q) {
+        if (((word >>> ADVSIMD_INT_SIZE_SHIFT) & ADVSIMD_INT_SIZE_MASK) != ADVSIMD_COPY_BITS23_22_PATTERN) {
+            // E15.9b: antes lia `imm5` sem olhar estes bits — toda palavra `bit21=0`/`bit10=1`
+            // que nenhuma forma anterior reclamava virava `INS`/`DUP`/`UMOV` com campos sem sentido.
+            return null;
+        }
         boolean u = ((word >>> ADVSIMD_INT_U_SHIFT) & 1) != 0;
         int imm5 = (word >>> ADVSIMD_INT_RM_SHIFT) & ADVSIMD_INT_RM_MASK;
         int rn = (word >>> RN_SHIFT) & REGISTER_FIELD_MASK;
