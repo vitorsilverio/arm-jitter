@@ -336,7 +336,7 @@ public final class Ir64IntegerExecutor {
     }
 
     /// `REV16` de A64 (B8.2): inverte a ordem dos BYTES dentro de cada halfword de 16 bits do
-    /// registrador — diferente do `REV16` de 32 bits do ARM32 ({@code AsmRuntimeHelpers}), que só
+    /// registrador — diferente do `REV16` de 32 bits do ARM32 ({@code AsmIntegerHelpers}), que só
     /// tem 1 halfword.
     private static long reverseHalfwordBytes(long value, boolean wide) {
         int halfwordCount = wide ? Long.BYTES / Short.BYTES : Integer.BYTES / Short.BYTES;

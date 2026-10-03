@@ -16,7 +16,7 @@ import dev.vitorsilverio.armjitter.support.TestAddressSpace;
 import org.junit.jupiter.api.Test;
 
 /// Emissão nativa ASM de `LDR`/`STR`/`LDRH`/`STRH` sob `ArmFeature.UNALIGNED_ACCESS` (task B1.7):
-/// o `AsmBlockCompiler` escolhe os helpers "Crossed" de {@code AsmRuntimeHelpers} em vez dos
+/// o `AsmBlockCompiler` escolhe os helpers "Crossed" de {@code AsmMemoryHelpers} em vez dos
 /// legados de alinha+rotaciona quando a feature está ligada e o destino não é o PC — prova de
 /// equivalência (invariante G1) contra o interpretado ARMv6K, 14 condições × 16 combinações de
 /// NZCV, espelhando a técnica de {@code ArmV6ExtendReverseNativeEquivalenceTest}.

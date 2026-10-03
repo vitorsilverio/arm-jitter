@@ -9,7 +9,7 @@ public enum Ir64OneSourceOp {
     RBIT,
     /// `REV16` (`ARM DDI 0487 C6.2.241`): inverte a ordem dos BYTES dentro de cada halfword de
     /// 16 bits do registrador (2 halfwords em `W`, 4 em `X`) — diferente do `REV16` de 32 bits do
-    /// ARM32 (`AsmRuntimeHelpers#reverseHalfwords`), que só tem 1 halfword para inverter.
+    /// ARM32 (`AsmIntegerHelpers#reverseHalfwords`), que só tem 1 halfword para inverter.
     REV16,
     /// `REV`(`W`)/`REV32`(`X`) — MESMO campo de opcode do encoding (`ARM DDI 0487 C6.2.239/238`):
     /// inverte a ordem dos BYTES dentro de cada palavra de 32 bits, mantendo a ORDEM das

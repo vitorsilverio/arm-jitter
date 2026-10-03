@@ -22,7 +22,7 @@ import org.objectweb.asm.Opcodes;
 /// budget = context.chainCycleBudget(); gen0 = context.generation()
 /// cycles = M0.execute0(core)                       // head sempre executa (S3)
 /// guard:  cycles >= budget?            -> return   // mesma ordem do while do chain loop
-///         sleep/interrupt?             -> return   // AsmRuntimeHelpers.superblockKeepRunning
+///         sleep/interrupt?             -> return   // AsmFlagHelpers.superblockKeepRunning
 ///         context.generation() != gen0 -> return   // SMC durante a corrente
 ///         core.mode()                              // re-banking por iteração (S2)
 ///         pc = core.programCounter()
@@ -41,7 +41,7 @@ public final class AsmSuperblockCompiler {
     private static final String LOOP_SUPERBLOCK = "dev/vitorsilverio/armjitter/jit/LoopSuperblock";
     private static final String CONTEXT = "dev/vitorsilverio/armjitter/codegen/jvm/SuperblockContext";
     private static final String CONTEXT_REF = "L" + CONTEXT + ";";
-    private static final String HELPERS = "dev/vitorsilverio/armjitter/codegen/jvm/AsmRuntimeHelpers";
+    private static final String HELPERS = "dev/vitorsilverio/armjitter/codegen/jvm/AsmFlagHelpers";
     private static final String CPU_MODE_REF = "Ldev/vitorsilverio/armjitter/core/CpuMode;";
     private static final String EXECUTE_IMPL = "execute0";
     private static final String MEMBER_DESCRIPTOR = "(" + CORE_REF + ")I";

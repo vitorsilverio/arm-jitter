@@ -5,7 +5,7 @@ import dev.vitorsilverio.armjitter.executor64.Ir64BlockExecutor;
 import dev.vitorsilverio.armjitter.ir64.Ir64Op;
 
 /// Alvo de `INVOKESTATIC` do bytecode gerado por {@code Ir64BlockCompiler} — espelho estrutural
-/// (bem mais enxuto) de {@link dev.vitorsilverio.armjitter.codegen.jvm.AsmRuntimeHelpers} (32
+/// (bem mais enxuto) dos helpers de 32 bits (`codegen.jvm.Asm*Helpers`, uma classe por família desde a E15.7; 32
 /// bits), introduzido na task B6.4 (PR1, decisão D-ASM).
 ///
 /// Decisão explícita (D-ASM da spec): em vez de reimplementar a aritmética de `Alu64`/

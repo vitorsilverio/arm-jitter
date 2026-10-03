@@ -29,6 +29,7 @@ Título, dependências e status de cada task da trilha. Quando o status diz "ver
 | [E15.5](e15.5-irop-execute.md) | 32 bits: `IrOp#execute` no lugar dos dois `switch` de 189 casos de `IrBlockExecutor`; gate de throughput interpretado do gbaemu ≥ −1% | E15.3 | ✅ (2026-10-02) — ver **Resultado** na task |
 | [E15.6](e15.6-regmask-nos-records.md) | `regUse`/`regDef` nos records; `DeadCodeEliminationPass` sem `switch` (288 → 69 linhas) | E15.5 | ✅ (2026-10-02) — ver **Resultado** na task |
 | [E15.6b](e15.6b-dce-gpr-nao-declarados.md) | 🆕 DCE: ~39 records (MOVT, CRC32, NEON/MVE load/store, `SMLALxy`...) leem GPR sem declarar `regUse()` — a DCE pode apagar a escrita anterior (corrupção só no JIT) | E15.6 | ✅ 2026-10-02 — ver **Resultado** na task |
+| [E15.7](e15.7-asm-emissores-por-familia.md) | Registro de emissores ASM 32 bits (`record` → emissor + predicado + acessos + spill); `AsmNativePolicy` derivada; `AsmBlockCompiler` (2580) e `AsmRuntimeHelpers` (1161) divididos por família | E15.6b | ✅ 2026-10-03 — ver **Resultado** na task |
 | [E16](e16-a64-eret-em-el0-derruba-o-host.md) | 🆕 A64: `ERET` executado em `EL0` lança `IllegalArgumentException` no host em vez de entrar na exceção de instrução indefinida (achado da E15.1, reproduzido via `step`) | — | ⬜ |
 
 Legenda: ⬜ pendente · 🟡 em andamento · ✅ concluída

@@ -77,6 +77,22 @@ Próxima versão: **`2.0.0`** — o refactor estrutural (épico `E15`) quebra no
   | `MveIntegerOp` (⊂ `MveOp`) | `WideShiftOperation` · `MveWideShift` → `WideShift` · `MveVector2Op` → `Vector2Op` · `MveVector2OpWidening` → `Vector2OpWidening` · `MveVectorCarry` → `VectorCarry` · `MveVectorComplexAdd` → `VectorComplexAdd` · `MveVectorAbsAccumulate` → `VectorAbsAccumulate` · `MveVectorShiftWidenInterleaved` → `VectorShiftWidenInterleaved` · `MveVectorNarrowInterleaved` → `VectorNarrowInterleaved` · `MveVectorDualMultiplyAddHigh` → `VectorDualMultiplyAddHigh` · `MveVectorDoublingWideningMultiply` → `VectorDoublingWideningMultiply` · `MveVectorScalar` → `VectorScalar` · `MveVectorScalarWidening` → `VectorScalarWidening` · `MveVectorScalarSpecial` → `VectorScalarSpecial` · `MveVectorShiftImmediate` → `VectorShiftImmediate` · `MveVectorShiftWidenImmediateInterleaved` → `VectorShiftWidenImmediateInterleaved` · `MveVectorShiftNarrowImmediateInterleaved` → `VectorShiftNarrowImmediateInterleaved` · `MveVectorShiftLeftCarry` → `VectorShiftLeftCarry` · `MveVectorUnary` → `VectorUnary` |
   | `MveFpOp` (⊂ `MveOp`) | `MveVectorFpAbsAccumulate` → `VectorFpAbsAccumulate` · `MveVectorFpConvertPrecision` → `VectorFpConvertPrecision` · `MveVectorFpComplexMultiply` → `VectorFpComplexMultiply` · `MveVectorFpTwoOp` → `VectorFpTwoOp` · `MveVectorFpComplexAdd` → `VectorFpComplexAdd` · `MveVectorFpComplexMultiplyAccumulate` → `VectorFpComplexMultiplyAccumulate` · `MveVectorFpScalar` → `VectorFpScalar` · `MveVectorFpScalarFma` → `VectorFpScalarFma` · `MveVectorFpConvert` → `VectorFpConvert` · `MveVectorFpConvertFixed` → `VectorFpConvertFixed` · `MveVectorFpUnary` → `VectorFpUnary` |
   | `MveReductionOp` (⊂ `MveOp`) | `MveVectorAddAcrossVector` → `VectorAddAcrossVector` · `MveVectorAddAcrossVectorLong` → `VectorAddAcrossVectorLong` · `MveVectorAbsoluteDifferenceAccumulate` → `VectorAbsoluteDifferenceAccumulate` · `MveVectorDualAccumulate` → `VectorDualAccumulate` · `MveVectorDualAccumulateLong` → `VectorDualAccumulateLong` · `MveVectorRoundingDualAccumulateHigh` → `VectorRoundingDualAccumulateHigh` · `MveVectorMinMaxAcrossVector` → `VectorMinMaxAcrossVector` · `MveVectorFpMinMaxAcrossVector` → `VectorFpMinMaxAcrossVector` |
+- **`AsmRuntimeHelpers` dividida por família** (`E15.7`): a classe pública de helpers chamados pelo bytecode ASM de 32 bits
+  (1161 linhas) deixa de existir. Os métodos mantêm nome, assinatura e semântica e passam para cinco classes públicas do
+  mesmo pacote (`codegen.jvm`), por seção:
+
+  | Classe nova | Seções de `AsmRuntimeHelpers` |
+  |---|---|
+  | `AsmFlagHelpers` | condição (`evalCond`, `condXx`, `superblockKeepRunning`) · flags ALU (`updateXxxFlags`) · shifts (`doLsl`/... e `doLslS`/...) · operando shifted-register (`shiftedOperand`, `shiftedOperandCarry`) |
+  | `AsmMemoryHelpers` | memória (`loadXxx`/`storeXxx`, `*Crossed`, BE8) · LDM/STM (`executeMultipleTransfer`; `executePush`/`executePop` saíram — nenhum emissor os chamava desde que PUSH/POP são desenrolados inline) · exclusivos (`loadExclusive`, `markExclusive`, `exclusiveMonitorCovers`, `clearExclusiveMonitor`) |
+  | `AsmIntegerHelpers` | ARMv5TE (`saturating`, `dspXxx`) · ARMv6 (`extendByte16`, `reverseHalfwords`, `reverseSignedHalfword`, `parallelAlu`, `sel`, `saturate`, `absDiffSum`) |
+  | `AsmSystemHelpers` | branches (`branchExchange`, `loadToPc`, `loadToPcArm4`, `loadToPcArm5`) · PSR · SWI · coprocessador · undefined |
+  | `AsmVfpHelpers` | VFP (`packDoubleWords`, `vfpAluCold`, `executeVfpXxx`) |
+- **`AsmNativePolicy` derivada do registro de emissores** (`E15.7`): o `switch` de 189 casos deu lugar a um registro
+  `record` → emissor (+ predicado, contagem de acessos ao register cache, spill), declarado por família
+  (`AsmAluEmitter`/`AsmIntegerEmitter`/`AsmMemoryEmitter`/`AsmControlEmitter`/`AsmVfpEmitter`, package-private). Política e
+  compilador não podem mais divergir; `supports(IrOp)`, `supports(IrBlock)` e `supportedAluOpcodes()` mantêm assinatura e
+  resultado (o bytecode gerado pelo `AsmBlockCompiler` é byte a byte o mesmo).
 
 ### Corrigido
 - **`DeadCodeEliminationPass` apagava escritas de registrador ainda lidas** (`E15.6b`, só no JIT de 32 bits — ASM e
