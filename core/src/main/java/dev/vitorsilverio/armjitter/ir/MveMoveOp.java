@@ -42,7 +42,7 @@ public sealed interface MveMoveOp extends MveOp permits MveMoveOp.LoadStore,
             /// Condição necessária para executar.
             Condition condition) implements MveMoveOp {
         @Override public int kind() { return Kind.MVE_LOAD_STORE; }
-        @Override public boolean execute(IrBlockExecutor executor, ArmCore core, int blockEndPc) { return executor.systemExecutor().executeMveLoadStore(core, this); }
+        @Override public boolean execute(IrBlockExecutor executor, ArmCore core, int blockEndPc) { return executor.mveMoveExecutor().executeMveLoadStore(core, this); }
         @Override public int regUse() { return (1 << rn) | GprMask.MVE_TAIL_PREDICATION; }
         @Override public int regDef() { return writeback ? (1 << rn) : 0; }
     }
@@ -94,7 +94,7 @@ public sealed interface MveMoveOp extends MveOp permits MveMoveOp.LoadStore,
             /// Condição necessária para executar.
             Condition condition) implements MveMoveOp {
         @Override public int kind() { return Kind.MVE_WIDENING_LOAD_STORE; }
-        @Override public boolean execute(IrBlockExecutor executor, ArmCore core, int blockEndPc) { return executor.systemExecutor().executeMveWideningLoadStore(core, this); }
+        @Override public boolean execute(IrBlockExecutor executor, ArmCore core, int blockEndPc) { return executor.mveMoveExecutor().executeMveWideningLoadStore(core, this); }
         @Override public int regUse() { return (1 << rn) | GprMask.MVE_TAIL_PREDICATION; }
         @Override public int regDef() { return writeback ? (1 << rn) : 0; }
     }
@@ -132,7 +132,7 @@ public sealed interface MveMoveOp extends MveOp permits MveMoveOp.LoadStore,
             /// Condição necessária para executar.
             Condition condition) implements MveMoveOp {
         @Override public int kind() { return Kind.MVE_GATHER_SCATTER_OFFSET; }
-        @Override public boolean execute(IrBlockExecutor executor, ArmCore core, int blockEndPc) { return executor.systemExecutor().executeMveGatherScatterOffset(core, this); }
+        @Override public boolean execute(IrBlockExecutor executor, ArmCore core, int blockEndPc) { return executor.mveMoveExecutor().executeMveGatherScatterOffset(core, this); }
         @Override public int regUse() { return (1 << rn) | GprMask.MVE_TAIL_PREDICATION; }
     }
 
@@ -163,14 +163,14 @@ public sealed interface MveMoveOp extends MveOp permits MveMoveOp.LoadStore,
             /// Condição necessária para executar.
             Condition condition) implements MveMoveOp {
         @Override public int kind() { return Kind.MVE_GATHER_SCATTER_IMMEDIATE; }
-        @Override public boolean execute(IrBlockExecutor executor, ArmCore core, int blockEndPc) { return executor.systemExecutor().executeMveGatherScatterImmediate(core, this); }
+        @Override public boolean execute(IrBlockExecutor executor, ArmCore core, int blockEndPc) { return executor.mveMoveExecutor().executeMveGatherScatterImmediate(core, this); }
     }
 
     /// `VLD2`/`VLD4`/`VST2`/`VST4` (perfil M, B16.5, MVE/Helium): desentrelaçamento/entrelaçamento
     /// de um grupo de {@link #groupSize} registradores `Q` consecutivos a partir de `Qd`, em 4
     /// "beats" de 32 bits cada (verbatim de `DO_VLD2*`/`DO_VLD4*`/`DO_VST2*`/`DO_VST4*`,
     /// `target/arm/tcg/mve_helper.c` — tabelas `off[]` por {@link #pat} transcritas em
-    /// `IrSystemExecutor`). **Beatwise mas NÃO predicado** (comentário literal do QEMU real): só
+    /// `IrMveMoveExecutor`). **Beatwise mas NÃO predicado** (comentário literal do QEMU real): só
     /// `eciMask` gate cada beat, `elementMask`/`VPT` nunca é consultado — por isso usa
     /// {@link MvePredicationOp.AdvanceEci} (não {@link MvePredicationOp.AdvanceVpt}) como gancho pós-instrução, já que
     /// `mve_update_and_store_eci` NUNCA toca `VPR.MASK01`/`MASK23`, ao contrário de
@@ -198,7 +198,7 @@ public sealed interface MveMoveOp extends MveOp permits MveMoveOp.LoadStore,
             /// Condição necessária para executar.
             Condition condition) implements MveMoveOp {
         @Override public int kind() { return Kind.MVE_INTERLEAVED_LOAD_STORE; }
-        @Override public boolean execute(IrBlockExecutor executor, ArmCore core, int blockEndPc) { return executor.systemExecutor().executeMveInterleavedLoadStore(core, this); }
+        @Override public boolean execute(IrBlockExecutor executor, ArmCore core, int blockEndPc) { return executor.mveMoveExecutor().executeMveInterleavedLoadStore(core, this); }
         // Beatwise mas não predicado: não consulta o contador de tail-predication.
         @Override public int regUse() { return 1 << rn; }
         @Override public int regDef() { return writeback ? (1 << rn) : 0; }
@@ -225,7 +225,7 @@ public sealed interface MveMoveOp extends MveOp permits MveMoveOp.LoadStore,
             /// Condição necessária para executar.
             Condition condition) implements MveMoveOp {
         @Override public int kind() { return Kind.MVE_INCREMENT_DUP; }
-        @Override public boolean execute(IrBlockExecutor executor, ArmCore core, int blockEndPc) { return executor.systemExecutor().executeMveIncrementDup(core, this); }
+        @Override public boolean execute(IrBlockExecutor executor, ArmCore core, int blockEndPc) { return executor.mveMoveExecutor().executeMveIncrementDup(core, this); }
         @Override public int regUse() { return (1 << rn) | GprMask.MVE_TAIL_PREDICATION; }
         @Override public int regDef() { return 1 << rn; }
     }
@@ -253,7 +253,7 @@ public sealed interface MveMoveOp extends MveOp permits MveMoveOp.LoadStore,
             /// Condição necessária para executar.
             Condition condition) implements MveMoveOp {
         @Override public int kind() { return Kind.MVE_WRAPPING_INCREMENT_DUP; }
-        @Override public boolean execute(IrBlockExecutor executor, ArmCore core, int blockEndPc) { return executor.systemExecutor().executeMveWrappingIncrementDup(core, this); }
+        @Override public boolean execute(IrBlockExecutor executor, ArmCore core, int blockEndPc) { return executor.mveMoveExecutor().executeMveWrappingIncrementDup(core, this); }
         @Override public int regUse() { return (1 << rn) | (1 << rm) | GprMask.MVE_TAIL_PREDICATION; }
         @Override public int regDef() { return 1 << rn; }
     }
@@ -276,7 +276,7 @@ public sealed interface MveMoveOp extends MveOp permits MveMoveOp.LoadStore,
             /// Condição necessária para executar.
             Condition condition) implements MveMoveOp {
         @Override public int kind() { return Kind.MVE_VECTOR_DUP; }
-        @Override public boolean execute(IrBlockExecutor executor, ArmCore core, int blockEndPc) { return executor.systemExecutor().executeMveVectorDup(core, this); }
+        @Override public boolean execute(IrBlockExecutor executor, ArmCore core, int blockEndPc) { return executor.mveMoveExecutor().executeMveVectorDup(core, this); }
         @Override public int regUse() { return (1 << rt) | GprMask.MVE_TAIL_PREDICATION; }
     }
 
@@ -308,7 +308,7 @@ public sealed interface MveMoveOp extends MveOp permits MveMoveOp.LoadStore,
             /// Condição necessária para executar.
             Condition condition) implements MveMoveOp {
         @Override public int kind() { return Kind.MVE_MOVE_LANES_GPR; }
-        @Override public boolean execute(IrBlockExecutor executor, ArmCore core, int blockEndPc) { return executor.systemExecutor().executeMveMoveLanesGpr(core, this); }
+        @Override public boolean execute(IrBlockExecutor executor, ArmCore core, int blockEndPc) { return executor.mveMoveExecutor().executeMveMoveLanesGpr(core, this); }
         // Não predicado (só `ECI`): não consulta o contador de tail-predication.
         @Override public int regUse() { return toGpr ? 0 : (1 << rt) | (1 << rt2); }
         @Override public int regDef() { return toGpr ? (1 << rt) | (1 << rt2) : 0; }
@@ -331,6 +331,6 @@ public sealed interface MveMoveOp extends MveOp permits MveMoveOp.LoadStore,
             /// Condição necessária para executar.
             Condition condition) implements MveMoveOp {
         @Override public int kind() { return Kind.MVE_VECTOR_MODIFIED_IMMEDIATE; }
-        @Override public boolean execute(IrBlockExecutor executor, ArmCore core, int blockEndPc) { return executor.systemExecutor().executeMveVectorModifiedImmediate(core, this); }
+        @Override public boolean execute(IrBlockExecutor executor, ArmCore core, int blockEndPc) { return executor.mveMoveExecutor().executeMveVectorModifiedImmediate(core, this); }
     }
 }

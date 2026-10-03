@@ -93,6 +93,20 @@ Próxima versão: **`2.0.0`** — o refactor estrutural (épico `E15`) quebra no
   (`AsmAluEmitter`/`AsmIntegerEmitter`/`AsmMemoryEmitter`/`AsmControlEmitter`/`AsmVfpEmitter`, package-private). Política e
   compilador não podem mais divergir; `supports(IrOp)`, `supports(IrBlock)` e `supportedAluOpcodes()` mantêm assinatura e
   resultado (o bytecode gerado pelo `AsmBlockCompiler` é byte a byte o mesmo).
+- **MVE sai de `IrSystemExecutor`** (`E15.8`): os 57 métodos públicos `execute*` do MVE (2516 → 392 linhas no
+  executor de sistema) passam, com o mesmo nome, assinatura e semântica, para cinco classes públicas de
+  `codegen.executor`, uma por família do IR. Quatro são estáticas (sem estado: a JVM só as carrega na primeira op MVE);
+  `IrMveMoveExecutor` usa os acessos à memória da arquitetura e vem de `IrBlockExecutor#mveMoveExecutor()` (novo,
+  criado na primeira chamada). `executeClrm` (`IntegerOp.ClearMultiple`) e o resto do sistema ficam em
+  `IrSystemExecutor`.
+
+  | Classe nova | Métodos (`execute…`) que saíram de `IrSystemExecutor` |
+  |---|---|
+  | `IrMvePredicationExecutor` (estática) | `Vpst` · `Vpnot` · `Vpsel` · `Lctp` · `Vctp` · `AdvanceVpt` · `AdvanceEci` · `VprTransfer` · `MveVectorCompare` · `MveVectorCompareScalar` |
+  | `IrMveMoveExecutor` (instância) | `MveLoadStore` · `MveWideningLoadStore` · `MveGatherScatterOffset` · `MveGatherScatterImmediate` · `MveInterleavedLoadStore` · `MveIncrementDup` · `MveWrappingIncrementDup` · `MveVectorDup` · `MveMoveLanesGpr` · `MveVectorModifiedImmediate` |
+  | `IrMveIntegerExecutor` (estática) | `MveWideShift` · `MveVector2Op` · `MveVector2OpWidening` · `MveVectorCarry` · `MveVectorComplexAdd` · `MveVectorAbsAccumulate` · `MveVectorShiftWidenInterleaved` · `MveVectorShiftImmediate` · `MveVectorShiftWidenImmediateInterleaved` · `MveVectorShiftNarrowImmediateInterleaved` · `MveVectorShiftLeftCarry` · `MveVectorUnary` · `MveVectorNarrowInterleaved` · `MveVectorDualMultiplyAddHigh` · `MveVectorDoublingWideningMultiply` · `MveVectorScalar` · `MveVectorScalarWidening` · `MveVectorScalarSpecial` |
+  | `IrMveFpExecutor` (estática) | `MveVectorFpAbsAccumulate` · `MveVectorFpConvert` · `MveVectorFpConvertFixed` · `MveVectorFpUnary` · `MveVectorFpConvertPrecision` · `MveVectorFpComplexMultiply` · `MveVectorFpTwoOp` · `MveVectorFpComplexAdd` · `MveVectorFpComplexMultiplyAccumulate` · `MveVectorFpScalar` · `MveVectorFpScalarFma` |
+  | `IrMveReductionExecutor` (estática) | `MveVectorAddAcrossVector` · `MveVectorAddAcrossVectorLong` · `MveVectorAbsoluteDifferenceAccumulate` · `MveVectorDualAccumulate` · `MveVectorDualAccumulateLong` · `MveVectorRoundingDualAccumulateHigh` · `MveVectorMinMaxAcrossVector` · `MveVectorFpMinMaxAcrossVector` |
 
 ### Corrigido
 - **`DeadCodeEliminationPass` apagava escritas de registrador ainda lidas** (`E15.6b`, só no JIT de 32 bits — ASM e

@@ -1,6 +1,7 @@
 package dev.vitorsilverio.armjitter.ir;
 
 import dev.vitorsilverio.armjitter.codegen.executor.IrBlockExecutor;
+import dev.vitorsilverio.armjitter.codegen.executor.IrMveFpExecutor;
 import dev.vitorsilverio.armjitter.core.ArmCore;
 import dev.vitorsilverio.armjitter.core.Condition;
 
@@ -34,7 +35,7 @@ public sealed interface MveFpOp extends MveOp permits MveFpOp.VectorFpAbsAccumul
             /// Condição necessária para executar.
             Condition condition) implements MveFpOp {
         @Override public int kind() { return Kind.MVE_VECTOR_FP_ABS_ACCUMULATE; }
-        @Override public boolean execute(IrBlockExecutor executor, ArmCore core, int blockEndPc) { return executor.systemExecutor().executeMveVectorFpAbsAccumulate(core, this); }
+        @Override public boolean execute(IrBlockExecutor executor, ArmCore core, int blockEndPc) { return IrMveFpExecutor.executeMveVectorFpAbsAccumulate(core, this); }
     }
 
     /// `VCVTB_SH`/`VCVTT_SH`/`VCVTB_HS`/`VCVTT_HS` (perfil M, B16.7, MVE/Helium, `FEAT_MVE_FP`,
@@ -56,7 +57,7 @@ public sealed interface MveFpOp extends MveOp permits MveFpOp.VectorFpAbsAccumul
             /// Condição necessária para executar.
             Condition condition) implements MveFpOp {
         @Override public int kind() { return Kind.MVE_VECTOR_FP_CONVERT_PRECISION; }
-        @Override public boolean execute(IrBlockExecutor executor, ArmCore core, int blockEndPc) { return executor.systemExecutor().executeMveVectorFpConvertPrecision(core, this); }
+        @Override public boolean execute(IrBlockExecutor executor, ArmCore core, int blockEndPc) { return IrMveFpExecutor.executeMveVectorFpConvertPrecision(core, this); }
     }
 
     /// `VCMUL0`/`VCMUL90`/`VCMUL180`/`VCMUL270` (perfil M, B16.7 sub-família 2, MVE/Helium,
@@ -79,7 +80,7 @@ public sealed interface MveFpOp extends MveOp permits MveFpOp.VectorFpAbsAccumul
             /// Condição necessária para executar.
             Condition condition) implements MveFpOp {
         @Override public int kind() { return Kind.MVE_VECTOR_FP_COMPLEX_MULTIPLY; }
-        @Override public boolean execute(IrBlockExecutor executor, ArmCore core, int blockEndPc) { return executor.systemExecutor().executeMveVectorFpComplexMultiply(core, this); }
+        @Override public boolean execute(IrBlockExecutor executor, ArmCore core, int blockEndPc) { return IrMveFpExecutor.executeMveVectorFpComplexMultiply(core, this); }
     }
 
     /// `VADD_fp`/`VSUB_fp`/`VMUL_fp`/`VABD_fp`/`VMAXNM`/`VMINNM`/`VFMA`/`VFMS` (perfil M, B16.7
@@ -110,7 +111,7 @@ public sealed interface MveFpOp extends MveOp permits MveFpOp.VectorFpAbsAccumul
             /// Condição necessária para executar.
             Condition condition) implements MveFpOp {
         @Override public int kind() { return Kind.MVE_VECTOR_FP_TWO_OP; }
-        @Override public boolean execute(IrBlockExecutor executor, ArmCore core, int blockEndPc) { return executor.systemExecutor().executeMveVectorFpTwoOp(core, this); }
+        @Override public boolean execute(IrBlockExecutor executor, ArmCore core, int blockEndPc) { return IrMveFpExecutor.executeMveVectorFpTwoOp(core, this); }
     }
 
     /// `VCADD90_fp`/`VCADD270_fp` (perfil M, B16.7 sub-família 3, MVE/Helium, `FEAT_MVE_FP`,
@@ -137,7 +138,7 @@ public sealed interface MveFpOp extends MveOp permits MveFpOp.VectorFpAbsAccumul
             /// Condição necessária para executar.
             Condition condition) implements MveFpOp {
         @Override public int kind() { return Kind.MVE_VECTOR_FP_COMPLEX_ADD; }
-        @Override public boolean execute(IrBlockExecutor executor, ArmCore core, int blockEndPc) { return executor.systemExecutor().executeMveVectorFpComplexAdd(core, this); }
+        @Override public boolean execute(IrBlockExecutor executor, ArmCore core, int blockEndPc) { return IrMveFpExecutor.executeMveVectorFpComplexAdd(core, this); }
     }
 
     /// `VCMLA0`/`VCMLA90`/`VCMLA180`/`VCMLA270` (perfil M, B16.7 sub-família 3, MVE/Helium,
@@ -164,7 +165,7 @@ public sealed interface MveFpOp extends MveOp permits MveFpOp.VectorFpAbsAccumul
             /// Condição necessária para executar.
             Condition condition) implements MveFpOp {
         @Override public int kind() { return Kind.MVE_VECTOR_FP_COMPLEX_MULTIPLY_ACCUMULATE; }
-        @Override public boolean execute(IrBlockExecutor executor, ArmCore core, int blockEndPc) { return executor.systemExecutor().executeMveVectorFpComplexMultiplyAccumulate(core, this); }
+        @Override public boolean execute(IrBlockExecutor executor, ArmCore core, int blockEndPc) { return IrMveFpExecutor.executeMveVectorFpComplexMultiplyAccumulate(core, this); }
     }
 
     /// `VADD_fp_scalar`/`VSUB_fp_scalar`/`VMUL_fp_scalar` (perfil M, B16.9, MVE/Helium,
@@ -189,7 +190,7 @@ public sealed interface MveFpOp extends MveOp permits MveFpOp.VectorFpAbsAccumul
             /// Condição necessária para executar.
             Condition condition) implements MveFpOp {
         @Override public int kind() { return Kind.MVE_VECTOR_FP_SCALAR; }
-        @Override public boolean execute(IrBlockExecutor executor, ArmCore core, int blockEndPc) { return executor.systemExecutor().executeMveVectorFpScalar(core, this); }
+        @Override public boolean execute(IrBlockExecutor executor, ArmCore core, int blockEndPc) { return IrMveFpExecutor.executeMveVectorFpScalar(core, this); }
         @Override public int regUse() { return (1 << rm) | GprMask.MVE_TAIL_PREDICATION; }
     }
 
@@ -218,7 +219,7 @@ public sealed interface MveFpOp extends MveOp permits MveFpOp.VectorFpAbsAccumul
             /// Condição necessária para executar.
             Condition condition) implements MveFpOp {
         @Override public int kind() { return Kind.MVE_VECTOR_FP_SCALAR_FMA; }
-        @Override public boolean execute(IrBlockExecutor executor, ArmCore core, int blockEndPc) { return executor.systemExecutor().executeMveVectorFpScalarFma(core, this); }
+        @Override public boolean execute(IrBlockExecutor executor, ArmCore core, int blockEndPc) { return IrMveFpExecutor.executeMveVectorFpScalarFma(core, this); }
         @Override public int regUse() { return (1 << rm) | GprMask.MVE_TAIL_PREDICATION; }
     }
 
@@ -251,7 +252,7 @@ public sealed interface MveFpOp extends MveOp permits MveFpOp.VectorFpAbsAccumul
             /// Condição necessária para executar.
             Condition condition) implements MveFpOp {
         @Override public int kind() { return Kind.MVE_VECTOR_FP_CONVERT; }
-        @Override public boolean execute(IrBlockExecutor executor, ArmCore core, int blockEndPc) { return executor.systemExecutor().executeMveVectorFpConvert(core, this); }
+        @Override public boolean execute(IrBlockExecutor executor, ArmCore core, int blockEndPc) { return IrMveFpExecutor.executeMveVectorFpConvert(core, this); }
     }
 
     /// `VCVT_SH_fixed`/`VCVT_UH_fixed`/`VCVT_HS_fixed`/`VCVT_HU_fixed`/`VCVT_SF_fixed`/
@@ -288,7 +289,7 @@ public sealed interface MveFpOp extends MveOp permits MveFpOp.VectorFpAbsAccumul
             /// Condição necessária para executar.
             Condition condition) implements MveFpOp {
         @Override public int kind() { return Kind.MVE_VECTOR_FP_CONVERT_FIXED; }
-        @Override public boolean execute(IrBlockExecutor executor, ArmCore core, int blockEndPc) { return executor.systemExecutor().executeMveVectorFpConvertFixed(core, this); }
+        @Override public boolean execute(IrBlockExecutor executor, ArmCore core, int blockEndPc) { return IrMveFpExecutor.executeMveVectorFpConvertFixed(core, this); }
     }
 
     /// `VABS_fp`/`VNEG_fp` (perfil M, B16.13a, MVE/Helium, `FEAT_MVE_FP`, `target/isa-decode/mve.decode`
@@ -313,6 +314,6 @@ public sealed interface MveFpOp extends MveOp permits MveFpOp.VectorFpAbsAccumul
             /// Condição necessária para executar.
             Condition condition) implements MveFpOp {
         @Override public int kind() { return Kind.MVE_VECTOR_FP_UNARY; }
-        @Override public boolean execute(IrBlockExecutor executor, ArmCore core, int blockEndPc) { return executor.systemExecutor().executeMveVectorFpUnary(core, this); }
+        @Override public boolean execute(IrBlockExecutor executor, ArmCore core, int blockEndPc) { return IrMveFpExecutor.executeMveVectorFpUnary(core, this); }
     }
 }

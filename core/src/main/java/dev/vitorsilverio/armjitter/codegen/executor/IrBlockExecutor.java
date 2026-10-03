@@ -26,10 +26,14 @@ public final class IrBlockExecutor {
     private final IrCycleExecutor cycle;
     private final IrVfpExecutor vfp;
     private final IrNeonExecutor neon;
+    private final IrExecutionSupport support;
+    /// Criado na primeira op de load/store/movimento MVE (task E15.8, D8): só o perfil M com MVE chega aqui.
+    private IrMveMoveExecutor mveMove;
 
     /// Cria um executor para a arquitetura informada.
     public IrBlockExecutor(ArmArchitecture architecture) {
         IrExecutionSupport support = new IrExecutionSupport(architecture);
+        this.support = support;
         this.alu = new IrAluExecutor(support);
         this.memory = new IrMemoryExecutor(support);
         this.branch = new IrBranchExecutor(support);
@@ -87,7 +91,7 @@ public final class IrBlockExecutor {
                 case IrOp.Kind.THUMB_BL_SUFFIX -> pcChanged |= branch.executeThumbBlSuffix(core, (BranchOp.ThumbBlSuffix) op);
                 // ADVANCE_VPT (B16.2)/ADVANCE_ECI (B16.5) são pulados quando a instrução MVE anterior no
                 // MESMO bloco já mudou o PC (fault de ECI reservado) — ver Javadoc de
-                // IrSystemExecutor#executeAdvanceVpt. `executeOp` não tem esse gate. A checagem fica
+                // IrMvePredicationExecutor#executeAdvanceVpt. `executeOp` não tem esse gate. A checagem fica
                 // no `default` (e não em casos próprios) para o `switch` continuar denso (`tableswitch`).
                 default -> {
                     if (!pcChanged || !isPredicationAdvance(kinds[i])) {
@@ -188,5 +192,17 @@ public final class IrBlockExecutor {
     /// Executor de NEON (task E15.5): ver {@link #aluExecutor()}.
     public IrNeonExecutor neonExecutor() {
         return neon;
+    }
+
+    /// Executor de load/store e movimentos MVE (task E15.8): a única família MVE com estado, criada na
+    /// primeira chamada. As outras famílias MVE são estáticas (`IrMvePredicationExecutor`,
+    /// `IrMveIntegerExecutor`, `IrMveFpExecutor`, `IrMveReductionExecutor`) e os records as chamam direto.
+    public IrMveMoveExecutor mveMoveExecutor() {
+        IrMveMoveExecutor executor = mveMove;
+        if (executor == null) {
+            executor = new IrMveMoveExecutor(support);
+            mveMove = executor;
+        }
+        return executor;
     }
 }

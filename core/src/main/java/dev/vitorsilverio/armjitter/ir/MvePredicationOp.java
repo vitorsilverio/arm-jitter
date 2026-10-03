@@ -1,6 +1,7 @@
 package dev.vitorsilverio.armjitter.ir;
 
 import dev.vitorsilverio.armjitter.codegen.executor.IrBlockExecutor;
+import dev.vitorsilverio.armjitter.codegen.executor.IrMvePredicationExecutor;
 import dev.vitorsilverio.armjitter.core.ArmCore;
 import dev.vitorsilverio.armjitter.core.Condition;
 
@@ -21,7 +22,7 @@ public sealed interface MvePredicationOp extends MveOp permits
             /// Condição necessária para executar.
             Condition condition) implements MvePredicationOp {
         @Override public int kind() { return Kind.LOOP_CLEAR_TAIL_PREDICATION; }
-        @Override public boolean execute(IrBlockExecutor executor, ArmCore core, int blockEndPc) { executor.systemExecutor().executeLctp(core, this); return false; }
+        @Override public boolean execute(IrBlockExecutor executor, ArmCore core, int blockEndPc) { IrMvePredicationExecutor.executeLctp(core, this); return false; }
         // Só grava `FPSCR.LTPSIZE`.
         @Override public int regUse() { return 0; }
     }
@@ -38,7 +39,7 @@ public sealed interface MvePredicationOp extends MveOp permits
             /// Condição necessária para executar.
             Condition condition) implements MvePredicationOp {
         @Override public int kind() { return Kind.VCTP; }
-        @Override public boolean execute(IrBlockExecutor executor, ArmCore core, int blockEndPc) { return executor.systemExecutor().executeVctp(core, this); }
+        @Override public boolean execute(IrBlockExecutor executor, ArmCore core, int blockEndPc) { return IrMvePredicationExecutor.executeVctp(core, this); }
         @Override public int regUse() { return (1 << rn) | GprMask.MVE_TAIL_PREDICATION; }
     }
 
@@ -53,7 +54,7 @@ public sealed interface MvePredicationOp extends MveOp permits
             /// lifter nunca emite este `IrOp` sob outra condição, mesmo padrão de `SetItState`).
             Condition condition) implements MvePredicationOp {
         @Override public int kind() { return Kind.ADVANCE_VPT; }
-        @Override public boolean execute(IrBlockExecutor executor, ArmCore core, int blockEndPc) { executor.systemExecutor().executeAdvanceVpt(core, this); return false; }
+        @Override public boolean execute(IrBlockExecutor executor, ArmCore core, int blockEndPc) { IrMvePredicationExecutor.executeAdvanceVpt(core, this); return false; }
         // Só avança `VPR`/`ECI`.
         @Override public int regUse() { return 0; }
     }
@@ -67,7 +68,7 @@ public sealed interface MvePredicationOp extends MveOp permits
             /// Condição necessária para executar.
             Condition condition) implements MvePredicationOp {
         @Override public int kind() { return Kind.VPST; }
-        @Override public boolean execute(IrBlockExecutor executor, ArmCore core, int blockEndPc) { return executor.systemExecutor().executeVpst(core, this); }
+        @Override public boolean execute(IrBlockExecutor executor, ArmCore core, int blockEndPc) { return IrMvePredicationExecutor.executeVpst(core, this); }
         @Override public int regUse() { return 0; }
     }
 
@@ -79,7 +80,7 @@ public sealed interface MvePredicationOp extends MveOp permits
             /// Condição necessária para executar.
             Condition condition) implements MvePredicationOp {
         @Override public int kind() { return Kind.VPNOT; }
-        @Override public boolean execute(IrBlockExecutor executor, ArmCore core, int blockEndPc) { return executor.systemExecutor().executeVpnot(core, this); }
+        @Override public boolean execute(IrBlockExecutor executor, ArmCore core, int blockEndPc) { return IrMvePredicationExecutor.executeVpnot(core, this); }
         @Override public int regUse() { return 0; }
     }
 
@@ -100,7 +101,7 @@ public sealed interface MvePredicationOp extends MveOp permits
             /// Condição necessária para executar.
             Condition condition) implements MvePredicationOp {
         @Override public int kind() { return Kind.VPSEL; }
-        @Override public boolean execute(IrBlockExecutor executor, ArmCore core, int blockEndPc) { return executor.systemExecutor().executeVpsel(core, this); }
+        @Override public boolean execute(IrBlockExecutor executor, ArmCore core, int blockEndPc) { return IrMvePredicationExecutor.executeVpsel(core, this); }
     }
 
     /// `VMSR`/`VMRS` com `reg=12` (perfil M, B16.2, MVE/Helium): transfere o `VPR` bruto de/para
@@ -118,7 +119,7 @@ public sealed interface MvePredicationOp extends MveOp permits
             /// Condição necessária para executar.
             Condition condition) implements MvePredicationOp {
         @Override public int kind() { return Kind.VPR_TRANSFER; }
-        @Override public boolean execute(IrBlockExecutor executor, ArmCore core, int blockEndPc) { executor.systemExecutor().executeVprTransfer(core, this); return false; }
+        @Override public boolean execute(IrBlockExecutor executor, ArmCore core, int blockEndPc) { IrMvePredicationExecutor.executeVprTransfer(core, this); return false; }
         @Override public int regUse() { return read ? 0 : (1 << armRegister); }
         @Override public int regDef() { return read ? (1 << armRegister) : 0; }
     }
@@ -134,7 +135,7 @@ public sealed interface MvePredicationOp extends MveOp permits
             /// padrão de {@link AdvanceVpt}.
             Condition condition) implements MvePredicationOp {
         @Override public int kind() { return Kind.ADVANCE_ECI; }
-        @Override public boolean execute(IrBlockExecutor executor, ArmCore core, int blockEndPc) { executor.systemExecutor().executeAdvanceEci(core, this); return false; }
+        @Override public boolean execute(IrBlockExecutor executor, ArmCore core, int blockEndPc) { IrMvePredicationExecutor.executeAdvanceEci(core, this); return false; }
         @Override public int regUse() { return 0; }
     }
 
@@ -177,7 +178,7 @@ public sealed interface MvePredicationOp extends MveOp permits
             /// Condição ARM necessária para executar.
             Condition condition) implements MvePredicationOp {
         @Override public int kind() { return Kind.MVE_VECTOR_COMPARE; }
-        @Override public boolean execute(IrBlockExecutor executor, ArmCore core, int blockEndPc) { return executor.systemExecutor().executeMveVectorCompare(core, this); }
+        @Override public boolean execute(IrBlockExecutor executor, ArmCore core, int blockEndPc) { return IrMvePredicationExecutor.executeMveVectorCompare(core, this); }
     }
 
     /// Forma escalar (vetor × GPR broadcast) das mesmas 8 condições de {@link VectorCompare}
@@ -205,7 +206,7 @@ public sealed interface MvePredicationOp extends MveOp permits
             /// Condição ARM necessária para executar.
             Condition condition) implements MvePredicationOp {
         @Override public int kind() { return Kind.MVE_VECTOR_COMPARE_SCALAR; }
-        @Override public boolean execute(IrBlockExecutor executor, ArmCore core, int blockEndPc) { return executor.systemExecutor().executeMveVectorCompareScalar(core, this); }
+        @Override public boolean execute(IrBlockExecutor executor, ArmCore core, int blockEndPc) { return IrMvePredicationExecutor.executeMveVectorCompareScalar(core, this); }
         /// `rm == 15` codifica o escalar zero, não o `PC`.
         private static final int ZERO_SCALAR_ENCODING = 15;
         @Override public int regUse() { return (rm == ZERO_SCALAR_ENCODING ? 0 : (1 << rm)) | GprMask.MVE_TAIL_PREDICATION; }

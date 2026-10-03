@@ -51,7 +51,7 @@ import dev.vitorsilverio.armjitter.ir.MvePredicationOp;
 /// **`Rm ∈ {13, 15}` — achado medido contra o QEMU real, DIVERGE da leitura inicial da spec**:
 /// `do_vcmp_scalar` (`target/arm/tcg/translate-mve.c`) só recusa `a->rm == 13`
 /// (`UNPREDICTABLE`); `a->rm == 15` é uma forma VÁLIDA ("Encoding Rm=0b1111 means 'constant
-/// zero'"), resolvida no EXECUTOR (`IrSystemExecutor#executeMveVectorCompareScalar`), não aqui.
+/// zero'"), resolvida no EXECUTOR (`IrMvePredicationExecutor#executeMveVectorCompareScalar`), não aqui.
 ///
 /// Gate: {@link ArmFeature#MVE_INTEGER} para as inteiras, {@link ArmFeature#MVE_FLOAT} para as
 /// `_fp`/`_fp_scalar` (gate POR LINHA, mesma Armadilha 1 da B16.7). Usa o escape hatch de lifting

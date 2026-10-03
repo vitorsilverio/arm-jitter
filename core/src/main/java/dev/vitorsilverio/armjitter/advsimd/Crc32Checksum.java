@@ -5,7 +5,7 @@ package dev.vitorsilverio.armjitter.advsimd;
 /// segunda cópia do laço — mesma disciplina "D1" da RFC `b13.2-rfc-nucleo-vetorial.md` (extrair
 /// para um núcleo neutro e fazer as duas larguras delegarem), aplicada ao pacote `advsimd` por já
 /// ser o único hoje importado tanto pelo lado de 32 bits (`codegen.executor.IrNeonExecutor`/
-/// `IrSystemExecutor`) quanto pelo de 64 (`executor64.Ir64BlockExecutor`).
+/// executores MVE) quanto pelo de 64 (`executor64.Ir64BlockExecutor`).
 ///
 /// A instrução em si **não complementa entrada nem saída** (ao contrário do CRC-32 "de aplicação"
 /// de `zlib`/Ethernet) — quem chama fornece o acumulador já invertido quando quiser reproduzir o
