@@ -50,7 +50,7 @@ class TamanhoDeFonteGuardTest {
     /// `AsmBlockCompiler` (2580) e `AsmRuntimeHelpers` (1161), divididos por família; na E15.8,
     /// `IrSystemExecutor` (2516), com o MVE indo para executores por família.
     private static final Map<String, Integer> EXCEPTIONS = Map.ofEntries(
-            entry("decoder64/Aarch64Decoder.java", 7851),
+            entry("decoder64/Aarch64Decoder.java", 7377),
             entry("advsimd/AdvSimdLanes.java", 3677),
             entry("core64/Aarch64Core.java", 1848),
             entry("ir/StandardIrBuilder.java", 1352),

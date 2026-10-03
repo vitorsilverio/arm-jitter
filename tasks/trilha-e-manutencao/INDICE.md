@@ -31,6 +31,8 @@ Título, dependências e status de cada task da trilha. Quando o status diz "ver
 | [E15.6b](e15.6b-dce-gpr-nao-declarados.md) | 🆕 DCE: ~39 records (MOVT, CRC32, NEON/MVE load/store, `SMLALxy`...) leem GPR sem declarar `regUse()` — a DCE pode apagar a escrita anterior (corrupção só no JIT) | E15.6 | ✅ 2026-10-02 — ver **Resultado** na task |
 | [E15.7](e15.7-asm-emissores-por-familia.md) | Registro de emissores ASM 32 bits (`record` → emissor + predicado + acessos + spill); `AsmNativePolicy` derivada; `AsmBlockCompiler` (2580) e `AsmRuntimeHelpers` (1161) divididos por família | E15.6b | ✅ 2026-10-03 — ver **Resultado** na task |
 | [E15.8](e15.8-mve-executor-por-familia.md) | `IrSystemExecutor` (2516) dividido: sistema fica (392), MVE vai para 5 executores por família do IR (4 estáticos + `IrMveMoveExecutor` sob demanda) | E15.7 | ✅ 2026-10-03 — ver **Resultado** na task |
+| [E15.9](e15.9-decode-table-piloto.md) | Infra `DecodeTable`/`DecodeRow` (decoder por tabela, feature como coluna) + piloto: a cascata de 8 `has()` do espaço AdvSIMD `bit21=0` vira 53 linhas | E15.8 | ✅ 2026-10-03 — ver **Resultado** na task |
+| [E15.9b](e15.9b-advsimd-bit31-ignorado.md) | 🆕 Espaço AdvSIMD `bit21=0`: `bit31` e `bits[23:22]` do copy não conferidos (G8) + `FADDP`/`FMAXP`/`FMINP`/`FMAXNMP`/`FMINNMP` `_h` ausentes (saem como `INS`, medidas ✅) | E15.9 | ⬜ |
 | [E16](e16-a64-eret-em-el0-derruba-o-host.md) | 🆕 A64: `ERET` executado em `EL0` lança `IllegalArgumentException` no host em vez de entrar na exceção de instrução indefinida (achado da E15.1, reproduzido via `step`) | — | ⬜ |
 
 Legenda: ⬜ pendente · 🟡 em andamento · ✅ concluída

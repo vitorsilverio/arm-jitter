@@ -100,6 +100,8 @@ public final class Aarch64Decoder {
     private final boolean streamingModeRestrictions;
     private final Aarch64SveDecoder sveDecoder;
     private final Aarch64SmeDecoder smeDecoder;
+    /// E15.9: formas com feature do espaço AdvSIMD `bit21=0`, já filtradas por {@link #architecture}.
+    private final DecodeTable<Ir64Op> advSimdBit21ZeroTable;
 
     /// Cria um decoder para {@link Aarch64Architecture#ARMV8_0_A} — equivalente ao comportamento
     /// deste decoder antes de B11.2 (tudo que está implementado, incondicional).
@@ -114,6 +116,7 @@ public final class Aarch64Decoder {
         this.streamingModeRestrictions = architecture.has(Aarch64Feature.SCALABLE_MATRIX_EXTENSION);
         this.sveDecoder = new Aarch64SveDecoder(architecture);
         this.smeDecoder = new Aarch64SmeDecoder(architecture);
+        this.advSimdBit21ZeroTable = DecodeTable.forArchitecture(AdvSimdBit21ZeroRows.ROWS, architecture);
     }
 
     /// Retorna a arquitetura configurada para este decoder (B11.2).
@@ -1293,13 +1296,6 @@ public final class Aarch64Decoder {
     private static final int ADVSIMD_INT_OPCODE_SHIFT = 11;
     private static final int ADVSIMD_INT_OPCODE_MASK = 0b1_1111;
     private static final int ADVSIMD_INT_BIT10_SHIFT = 10;
-    /// B11.4 (`FEAT_RDM`): `SQRDMLAH`/`SQRDMLSH` vetorial/escalar não-indexado vivem no MESMO
-    /// prefixo "01110" e MESMO valor de `opcode`(bits[15:11]) que `ADD_v`/`SUB_v` (`0b10000`), mas
-    /// com `bit21=0` (`ADD_v`/`SUB_v` têm `bit21=1`) — conferido bit a bit contra `a64.decode` real
-    /// do QEMU e corpus devkitA64 (`.arch armv8.1-a`). `SQRDMLSH` usa `0b10001`. `U=1` sempre (não
-    /// há forma `U=0` real neste opcode+`bit21=0`).
-    private static final int ADVSIMD_RDM_OPCODE_SQRDMLAH = 0b1_0000;
-    private static final int ADVSIMD_RDM_OPCODE_SQRDMLSH = 0b1_0001;
     /// Tamanho fixo do escalar D-only (`esz=3`) — a forma vetorial NUNCA produz `esz=3`/`q=false`
     /// de verdade (doubleword exige `q=true` no hardware real, só existe `.2d`), então este par é
     /// reaproveitado como sentinela da forma escalar sem ambiguidade (ver javadoc de
@@ -1336,47 +1332,16 @@ public final class Aarch64Decoder {
     /// (`Rm=00001`) — `!u` = `FCVTL_v` (ISA base); `u` = `F1CVTL`/`F2CVTL`/`BF1CVTL`/`BF2CVTL`
     /// (`FEAT_FP8`, B19.11).
     private static final int ADVSIMD_FCVTL_OPCODE = 0b0_1111;
-    /// B19.11 (`FEAT_FP8`): opcode (bits[15:11]) de `FCVTN_bh`/`FCVTN_bs` ("AdvSIMD three same
-    /// (FP8 convert)", `Rm` é um registrador REAL, não este slot narrow/widen) — MESMO valor que
-    /// `FRECPX_s` (`ADVSIMD_FRECPX_OPCODE`) e que `SQRT` vetorial (`decodeVectorFpUnaryRmOneOpcode`,
-    /// `key==0b11`) em espaços DIFERENTES (aquele exige `bit21=1`; este exige `bit21=0`, o espaço de
-    /// "AdvSIMD three same (FP16)"/RDM) — nunca colidem. Confirmado byte a byte contra `a64.decode`
-    /// real (`target/isa-decode/a64.decode:1216-1217`).
-    private static final int ADVSIMD_FP8_THREE_SAME_CONVERT_OPCODE = 0b1_1110;
-    /// B19.11e (`FEAT_FP8`): opcode (bits[15:11]) de `FSCALE_h` — MESMO valor que, OR'ado com
-    /// {@link #ADVSIMD_FP16_OPCODE_TO_SD_BIT}, produz `0b1_1111` (o opcode de `DIV`/`RECPS`/
-    /// `RSQRTS`/`FSCALE_sd` em {@link #decodeVectorFpThreeSameOpcode}) — a key `(u=1,a=1)=0b110`
-    /// não é mapeada por nenhum dos três, então esta forma nunca colide. Confirmado byte a byte
-    /// contra `aarch64-linux-gnu-as -march=armv8.2-a+fp8` (WSL): `fscale v0.8h,v1.8h,v2.8h` monta
-    /// `0x6ec23c20`.
-    private static final int ADVSIMD_FP8_SCALE_OPCODE_H = 0b0_0111;
     /// B19.11e (`FEAT_FP8`): opcode (bits[15:11]) de `FSCALE_sd` dentro de
     /// {@link #decodeVectorFpThreeSameOpcode} — MESMO valor de `DIV`/`RECPS`/`RSQRTS`, discriminado
     /// pela key `(u,a)=0b110` que nenhum dos três usa (ver Javadoc de
-    /// {@link #ADVSIMD_FP8_SCALE_OPCODE_H}).
+    /// `FSCALE_h` em {@link AdvSimdBit21ZeroRows}).
     private static final int ADVSIMD_FP8_SCALE_OPCODE_SD = 0b1_1111;
-    /// B19.24 (`FEAT_FAMINMAX`): opcode (bits[15:11]) de `FAMAX_h`/`FAMIN_h` — próprio, nunca colide
-    /// com `FSCALE_h`/`FCVTN_bh`/`FCVTN_bs`/RDM/FP16 no MESMO espaço `bit21=0` (conferido). `U`
-    /// (bit29) separa `FAMAX`(`u=0`)/`FAMIN`(`u=1`). Confirmado byte a byte contra
-    /// `aarch64-linux-gnu-as -march=armv9.4-a+faminmax` (WSL): `famax v0.8h,v1.8h,v2.8h` monta
-    /// `0x4ec21c20`, `famin v0.8h,v1.8h,v2.8h` monta `0x6ec21c20`.
-    private static final int ADVSIMD_FAMINMAX_OPCODE_H = 0b0_0011;
     /// B19.24 (`FEAT_FAMINMAX`): opcode (bits[15:11]) de `FAMAX_sd`/`FAMIN_sd` dentro de
     /// {@link #decodeVectorFpThreeSameOpcode} — MESMO valor de `MUL`/`MULX`, discriminado pelas keys
     /// `(u,a)=0b010`/`0b110` que nenhum dos dois usa (ver Javadoc do intercept em
     /// {@link #decodeAdvancedSimdThreeSameShape}).
     private static final int ADVSIMD_FAMINMAX_OPCODE_SD = 0b1_1011;
-    /// B19.11b (`FEAT_FP8FMA`): opcode (bits[15:11]) de `FMLAL_hb_v` — MESMO valor `0b1_1111` que
-    /// `FDOT_hb_v` (`FEAT_FP8DOT2`, B19.11c, ainda `⬜`) usa no MESMO espaço `bit22=1`/`bit21=0`,
-    /// discriminado por `a`(bit23): `0`=`FDOT_hb_v`, `1`=`FMLAL_hb_v` (achado da B19.11, reusado
-    /// aqui — ver `## Resultado` daquela task). Confirmado byte a byte contra
-    /// `target/isa-decode/a64.decode:1219`.
-    private static final int ADVSIMD_FP8_FMA_OPCODE_HB = 0b1_1111;
-    /// B19.11b (`FEAT_FP8FMA`): opcode (bits[15:11]) de `FMLALL_sb_v` — PRÓPRIO, `u`(bit29)=`0`/
-    /// `a`(bit23)=`0` fixos (MESMO par que `FCVTN_bh`/`FCVTN_bs`, mas opcode diferente — nunca
-    /// colide, ver {@link #decodeAdvancedSimdFp8ThreeSame}). Confirmado byte a byte contra
-    /// `target/isa-decode/a64.decode:1223`.
-    private static final int ADVSIMD_FP8_FMA_OPCODE_SB = 0b1_1000;
     /// B19.11b (`FEAT_FP8FMA`): opcode (bits[15:12]) de `FMLAL_hb_vi` dentro de
     /// {@link #decodeAdvancedSimdIndexedElement} — hijacka o MESMO slot `sizeField=DOUBLEWORD`
     /// (`0b11`) que `BFMLAL_vi` usa (opcode `0b1111`), nunca colide. Confirmado byte a byte contra
@@ -1448,12 +1413,6 @@ public final class Aarch64Decoder {
     /// nunca tamanho). Conferido contra `a64.decode` real do QEMU (`@qrrr_sd`/`@qrr_sd`: `esz=%esz_sd`
     /// deriva só de `sz`, bit22).
     private static final int ADVSIMD_FP_A_BIT_SHIFT = 23;
-    /// B19.5.5 (`FEAT_FP16`): relação entre o `opcode` (bits[15:11]) da forma `_h` de "AdvSIMD three
-    /// same (FP)" e o da forma `_sd` já tabelada por {@link #decodeVectorFpThreeSameOpcode} —
-    /// `opcode_sd = opcode_h | 0b1_1000` (medido bit a bit contra `a64.decode`; MESMA relação
-    /// numérica de {@link #ADVSIMD_INT_RM_FP16_TWO_REG_MISC}, mas aplicada ao campo `opcode`, não a
-    /// `Rm` — por isso uma constante própria em vez de reusar aquela).
-    private static final int ADVSIMD_FP16_OPCODE_TO_SD_BIT = 0b1_1000;
     /// B19.13 (`FEAT_FHM`): `opcode` (bits[15:11]) de "AdvSIMD three same (FP)" que `FMLAL_v`/
     /// `FMLSL_v` (`u=0`) reaproveitam — medido bit a bit contra `a64.decode`/corpus real
     /// (`arm-linux-gnu-as -march=armv8.2-a+fp16+fp16fml`).
@@ -1678,19 +1637,8 @@ public final class Aarch64Decoder {
     /// B19.20 (`FEAT_FCMA`): unidade de rotação em graus — `rot` (2 bits, `FCMLA`) ou 1 bit
     /// (`FCADD`) sempre significa "× 90°" (`0`/`90`/`180`/`270`).
     private static final int ADVSIMD_FCMA_ROTATION_UNIT_DEGREES = 90;
-    /// B19.20: `FCMLA_v` ("three same") tem `opcode`(bits[15:11], 5 bits) `0b110rr` — `rr` é a
-    /// rotação (`0`-`3`, × {@link #ADVSIMD_FCMA_ROTATION_UNIT_DEGREES}). Máscara/padrão dos 3 bits
-    /// altos, confirmados bit a bit contra `aarch64-linux-gnu-as -march=armv8.3-a` (WSL): `fcmla
-    /// v0.4h,v1.4h,v2.4h,#0` → opcode=`0b11000`; `#90`→`0b11001`; `#180`→`0b11010`; `#270`→
-    /// `0b11011`.
-    private static final int ADVSIMD_FCMA_OPCODE_PREFIX_MASK = 0b1_1100;
-    private static final int ADVSIMD_FCMA_OPCODE_PREFIX_PATTERN = 0b1_1000;
+    /// B19.20: rotação `rr` (2 bits) de `FCMLA_vi`, em unidades de {@link #ADVSIMD_FCMA_ROTATION_UNIT_DEGREES}.
     private static final int ADVSIMD_FCMA_ROTATION_MASK = 0b11;
-    /// B19.20: `FCADD_90`/`FCADD_270` ("three same") — opcode FIXO (sem campo `rot`, só as duas
-    /// rotações existem: `0°`/`180°` já são `FADD`/`FSUB` comuns). Confirmado contra corpus real:
-    /// `fcadd v0.4h,v1.4h,v2.4h,#90` → opcode=`0b11100`; `#270` → `0b11110`.
-    private static final int ADVSIMD_FCADD_OPCODE_90 = 0b1_1100;
-    private static final int ADVSIMD_FCADD_OPCODE_270 = 0b1_1110;
     /// B19.20: `FCMLA_vi` ("vector × indexed element") tem `opcode`(bits[15:12], 4 bits) `0b0rr1` —
     /// MESMA rotação de 2 bits (`rr`) que a forma "three same", só reempacotada em 4 bits em vez de
     /// 5 (o bit baixo fixo `1` ocupa o lugar do `bit10=1`/`bit11` fixos da forma vetorial).
@@ -4040,98 +3988,13 @@ public final class Aarch64Decoder {
         }
         boolean q = !scalar && ((word >>> ADVSIMD_INT_Q_SHIFT) & 1) != 0;
         if (((word >>> ADVSIMD_INT_BIT21_SHIFT) & 1) == 0) {
-            // B11.4 (`FEAT_RDM`, primeiro gate real de feature A64): `SQRDMLAH`/`SQRDMLSH`
-            // vetorial/escalar não-indexado também vivem neste espaço `bit21=0` (ver
-            // {@link #ADVSIMD_RDM_OPCODE_SQRDMLAH}) — checados ANTES do resto (EXT/permute/TBL/
-            // copy/SHA abaixo) porque, sem a feature, o encoding precisa continuar caindo no
-            // `unsupported` de sempre (G3), e `decodeAdvancedSimdCopy` já devolve `null` para esses
-            // bits mesmo com a feature ausente (sem colisão), então a ordem aqui só importa para
-            // não fazer trabalho à toa quando a feature ESTÁ presente.
-            if (architecture.has(Aarch64Feature.RDM)) {
-                Ir64Op rdmOp = decodeAdvancedSimdRoundingDoublingMultiplyAccumulate(word, scalar, q);
-                if (rdmOp != null) {
-                    return rdmOp;
-                }
-            }
-            // B19.5.5 (`FEAT_FP16`): "AdvSIMD three same (FP)" de meia precisão vive no MESMO
-            // espaço `bit21=0`, assinatura `bit22=1 && bit10=1 && bit15=0` — checado DEPOIS do RDM
-            // (que compartilha os mesmos 3 bits e só se separa pelo `opcode`, ver o Javadoc do
-            // método) e ANTES de EXT/permute/copy/SHA (que exigem `bit22=0` ou `bit10=0`, nunca
-            // colidem). Sem a feature, o bloco é pulado inteiro — comportamento byte a byte o de
-            // hoje.
-            if (architecture.has(Aarch64Feature.FP16)) {
-                Ir64Op fp16ThreeSameOp = decodeAdvancedSimdFp16ThreeSame(word, scalar, q);
-                if (fp16ThreeSameOp != null) {
-                    return fp16ThreeSameOp;
-                }
-            }
-            // B19.11 (`FEAT_FP8`): `FCVTN_bh`/`FCVTN_bs` vivem no MESMO espaço `bit21=0`,
-            // discriminadas por `opcode=0b1_1110` (`bit15=1`, o valor que
-            // {@link #decodeAdvancedSimdFp16ThreeSame} trata como reservado/RDM e devolve `null`) —
-            // checado DEPOIS do FP16 (nunca colide: FP16 exige `bit15=0`) e ANTES de EXT/permute/
-            // copy/SHA. Sem a feature, pulado inteiro (byte a byte igual a antes desta task).
-            if (architecture.has(Aarch64Feature.FP8)) {
-                Ir64Op fp8ThreeSameOp = decodeAdvancedSimdFp8ThreeSame(word, scalar, q);
-                if (fp8ThreeSameOp != null) {
-                    return fp8ThreeSameOp;
-                }
-                // B19.11e: `FSCALE_h` — mesma feature, opcode DIFERENTE de FCVTN_bh/FCVTN_bs
-                // (nunca colide, ver Javadoc de {@link #decodeAdvancedSimdFp8Scale}).
-                Ir64Op fp8ScaleOp = decodeAdvancedSimdFp8Scale(word, scalar, q);
-                if (fp8ScaleOp != null) {
-                    return fp8ScaleOp;
-                }
-            }
-            // B19.24 (`FEAT_FAMINMAX`): `FAMAX_h`/`FAMIN_h` também vivem no MESMO espaço `bit21=0`
-            // (opcode PRÓPRIO, nunca colide com RDM/FP16/FP8 acima — conferido) — checado DEPOIS do
-            // FP8 e ANTES de FCMA/EXT/permute/copy/SHA. Sem a feature, pulado inteiro.
-            if (architecture.has(Aarch64Feature.FP_ABSOLUTE_MAX_MIN)) {
-                Ir64Op faminmaxOp = decodeAdvancedSimdFaminmaxHalf(word, scalar, q);
-                if (faminmaxOp != null) {
-                    return faminmaxOp;
-                }
-            }
-            // B19.11b (`FEAT_FP8FMA`): `FMLAL_hb_v`/`FMLALL_sb_v` também vivem no MESMO espaço
-            // `bit21=0` (`FMLAL_hb_v` reusa o opcode de `FDOT_hb_v`, discriminado por `a`;
-            // `FMLALL_sb_v` tem opcode PRÓPRIO) — checado DEPOIS do FAMINMAX e ANTES do FCMA. Sem a
-            // feature, pulado inteiro.
-            if (architecture.has(Aarch64Feature.FP8_FUSED_MULTIPLY_ADD)) {
-                Ir64Op fp8FmaHalfOp = decodeAdvancedSimdFp8FusedMultiplyAddHalf(word, scalar);
-                if (fp8FmaHalfOp != null) {
-                    return fp8FmaHalfOp;
-                }
-                Ir64Op fp8FmaSingleOp = decodeAdvancedSimdFp8FusedMultiplyAddSingle(word, scalar);
-                if (fp8FmaSingleOp != null) {
-                    return fp8FmaSingleOp;
-                }
-            }
-            // B19.11c (`FEAT_FP8DOT2`): `FDOT_hb_v` também vive no MESMO espaço `bit21=0`
-            // (reusa o opcode de `FMLAL_hb_v`, discriminado por `a`) — checado DEPOIS do
-            // `FP8_FUSED_MULTIPLY_ADD` e ANTES do FCMA. Sem a feature, pulado inteiro.
-            if (architecture.has(Aarch64Feature.FP8_DOT_PRODUCT_2WAY)) {
-                Ir64Op fp8DotHalfOp = decodeAdvancedSimdFp8DotHalf(word, scalar, q);
-                if (fp8DotHalfOp != null) {
-                    return fp8DotHalfOp;
-                }
-            }
-            // B19.11d (`FEAT_FP8DOT4`): `FDOT_sb_v` também vive no MESMO espaço `bit21=0`
-            // (reusa o opcode de `FDOT_hb_v`/`FMLAL_hb_v`, discriminado por `bit22`) — checado
-            // DEPOIS do `FP8_DOT_PRODUCT_2WAY` e ANTES do FCMA. Sem a feature, pulado inteiro.
-            if (architecture.has(Aarch64Feature.FP8_DOT_PRODUCT_4WAY)) {
-                Ir64Op fp8DotSingleOp = decodeAdvancedSimdFp8DotSingle(word, scalar, q);
-                if (fp8DotSingleOp != null) {
-                    return fp8DotSingleOp;
-                }
-            }
-            // B19.20 (`FEAT_FCMA`): `FCADD_90`/`FCADD_270`/`FCMLA_v` também vivem no MESMO espaço
-            // `bit21=0` (`U=1`+`bit10=1` fixos, opcode nunca colide com RDM/FP16/FP8 acima —
-            // conferido exaustivamente, ver o Javadoc das constantes `ADVSIMD_FCMA_*`) — checado
-            // DEPOIS do FP8 e ANTES de EXT/permute/copy/SHA. Sem a feature, pulado inteiro.
-            if (architecture.has(Aarch64Feature.COMPLEX_NUMBER_ARITHMETIC)) {
-                Ir64Op fcmaOp = decodeAdvancedSimdComplexNumberArithmetic(word, scalar, q);
-                if (fcmaOp != null) {
-                    return fcmaOp;
-                }
+            // E15.9: as formas com feature deste espaço (RDM/FP16/FP8/FAMINMAX/FP8FMA/FP8DOT2/
+            // FP8DOT4/FCMA) são linhas de {@link AdvSimdBit21ZeroRows}; a tabela já vem filtrada pelo
+            // preset, e a exclusão mútua entre as linhas é verificada por teste. O que não casar segue
+            // para EXT/permute/TBL/copy/SHA abaixo.
+            Ir64Op tableOp = advSimdBit21ZeroTable.decode(word);
+            if (tableOp != null) {
+                return tableOp;
             }
             // B8.10: `EXT`/`UZP1`/`UZP2`/`TRN1`/`TRN2`/`ZIP1`/`ZIP2`/`TBL`/`TBX` vivem no MESMO
             // prefixo vetorial "01110", `bit21=0` — espaço que B8.7-B8.9 nunca examinaram (só
@@ -4527,343 +4390,6 @@ public final class Aarch64Decoder {
         throw unsupported(word, address);
     }
 
-    /// `SQRDMLAH`/`SQRDMLSH` vetorial/escalar não-indexado (B11.4, `FEAT_RDM`) — entra já sabendo
-    /// que `bit21=0` e que a feature está presente (checado pelo chamador). Devolve `null` (nunca
-    /// lança) para qualquer combinação que não bata, deixando o chamador continuar tentando
-    /// EXT/permute/TBL/copy/SHA no mesmo espaço (G8: o `unsupported` final continua vindo de lá).
-    private Ir64Op decodeAdvancedSimdRoundingDoublingMultiplyAccumulate(int word, boolean scalar, boolean q) {
-        boolean u = ((word >>> ADVSIMD_INT_U_SHIFT) & 1) != 0;
-        if (!u) {
-            return null; // sem forma `U=0` real neste opcode+`bit21=0` (ver constante).
-        }
-        boolean bit10 = ((word >>> ADVSIMD_INT_BIT10_SHIFT) & 1) != 0;
-        if (!bit10) {
-            return null;
-        }
-        int opcode = (word >>> ADVSIMD_INT_OPCODE_SHIFT) & ADVSIMD_INT_OPCODE_MASK;
-        Ir64VectorThreeSameOp op = switch (opcode) {
-            case ADVSIMD_RDM_OPCODE_SQRDMLAH -> Ir64VectorThreeSameOp.SQRDMLAH;
-            case ADVSIMD_RDM_OPCODE_SQRDMLSH -> Ir64VectorThreeSameOp.SQRDMLSH;
-            default -> null;
-        };
-        if (op == null) {
-            return null;
-        }
-        int esz = (word >>> ADVSIMD_INT_SIZE_SHIFT) & ADVSIMD_INT_SIZE_MASK;
-        if (esz != ADVSIMD_ESZ_HALFWORD && esz != ADVSIMD_ESZ_WORD) {
-            // Só `H`/`S` são reais nesta família (mesma restrição de `SQDMULH`/`SQRDMULH`) — `B`/`D`
-            // ficam reservados aqui, não silenciosamente aceitos (G8).
-            return null;
-        }
-        int rm = (word >>> ADVSIMD_INT_RM_SHIFT) & ADVSIMD_INT_RM_MASK;
-        int rn = (word >>> RN_SHIFT) & REGISTER_FIELD_MASK;
-        int rd = word & REGISTER_FIELD_MASK;
-        return new AdvSimdIntegerOp64.ArithmeticThreeSame(op, scalar, q, esz, rd, rn, rm);
-    }
-
-    /// B19.5.5 (`FEAT_FP16`): "AdvSIMD three same (FP)"/"AdvSIMD scalar three same (FP)" de meia
-    /// precisão (`FADD_v`/`FSUB_v`/`FMAX_v`/`FMIN_v`/`FCMEQ_v` vetoriais + `FMULX_s`/`FCMEQ_s`/
-    /// `FCMGE_s`/`FCMGT_s`/`FACGE_s`/`FACGT_s`/`FABD_s`/`FRECPS_s`/`FRSQRTS_s` escalares, 14 linhas)
-    /// — MESMO subespaço `bit21=0` de `FEAT_RDM`/EXT-permute-TBL/copy/cripto SHA (auditoria de
-    /// colisão medida bit a bit contra `a64.decode`, ver `## Contexto` da task): assinatura
-    /// `bit22=1 && bit10=1 && bit15=0`. Só `FEAT_RDM` compartilha os 3 primeiros bits (`esz` livre
-    /// em bits[23:22]) — separado exclusivamente pelo `opcode` (`bit15=1` no RDM, checado ANTES por
-    /// este método via {@link #ADVSIMD_EXTRACT_PERMUTE_BIT15_MASK}); EXT/permute/TBL exigem
-    /// `bit10=0` e copy/SHA exigem `bit22=0`, nenhum alcança este método. Reusa a MESMA tabela de
-    /// opcode `(u,a,opcode)` da forma `_sd` ({@link #decodeVectorFpThreeSameOpcode}):
-    /// `opcode_sd = opcode_h | `{@link #ADVSIMD_FP16_OPCODE_TO_SD_BIT} (achado medido bit a bit
-    /// contra `a64.decode`, os 14 mnemônicos convertem sem exceção). `null` para qualquer
-    /// combinação fora das 14 linhas reais (G8) — o chamador decide o que fazer.
-    private Ir64Op decodeAdvancedSimdFp16ThreeSame(int word, boolean scalar, boolean q) {
-        boolean bit22 = ((word >>> ADVSIMD_INT_SIZE_SHIFT) & 1) != 0;
-        boolean bit10 = ((word >>> ADVSIMD_INT_BIT10_SHIFT) & 1) != 0;
-        if (!bit22 || !bit10) {
-            return null;
-        }
-        int opcodeH = (word >>> ADVSIMD_INT_OPCODE_SHIFT) & ADVSIMD_INT_OPCODE_MASK;
-        boolean bit15 = (opcodeH & ADVSIMD_EXTRACT_PERMUTE_BIT15_MASK) != 0;
-        if (bit15) {
-            // `FEAT_RDM` (`SQRDMLAH`/`SQRDMLSH` de halfword, `esz=01`) — o vizinho perigoso, ver a
-            // "Armadilha 1" da task. Já foi tentado primeiro pelo chamador; aqui só garante que este
-            // método nunca o engole se a ordem de chamada mudar no futuro.
-            return null;
-        }
-        boolean u = ((word >>> ADVSIMD_INT_U_SHIFT) & 1) != 0;
-        boolean a = ((word >>> ADVSIMD_FP_A_BIT_SHIFT) & 1) != 0;
-        int opcodeSd = opcodeH | ADVSIMD_FP16_OPCODE_TO_SD_BIT;
-        Ir64VectorFpThreeSameOp fpOp = decodeVectorFpThreeSameOpcode(u, a, opcodeSd);
-        if (fpOp == null) {
-            return null;
-        }
-        if (scalar && !fpThreeSameOpHasScalarForm(fpOp)) {
-            return null;
-        }
-        int rm = (word >>> ADVSIMD_INT_RM_SHIFT) & ADVSIMD_INT_RM_MASK;
-        int rn = (word >>> RN_SHIFT) & REGISTER_FIELD_MASK;
-        int rd = word & REGISTER_FIELD_MASK;
-        return new AdvSimdFpOp64.FpArithmeticThreeSame(fpOp, scalar, q, ADVSIMD_ESZ_HALFWORD, rd, rn, rm);
-    }
-
-    /// B19.11 (`FEAT_FP8`): `FCVTN_bh`/`FCVTN_bs` — vivem no MESMO espaço que
-    /// {@link #decodeAdvancedSimdFp16ThreeSame} (`bit21=0`, `bit10=1`), mas com `opcode=0b1_1110`
-    /// (`bit15=1`, que aquele método trata como reservado/RDM e devolve `null` — nunca colidem,
-    /// checado APÓS ele pelo chamador). `bit22` aqui NÃO é o discriminador fp16-vs-sd de sempre: é
-    /// o próprio seletor de largura de ORIGEM (`FCVTN_bh`=`1`/`FCVTN_bs`=`0`, Armadilha 6 da task —
-    /// as duas mnemônicas diferem SÓ nesse bit). `U`(bit29)/`a`(bit23) são fixos em `0` para ambas;
-    /// a família de acumulação vizinha (`FDOT_hb_v`/`FMLAL_hb_v`/`FMLALL_sb_v`, `opcode=0b1_1111`,
-    /// fora do escopo desta task — ver "Não inclui") não bate este `opcode` e continua caindo no
-    /// `unsupported` de sempre (G8). Sem forma escalar real (`a64.decode` só lista `@qrrr_h`
-    /// vetorial). Confirmado byte a byte contra `a64.decode` real
-    /// (`target/isa-decode/a64.decode:1216-1217`).
-    private Ir64Op decodeAdvancedSimdFp8ThreeSame(int word, boolean scalar, boolean q) {
-        if (scalar) {
-            return null;
-        }
-        boolean bit10 = ((word >>> ADVSIMD_INT_BIT10_SHIFT) & 1) != 0;
-        if (!bit10) {
-            return null;
-        }
-        int opcodeH = (word >>> ADVSIMD_INT_OPCODE_SHIFT) & ADVSIMD_INT_OPCODE_MASK;
-        if (opcodeH != ADVSIMD_FP8_THREE_SAME_CONVERT_OPCODE) {
-            return null;
-        }
-        boolean u = ((word >>> ADVSIMD_INT_U_SHIFT) & 1) != 0;
-        boolean a = ((word >>> ADVSIMD_FP_A_BIT_SHIFT) & 1) != 0;
-        if (u || a) {
-            return null;
-        }
-        boolean halfSource = ((word >>> ADVSIMD_INT_SIZE_SHIFT) & 1) != 0;
-        int rm = (word >>> ADVSIMD_INT_RM_SHIFT) & ADVSIMD_INT_RM_MASK;
-        int rn = (word >>> RN_SHIFT) & REGISTER_FIELD_MASK;
-        int rd = word & REGISTER_FIELD_MASK;
-        return new AdvSimdFpOp64.FpConvertToFp8(halfSource, q, rd, rn, rm);
-    }
-
-    /// B19.11e (`FEAT_FP8`): `FSCALE_h` — vive no MESMO espaço `bit21=0` de `FEAT_RDM`/FP16/
-    /// FP8-convert/FCMA/EXT-permute-copy/SHA, discriminado por `U`=1 fixo + `a`(bit23)=1 fixo +
-    /// `bit22`=1 fixo (marca meia precisão, nunca um `sz` livre aqui) + `bit10`=1 fixo +
-    /// `opcode`(bits[15:11])={@link #ADVSIMD_FP8_SCALE_OPCODE_H}. **Achado real desta task**: sem
-    /// este método, o encoding caía até {@link #decodeAdvancedSimdCopy} (fallback EXT/permute/
-    /// copy), que leu `Rm`(bits[20:16], o registrador `Vm` de VERDADE aqui) como se fosse `imm5`
-    /// de `INS_element`/`DUP` — produzindo `AdvSimdMoveOp64.InsertElement`/`AdvSimdMoveOp64.InsertGeneral` sempre que
-    /// os bits baixos de `Rm` calhassem de formar um `esz` válido (o `⚠️` medido pela task).
-    /// {@link #decodeAdvancedSimdFp16ThreeSame} e {@link #decodeAdvancedSimdFp8ThreeSame} são
-    /// tentados ANTES (mesma ordem do chamador) e devolvem `null` para este opcode sem ambiguidade
-    /// (conferido bit a bit: nenhuma key mapeada por eles bate `(u=1,a=1)`). Sem forma escalar
-    /// real (`a64.decode` só lista `@qrrr_h`).
-    private Ir64Op decodeAdvancedSimdFp8Scale(int word, boolean scalar, boolean q) {
-        if (scalar) {
-            return null;
-        }
-        boolean u = ((word >>> ADVSIMD_INT_U_SHIFT) & 1) != 0;
-        boolean a = ((word >>> ADVSIMD_FP_A_BIT_SHIFT) & 1) != 0;
-        boolean bit22 = ((word >>> ADVSIMD_INT_SIZE_SHIFT) & 1) != 0;
-        boolean bit10 = ((word >>> ADVSIMD_INT_BIT10_SHIFT) & 1) != 0;
-        if (!u || !a || !bit22 || !bit10) {
-            return null;
-        }
-        int opcodeH = (word >>> ADVSIMD_INT_OPCODE_SHIFT) & ADVSIMD_INT_OPCODE_MASK;
-        if (opcodeH != ADVSIMD_FP8_SCALE_OPCODE_H) {
-            return null;
-        }
-        int rm = (word >>> ADVSIMD_INT_RM_SHIFT) & ADVSIMD_INT_RM_MASK;
-        int rn = (word >>> RN_SHIFT) & REGISTER_FIELD_MASK;
-        int rd = word & REGISTER_FIELD_MASK;
-        return new AdvSimdFpOp64.FpScaleByInt(q, ADVSIMD_ESZ_HALFWORD, rd, rn, rm);
-    }
-
-    /// B19.24 (`FEAT_FAMINMAX`): `FAMAX_h`/`FAMIN_h` — vivem no MESMO espaço `bit21=0` de
-    /// `FEAT_RDM`/FP16/FP8-convert/FP8-scale/FCMA/EXT-permute-copy/SHA, discriminados por
-    /// `a`(bit23)=1 fixo + `bit22`=1 fixo (marca meia precisão) + `bit10`=1 fixo +
-    /// `opcode`(bits[15:11])={@link #ADVSIMD_FAMINMAX_OPCODE_H}, com `U`(bit29) escolhendo
-    /// `FAMAX`(`u=0`)/`FAMIN`(`u=1`). **Achado real desta task, MESMA classe de bug que a B19.11e já
-    /// documentou para `FSCALE_h`**: sem este método, o encoding cai até
-    /// {@link #decodeAdvancedSimdCopy} (fallback EXT/permute/copy), que lê `Rm`(bits[20:16], o
-    /// registrador `Vm` de VERDADE aqui) como se fosse `imm5` de `INS_element`/`DUP` — produzindo
-    /// `AdvSimdMoveOp64.InsertElement`/`AdvSimdMoveOp64.InsertGeneral` sempre que os bits baixos de `Rm` formassem um
-    /// `esz` válido (o `⚠️` medido pela task). {@link #decodeAdvancedSimdFp16ThreeSame}/
-    /// {@link #decodeAdvancedSimdFp8ThreeSame}/{@link #decodeAdvancedSimdFp8Scale} são tentados
-    /// ANTES (mesma ordem do chamador) e devolvem `null` para este opcode sem ambiguidade
-    /// (conferido bit a bit: nenhuma key/opcode mapeado por eles bate `opcode=0b0_0011`). Sem forma
-    /// escalar real (`a64.decode` só lista `@qrrr_h`).
-    private Ir64Op decodeAdvancedSimdFaminmaxHalf(int word, boolean scalar, boolean q) {
-        if (scalar) {
-            return null;
-        }
-        boolean a = ((word >>> ADVSIMD_FP_A_BIT_SHIFT) & 1) != 0;
-        boolean bit22 = ((word >>> ADVSIMD_INT_SIZE_SHIFT) & 1) != 0;
-        boolean bit10 = ((word >>> ADVSIMD_INT_BIT10_SHIFT) & 1) != 0;
-        if (!a || !bit22 || !bit10) {
-            return null;
-        }
-        int opcodeH = (word >>> ADVSIMD_INT_OPCODE_SHIFT) & ADVSIMD_INT_OPCODE_MASK;
-        if (opcodeH != ADVSIMD_FAMINMAX_OPCODE_H) {
-            return null;
-        }
-        boolean u = ((word >>> ADVSIMD_INT_U_SHIFT) & 1) != 0;
-        int rm = (word >>> ADVSIMD_INT_RM_SHIFT) & ADVSIMD_INT_RM_MASK;
-        int rn = (word >>> RN_SHIFT) & REGISTER_FIELD_MASK;
-        int rd = word & REGISTER_FIELD_MASK;
-        return new AdvSimdFpOp64.FpAbsoluteMaxMin(!u, q, ADVSIMD_ESZ_HALFWORD, rd, rn, rm);
-    }
-
-    /// B19.11b (`FEAT_FP8FMA`): `FMLAL_hb_v` — vive no MESMO espaço `bit21=0`/opcode
-    /// {@link #ADVSIMD_FP8_FMA_OPCODE_HB} que `FDOT_hb_v` (`FEAT_FP8DOT2`, ainda `⬜`) já usa,
-    /// discriminado por `a`(bit23): `0`=`FDOT_hb_v`, `1`=`FMLAL_hb_v`. `idxn`(bit30) NÃO é `Q` — o
-    /// `do_fmla_fp8` real do QEMU fixa `oprsz=16` incondicionalmente (sempre os 128 bits inteiros de
-    /// `Rd`), então este método ignora completamente o `q` do chamador e lê `idxn` direto do bit30
-    /// (achado que corrige a leitura inicial da spec desta task, que tratava esse campo como `Q`).
-    /// `idxn` seleciona a PARIDADE dos bytes FP8 de `Rn`/`Rm` usados — ver Javadoc de
-    /// {@link AdvSimdFpOp64.Fp8FusedMultiplyAddLong}.
-    private Ir64Op decodeAdvancedSimdFp8FusedMultiplyAddHalf(int word, boolean scalar) {
-        if (scalar) {
-            return null;
-        }
-        boolean u = ((word >>> ADVSIMD_INT_U_SHIFT) & 1) != 0;
-        boolean a = ((word >>> ADVSIMD_FP_A_BIT_SHIFT) & 1) != 0;
-        boolean bit22 = ((word >>> ADVSIMD_INT_SIZE_SHIFT) & 1) != 0;
-        boolean bit10 = ((word >>> ADVSIMD_INT_BIT10_SHIFT) & 1) != 0;
-        if (u || !a || !bit22 || !bit10) {
-            return null;
-        }
-        int opcodeH = (word >>> ADVSIMD_INT_OPCODE_SHIFT) & ADVSIMD_INT_OPCODE_MASK;
-        if (opcodeH != ADVSIMD_FP8_FMA_OPCODE_HB) {
-            return null;
-        }
-        int idxn = (word >>> ADVSIMD_INT_Q_SHIFT) & 1;
-        int rm = (word >>> ADVSIMD_INT_RM_SHIFT) & ADVSIMD_INT_RM_MASK;
-        int rn = (word >>> RN_SHIFT) & REGISTER_FIELD_MASK;
-        int rd = word & REGISTER_FIELD_MASK;
-        return new AdvSimdFpOp64.Fp8FusedMultiplyAddLong(false, idxn, rd, rn, rm);
-    }
-
-    /// B19.11b (`FEAT_FP8FMA`): `FMLALL_sb_v` — opcode PRÓPRIO {@link #ADVSIMD_FP8_FMA_OPCODE_SB},
-    /// `a`(bit23)=0/`u`(bit29)=0 fixos (MESMO par que `FCVTN_bh`/`FCVTN_bs`, mas opcode diferente —
-    /// nunca colide, ver {@link #decodeAdvancedSimdFp8ThreeSame}). O campo `idxn` combina bit30
-    /// (alto) e bit22 (baixo) num valor de 2 bits (`%fmlall_idxn` do QEMU), selecionando a FASE
-    /// (`0`-`3`) dos bytes FP8 de `Rn`/`Rm` usados — ver Javadoc de
-    /// {@link AdvSimdFpOp64.Fp8FusedMultiplyAddLong}.
-    private Ir64Op decodeAdvancedSimdFp8FusedMultiplyAddSingle(int word, boolean scalar) {
-        if (scalar) {
-            return null;
-        }
-        boolean u = ((word >>> ADVSIMD_INT_U_SHIFT) & 1) != 0;
-        boolean a = ((word >>> ADVSIMD_FP_A_BIT_SHIFT) & 1) != 0;
-        boolean bit10 = ((word >>> ADVSIMD_INT_BIT10_SHIFT) & 1) != 0;
-        if (u || a || !bit10) {
-            return null;
-        }
-        int opcodeH = (word >>> ADVSIMD_INT_OPCODE_SHIFT) & ADVSIMD_INT_OPCODE_MASK;
-        if (opcodeH != ADVSIMD_FP8_FMA_OPCODE_SB) {
-            return null;
-        }
-        int idxnHigh = (word >>> ADVSIMD_INT_Q_SHIFT) & 1;
-        int idxnLow = (word >>> ADVSIMD_INT_SIZE_SHIFT) & 1;
-        int idxn = (idxnHigh << 1) | idxnLow;
-        int rm = (word >>> ADVSIMD_INT_RM_SHIFT) & ADVSIMD_INT_RM_MASK;
-        int rn = (word >>> RN_SHIFT) & REGISTER_FIELD_MASK;
-        int rd = word & REGISTER_FIELD_MASK;
-        return new AdvSimdFpOp64.Fp8FusedMultiplyAddLong(true, idxn, rd, rn, rm);
-    }
-
-    /// B19.11c (`FEAT_FP8DOT2`): `FDOT_hb_v` — vive no MESMO espaço `bit21=0`/opcode
-    /// {@link #ADVSIMD_FP8_FMA_OPCODE_HB} que `FMLAL_hb_v` (B19.11b) já usa, discriminado por
-    /// `a`(bit23): `0`=`FDOT_hb_v` (esta task), `1`=`FMLAL_hb_v`. **AO CONTRÁRIO** de `FMLAL_hb_v`
-    /// (que ignora `Q` e sempre processa os 128 bits inteiros de `Rd`, `idxn` roubando o bit30),
-    /// `FDOT_hb_v` usa `Q` NORMALMENTE — `do_f8dot` do QEMU real passa `a->q ? 16 : 8` (forma
-    /// AdvSIMD "three same" padrão), achado confirmado em `target/arm/tcg/translate-a64.c`
-    /// (`do_f8dot`/`do_fmla_fp8`, revisão fixada pela E11). `FDOT_sb_v` (`bit22=0`) fica de fora
-    /// deste método — decodificado por {@link #decodeAdvancedSimdFp8DotSingle} (B19.11d).
-    private Ir64Op decodeAdvancedSimdFp8DotHalf(int word, boolean scalar, boolean q) {
-        if (scalar) {
-            return null;
-        }
-        boolean u = ((word >>> ADVSIMD_INT_U_SHIFT) & 1) != 0;
-        boolean a = ((word >>> ADVSIMD_FP_A_BIT_SHIFT) & 1) != 0;
-        boolean bit22 = ((word >>> ADVSIMD_INT_SIZE_SHIFT) & 1) != 0;
-        boolean bit10 = ((word >>> ADVSIMD_INT_BIT10_SHIFT) & 1) != 0;
-        if (u || a || !bit22 || !bit10) {
-            return null;
-        }
-        int opcodeH = (word >>> ADVSIMD_INT_OPCODE_SHIFT) & ADVSIMD_INT_OPCODE_MASK;
-        if (opcodeH != ADVSIMD_FP8_FMA_OPCODE_HB) {
-            return null;
-        }
-        int rm = (word >>> ADVSIMD_INT_RM_SHIFT) & ADVSIMD_INT_RM_MASK;
-        int rn = (word >>> RN_SHIFT) & REGISTER_FIELD_MASK;
-        int rd = word & REGISTER_FIELD_MASK;
-        return new AdvSimdFpOp64.Fp8DotProduct(false, q, rd, rn, rm);
-    }
-
-    /// B19.11d (`FEAT_FP8DOT4`): `FDOT_sb_v` — vive no MESMO espaço `bit21=0`/opcode
-    /// {@link #ADVSIMD_FP8_FMA_OPCODE_HB} que `FDOT_hb_v` (B19.11c) e `FMLAL_hb_v` (B19.11b) já
-    /// usam, discriminado por `bit22` (ao contrário do par `FDOT_hb_v`×`FMLAL_hb_v`, que se separam
-    /// por `a`): `1`=`FDOT_hb_v`, `0`=`FDOT_sb_v` (esta task) — confirmado byte a byte contra
-    /// `aarch64-linux-gnu-as -march=armv9.5-a+fp8dot2+fp8dot4` (WSL). `a`(bit23)=`0` fixo nas duas
-    /// formas `FDOT`. Mesma disciplina de `Q` de {@link #decodeAdvancedSimdFp8DotHalf} (`FDOT` usa
-    /// `Q` normalmente, ao contrário de `FMLAL_hb_v`/`FMLALL_sb_v`).
-    private Ir64Op decodeAdvancedSimdFp8DotSingle(int word, boolean scalar, boolean q) {
-        if (scalar) {
-            return null;
-        }
-        boolean u = ((word >>> ADVSIMD_INT_U_SHIFT) & 1) != 0;
-        boolean a = ((word >>> ADVSIMD_FP_A_BIT_SHIFT) & 1) != 0;
-        boolean bit22 = ((word >>> ADVSIMD_INT_SIZE_SHIFT) & 1) != 0;
-        boolean bit10 = ((word >>> ADVSIMD_INT_BIT10_SHIFT) & 1) != 0;
-        if (u || a || bit22 || !bit10) {
-            return null;
-        }
-        int opcodeH = (word >>> ADVSIMD_INT_OPCODE_SHIFT) & ADVSIMD_INT_OPCODE_MASK;
-        if (opcodeH != ADVSIMD_FP8_FMA_OPCODE_HB) {
-            return null;
-        }
-        int rm = (word >>> ADVSIMD_INT_RM_SHIFT) & ADVSIMD_INT_RM_MASK;
-        int rn = (word >>> RN_SHIFT) & REGISTER_FIELD_MASK;
-        int rd = word & REGISTER_FIELD_MASK;
-        return new AdvSimdFpOp64.Fp8DotProduct(true, q, rd, rn, rm);
-    }
-
-    /// B19.20 (`FEAT_FCMA`): `FCADD_90`/`FCADD_270`/`FCMLA_v` — vivem no MESMO espaço `bit21=0` que
-    /// `FEAT_RDM`/FP16/FP8-three-same/EXT-permute-TBL/copy/SHA (checado ANTES de EXT/permute, mesma
-    /// disciplina de {@link #decodeAdvancedSimdRoundingDoublingMultiplyAccumulate}), discriminados
-    /// por `U`=1 fixo + `bit10`=1 fixo + `opcode`(bits[15:11], ver as constantes `ADVSIMD_FCMA_*`).
-    /// `esz`(bits[23:22]) livre em `{1,2,3}` (`0` reservado, G8); `esz=3`(dupla) EXIGE `q=true` no
-    /// encoding real — não cabe um par complexo de dupla precisão em 64 bits (confirmado: o
-    /// assembler real só produz `.2d`, nunca `.1d`, para `FCADD`/`FCMLA`). Sem forma escalar (ARM
-    /// DDI 0487: só vetorial). Núcleo reaproveitado 100% de `advsimd/AdvSimdLanes`
-    /// (`fpComplexAdd`/`fpComplexMultiplyAccumulate`, já escrito pela B13.17 para o NEON de 32
-    /// bits). `null` (nunca `unsupported`) para qualquer combinação fora das 6 formas reais — G8,
-    /// deixa o chamador continuar tentando EXT/permute/TBL/copy/SHA no mesmo espaço.
-    private Ir64Op decodeAdvancedSimdComplexNumberArithmetic(int word, boolean scalar, boolean q) {
-        if (scalar) {
-            return null;
-        }
-        boolean u = ((word >>> ADVSIMD_INT_U_SHIFT) & 1) != 0;
-        boolean bit10 = ((word >>> ADVSIMD_INT_BIT10_SHIFT) & 1) != 0;
-        if (!u || !bit10) {
-            return null;
-        }
-        int esz = (word >>> ADVSIMD_INT_SIZE_SHIFT) & ADVSIMD_INT_SIZE_MASK;
-        if (esz == 0 || (esz == ADVSIMD_INT_SCALAR_ESZ && !q)) {
-            return null; // `esz=0` reservado; `esz=3&&!q` UNDEFINED (par complexo não cabe em D).
-        }
-        int opcode = (word >>> ADVSIMD_INT_OPCODE_SHIFT) & ADVSIMD_INT_OPCODE_MASK;
-        int rm = (word >>> ADVSIMD_INT_RM_SHIFT) & ADVSIMD_INT_RM_MASK;
-        int rn = (word >>> RN_SHIFT) & REGISTER_FIELD_MASK;
-        int rd = word & REGISTER_FIELD_MASK;
-        if ((opcode & ADVSIMD_FCMA_OPCODE_PREFIX_MASK) == ADVSIMD_FCMA_OPCODE_PREFIX_PATTERN) {
-            int rotation = (opcode & ADVSIMD_FCMA_ROTATION_MASK) * ADVSIMD_FCMA_ROTATION_UNIT_DEGREES;
-            return new AdvSimdFpOp64.FpComplexMultiplyAccumulate(q, esz, rotation, rd, rn, rm);
-        }
-        if (opcode == ADVSIMD_FCADD_OPCODE_90) {
-            return new AdvSimdFpOp64.FpComplexAdd(q, esz, ADVSIMD_FCMA_ROTATION_UNIT_DEGREES, rd, rn, rm);
-        }
-        if (opcode == ADVSIMD_FCADD_OPCODE_270) {
-            return new AdvSimdFpOp64.FpComplexAdd(q, esz, 3 * ADVSIMD_FCMA_ROTATION_UNIT_DEGREES, rd, rn, rm);
-        }
-        return null;
-    }
-
     /// `EXT`(`U=1`)/`UZP1``UZP2``TRN1``TRN2``ZIP1``ZIP2`(`U=0`,`bit11=1`)/`TBL``TBX`(`U=0`,
     /// `bit11=0`) — B8.10: as três famílias que vivem no prefixo vetorial "01110", `bit21=0`,
     /// `bit10=0` (espaço nunca examinado por B8.7-B8.9, que só tratavam `bit21=1` e lançavam
@@ -4888,7 +4414,7 @@ public final class Aarch64Decoder {
         boolean bit11 = (opcode & 1) != 0;
         boolean bit10 = ((word >>> ADVSIMD_INT_BIT10_SHIFT) & 1) != 0;
         // B19.8 (`FEAT_LUT`): `LUTI2`/`LUTI4` checados ANTES do resto (EXT/permute/TBL/copy),
-        // mesmo padrão de {@link #decodeAdvancedSimdRoundingDoublingMultiplyAccumulate} (B11.4) —
+        // mesmo padrão de RDM (B11.4, hoje em {@link AdvSimdBit21ZeroRows}) —
         // sem a feature, os 4 padrões já caem em `unsupported` pelo fallback de `TBL` abaixo
         // (`esz` nunca `0` para eles), então a ordem só evita trabalho à toa quando a feature ESTÁ
         // presente.
@@ -5944,7 +5470,7 @@ public final class Aarch64Decoder {
         // B19.11b (`FEAT_FP8FMA`): `FMLALL_sb_vi` — `U`(bit29)=`1` fixo, `opcode`(bits[15:12])=
         // {@link #ADVSIMD_FP8_FMA_INDEXED_OPCODE_SB}, `bit23`=`0` fixo — mas bit22 aqui NÃO é
         // `sizeField`: é a metade BAIXA de `idxn` (`%fmlall_idxn` do QEMU, MESMA fórmula de
-        // {@link #decodeAdvancedSimdFp8FusedMultiplyAddSingle}), por isso este intercepto NÃO usa
+        // `FMLALL_sb_v` em {@link AdvSimdBit21ZeroRows}), por isso este intercepto NÃO usa
         // `sizeField` (que mediria um valor sem sentido, `0b00`/`0b01` dependendo de `idxn`) e checa
         // `bit23` diretamente. Nunca colide com nenhuma chave de
         // {@link #decodeAdvancedSimdIndexedFp}/{@link #decodeAdvancedSimdIndexedInt} (conferido

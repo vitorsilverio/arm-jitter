@@ -124,7 +124,8 @@ G5 = suites de gbaemu/ndsemu obrigatórias (regra do `tasks/README.md`).
 | [E15.6b](e15.6b-dce-gpr-nao-declarados.md) | DCE: ~39 records que leem GPR sem declarar `regUse()` (bug latente do JIT) + teste-guarda | sim | ✅ 2026-10-02 |
 | [E15.7](e15.7-asm-emissores-por-familia.md) | Registro de emissores ASM 32 bits + política derivada (D3); `AsmBlockCompiler`/`AsmRuntimeHelpers` por família | sim | ✅ 2026-10-03 (bytecode idêntico) |
 | [E15.8](e15.8-mve-executor-por-familia.md) | `IrSystemExecutor` (2516) → sistema + 5 executores MVE por família; `IrBlockExecutor#mveMoveExecutor()` sob demanda (D8) | sim | ✅ 2026-10-03 (deslocamento puro) |
-| E15.9 | Infra `DecodeTable` (D5) + **piloto**: a cascata `bit21=0` de `decodeAdvancedSimdInteger` (FP16/FP8/FAMINMAX/FP8FMA/FP8DOT2/FP8DOT4/FCMA). Gate de go/no-go: linhas, branches e tempo de lift antes/depois | não | ⬜ [REFINAR] |
+| [E15.9](e15.9-decode-table-piloto.md) | Infra `DecodeTable` (D5) + **piloto**: a cascata `bit21=0` de `decodeAdvancedSimdInteger` (FP16/FP8/FAMINMAX/FP8FMA/FP8DOT2/FP8DOT4/FCMA). Gate de go/no-go: linhas, branches e tempo de lift antes/depois | não | ✅ 2026-10-03 (go; corrigiu um G8 do FP16) |
+| [E15.9b](e15.9b-advsimd-bit31-ignorado.md) | Achados da E15.9: `bit31` e `bits[23:22]` do copy não conferidos (G8); 5 `F*P_v` `_h` ausentes, medidas ✅ por misdecode | não | ⬜ |
 | E15.10–E15.15 | `Aarch64Decoder` grupo a grupo para tabela, um arquivo por grupo: DP-imediato · branch/exceção/sistema (inclui `decodeSystemRegisterId` → encoding no próprio `Aarch64SystemRegisterId`) · load/store · DP-registrador · FP escalar · AdvSIMD | não | ⬜ [REFINAR] após E15.9 |
 | E15.16 | Decoders de 32 bits (`ArmDecoder`, `VfpDecoder`, `Thumb2*`) para tabela | sim | ⬜ [REFINAR] após E15.15 |
 | E15.17 | `AdvSimdLanes` (3677) por família de operação; `Aarch64Core` (1848): banco de sysreg para fora | sim | ⬜ [REFINAR] |

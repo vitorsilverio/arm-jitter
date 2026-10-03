@@ -118,6 +118,11 @@ Próxima versão: **`2.0.0`** — o refactor estrutural (épico `E15`) quebra no
   nenhum no record — o `LR`, contador de tail-predication que toda op MVE predicada lê (`MveOp#regUse()` passa a
   devolver o `LR` por default). Um teste-guarda por reflexão (`IrOpRegisterUseGuardTest`) faz um record novo com
   componente de nome de GPR e sem `regUse()` falhar no build.
+- **AdvSIMD `FEAT_FP16` "three same" aceitava `opcode=01ooo`** (`E15.9`): o decoder A64 ignorava o `bit14` e devolvia
+  `FADD`/`FMUL`/`FCMEQ`/... de meia precisão para palavras que o ARM não aloca (ex.: `0x4e405400`, `undefined` no
+  `objdump`). Agora essas palavras não decodificam como FP16. O espaço AdvSIMD `bit21=0` com feature (RDM, FP16, FP8,
+  FAMINMAX, FP8FMA, FP8DOT2/4, FCMA) passou a ser uma tabela de encodings filtrada pelo preset (`DecodeTable`, interno);
+  o resto do comportamento é idêntico, conferido por oráculo sobre o subespaço inteiro × 256 combinações de features.
 
 ## [1.4.0] — 2026-10-01
 
