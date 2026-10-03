@@ -111,6 +111,11 @@ public sealed interface MveIntegerOp extends MveOp permits MveIntegerOp.WideShif
             Condition condition) implements MveIntegerOp {
         @Override public int kind() { return Kind.MVE_WIDE_SHIFT; }
         @Override public boolean execute(IrBlockExecutor executor, ArmCore core, int blockEndPc) { executor.systemExecutor().executeMveWideShift(core, this); return false; }
+        // Escalar: não consulta `VPR`/`ECI` nem o contador de tail-predication.
+        @Override public int regUse() {
+            return (operation.register() ? (1 << rm) : 0) | (1 << rdaLo) | (operation.wide() ? (1 << rdaHi) : 0);
+        }
+        @Override public int regDef() { return (1 << rdaLo) | (operation.wide() ? (1 << rdaHi) : 0); }
     }
 
     /// Vector 2-op inteiro (perfil M, B16.6, MVE/Helium, `target/isa-decode/mve.decode`, seção
@@ -420,6 +425,7 @@ public sealed interface MveIntegerOp extends MveOp permits MveIntegerOp.WideShif
             Condition condition) implements MveIntegerOp {
         @Override public int kind() { return Kind.MVE_VECTOR_SCALAR; }
         @Override public boolean execute(IrBlockExecutor executor, ArmCore core, int blockEndPc) { return executor.systemExecutor().executeMveVectorScalar(core, this); }
+        @Override public int regUse() { return (1 << rm) | GprMask.MVE_TAIL_PREDICATION; }
     }
 
     /// `VQDMULLB_scalar`/`VQDMULLT_scalar` (perfil M, B16.9, MVE/Helium, verbatim de
@@ -450,6 +456,7 @@ public sealed interface MveIntegerOp extends MveOp permits MveIntegerOp.WideShif
             Condition condition) implements MveIntegerOp {
         @Override public int kind() { return Kind.MVE_VECTOR_SCALAR_WIDENING; }
         @Override public boolean execute(IrBlockExecutor executor, ArmCore core, int blockEndPc) { return executor.systemExecutor().executeMveVectorScalarWidening(core, this); }
+        @Override public int regUse() { return (1 << rm) | GprMask.MVE_TAIL_PREDICATION; }
     }
 
     /// `VBRSR`/`VMLAS`/`VQDMLAH`/`VQRDMLAH`/`VQDMLASH`/`VQRDMLASH` (perfil M, B16.9, MVE/Helium):
@@ -478,6 +485,7 @@ public sealed interface MveIntegerOp extends MveOp permits MveIntegerOp.WideShif
             Condition condition) implements MveIntegerOp {
         @Override public int kind() { return Kind.MVE_VECTOR_SCALAR_SPECIAL; }
         @Override public boolean execute(IrBlockExecutor executor, ArmCore core, int blockEndPc) { return executor.systemExecutor().executeMveVectorScalarSpecial(core, this); }
+        @Override public int regUse() { return (1 << rm) | GprMask.MVE_TAIL_PREDICATION; }
 
         /// As 6 operações servidas por {@link VectorScalarSpecial} — nenhuma cabe em
         /// {@link dev.vitorsilverio.armjitter.advsimd.AdvSimdThreeSameOp} sem alterar o `switch`
@@ -614,6 +622,8 @@ public sealed interface MveIntegerOp extends MveOp permits MveIntegerOp.WideShif
             Condition condition) implements MveIntegerOp {
         @Override public int kind() { return Kind.MVE_VECTOR_SHIFT_LEFT_CARRY; }
         @Override public boolean execute(IrBlockExecutor executor, ArmCore core, int blockEndPc) { return executor.systemExecutor().executeMveVectorShiftLeftCarry(core, this); }
+        @Override public int regUse() { return (1 << rdm) | GprMask.MVE_TAIL_PREDICATION; }
+        @Override public int regDef() { return 1 << rdm; }
     }
 
     /// `VCLS`/`VCLZ`/`VREV16`/`VREV32`/`VREV64`/`VMVN`/`VABS`/`VNEG`/`VQABS`/`VQNEG` (perfil M,

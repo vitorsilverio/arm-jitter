@@ -347,6 +347,7 @@ public sealed interface VfpOp extends IrOp permits VfpOp.Alu, VfpOp.Select, VfpO
             Condition condition) implements VfpOp {
         @Override public int kind() { return Kind.VFP_LOAD_HALF; }
         @Override public boolean execute(IrBlockExecutor executor, ArmCore core, int blockEndPc) { executor.vfpExecutor().executeVfpLoadHalf(core, this); return false; }
+        @Override public int regUse() { return baseValueOverride < 0 ? (1 << base) : 0; }
     }
 
     /// `VSTR_hp` (B14.6b) — ver {@link LoadHalf}.
@@ -363,6 +364,7 @@ public sealed interface VfpOp extends IrOp permits VfpOp.Alu, VfpOp.Select, VfpO
             Condition condition) implements VfpOp {
         @Override public int kind() { return Kind.VFP_STORE_HALF; }
         @Override public boolean execute(IrBlockExecutor executor, ArmCore core, int blockEndPc) { executor.vfpExecutor().executeVfpStoreHalf(core, this); return false; }
+        @Override public int regUse() { return baseValueOverride < 0 ? (1 << base) : 0; }
     }
 
     /// Direção de conversão de {@link ConvertHalfPrecision} (`VCVTB`/`VCVTT`, B22.7). O nome diz
@@ -689,6 +691,8 @@ public sealed interface VfpOp extends IrOp permits VfpOp.Alu, VfpOp.Select, VfpO
             Condition condition) implements VfpOp {
         @Override public int kind() { return Kind.VFP_CORE_PAIR_TRANSFER_SINGLE; }
         @Override public boolean execute(IrBlockExecutor executor, ArmCore core, int blockEndPc) { executor.vfpExecutor().executeVfpCorePairTransferSingle(core, this); return false; }
+        @Override public int regUse() { return toArmRegisters ? 0 : (1 << armLow) | (1 << armHigh); }
+        @Override public int regDef() { return toArmRegisters ? (1 << armLow) | (1 << armHigh) : 0; }
     }
 
     /// `VCVT_fix_{sp,dp}` (ARM DDI 0406C A8.8.397, VFPv3): converte, no MESMO registrador `vd`

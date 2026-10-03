@@ -39,6 +39,8 @@ public sealed interface MveReductionOp extends MveOp permits MveReductionOp.Vect
             Condition condition) implements MveReductionOp {
         @Override public int kind() { return Kind.MVE_VECTOR_ADD_ACROSS_VECTOR; }
         @Override public boolean execute(IrBlockExecutor executor, ArmCore core, int blockEndPc) { return executor.systemExecutor().executeMveVectorAddAcrossVector(core, this); }
+        @Override public int regUse() { return (accumulate ? (1 << rda) : 0) | GprMask.MVE_TAIL_PREDICATION; }
+        @Override public int regDef() { return 1 << rda; }
     }
 
     /// `VADDLV` (perfil M, B16.13a, MVE/Helium, `FEAT_MVE_INTEGER`, `target/isa-decode/mve.decode`,
@@ -61,6 +63,8 @@ public sealed interface MveReductionOp extends MveOp permits MveReductionOp.Vect
             Condition condition) implements MveReductionOp {
         @Override public int kind() { return Kind.MVE_VECTOR_ADD_ACROSS_VECTOR_LONG; }
         @Override public boolean execute(IrBlockExecutor executor, ArmCore core, int blockEndPc) { return executor.systemExecutor().executeMveVectorAddAcrossVectorLong(core, this); }
+        @Override public int regUse() { return (accumulate ? (1 << rdahi) | (1 << rdalo) : 0) | GprMask.MVE_TAIL_PREDICATION; }
+        @Override public int regDef() { return (1 << rdahi) | (1 << rdalo); }
     }
 
     /// `VABAV_S`/`VABAV_U` (perfil M, B16.13a, MVE/Helium, `FEAT_MVE_INTEGER`,
@@ -84,6 +88,8 @@ public sealed interface MveReductionOp extends MveOp permits MveReductionOp.Vect
             Condition condition) implements MveReductionOp {
         @Override public int kind() { return Kind.MVE_VECTOR_ABSOLUTE_DIFFERENCE_ACCUMULATE; }
         @Override public boolean execute(IrBlockExecutor executor, ArmCore core, int blockEndPc) { return executor.systemExecutor().executeMveVectorAbsoluteDifferenceAccumulate(core, this); }
+        @Override public int regUse() { return (1 << rda) | GprMask.MVE_TAIL_PREDICATION; }
+        @Override public int regDef() { return 1 << rda; }
     }
 
     /// `VMLADAV_S`/`VMLADAV_U`/`VMLSDAV` (perfil M, B16.13b, MVE/Helium, `FEAT_MVE_INTEGER`,
@@ -115,6 +121,8 @@ public sealed interface MveReductionOp extends MveOp permits MveReductionOp.Vect
             Condition condition) implements MveReductionOp {
         @Override public int kind() { return Kind.MVE_VECTOR_DUAL_ACCUMULATE; }
         @Override public boolean execute(IrBlockExecutor executor, ArmCore core, int blockEndPc) { return executor.systemExecutor().executeMveVectorDualAccumulate(core, this); }
+        @Override public int regUse() { return (accumulate ? (1 << rda) : 0) | GprMask.MVE_TAIL_PREDICATION; }
+        @Override public int regDef() { return 1 << rda; }
     }
 
     /// `VMLALDAV_S`/`VMLALDAV_U`/`VMLSLDAV` (perfil M, B16.13b, MVE/Helium, `FEAT_MVE_INTEGER`,
@@ -145,6 +153,8 @@ public sealed interface MveReductionOp extends MveOp permits MveReductionOp.Vect
             Condition condition) implements MveReductionOp {
         @Override public int kind() { return Kind.MVE_VECTOR_DUAL_ACCUMULATE_LONG; }
         @Override public boolean execute(IrBlockExecutor executor, ArmCore core, int blockEndPc) { return executor.systemExecutor().executeMveVectorDualAccumulateLong(core, this); }
+        @Override public int regUse() { return (accumulate ? (1 << rdahi) | (1 << rdalo) : 0) | GprMask.MVE_TAIL_PREDICATION; }
+        @Override public int regDef() { return (1 << rdahi) | (1 << rdalo); }
     }
 
     /// `VRMLALDAVH_S`/`VRMLALDAVH_U`/`VRMLSLDAVH` (perfil M, B16.13b, MVE/Helium,
@@ -175,6 +185,8 @@ public sealed interface MveReductionOp extends MveOp permits MveReductionOp.Vect
             Condition condition) implements MveReductionOp {
         @Override public int kind() { return Kind.MVE_VECTOR_ROUNDING_DUAL_ACCUMULATE_HIGH; }
         @Override public boolean execute(IrBlockExecutor executor, ArmCore core, int blockEndPc) { return executor.systemExecutor().executeMveVectorRoundingDualAccumulateHigh(core, this); }
+        @Override public int regUse() { return (accumulate ? (1 << rdahi) | (1 << rdalo) : 0) | GprMask.MVE_TAIL_PREDICATION; }
+        @Override public int regDef() { return (1 << rdahi) | (1 << rdalo); }
     }
 
     /// `VMAXV_S`/`VMAXV_U`/`VMINV_S`/`VMINV_U`/`VMAXAV`/`VMINAV` (perfil M, B16.13b, MVE/Helium,
@@ -201,6 +213,9 @@ public sealed interface MveReductionOp extends MveOp permits MveReductionOp.Vect
             Condition condition) implements MveReductionOp {
         @Override public int kind() { return Kind.MVE_VECTOR_MIN_MAX_ACROSS_VECTOR; }
         @Override public boolean execute(IrBlockExecutor executor, ArmCore core, int blockEndPc) { return executor.systemExecutor().executeMveVectorMinMaxAcrossVector(core, this); }
+        // O valor inicial da redução é sempre o `rda` atual.
+        @Override public int regUse() { return (1 << rda) | GprMask.MVE_TAIL_PREDICATION; }
+        @Override public int regDef() { return 1 << rda; }
     }
 
     /// `VMAXNMV`/`VMINNMV`/`VMAXNMAV`/`VMINNMAV` (perfil M, B16.13b, MVE/Helium, `FEAT_MVE_FP`,
@@ -229,5 +244,7 @@ public sealed interface MveReductionOp extends MveOp permits MveReductionOp.Vect
             Condition condition) implements MveReductionOp {
         @Override public int kind() { return Kind.MVE_VECTOR_FP_MIN_MAX_ACROSS_VECTOR; }
         @Override public boolean execute(IrBlockExecutor executor, ArmCore core, int blockEndPc) { return executor.systemExecutor().executeMveVectorFpMinMaxAcrossVector(core, this); }
+        @Override public int regUse() { return (1 << rda) | GprMask.MVE_TAIL_PREDICATION; }
+        @Override public int regDef() { return 1 << rda; }
     }
 }

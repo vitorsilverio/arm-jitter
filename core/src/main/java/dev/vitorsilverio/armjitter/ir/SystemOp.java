@@ -92,6 +92,8 @@ public sealed interface SystemOp extends IrOp permits SystemOp.PsrTransfer, Syst
             Condition condition) implements SystemOp {
         @Override public int kind() { return Kind.ERET; }
         @Override public boolean execute(IrBlockExecutor executor, ArmCore core, int blockEndPc) { return executor.systemExecutor().executeEret(core, this, blockEndPc); }
+        // Fora do Hyp mode o retorno vem do LR do banco ativo.
+        @Override public int regUse() { return GprMask.LR; }
     }
 
     /// `MRS` (forma bancada, B9.8.5, ARM DDI 0406C A8.8.64): lê um registrador geral ou `SPSR` de
@@ -117,6 +119,8 @@ public sealed interface SystemOp extends IrOp permits SystemOp.PsrTransfer, Syst
             Condition condition) implements SystemOp {
         @Override public int kind() { return Kind.MRS_BANK; }
         @Override public boolean execute(IrBlockExecutor executor, ArmCore core, int blockEndPc) { return executor.systemExecutor().executeMrsBank(core, this, blockEndPc); }
+        // Com o modo alvo igual ao ativo, o registrador bancado lido é o próprio `bankedRegister`.
+        @Override public int regUse() { return spsr || elrHyp ? 0 : 1 << bankedRegister; }
     }
 
     /// `MSR` (forma bancada, B9.8.5): escreve um registrador geral num registrador geral ou `SPSR`
@@ -137,6 +141,7 @@ public sealed interface SystemOp extends IrOp permits SystemOp.PsrTransfer, Syst
             Condition condition) implements SystemOp {
         @Override public int kind() { return Kind.MSR_BANK; }
         @Override public boolean execute(IrBlockExecutor executor, ArmCore core, int blockEndPc) { return executor.systemExecutor().executeMsrBank(core, this, blockEndPc); }
+        @Override public int regUse() { return 1 << armRegister; }
     }
 
     /// Operação SWI delegada ao dispatcher do host.
@@ -256,6 +261,8 @@ public sealed interface SystemOp extends IrOp permits SystemOp.PsrTransfer, Syst
             Condition condition) implements SystemOp {
         @Override public int kind() { return Kind.CHANGE_PROCESSOR_STATE; }
         @Override public boolean execute(IrBlockExecutor executor, ArmCore core, int blockEndPc) { executor.systemExecutor().executeChangeProcessorState(core, this); return false; }
+        // Troca de modo salva o banco r8-r14 atual (mesmo motivo de `PsrTransfer` com o campo `c`).
+        @Override public int regUse() { return changeMode ? GprMask.BANKED_R8_R14 : 0; }
     }
 
     /// `SETEND` (ARMv6): seta o bit E (endianness de dados) do CPSR.
@@ -282,6 +289,8 @@ public sealed interface SystemOp extends IrOp permits SystemOp.PsrTransfer, Syst
             Condition condition) implements SystemOp {
         @Override public int kind() { return Kind.STORE_RETURN_STATE; }
         @Override public boolean execute(IrBlockExecutor executor, ArmCore core, int blockEndPc) { return executor.transferExecutor().executeStoreReturnState(core, this); }
+        // Empilha o LR atual; com o modo alvo igual ao ativo, o SP lido é o próprio R13.
+        @Override public int regUse() { return GprMask.LR | GprMask.SP; }
     }
 
     /// `RFE` (ARMv6): carrega PC e CPSR da pilha apontada por `base` (Rn).
@@ -298,6 +307,7 @@ public sealed interface SystemOp extends IrOp permits SystemOp.PsrTransfer, Syst
             Condition condition) implements SystemOp {
         @Override public int kind() { return Kind.RETURN_FROM_EXCEPTION; }
         @Override public boolean execute(IrBlockExecutor executor, ArmCore core, int blockEndPc) { return executor.transferExecutor().executeReturnFromException(core, this); }
+        @Override public int regUse() { return 1 << base; }
     }
 
     /// `WFI` (ARMv6K hint): coloca o core em HALT até uma interrupção.
@@ -398,5 +408,8 @@ public sealed interface SystemOp extends IrOp permits SystemOp.PsrTransfer, Syst
             Condition condition) implements SystemOp {
         @Override public int kind() { return Kind.SECURE_GATEWAY; }
         @Override public boolean execute(IrBlockExecutor executor, ArmCore core, int blockEndPc) { executor.systemExecutor().executeSecureGateway(core, this); return false; }
+        // `SG` limpa o bit 0 do LR (lê e escreve).
+        @Override public int regUse() { return GprMask.LR; }
+        @Override public int regDef() { return GprMask.LR; }
     }
 }

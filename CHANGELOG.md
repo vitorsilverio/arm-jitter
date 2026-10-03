@@ -78,6 +78,17 @@ Próxima versão: **`2.0.0`** — o refactor estrutural (épico `E15`) quebra no
   | `MveFpOp` (⊂ `MveOp`) | `MveVectorFpAbsAccumulate` → `VectorFpAbsAccumulate` · `MveVectorFpConvertPrecision` → `VectorFpConvertPrecision` · `MveVectorFpComplexMultiply` → `VectorFpComplexMultiply` · `MveVectorFpTwoOp` → `VectorFpTwoOp` · `MveVectorFpComplexAdd` → `VectorFpComplexAdd` · `MveVectorFpComplexMultiplyAccumulate` → `VectorFpComplexMultiplyAccumulate` · `MveVectorFpScalar` → `VectorFpScalar` · `MveVectorFpScalarFma` → `VectorFpScalarFma` · `MveVectorFpConvert` → `VectorFpConvert` · `MveVectorFpConvertFixed` → `VectorFpConvertFixed` · `MveVectorFpUnary` → `VectorFpUnary` |
   | `MveReductionOp` (⊂ `MveOp`) | `MveVectorAddAcrossVector` → `VectorAddAcrossVector` · `MveVectorAddAcrossVectorLong` → `VectorAddAcrossVectorLong` · `MveVectorAbsoluteDifferenceAccumulate` → `VectorAbsoluteDifferenceAccumulate` · `MveVectorDualAccumulate` → `VectorDualAccumulate` · `MveVectorDualAccumulateLong` → `VectorDualAccumulateLong` · `MveVectorRoundingDualAccumulateHigh` → `VectorRoundingDualAccumulateHigh` · `MveVectorMinMaxAcrossVector` → `VectorMinMaxAcrossVector` · `MveVectorFpMinMaxAcrossVector` → `VectorFpMinMaxAcrossVector` |
 
+### Corrigido
+- **`DeadCodeEliminationPass` apagava escritas de registrador ainda lidas** (`E15.6b`, só no JIT de 32 bits — ASM e
+  Truffle; o interpretador acertava): dezenas de records de `IrOp` liam GPR sem declarar em `regUse()`, e a DCE removia a
+  `IntegerOp.Alu` anterior que escrevia aquele registrador quando ele era sobrescrito logo depois. Afetados, entre outros:
+  `CRC32*` (`rn`/`rm`), `SMLALxy` (RdHi), `VLDn`/`VSTn` (base e `Rm` de pós-índice), `CPS` com troca de modo (banco
+  `r8`-`r14`), `SRS` (`LR`/`SP`), `VLDR_hp`/`VSTR_hp`, `VMOV` de dois GPR para `S`, os laços `DLS`/`WLS`/`LE`, `BXNS`/`BLXNS`,
+  `SG`, `ERET`, `MRS`/`MSR` bancados, `RFE` e quase todo o MVE: os escalares (`Rn`/`Rm`/`Rt`/`Rda`) e — sem componente
+  nenhum no record — o `LR`, contador de tail-predication que toda op MVE predicada lê (`MveOp#regUse()` passa a
+  devolver o `LR` por default). Um teste-guarda por reflexão (`IrOpRegisterUseGuardTest`) faz um record novo com
+  componente de nome de GPR e sem `regUse()` falhar no build.
+
 ## [1.4.0] — 2026-10-01
 
 Cobertura de ISA completa: `docs/COBERTURA-ISA.md` mede 100% (29619/29619 células aplicáveis decodificam).

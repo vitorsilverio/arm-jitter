@@ -157,6 +157,10 @@ public sealed interface BranchOp extends IrOp permits BranchOp.Branch, BranchOp.
             Condition condition) implements BranchOp {
         @Override public int kind() { return Kind.SECURE_BRANCH_EXCHANGE; }
         @Override public boolean execute(IrBlockExecutor executor, ArmCore core, int blockEndPc) { return executor.branchExecutor().executeSecureBranchExchange(core, this); }
+        // BLXNS que troca de estado empilha o retorno na pilha Secure: lê o SP também.
+        @Override public int regUse() {
+            return (sourceValueOverride < 0 ? (1 << sourceRegister) : 0) | (link ? GprMask.SP : 0);
+        }
     }
 
     /// `DLS`/`WLS`/`DLSTP`/`WLSTP` (perfil M, B15.6/B16.15, Low Overhead Branch Extension): grava
@@ -188,6 +192,9 @@ public sealed interface BranchOp extends IrOp permits BranchOp.Branch, BranchOp.
 
         @Override public int kind() { return Kind.LOOP_START; }
         @Override public boolean execute(IrBlockExecutor executor, ArmCore core, int blockEndPc) { return executor.branchExecutor().executeLoopStart(core, this); }
+        @Override public int regUse() { return 1 << rn; }
+        // WLS com `rn==0` desvia sem gravar o LR: só o DLS é must-def.
+        @Override public int regDef() { return hasSkipBranch ? 0 : GprMask.LR; }
     }
 
     /// `LE`/`LETP` (perfil M, B15.6/B16.15, Low Overhead Branch Extension). **Achado medido contra
@@ -213,5 +220,7 @@ public sealed interface BranchOp extends IrOp permits BranchOp.Branch, BranchOp.
 
         @Override public int kind() { return Kind.LOOP_END; }
         @Override public boolean execute(IrBlockExecutor executor, ArmCore core, int blockEndPc) { return executor.branchExecutor().executeLoopEnd(core, this); }
+        // O contador de loop vive no LR; a forma "forever" não o toca.
+        @Override public int regUse() { return forever ? 0 : GprMask.LR; }
     }
 }

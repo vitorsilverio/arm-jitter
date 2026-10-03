@@ -20,4 +20,24 @@ final class GprMask {
     static final int BANKED_R8_R14 = 0x7F00;
     /// `r0..r7`: os registradores que nenhum modo banca.
     static final int UNBANKED_R0_R7 = 0xFF;
+
+    /// `rm` de NEON load/store (`VLDn`/`VSTn`, ARM DDI 0406C A7.7) sem writeback.
+    static final int NEON_RM_NO_WRITEBACK = 15;
+    /// `rm` de NEON load/store com writeback imediato (`Rn += bytes transferidos`) — código, não o `SP`.
+    static final int NEON_RM_IMMEDIATE_WRITEBACK = 13;
+
+    /// `regUse` de NEON load/store: a base `rn` e, no writeback por registrador, `rm`.
+    static int neonLoadStoreUse(int rn, int rm) {
+        boolean registerWriteback = rm != NEON_RM_NO_WRITEBACK && rm != NEON_RM_IMMEDIATE_WRITEBACK;
+        return (1 << rn) | (registerWriteback ? (1 << rm) : 0);
+    }
+
+    /// `regDef` de NEON load/store: `rn` quando há writeback.
+    static int neonLoadStoreDef(int rn, int rm) {
+        return rm == NEON_RM_NO_WRITEBACK ? 0 : 1 << rn;
+    }
+
+    /// `regUse` de toda op MVE que consulta o predicado de elementos: o `LR` é o contador de
+    /// tail-predication que `MveVptState#elementMask` lê quando `FPSCR.LTPSIZE < 4` (B16.15).
+    static final int MVE_TAIL_PREDICATION = LR;
 }

@@ -54,6 +54,8 @@ public sealed interface NeonMoveOp extends NeonOp permits NeonMoveOp.LoadStoreMu
             int stride) implements NeonMoveOp {
         @Override public int kind() { return Kind.NEON_LOAD_STORE_MULTIPLE; }
         @Override public boolean execute(IrBlockExecutor executor, ArmCore core, int blockEndPc) { executor.neonExecutor().executeNeonLoadStoreMultiple(core, this); return false; }
+        @Override public int regUse() { return GprMask.neonLoadStoreUse(rn, rm); }
+        @Override public int regDef() { return GprMask.neonLoadStoreDef(rn, rm); }
     }
 
     /// `VLD1`-`VLD4`/`VST1`-`VST4` NEON A32, forma "single structure to one lane" (B13.3) —
@@ -86,6 +88,8 @@ public sealed interface NeonMoveOp extends NeonOp permits NeonMoveOp.LoadStoreMu
             int index) implements NeonMoveOp {
         @Override public int kind() { return Kind.NEON_LOAD_STORE_SINGLE; }
         @Override public boolean execute(IrBlockExecutor executor, ArmCore core, int blockEndPc) { executor.neonExecutor().executeNeonLoadStoreSingle(core, this); return false; }
+        @Override public int regUse() { return GprMask.neonLoadStoreUse(rn, rm); }
+        @Override public int regDef() { return GprMask.neonLoadStoreDef(rn, rm); }
     }
 
     /// `VLD1R`-`VLD4R` NEON A32, forma "single structure to all lanes" (B13.3) — lê UM elemento
@@ -115,6 +119,8 @@ public sealed interface NeonMoveOp extends NeonOp permits NeonMoveOp.LoadStoreMu
             boolean quad) implements NeonMoveOp {
         @Override public int kind() { return Kind.NEON_LOAD_ALL_LANES; }
         @Override public boolean execute(IrBlockExecutor executor, ArmCore core, int blockEndPc) { executor.neonExecutor().executeNeonLoadAllLanes(core, this); return false; }
+        @Override public int regUse() { return GprMask.neonLoadStoreUse(rn, rm); }
+        @Override public int regDef() { return GprMask.neonLoadStoreDef(rn, rm); }
     }
 
     /// NEON/Advanced SIMD de 32 bits, "1-reg-and-modified-immediate" (B13.9): `VMOV`/`VMVN`/`VORR`/

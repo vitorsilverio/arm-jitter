@@ -190,6 +190,7 @@ public sealed interface MveFpOp extends MveOp permits MveFpOp.VectorFpAbsAccumul
             Condition condition) implements MveFpOp {
         @Override public int kind() { return Kind.MVE_VECTOR_FP_SCALAR; }
         @Override public boolean execute(IrBlockExecutor executor, ArmCore core, int blockEndPc) { return executor.systemExecutor().executeMveVectorFpScalar(core, this); }
+        @Override public int regUse() { return (1 << rm) | GprMask.MVE_TAIL_PREDICATION; }
     }
 
     /// `VFMA_scalar`/`VFMAS_scalar` (perfil M, B16.9, MVE/Helium, `FEAT_MVE_FP`, verbatim de
@@ -218,6 +219,7 @@ public sealed interface MveFpOp extends MveOp permits MveFpOp.VectorFpAbsAccumul
             Condition condition) implements MveFpOp {
         @Override public int kind() { return Kind.MVE_VECTOR_FP_SCALAR_FMA; }
         @Override public boolean execute(IrBlockExecutor executor, ArmCore core, int blockEndPc) { return executor.systemExecutor().executeMveVectorFpScalarFma(core, this); }
+        @Override public int regUse() { return (1 << rm) | GprMask.MVE_TAIL_PREDICATION; }
     }
 
     /// `VCVT_SF`/`VCVT_UF`/`VCVT_FS`/`VCVT_FU`, `VCVTAS`/`VCVTAU`/`VCVTNS`/`VCVTNU`/`VCVTPS`/

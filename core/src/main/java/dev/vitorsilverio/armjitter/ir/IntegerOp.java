@@ -178,6 +178,8 @@ public sealed interface IntegerOp extends IrOp permits IntegerOp.Alu, IntegerOp.
             Condition condition) implements IntegerOp {
         @Override public int kind() { return Kind.CRC32; }
         @Override public boolean execute(IrBlockExecutor executor, ArmCore core, int blockEndPc) { executor.aluExecutor().executeCrc32(core, this); return false; }
+        @Override public int regUse() { return (1 << rn) | (1 << rm); }
+        @Override public int regDef() { return 1 << dst; }
     }
 
     /// Multiplicações DSP ARMv5TE. `op2`: 0=SMLAxy, 1=SMLAW(x=0)/SMULW(x=1), 2=SMLALxy, 3=SMULxy.
@@ -202,9 +204,10 @@ public sealed interface IntegerOp extends IrOp permits IntegerOp.Alu, IntegerOp.
             Condition condition) implements IntegerOp {
         @Override public int kind() { return Kind.DSP_MULTIPLY; }
         @Override public boolean execute(IrBlockExecutor executor, ArmCore core, int blockEndPc) { executor.aluExecutor().executeDspMultiply(core, this); return false; }
-        @Override public int regUse() { return (1 << rm) | (1 << rs) | (1 << rn); }
-        /// `SMLALxy` (`op2 == 2`) — única forma que também escreve `rn` (RdLo).
+        /// `SMLALxy` (`op2 == 2`) — única forma que também lê e escreve `rn` (RdLo) e lê `dst`
+        /// (RdHi, a metade alta do acumulador de 64 bits).
         private static final int SMLAL_XY = 2;
+        @Override public int regUse() { return (1 << rm) | (1 << rs) | (1 << rn) | (op2 == SMLAL_XY ? (1 << dst) : 0); }
         @Override public int regDef() { return (1 << dst) | (op2 == SMLAL_XY ? (1 << rn) : 0); }
     }
 
@@ -352,6 +355,9 @@ public sealed interface IntegerOp extends IrOp permits IntegerOp.Alu, IntegerOp.
             Condition condition) implements IntegerOp {
         @Override public int kind() { return Kind.MOVE_TOP; }
         @Override public boolean execute(IrBlockExecutor executor, ArmCore core, int blockEndPc) { executor.aluExecutor().executeMoveTop(core, this); return false; }
+        // MOVT preserva a metade baixa: lê `dst` antes de escrever.
+        @Override public int regUse() { return 1 << dst; }
+        @Override public int regDef() { return 1 << dst; }
     }
 
     /// `SBFX`/`UBFX` (ARM/Thumb-2, ARMv6T2+, B3.1): extrai `width` bits de `src` a partir do bit
@@ -440,5 +446,7 @@ public sealed interface IntegerOp extends IrOp permits IntegerOp.Alu, IntegerOp.
             Condition condition) implements IntegerOp {
         @Override public int kind() { return Kind.CLEAR_MULTIPLE; }
         @Override public boolean execute(IrBlockExecutor executor, ArmCore core, int blockEndPc) { executor.systemExecutor().executeClrm(core, this); return false; }
+        // Bit 15 da lista é o APSR, não o PC.
+        @Override public int regDef() { return list & ~GprMask.PC; }
     }
 }

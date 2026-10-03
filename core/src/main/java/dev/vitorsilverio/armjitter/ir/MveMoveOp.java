@@ -43,6 +43,8 @@ public sealed interface MveMoveOp extends MveOp permits MveMoveOp.LoadStore,
             Condition condition) implements MveMoveOp {
         @Override public int kind() { return Kind.MVE_LOAD_STORE; }
         @Override public boolean execute(IrBlockExecutor executor, ArmCore core, int blockEndPc) { return executor.systemExecutor().executeMveLoadStore(core, this); }
+        @Override public int regUse() { return (1 << rn) | GprMask.MVE_TAIL_PREDICATION; }
+        @Override public int regDef() { return writeback ? (1 << rn) : 0; }
     }
 
     /// `VLDSTB_H`/`VLDSTB_W`/`VLDSTH_W` (perfil M, B16.4, MVE/Helium, `target/isa-decode/mve.decode`):
@@ -93,6 +95,8 @@ public sealed interface MveMoveOp extends MveOp permits MveMoveOp.LoadStore,
             Condition condition) implements MveMoveOp {
         @Override public int kind() { return Kind.MVE_WIDENING_LOAD_STORE; }
         @Override public boolean execute(IrBlockExecutor executor, ArmCore core, int blockEndPc) { return executor.systemExecutor().executeMveWideningLoadStore(core, this); }
+        @Override public int regUse() { return (1 << rn) | GprMask.MVE_TAIL_PREDICATION; }
+        @Override public int regDef() { return writeback ? (1 << rn) : 0; }
     }
 
     /// `VLDR_S_sg`/`VLDR_U_sg`/`VSTR_sg` (perfil M, B16.5, MVE/Helium, `target/isa-decode/mve.decode`):
@@ -129,6 +133,7 @@ public sealed interface MveMoveOp extends MveOp permits MveMoveOp.LoadStore,
             Condition condition) implements MveMoveOp {
         @Override public int kind() { return Kind.MVE_GATHER_SCATTER_OFFSET; }
         @Override public boolean execute(IrBlockExecutor executor, ArmCore core, int blockEndPc) { return executor.systemExecutor().executeMveGatherScatterOffset(core, this); }
+        @Override public int regUse() { return (1 << rn) | GprMask.MVE_TAIL_PREDICATION; }
     }
 
     /// `VLDRW_sg_imm`/`VLDRD_sg_imm`/`VSTRW_sg_imm`/`VSTRD_sg_imm` (perfil M, B16.5, MVE/Helium):
@@ -194,6 +199,9 @@ public sealed interface MveMoveOp extends MveOp permits MveMoveOp.LoadStore,
             Condition condition) implements MveMoveOp {
         @Override public int kind() { return Kind.MVE_INTERLEAVED_LOAD_STORE; }
         @Override public boolean execute(IrBlockExecutor executor, ArmCore core, int blockEndPc) { return executor.systemExecutor().executeMveInterleavedLoadStore(core, this); }
+        // Beatwise mas não predicado: não consulta o contador de tail-predication.
+        @Override public int regUse() { return 1 << rn; }
+        @Override public int regDef() { return writeback ? (1 << rn) : 0; }
     }
 
     /// `VIDUP`/`VDDUP` (perfil M, B16.5, MVE/Helium): preenche `Qd` com `Rn, Rn+passo, Rn+2·passo,
@@ -218,6 +226,8 @@ public sealed interface MveMoveOp extends MveOp permits MveMoveOp.LoadStore,
             Condition condition) implements MveMoveOp {
         @Override public int kind() { return Kind.MVE_INCREMENT_DUP; }
         @Override public boolean execute(IrBlockExecutor executor, ArmCore core, int blockEndPc) { return executor.systemExecutor().executeMveIncrementDup(core, this); }
+        @Override public int regUse() { return (1 << rn) | GprMask.MVE_TAIL_PREDICATION; }
+        @Override public int regDef() { return 1 << rn; }
     }
 
     /// `VIWDUP`/`VDWDUP` (perfil M, B16.5, MVE/Helium): como {@link IncrementDup}, mas o
@@ -244,6 +254,8 @@ public sealed interface MveMoveOp extends MveOp permits MveMoveOp.LoadStore,
             Condition condition) implements MveMoveOp {
         @Override public int kind() { return Kind.MVE_WRAPPING_INCREMENT_DUP; }
         @Override public boolean execute(IrBlockExecutor executor, ArmCore core, int blockEndPc) { return executor.systemExecutor().executeMveWrappingIncrementDup(core, this); }
+        @Override public int regUse() { return (1 << rn) | (1 << rm) | GprMask.MVE_TAIL_PREDICATION; }
+        @Override public int regDef() { return 1 << rn; }
     }
 
     /// `VDUP` (perfil M, B16.13a, MVE/Helium, `FEAT_MVE_INTEGER`, `target/isa-decode/mve.decode`,
@@ -265,6 +277,7 @@ public sealed interface MveMoveOp extends MveOp permits MveMoveOp.LoadStore,
             Condition condition) implements MveMoveOp {
         @Override public int kind() { return Kind.MVE_VECTOR_DUP; }
         @Override public boolean execute(IrBlockExecutor executor, ArmCore core, int blockEndPc) { return executor.systemExecutor().executeMveVectorDup(core, this); }
+        @Override public int regUse() { return (1 << rt) | GprMask.MVE_TAIL_PREDICATION; }
     }
 
     /// `VMOV_to_2gp`/`VMOV_from_2gp` (perfil M, B16.13a, MVE/Helium, `FEAT_MVE_INTEGER`,
@@ -296,6 +309,9 @@ public sealed interface MveMoveOp extends MveOp permits MveMoveOp.LoadStore,
             Condition condition) implements MveMoveOp {
         @Override public int kind() { return Kind.MVE_MOVE_LANES_GPR; }
         @Override public boolean execute(IrBlockExecutor executor, ArmCore core, int blockEndPc) { return executor.systemExecutor().executeMveMoveLanesGpr(core, this); }
+        // Não predicado (só `ECI`): não consulta o contador de tail-predication.
+        @Override public int regUse() { return toGpr ? 0 : (1 << rt) | (1 << rt2); }
+        @Override public int regDef() { return toGpr ? (1 << rt) | (1 << rt2) : 0; }
     }
 
     /// `Vimm_1r` (perfil M, B16.13a, MVE/Helium, `FEAT_MVE_INTEGER`, `target/isa-decode/mve.decode`,

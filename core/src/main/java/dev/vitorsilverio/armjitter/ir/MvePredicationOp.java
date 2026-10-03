@@ -22,6 +22,8 @@ public sealed interface MvePredicationOp extends MveOp permits
             Condition condition) implements MvePredicationOp {
         @Override public int kind() { return Kind.LOOP_CLEAR_TAIL_PREDICATION; }
         @Override public boolean execute(IrBlockExecutor executor, ArmCore core, int blockEndPc) { executor.systemExecutor().executeLctp(core, this); return false; }
+        // Só grava `FPSCR.LTPSIZE`.
+        @Override public int regUse() { return 0; }
     }
 
     /// `VCTP.<size> Rn` (perfil M, B16.15, MVE, beatwise): cria o predicado de cauda em `VPR.P0` —
@@ -37,6 +39,7 @@ public sealed interface MvePredicationOp extends MveOp permits
             Condition condition) implements MvePredicationOp {
         @Override public int kind() { return Kind.VCTP; }
         @Override public boolean execute(IrBlockExecutor executor, ArmCore core, int blockEndPc) { return executor.systemExecutor().executeVctp(core, this); }
+        @Override public int regUse() { return (1 << rn) | GprMask.MVE_TAIL_PREDICATION; }
     }
 
     /// Avanço pós-instrução do `VPR`/`ECI` (perfil M, B16.2, MVE/Helium) — transcrição de
@@ -51,6 +54,8 @@ public sealed interface MvePredicationOp extends MveOp permits
             Condition condition) implements MvePredicationOp {
         @Override public int kind() { return Kind.ADVANCE_VPT; }
         @Override public boolean execute(IrBlockExecutor executor, ArmCore core, int blockEndPc) { executor.systemExecutor().executeAdvanceVpt(core, this); return false; }
+        // Só avança `VPR`/`ECI`.
+        @Override public int regUse() { return 0; }
     }
 
     /// `VPST` (perfil M, B16.2, MVE/Helium, `target/isa-decode/mve.decode`): grava `mask` em
@@ -63,6 +68,7 @@ public sealed interface MvePredicationOp extends MveOp permits
             Condition condition) implements MvePredicationOp {
         @Override public int kind() { return Kind.VPST; }
         @Override public boolean execute(IrBlockExecutor executor, ArmCore core, int blockEndPc) { return executor.systemExecutor().executeVpst(core, this); }
+        @Override public int regUse() { return 0; }
     }
 
     /// `VPNOT` (perfil M, B16.2, MVE/Helium): inverte `VPR.P0` nas lanes correspondentes aos beats
@@ -74,6 +80,7 @@ public sealed interface MvePredicationOp extends MveOp permits
             Condition condition) implements MvePredicationOp {
         @Override public int kind() { return Kind.VPNOT; }
         @Override public boolean execute(IrBlockExecutor executor, ArmCore core, int blockEndPc) { return executor.systemExecutor().executeVpnot(core, this); }
+        @Override public int regUse() { return 0; }
     }
 
     /// `VPSEL` (perfil M, B16.2, MVE/Helium): seleciona lane a lane (byte a byte, `@2op_nosz` —
@@ -112,6 +119,8 @@ public sealed interface MvePredicationOp extends MveOp permits
             Condition condition) implements MvePredicationOp {
         @Override public int kind() { return Kind.VPR_TRANSFER; }
         @Override public boolean execute(IrBlockExecutor executor, ArmCore core, int blockEndPc) { executor.systemExecutor().executeVprTransfer(core, this); return false; }
+        @Override public int regUse() { return read ? 0 : (1 << armRegister); }
+        @Override public int regDef() { return read ? (1 << armRegister) : 0; }
     }
 
     /// Avanço pós-instrução SÓ do `ECI` (perfil M, B16.5, MVE/Helium) — `mve_update_and_store_eci`
@@ -126,6 +135,7 @@ public sealed interface MvePredicationOp extends MveOp permits
             Condition condition) implements MvePredicationOp {
         @Override public int kind() { return Kind.ADVANCE_ECI; }
         @Override public boolean execute(IrBlockExecutor executor, ArmCore core, int blockEndPc) { executor.systemExecutor().executeAdvanceEci(core, this); return false; }
+        @Override public int regUse() { return 0; }
     }
 
     /// `VCMPEQ`/`VCMPNE`/`VCMPGE`/`VCMPLT`/`VCMPGT`/`VCMPLE`/`VCMPCS`/`VCMPHI` e as 6 formas `_fp`
@@ -196,5 +206,8 @@ public sealed interface MvePredicationOp extends MveOp permits
             Condition condition) implements MvePredicationOp {
         @Override public int kind() { return Kind.MVE_VECTOR_COMPARE_SCALAR; }
         @Override public boolean execute(IrBlockExecutor executor, ArmCore core, int blockEndPc) { return executor.systemExecutor().executeMveVectorCompareScalar(core, this); }
+        /// `rm == 15` codifica o escalar zero, não o `PC`.
+        private static final int ZERO_SCALAR_ENCODING = 15;
+        @Override public int regUse() { return (rm == ZERO_SCALAR_ENCODING ? 0 : (1 << rm)) | GprMask.MVE_TAIL_PREDICATION; }
     }
 }
