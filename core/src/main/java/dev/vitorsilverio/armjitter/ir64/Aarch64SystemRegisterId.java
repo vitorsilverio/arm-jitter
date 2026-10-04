@@ -1,5 +1,7 @@
 package dev.vitorsilverio.armjitter.ir64;
 
+import dev.vitorsilverio.armjitter.arch64.Aarch64Feature;
+
 /// Identifica um registrador de sistema AArch64 acessável via `MRS`/`MSR (register)`
 /// (`ARM DDI 0487 C5.2.3`, task B6.6.1) — resolvido pelo DECODER a partir da 5-upla crua
 /// `op0:op1:CRn:CRm:op2` do encoding, nunca pelo executor (mesma disciplina de resolução única já
@@ -14,7 +16,7 @@ package dev.vitorsilverio.armjitter.ir64;
 /// serve para eles, mas a task que os inclui é própria.
 ///
 /// **B6.6.7 — dois grupos de resolução distintos** (ver `Aarch64Core#readIntrinsicSystemRegister`/
-/// `Aarch64Decoder#decodeSystemRegisterId`): `CURRENT_EL`/`MPIDR_EL1`/`MIDR_EL1`/`ID_AA64*`/
+/// `decoder64.SystemRegisterRows`): `CURRENT_EL`/`MPIDR_EL1`/`MIDR_EL1`/`ID_AA64*`/
 /// `TPIDR_EL1` são resolvidos DIRETO pelo `Aarch64Core` (identidade da própria CPU emulada — não
 /// fazem sentido como algo "plugável" pelo hospedeiro, mesmo espírito de por que `PstateRegister`
 /// não é pluggable); o timer genérico (`CNTFRQ_EL0`/`CNTPCT_EL0`/`CNTP_TVAL_EL0`/`CNTP_CTL_EL0`/
@@ -22,43 +24,48 @@ package dev.vitorsilverio.armjitter.ir64;
 /// do hospedeiro (mesmo padrão D2 de B6.6.1/B6.6.3 — a frequência/contagem depende do relógio real
 /// do host, e a entrega de IRQ do comparador de timer é responsabilidade do consumidor, não deste
 /// registrador em si — ver a task B6.6.7, "Não inclui").
+///
+/// **E15.11 — o encoding é dado da constante:** cada registrador declara `(op0, op1, CRn, CRm, op2)` e,
+/// quando só existe com uma extensão, a {@link Aarch64Feature} ({@link #encoding()}/{@link #requires()}).
+/// O decoder monta uma linha de tabela por constante (`decoder64.SystemRegisterRows`) em vez de uma
+/// cascata de `if` por campo.
 public enum Aarch64SystemRegisterId {
     /// `SCTLR_EL1` (`op0=3,op1=0,CRn=1,CRm=0,op2=0`) — controle do sistema (MMU/cache habilitados).
-    SCTLR_EL1,
+    SCTLR_EL1(3, 0, 1, 0, 0),
     /// `TTBR0_EL1` (`op0=3,op1=0,CRn=2,CRm=0,op2=0`) — base da tabela de tradução.
-    TTBR0_EL1,
+    TTBR0_EL1(3, 0, 2, 0, 0),
     /// `TTBR1_EL1` (`op0=3,op1=0,CRn=2,CRm=0,op2=1`) — base da tabela de tradução do espaço de
     /// endereço ALTO (kernel, VA com bit 55 setado). Achado real da F11: a hipótese original de
     /// `B6.13` (bit 63 selecionaria) foi refutada por instrumentação — o QEMU real
     /// (`aa64_va_parameters`) seleciona por bit 55; implementado de verdade aqui (não mais
     /// armazenamento puro) porque o `kernel8.img` real programa este registrador antes de ativar
     /// a MMU, e o espaço de endereço do próprio kernel depende dele.
-    TTBR1_EL1,
+    TTBR1_EL1(3, 0, 2, 0, 1),
     /// `TCR_EL1` (`op0=3,op1=0,CRn=2,CRm=0,op2=2`) — controle de tradução (granule/tamanho).
-    TCR_EL1,
+    TCR_EL1(3, 0, 2, 0, 2),
     /// `MAIR_EL1` (`op0=3,op1=0,CRn=10,CRm=2,op2=0`) — atributos de memória indexados.
-    MAIR_EL1,
+    MAIR_EL1(3, 0, 10, 2, 0),
     /// `ESR_EL1` (`op0=3,op1=0,CRn=5,CRm=2,op2=0`) — síndrome da exceção mais recente.
-    ESR_EL1,
+    ESR_EL1(3, 0, 5, 2, 0),
     /// `FAR_EL1` (`op0=3,op1=0,CRn=6,CRm=0,op2=0`) — endereço faltoso da exceção mais recente.
-    FAR_EL1,
+    FAR_EL1(3, 0, 6, 0, 0),
     /// `VBAR_EL1` (`op0=3,op1=0,CRn=12,CRm=0,op2=0`) — base da tabela de vetores de exceção.
-    VBAR_EL1,
+    VBAR_EL1(3, 0, 12, 0, 0),
     /// `ELR_EL1` (`op0=3,op1=0,CRn=4,CRm=0,op2=1`) — endereço de retorno de exceção.
-    ELR_EL1,
+    ELR_EL1(3, 0, 4, 0, 1),
     /// `SP_EL0` (`op0=3,op1=0,CRn=4,CRm=1,op2=0`) — pilha de EL0, acessível de EL1. O Linux/arm64
     /// grava aqui o ponteiro `current` (`task_struct`) durante todo o tempo em que roda em EL1 (achado
     /// real da F11, `__primary_switched`: `msr sp_el0, x4`) — armazenamento puro no `Aarch64Core`.
-    SP_EL0,
+    SP_EL0(3, 0, 4, 1, 0),
     /// `SPSR_EL1` (`op0=3,op1=0,CRn=4,CRm=0,op2=0`) — `PSTATE` salvo na entrada de exceção.
-    SPSR_EL1,
+    SPSR_EL1(3, 0, 4, 0, 0),
     /// `CPACR_EL1` (`op0=3,op1=0,CRn=1,CRm=0,op2=2`) — controle de trap de FP/SIMD/SVE para EL1
     /// (mesmo `CRn`/`CRm` de {@link #SCTLR_EL1}, só `op2` diferente — achado real da F11, gap que
     /// bloqueava `cpacr_el1` sendo escrito no início de `head.S`). Armazenamento puro, mesma
     /// disciplina de {@code CPTR_EL2}/{@code CPTR_EL3} (B10.2/B10.3): sem trap real modelado, o
     /// decoder A64 deste emulador nunca consulta os bits `FPEN` para decidir se uma instrução VFP/
     /// AdvSIMD é permitida.
-    CPACR_EL1,
+    CPACR_EL1(3, 0, 1, 0, 2),
 
     // ── B20.8: PMSAv8-64 (ARMv8-R AArch64, Cortex-R82) — registradores de MPU de EL1. Fonte
     // ── normativa: ARM DDI 0600A.d (ARM ARM Supplement, ARMv8-R AArch64), lido via `curl` nesta
@@ -68,19 +75,19 @@ public enum Aarch64SystemRegisterId {
 
     /// `MPUIR_EL1` (`op0=0b11,op1=0b000,CRn=0b0000,CRm=0b0000,op2=0b100`, DDI 0600A.d §G1.3.14) —
     /// número de regiões de MPU de EL1 implementadas (`REGION[7:0]`). Só leitura.
-    MPUIR_EL1,
+    MPUIR_EL1(3, 0, 0, 0, 4, Aarch64Feature.PMSA),
     /// `PRSELR_EL1` (`op0=0b11,op1=0b000,CRn=0b0110,CRm=0b0010,op2=0b001`, DDI 0600A.d §G1.3.26) —
     /// seleciona a região de EL1 visível em {@link #PRBAR_EL1}/{@link #PRLAR_EL1} (`REGION[7:0]`).
-    PRSELR_EL1,
+    PRSELR_EL1(3, 0, 6, 2, 1, Aarch64Feature.PMSA),
     /// `PRBAR_EL1` (`op0=0b11,op1=0b000,CRn=0b0110,CRm=0b1000,op2=0b000`, DDI 0600A.d §G1.3.16) —
     /// base da região de EL1 selecionada por {@link #PRSELR_EL1} (`BASE[51:6]`/`SH[5:4]`/`AP[3:2]`/
     /// `XN[1]`). **Largura de campo de bit ≠ da versão de 32 bits `PRBAR`** (Armadilha 1 da task
     /// B20.8: `BASE` tem 46 bits aqui, não 26 — nunca deduzir do layout `ArmArchitecture#ARMV8R_32`).
-    PRBAR_EL1,
+    PRBAR_EL1(3, 0, 6, 8, 0, Aarch64Feature.PMSA),
     /// `PRLAR_EL1` (`op0=0b11,op1=0b000,CRn=0b0110,CRm=0b1000,op2=0b001`, DDI 0600A.d §G1.3.19) —
     /// limite (inclusivo) da região de EL1 selecionada por {@link #PRSELR_EL1} (`LIMIT[51:6]`/
     /// `NS[4]`/`AttrIndx[3:1]`/`EN[0]`). Mesma ressalva de largura de {@link #PRBAR_EL1}.
-    PRLAR_EL1,
+    PRLAR_EL1(3, 0, 6, 8, 1, Aarch64Feature.PMSA),
     /// `PRENR_EL1` (`op0=0b11,op1=0b000,CRn=0b0110,CRm=0b0001,op2=0b001`, DDI 0600A.d §G1.3.20) —
     /// bitmap de habilitação direta das regiões 0-31 (espelha {@link #PRLAR_EL1}`.EN` por região,
     /// sem passar por {@link #PRSELR_EL1}). Mesmo tratamento "sem consumidor real confirmado" do
@@ -89,121 +96,121 @@ public enum Aarch64SystemRegisterId {
     /// {@link dev.vitorsilverio.armjitter.memory.mmu.Pmsav8SystemRegisters64} guarda o valor bruto,
     /// `PRLAR_EL1.EN` continua a fonte autoritativa que
     /// {@link dev.vitorsilverio.armjitter.memory.mmu.Pmsav8AddressSpace64} consulta.
-    PRENR_EL1,
+    PRENR_EL1(3, 0, 6, 1, 1, Aarch64Feature.PMSA),
 
     // ── B6.6.7: identidade da CPU, resolvidos direto pelo `Aarch64Core` (ver javadoc da classe) ──
 
     /// `CurrentEL` (`op0=3,op1=0,CRn=4,CRm=2,op2=2`) — nível de exceção atual em `[3:2]`
     /// (`0b00`=EL0, `0b01`=EL1; `[1:0]` são `RES0`). Somente leitura (`MSR` não é encoding válido
     /// para este registrador — não checado aqui, decisão de decoder).
-    CURRENT_EL,
+    CURRENT_EL(3, 0, 4, 2, 2),
     /// `MPIDR_EL1` (`op0=3,op1=0,CRn=0,CRm=0,op2=5`) — identificador de multiprocessamento.
     /// Constante (core único emulado): bit `31` (`RES1`) + bit `30` (`U`, uniprocessador) setados,
     /// `Aff0`-`Aff3` em `0` (só um core, `ARM DDI 0487 D19.2.87`).
-    MPIDR_EL1,
+    MPIDR_EL1(3, 0, 0, 0, 5),
     /// `MIDR_EL1` (`op0=3,op1=0,CRn=0,CRm=0,op2=0`) — identificador do implementador/modelo da
     /// CPU. Constante fixa no valor real do Cortex-A53 do Raspberry Pi 3 (`0x410FD034`, alvo
     /// primário desta task via a F11 do `virtual-arm-box`) — sem consumidor que precise de um
     /// valor configurável ainda (mesma disciplina "sem hospedeiro plugável para identidade").
-    MIDR_EL1,
+    MIDR_EL1(3, 0, 0, 0, 0),
     /// `ID_AA64PFR0_EL1` (`op0=3,op1=0,CRn=0,CRm=4,op2=0`) — features de processamento. Constante
     /// mínima: `EL0`/`EL1` `=0b0001` (só AArch64, sem AArch32), `EL2`/`EL3=0` (não implementados,
     /// consistente com o escopo do épico B6 — sem virtualização/TrustZone), demais campos (FP/
     /// AdvSIMD/GIC/RAS/SVE) `=0` (implementados na forma básica ou ausentes, ver Armadilhas da
     /// task B6.6.7 — nenhum destes é auditado bit a bit contra hardware real).
-    ID_AA64PFR0_EL1,
+    ID_AA64PFR0_EL1(3, 0, 0, 4, 0),
     /// `ID_AA64ISAR0_EL1` (`op0=3,op1=0,CRn=0,CRm=6,op2=0`) — extensões de conjunto de
     /// instrução (`SHA`/`AES`/`CRC32`/atômicos/...). Constante `0` (nenhuma extensão opcional
     /// implementada) — kernels reais toleram isso desabilitando os caminhos otimizados
     /// correspondentes, não é um bloqueio de boot.
-    ID_AA64ISAR0_EL1,
+    ID_AA64ISAR0_EL1(3, 0, 0, 6, 0),
     /// `ID_AA64MMFR0_EL1` (`op0=3,op1=0,CRn=0,CRm=7,op2=0`) — features de gerência de memória.
     /// Constante: `PARange[3:0]=0b0101` (48 bits de endereço físico, casando com o que
     /// `TranslatingAddressSpace64`/B6.6.2 já suporta em VA), `TGran4[31:28]=0b0000` (granule de
     /// 4KiB suportado — único granule que este emulador decodifica).
-    ID_AA64MMFR0_EL1,
+    ID_AA64MMFR0_EL1(3, 0, 0, 7, 0),
     /// `ID_AA64MMFR1_EL1` (`op0=3,op1=0,CRn=0,CRm=7,op2=1`) — features de gerência de memória
     /// (parte 2: `VHE`/`HPDS`/`LOR`/`PAN`/`VMIDBits`/...). Constante `0` (nenhuma extensão
     /// opcional implementada), mesma disciplina de {@link #ID_AA64ISAR0_EL1} — achado real da F11
     /// (`kernel8.img` real lê este registrador logo depois de `CPACR_EL1` em `head.S`).
-    ID_AA64MMFR1_EL1,
+    ID_AA64MMFR1_EL1(3, 0, 0, 7, 1),
     /// `ID_AA64MMFR2_EL1` (`CRn=0,CRm=7,op2=2`) — features de gerência de memória (parte 3).
     /// Constante `0`, mesma disciplina de {@link #ID_AA64MMFR1_EL1} — achado real da F11.
-    ID_AA64MMFR2_EL1,
+    ID_AA64MMFR2_EL1(3, 0, 0, 7, 2),
     /// `ID_AA64MMFR3_EL1` (`CRn=0,CRm=7,op2=3`) — features de gerência de memória (parte 4:
     /// `MEC`/`S1PIE`/`S1POE`/`SCTLRX`/...). Constante `0`, achado real da F11 (bloqueio
     /// imediatamente seguinte a `ID_AA64MMFR1_EL1` no `head.S` real).
-    ID_AA64MMFR3_EL1,
+    ID_AA64MMFR3_EL1(3, 0, 0, 7, 3),
     /// `ID_AA64MMFR4_EL1` (`CRn=0,CRm=7,op2=4`) — features de gerência de memória (parte 5).
     /// Constante `0`, mesma disciplina de {@link #ID_AA64MMFR1_EL1}.
-    ID_AA64MMFR4_EL1,
+    ID_AA64MMFR4_EL1(3, 0, 0, 7, 4),
     /// `ID_AA64PFR1_EL1` (`CRn=0,CRm=4,op2=1`) — features de processamento (parte 2: `BT`/`SSBS`/
     /// `MTE`/`SME`/...). Constante `0` (nenhuma extensão opcional implementada).
-    ID_AA64PFR1_EL1,
+    ID_AA64PFR1_EL1(3, 0, 0, 4, 1),
     /// `ID_AA64ZFR0_EL1` (`CRn=0,CRm=4,op2=4`) — features de SVE. Desde a B17.3 anuncia só
     /// `SVEver` (`bits[3:0]`: `0`=SVE, `1`=SVE2), e só quando o preset declara `FEAT_SVE`; os campos
     /// `AES`/`BitPerm`/`BF16`/`SHA3`/`SM4`/`I8MM`/`F32MM`/`F64MM` ficam `0` até a task B17.x que
     /// implementa a família correspondente (não anunciar o que não existe, G8).
-    ID_AA64ZFR0_EL1,
+    ID_AA64ZFR0_EL1(3, 0, 0, 4, 4),
     /// `ZCR_EL1` (`op0=3,op1=0,CRn=1,CRm=2,op2=0`, B17.3) — comprimento de vetor SVE de EL1: só
     /// `LEN` (`bits[3:0]`, `VL = (LEN+1) × 128`), o resto é `RES0`. Só existe em presets com
     /// `FEAT_SVE` (UNDEFINED nos demais).
-    ZCR_EL1,
+    ZCR_EL1(3, 0, 1, 2, 0, Aarch64Feature.SVE),
     /// `ZCR_EL2` (`op0=3,op1=4,CRn=1,CRm=2,op2=0`, B17.3) — idem, limite de EL2.
-    ZCR_EL2,
+    ZCR_EL2(3, 4, 1, 2, 0, Aarch64Feature.SVE),
     /// `ZCR_EL3` (`op0=3,op1=6,CRn=1,CRm=2,op2=0`, B17.3) — idem, limite de EL3.
-    ZCR_EL3,
+    ZCR_EL3(3, 6, 1, 2, 0, Aarch64Feature.SVE),
     /// `SVCR` (`op0=3,op1=3,CRn=4,CRm=2,op2=2`, B18.1) — `bit0`=`SM` (modo streaming), `bit1`=`ZA`
     /// (armazenamento `ZA` habilitado); o resto é `RES0`. Acessível de EL0. Só existe com `FEAT_SME`.
     /// Escrever `ZA` 0→1 aloca `ZA` zerado; o EFEITO de `SM` é da B18.2.
-    SVCR,
+    SVCR(3, 3, 4, 2, 2, Aarch64Feature.SCALABLE_MATRIX_EXTENSION),
     /// `SMCR_EL1` (`op0=3,op1=0,CRn=1,CRm=2,op2=6`, B18.1) — `LEN` (`bits[3:0]`, `SVL = (LEN+1) ×
     /// 128`), `EZT0` (bit 30, `FEAT_SME2`) e `FA64` (bit 31). Só existe com `FEAT_SME`.
-    SMCR_EL1,
+    SMCR_EL1(3, 0, 1, 2, 6, Aarch64Feature.SCALABLE_MATRIX_EXTENSION),
     /// `SMCR_EL2` (`op0=3,op1=4,CRn=1,CRm=2,op2=6`, B18.1) — idem, limite de EL2.
-    SMCR_EL2,
+    SMCR_EL2(3, 4, 1, 2, 6, Aarch64Feature.SCALABLE_MATRIX_EXTENSION),
     /// `SMCR_EL3` (`op0=3,op1=6,CRn=1,CRm=2,op2=6`, B18.1) — idem, limite de EL3.
-    SMCR_EL3,
+    SMCR_EL3(3, 6, 1, 2, 6, Aarch64Feature.SCALABLE_MATRIX_EXTENSION),
     /// `ID_AA64SMFR0_EL1` (`op0=3,op1=0,CRn=0,CRm=4,op2=5`, B18.1) — features de SME. Anuncia só
     /// `SMEver` (`bits[59:56]`); os campos de capacidade ficam `0` até a task que implementa a
     /// família correspondente (não anunciar o que não existe, G8).
-    ID_AA64SMFR0_EL1,
+    ID_AA64SMFR0_EL1(3, 0, 0, 4, 5, Aarch64Feature.SCALABLE_MATRIX_EXTENSION),
     /// `ID_AA64DFR1_EL1` (`CRn=0,CRm=5,op2=1`) — features de debug (parte 2). Constante `0`.
-    ID_AA64DFR1_EL1,
+    ID_AA64DFR1_EL1(3, 0, 0, 5, 1),
     /// `ID_AA64ISAR1_EL1` (`CRn=0,CRm=6,op2=1`) — extensões de conjunto de instrução (parte 2:
     /// `DPB`/`APA`/`API`/`JSCVT`/`FCMA`/...). Constante `0`, mesma disciplina de
     /// {@link #ID_AA64ISAR0_EL1}.
-    ID_AA64ISAR1_EL1,
+    ID_AA64ISAR1_EL1(3, 0, 0, 6, 1),
     /// `ID_AA64ISAR2_EL1` (`CRn=0,CRm=6,op2=2`) — extensões de conjunto de instrução (parte 3).
     /// Constante `0`, mesma disciplina de {@link #ID_AA64ISAR0_EL1}.
-    ID_AA64ISAR2_EL1,
+    ID_AA64ISAR2_EL1(3, 0, 0, 6, 2),
     /// `REVIDR_EL1` (`CRn=0,CRm=0,op2=6`) — revisão específica do implementador, sem significado
     /// arquitetural padronizado (`ARM DDI 0487 D19.2.109`). Constante `0` (mesmo valor default
     /// documentado quando o implementador não define nada específico).
-    REVIDR_EL1,
+    REVIDR_EL1(3, 0, 0, 0, 6),
     /// `ID_AA64DFR0_EL1` (`op0=3,op1=0,CRn=0,CRm=5,op2=0`) — features de debug. Constante:
     /// `DebugVer[3:0]=0b0110` (arquitetura de debug ARMv8, valor real de referência — nenhum
     /// registrador de debug em si é implementado, só o campo de versão para não confundir
     /// detecção de features do kernel com "debug ausente" `=0`, que teria semântica arquitetural
     /// diferente).
-    ID_AA64DFR0_EL1,
+    ID_AA64DFR0_EL1(3, 0, 0, 5, 0),
     /// `TPIDR_EL1` (`op0=3,op1=0,CRn=13,CRm=0,op2=4`) — ponteiro de dados de thread do kernel
     /// (`per_cpu_offset` no Linux real). Armazenamento puro leitura/escrita pelo GUEST — ao
     /// contrário dos registradores de identidade acima, este É mutável, mas ainda não precisa de
     /// hospedeiro plugável (é só um escaninho de 64 bits, guardado direto no `Aarch64Core`).
-    TPIDR_EL1,
+    TPIDR_EL1(3, 0, 13, 0, 4),
     /// `TPIDR_EL0` (`op0=3,op1=3,CRn=13,CRm=0,op2=2`, B8.14) — ponteiro de dados de thread do
     /// USERSPACE (o TLS base que `musl`/`glibc` gravam no `crt0`, antes de qualquer outra coisa —
     /// achado real: sem isso NENHUM binário aarch64 real com libc chega a rodar). Armazenamento
     /// puro leitura/escrita, mesma disciplina de {@link #TPIDR_EL1} (não há hospedeiro plugável).
     /// No hardware real é `R/W` de EL0 e EL1; este emulador não modela essa distinção de
     /// privilégio (mesma simplificação já aplicada aos registradores de debug, B10.7).
-    TPIDR_EL0,
+    TPIDR_EL0(3, 3, 13, 0, 2),
     /// `TPIDRRO_EL0` (`op0=3,op1=3,CRn=13,CRm=0,op2=3`, B8.14) — segundo escaninho de thread,
     /// `R/O` de EL0 e `R/W` de EL1 no hardware real (glibc o usa para um ponteiro de TLS
     /// alternativo em alguns ABIs). Mesma simplificação de {@link #TPIDR_EL0}: sem enforcement de
     /// privilégio, aceita `MSR`/`MRS` dos dois lados.
-    TPIDRRO_EL0,
+    TPIDRRO_EL0(3, 3, 13, 0, 3),
     /// `FPCR` (`op0=3,op1=3,CRn=4,CRm=4,op2=0`, B8.15) — Floating-point Control Register
     /// (arredondamento/exceções habilitadas/flush-to-zero). Pendência EXPLÍCITA desde B6.6.1 (D3)
     /// e B6.5.1: armazenamento puro leitura/escrita — o modo de arredondamento efetivo continua
@@ -211,13 +218,13 @@ public enum Aarch64SystemRegisterId {
     /// `FRINTX`/`FRINTI`, `Aarch64Decoder`); o guest pode ler/escrever o registrador sem crashar,
     /// mas mudar `RMode` não muda o comportamento real das operações — modelar isso de verdade é
     /// escopo de uma task futura própria (não presumido desnecessário, só sequenciado depois).
-    FPCR,
+    FPCR(3, 3, 4, 4, 0),
     /// `FPSR` (`op0=3,op1=3,CRn=4,CRm=4,op2=1`, B8.15) — Floating-point Status Register (flags de
     /// exceção cumulativas: `IOC`/`DZC`/`OFC`/`UFC`/`IXC`/`IDC`). Mesma disciplina de "armazenamento
     /// puro" de {@link #FPCR}: nenhuma operação FP deste emulador seta essas flags de verdade
     /// ainda (nenhuma condição de exceção FP é detectada hoje) — o guest sempre lê o que ele mesmo
     /// escreveu, nunca um flag setado pelo hardware emulado.
-    FPSR,
+    FPSR(3, 3, 4, 4, 1),
     /// `FPMR` (`op0=3,op1=3,CRn=4,CRm=4,op2=2`, B19.11a, `FEAT_FPMR`) — Floating-point Mode
     /// Register: MESMO `CRn`/`CRm` de {@link #FPCR}/{@link #FPSR} (só `op2` muda), mas **NÃO** é
     /// "armazenamento puro" como eles — os campos são lidos DE VERDADE pelas 12 instruções de
@@ -232,20 +239,20 @@ public enum Aarch64SystemRegisterId {
     /// converter PARA FP8), `F8S2[5:3]`/`F8S1[2:0]` (formato do 2º/1º operando FP8; `0b000`=E5M2,
     /// `0b001`=E4M3). Gateado pela mesma `Aarch64Feature.FP8` que `FEAT_FPMR` implica (não existe
     /// preset/consumidor que precise de `FPMR` sem `FEAT_FP8` neste emulador).
-    FPMR,
+    FPMR(3, 3, 4, 4, 2, Aarch64Feature.FP8),
     /// `CTR_EL0` (`op0=3,op1=3,CRn=0,CRm=0,op2=1`) — Cache Type Register, somente leitura
     /// (`PL0_R` no hardware real). Constante fixa no valor real do Cortex-A53 do Raspberry Pi 3
     /// (`0x84448004`, mesmo alvo de {@link #MIDR_EL1}, task B6.10) — apesar de viver no mesmo
     /// grupo de bits `op1=3` do timer genérico (ver javadoc da classe), é identidade CONSTANTE da
     /// CPU, não algo dependente do relógio do hospedeiro — resolvida DIRETO pelo `Aarch64Core`,
     /// mesma disciplina de `MIDR_EL1`/`ID_AA64*`.
-    CTR_EL0,
+    CTR_EL0(3, 3, 0, 0, 1),
     /// `DCZID_EL0` (`op0=3,op1=3,CRn=0,CRm=0,op2=7`) — Data Cache Zero ID, somente leitura.
     /// Constante `0x10` (só o bit `DZP`, "DC ZVA desabilitado") — este emulador não implementa a
     /// instrução `DC ZVA`, então anunciar `DZP=1` é o valor correto (task B6.10), evitando que o
     /// guest tente usá-la e bata num `UnsupportedOperationException` de decode em vez de
     /// simplesmente não usar o caminho otimizado.
-    DCZID_EL0,
+    DCZID_EL0(3, 3, 0, 0, 7),
     /// Qualquer registrador do espaço de identidade `op0=3,op1=0,CRn=0,CRm=1..7` sem identidade
     /// própria neste enum (ex.: `ID_AA64ISAR3_EL1`, `ID_PFR*`): "reserved, RAZ" — lê zero.
     /// Somente leitura (escrita é UNDEFINED no hardware).
@@ -254,63 +261,63 @@ public enum Aarch64SystemRegisterId {
     /// (acesso de EL0 aos contadores, event stream). Armazenamento puro leitura/escrita no
     /// `Aarch64Core` — achado real da F11: `arch_counter_register`/`arch_timer_starting_cpu` do
     /// Linux lê-modifica-escreve no boot.
-    CNTKCTL_EL1,
+    CNTKCTL_EL1(3, 0, 14, 1, 0),
     /// `CLIDR_EL1` (`op0=3,op1=1,CRn=0,CRm=0,op2=1`) — Cache Level ID, somente leitura. Constante do
     /// Cortex-A53 (`0x0a200023`: L1 separado I+D, L2 unificado, LoC=2, LoUU=1, LoUIS=1, valor de
     /// referência do QEMU) — achado real da F11: o `cacheinfo` do Linux/arm64 lê no boot.
-    CLIDR_EL1,
+    CLIDR_EL1(3, 1, 0, 0, 1),
     /// `CCSIDR_EL1` (`op0=3,op1=1,CRn=0,CRm=0,op2=0`) — geometria do cache escolhido por
     /// {@link #CSSELR_EL1}, somente leitura (L1D 32KiB/4 vias, L1I 32KiB/4 vias, L2 512KiB/16 vias,
     /// linhas de 64 bytes — A53, formato legado sem `CCIDX`). Seleção sem cache: 0.
-    CCSIDR_EL1,
+    CCSIDR_EL1(3, 1, 0, 0, 0),
     /// `CSSELR_EL1` (`op0=3,op1=2,CRn=0,CRm=0,op2=0`) — seleciona qual cache {@link #CCSIDR_EL1}
     /// descreve (`InD` bit 0, `Level` bits [3:1]). Armazenamento puro leitura/escrita.
-    CSSELR_EL1,
+    CSSELR_EL1(3, 2, 0, 0, 0),
     /// `AIDR_EL1` (`op0=3,op1=1,CRn=0,CRm=0,op2=7`) — Auxiliary ID, `IMPLEMENTATION DEFINED`;
     /// o Cortex-A53 devolve 0. Somente leitura.
-    AIDR_EL1,
+    AIDR_EL1(3, 1, 0, 0, 7),
     /// `RGSR_EL1` (`op0=3,op1=0,CRn=1,CRm=0,op2=5`, B19.14, `FEAT_MTE2`) — Random Allocation Tag
     /// Seed Register: `TAG[3:0]`/`SEED[23:8]` que alimentam o algoritmo determinístico de `IRG` (ver
     /// {@link dev.vitorsilverio.armjitter.core64.Aarch64Core#insertRandomTag}). Armazenamento
     /// misto: o guest pode ler/escrever livremente (mesma disciplina de "armazenamento puro" de
     /// {@link #FPCR}), mas `IRG` também MUTA este registrador como efeito colateral real (avança o
     /// gerador determinístico) — não é um escaninho passivo puro como `FPCR`.
-    RGSR_EL1,
+    RGSR_EL1(3, 0, 1, 0, 5, Aarch64Feature.MEMORY_TAGGING),
     /// `GCR_EL1` (`op0=3,op1=0,CRn=1,CRm=0,op2=6`, B19.14, `FEAT_MTE2`) — Tag Control Register:
     /// `Exclude[15:0]` (máscara de tags que `IRG` nunca gera, OR'ada com `Rm` no encoding) e `RRND`
     /// (não modelado — este core nunca usa entropia real, só o algoritmo determinístico, decisão
     /// registrada na task). Armazenamento puro leitura/escrita; `Exclude` É consumido de verdade por
     /// `IRG` (diferente de `FPCR.RMode`, que é lido mas não afeta o resultado).
-    GCR_EL1,
+    GCR_EL1(3, 0, 1, 0, 6, Aarch64Feature.MEMORY_TAGGING),
 
     // ── B6.6.7: timer genérico, EL0-acessível (`op0=3,op1=3`) — via `Aarch64SystemRegisterBus` ──
 
     /// `CNTFRQ_EL0` (`op0=3,op1=3,CRn=14,CRm=0,op2=0`) — frequência do contador do timer
     /// genérico, em Hz. Configurada pelo hospedeiro (depende do relógio real emulado).
-    CNTFRQ_EL0,
+    CNTFRQ_EL0(3, 3, 14, 0, 0),
     /// `CNTPCT_EL0` (`op0=3,op1=3,CRn=14,CRm=0,op2=1`) — valor atual do contador físico
     /// (monotônico, crescente). Fonte de verdade é o hospedeiro.
-    CNTPCT_EL0,
+    CNTPCT_EL0(3, 3, 14, 0, 1),
     /// `CNTP_TVAL_EL0` (`op0=3,op1=3,CRn=14,CRm=2,op2=0`) — valor do temporizador do comparador
     /// físico (contagem regressiva relativa; visão alternativa de {@link #CNTP_CVAL_EL0}).
-    CNTP_TVAL_EL0,
+    CNTP_TVAL_EL0(3, 3, 14, 2, 0),
     /// `CNTP_CTL_EL0` (`op0=3,op1=3,CRn=14,CRm=2,op2=1`) — controle do comparador físico
     /// (`ENABLE`/`IMASK`/`ISTATUS`).
-    CNTP_CTL_EL0,
+    CNTP_CTL_EL0(3, 3, 14, 2, 1),
     /// `CNTP_CVAL_EL0` (`op0=3,op1=3,CRn=14,CRm=2,op2=2`) — valor absoluto de disparo do
     /// comparador físico.
-    CNTP_CVAL_EL0,
+    CNTP_CVAL_EL0(3, 3, 14, 2, 2),
     /// `CNTVCT_EL0` (`op0=3,op1=3,CRn=14,CRm=0,op2=2`, B8.16) — valor atual do contador VIRTUAL
     /// (`= CNTPCT_EL0 - CNTVOFF_EL2`; sem `CNTVOFF_EL2` modelado, mesmo raciocínio de
     /// simplificação já aplicado ao resto da árvore — o hospedeiro decide o que devolver, mesmo
     /// papel de {@link #CNTPCT_EL0}).
-    CNTVCT_EL0,
+    CNTVCT_EL0(3, 3, 14, 0, 2),
     /// `CNTV_TVAL_EL0`/`CNTV_CTL_EL0`/`CNTV_CVAL_EL0` (B8.16, `CRn=14,CRm=3`) — comparador
     /// VIRTUAL, mesmo layout/papel de {@link #CNTP_TVAL_EL0}/{@link #CNTP_CTL_EL0}/
     /// {@link #CNTP_CVAL_EL0}, só `CRm` muda (`2`→`3`).
-    CNTV_TVAL_EL0,
-    CNTV_CTL_EL0,
-    CNTV_CVAL_EL0,
+    CNTV_TVAL_EL0(3, 3, 14, 3, 0),
+    CNTV_CTL_EL0(3, 3, 14, 3, 1),
+    CNTV_CVAL_EL0(3, 3, 14, 3, 2),
 
     // ── B8.16: PSTATE via MRS/MSR (`op0=3,op1=3,CRn=4,CRm=2`) — ESTADO REAL do core, resolvido
     // ── intrinsecamente (não pluggable, mesma razão de CurrentEL/identidades da CPU) ────────────
@@ -321,44 +328,44 @@ public enum Aarch64SystemRegisterId {
     /// Formato do valor de 64 bits: `N`/`Z`/`C`/`V` em `[31:28]`, resto `RES0` — MESMA posição de
     /// {@code PstateRegister#toSpsrFormat()}. Ler/escrever aqui MUDA o estado real (uma `B.cond`
     /// logo depois de um `MSR NZCV` vê o valor novo) — não é um escaninho paralelo.
-    NZCV,
+    NZCV(3, 3, 4, 2, 0),
     /// `DAIF` (`op0=3,op1=3,CRn=4,CRm=2,op2=1`, B8.16) — só o bit `I` (máscara de IRQ, bit `7`,
     /// {@code PstateRegister#irqDisabled()}) tem efeito real, mesma disciplina já registrada por
     /// B6.6.7 (`D`/`A`/`F` — debug/SError/FIQ — não são modelados, `WI`: aceitos na escrita, mas
     /// sempre lidos como `0`, nunca setados de verdade). Ler/escrever o bit `I` aqui afeta o MESMO
     /// estado que `Aarch64Core#enterIrq` consulta, não um escaninho paralelo.
-    DAIF,
+    DAIF(3, 3, 4, 2, 1),
     /// `DIT` (`op0=3,op1=3,CRn=4,CRm=2,op2=5`, B8.17, `FEAT_DIT` ARMv8.4) — Data Independent
     /// Timing. Armazenamento puro: nenhum caminho de execução deste emulador tem timing
     /// dependente de dado para `DIT=1` normalizar (mesma disciplina já aplicada à forma `MSR
     /// (immediate)`, B8.3).
-    DIT,
+    DIT(3, 3, 4, 2, 5, Aarch64Feature.DIT),
     /// `SSBS` (`op0=3,op1=3,CRn=4,CRm=2,op2=6`, B8.17, `FEAT_SSBS` ARMv8.5) — Speculative Store
     /// Bypass Safe. Armazenamento puro: nenhuma mitigação de execução especulativa é modelada.
-    SSBS,
+    SSBS(3, 3, 4, 2, 6),
     /// `TCO` (`op0=3,op1=3,CRn=4,CRm=2,op2=7`, B8.17, `FEAT_MTE` ARMv8.5) — Tag Check Override.
     /// Armazenamento puro: MTE (Memory Tagging Extension) não é modelada, nenhuma tag para
     /// `TCO=1` suprimir a checagem.
-    TCO,
+    TCO(3, 3, 4, 2, 7),
     /// `SPSel` (`op0=3,op1=0,CRn=4,CRm=2,op2=0`, B8.17) — seleciona `SP_EL0` vs. `SP_ELx` do
     /// nível atual. Armazenamento puro: {@code Aarch64Core#sp()} já resolve isso sozinho a partir
     /// só do nível de exceção atual (assume `SPSel=1` implicitamente para EL1+, mesma
     /// simplificação documentada desde B10.1) — mudar este registrador não muda qual `SP` uma
     /// instrução usa.
-    SPSEL,
+    SPSEL(3, 0, 4, 2, 0),
     /// `PAN` (`op0=3,op1=0,CRn=4,CRm=2,op2=3`, B8.17, `FEAT_PAN` ARMv8.1) — Privileged Access
     /// Never. Armazenamento puro: a MMU deste emulador não modela a checagem de acesso
     /// privilegiado a páginas de EL0 que `PAN=1` ativaria (mesma disciplina de `MSR (immediate)`,
     /// B8.3).
-    PAN,
+    PAN(3, 0, 4, 2, 3, Aarch64Feature.PAN),
     /// `UAO` (`op0=3,op1=0,CRn=4,CRm=2,op2=4`, B8.17, `FEAT_UAO` ARMv8.2) — User Access Override.
     /// Armazenamento puro: sem acesso `LDTR`/`STTR` ("unprivileged") afetado por este bit no
     /// modelo de MMU atual (mesma disciplina de `MSR (immediate)`, B8.3).
-    UAO,
+    UAO(3, 0, 4, 2, 4, Aarch64Feature.UAO),
     /// `ALLINT` (`op0=3,op1=0,CRn=4,CRm=3,op2=0`, B8.17, `FEAT_NMI` ARMv8.8) — máscara de
     /// interrupção não-mascarável. Armazenamento puro: este emulador não modela NMI (só IRQ
     /// simples, B6.6.7).
-    ALLINT,
+    ALLINT(3, 0, 4, 3, 0, Aarch64Feature.NMI),
 
     // ── B10.2: registradores de sistema EL2 (`op0=3,op1=4`), armazenamento puro por enquanto —
     // ── SEM side effect funcional (nenhum código roda em EL2 ainda, ver `Aarch64VmsaSystemRegisters`;
@@ -367,52 +374,52 @@ public enum Aarch64SystemRegisterId {
     /// `SCTLR_EL2` (`op0=3,op1=4,CRn=1,CRm=0,op2=0`) — controle do sistema em EL2. Armazenamento
     /// puro: NÃO liga a MMU de stage-1 EL1 (`TranslatingAddressSpace64`) — essa é controlada só
     /// por {@link #SCTLR_EL1}; ligar stage-2 real é B10.8.
-    SCTLR_EL2,
+    SCTLR_EL2(3, 4, 1, 0, 0),
     /// `HCR_EL2` (`op0=3,op1=4,CRn=1,CRm=1,op2=0`) — controle de virtualização (`VM`, `TGE`, ...).
     /// Armazenamento puro; o roteamento real que estes bits deveriam decidir é B10.4/B10.8.
-    HCR_EL2,
+    HCR_EL2(3, 4, 1, 1, 0),
     /// `MDCR_EL2` (`op0=3,op1=4,CRn=1,CRm=1,op2=1`) — controle de debug/trace delegado a EL2.
     /// Armazenamento puro (sem debugger de hardware conectado, mesma disciplina de B10.7).
-    MDCR_EL2,
+    MDCR_EL2(3, 4, 1, 1, 1),
     /// `CPTR_EL2` (`op0=3,op1=4,CRn=1,CRm=1,op2=2`) — controle de trap de FP/SIMD/SVE para EL2.
     /// Armazenamento puro (sem trap real modelado ainda).
-    CPTR_EL2,
+    CPTR_EL2(3, 4, 1, 1, 2),
     /// `TCR_EL2` (`op0=3,op1=4,CRn=2,CRm=0,op2=2`) — controle de tradução de stage-1 EL2.
     /// Armazenamento puro (mesma disciplina de {@link #TCR_EL1}: granule/tamanho fixos, o valor
     /// escrito não é lido pela stage-1 de EL2).
-    TCR_EL2,
+    TCR_EL2(3, 4, 2, 0, 2),
     /// `TTBR0_EL2` (`op0=3,op1=4,CRn=2,CRm=0,op2=0`) — base da tabela de tradução de stage-1 EL2
     /// (tasks B10.6b, `AT S1E2R`/`S1E2W`). Liga de verdade em
     /// {@link dev.vitorsilverio.armjitter.memory.mmu.Aarch64PrivilegedStage1TranslatingAddressSpace64#setTtbr0}
     /// — diferente de {@link #TCR_EL2} (armazenamento puro), este registrador tem efeito
     /// observável real desde que existe.
-    TTBR0_EL2,
+    TTBR0_EL2(3, 4, 2, 0, 0),
     /// `VTTBR_EL2` (`op0=3,op1=4,CRn=2,CRm=1,op2=0`) — base da tabela de tradução de stage-2.
     /// Armazenamento puro; ligar de verdade em `TranslatingAddressSpace64` é B10.8.
-    VTTBR_EL2,
+    VTTBR_EL2(3, 4, 2, 1, 0),
     /// `VTCR_EL2` (`op0=3,op1=4,CRn=2,CRm=1,op2=2`) — controle de tradução de stage-2.
     /// Armazenamento puro; mesmo destino futuro de {@link #VTTBR_EL2}.
-    VTCR_EL2,
+    VTCR_EL2(3, 4, 2, 1, 2),
     /// `SPSR_EL2` (`op0=3,op1=4,CRn=4,CRm=0,op2=0`) — `PSTATE` salvo na entrada de exceção em EL2.
     /// Delega ao banco por nível de {@link dev.vitorsilverio.armjitter.core64.Aarch64ExceptionState}
     /// (generalizado em B10.1) — mesma fonte única já usada por {@link #SPSR_EL1}.
-    SPSR_EL2,
+    SPSR_EL2(3, 4, 4, 0, 0),
     /// `ELR_EL2` (`op0=3,op1=4,CRn=4,CRm=0,op2=1`) — endereço de retorno de exceção em EL2.
     /// Delega ao banco por nível, mesma disciplina de {@link #SPSR_EL2}.
-    ELR_EL2,
+    ELR_EL2(3, 4, 4, 0, 1),
     /// `FAR_EL2` (`op0=3,op1=4,CRn=6,CRm=0,op2=0`) — endereço faltoso da exceção mais recente em
     /// EL2. Delega ao banco por nível, mesma disciplina de {@link #SPSR_EL2}.
-    FAR_EL2,
+    FAR_EL2(3, 4, 6, 0, 0),
     /// `ESR_EL2` (`op0=3,op1=4,CRn=5,CRm=2,op2=0`) — síndrome da exceção mais recente em EL2.
     /// Delega ao banco por nível, mesma disciplina de {@link #SPSR_EL2}.
-    ESR_EL2,
+    ESR_EL2(3, 4, 5, 2, 0),
     /// `CNTHCTL_EL2` (`op0=3,op1=4,CRn=14,CRm=1,op2=0`) — controle do timer genérico visto de EL2.
     /// Armazenamento puro (o timer genérico deste emulador, B6.6.7, não modela os traps que este
     /// registrador controlaria).
-    CNTHCTL_EL2,
+    CNTHCTL_EL2(3, 4, 14, 1, 0),
     /// `VBAR_EL2` (`op0=3,op1=4,CRn=12,CRm=0,op2=0`) — base da tabela de vetores de exceção de
     /// EL2. Delega ao banco por nível, mesma disciplina de {@link #SPSR_EL2}.
-    VBAR_EL2,
+    VBAR_EL2(3, 4, 12, 0, 0),
 
     // ── B10.3: registradores de sistema EL3 (`op0=3,op1=6`), mesma disciplina de B10.2:
     // ── armazenamento puro por enquanto — SEM side effect funcional (nenhum código roda em EL3
@@ -421,35 +428,35 @@ public enum Aarch64SystemRegisterId {
 
     /// `SCTLR_EL3` (`op0=3,op1=6,CRn=1,CRm=0,op2=0`) — controle do sistema em EL3. Armazenamento
     /// puro: NÃO liga nenhuma MMU (stage-1 de EL3 não é modelada por este épico).
-    SCTLR_EL3,
+    SCTLR_EL3(3, 6, 1, 0, 0),
     /// `SCR_EL3` (`op0=3,op1=6,CRn=1,CRm=1,op2=0`) — controle seguro (`NS`, roteamento de
     /// `SMC`/IRQ/FIQ para EL3). Armazenamento puro; o roteamento real que estes bits deveriam
     /// decidir é B10.5.
-    SCR_EL3,
+    SCR_EL3(3, 6, 1, 1, 0),
     /// `CPTR_EL3` (`op0=3,op1=6,CRn=1,CRm=1,op2=2`) — controle de trap de FP/SIMD/SVE para EL3.
     /// Armazenamento puro (sem trap real modelado ainda).
-    CPTR_EL3,
+    CPTR_EL3(3, 6, 1, 1, 2),
     /// `MDCR_EL3` (`op0=3,op1=6,CRn=1,CRm=3,op2=1`) — controle de debug/trace delegado a EL3.
     /// Armazenamento puro (sem debugger de hardware conectado, mesma disciplina de B10.7).
-    MDCR_EL3,
+    MDCR_EL3(3, 6, 1, 3, 1),
     /// `SPSR_EL3` (`op0=3,op1=6,CRn=4,CRm=0,op2=0`) — `PSTATE` salvo na entrada de exceção em EL3.
     /// Delega ao banco por nível de {@link dev.vitorsilverio.armjitter.core64.Aarch64ExceptionState}
     /// (generalizado em B10.1) — mesma fonte única já usada por {@link #SPSR_EL2}.
-    SPSR_EL3,
+    SPSR_EL3(3, 6, 4, 0, 0),
     /// `ELR_EL3` (`op0=3,op1=6,CRn=4,CRm=0,op2=1`) — endereço de retorno de exceção em EL3.
     /// Delega ao banco por nível, mesma disciplina de {@link #SPSR_EL3}.
-    ELR_EL3,
+    ELR_EL3(3, 6, 4, 0, 1),
     /// `VBAR_EL3` (`op0=3,op1=6,CRn=12,CRm=0,op2=0`) — base da tabela de vetores de exceção de
     /// EL3. Delega ao banco por nível, mesma disciplina de {@link #SPSR_EL3}.
-    VBAR_EL3,
+    VBAR_EL3(3, 6, 12, 0, 0),
     /// `TTBR0_EL3` (`op0=3,op1=6,CRn=2,CRm=0,op2=0`) — base da tabela de tradução de stage-1 EL3
     /// (task B10.6c, `AT S1E3R`/`S1E3W`). Liga de verdade em
     /// {@link dev.vitorsilverio.armjitter.memory.mmu.Aarch64PrivilegedStage1TranslatingAddressSpace64#setTtbr0}
     /// — mesma disciplina de {@link #TTBR0_EL2}.
-    TTBR0_EL3,
+    TTBR0_EL3(3, 6, 2, 0, 0),
     /// `TCR_EL3` (`op0=3,op1=6,CRn=2,CRm=0,op2=2`) — controle de tradução de stage-1 EL3.
     /// Armazenamento puro, mesma disciplina de {@link #TCR_EL2}.
-    TCR_EL3,
+    TCR_EL3(3, 6, 2, 0, 2),
 
     // ── B10.6: `PAR_EL1` (`op0=3,op1=0,CRn=7,CRm=4,op2=0`) — resultado da instrução `AT`. ──
 
@@ -469,26 +476,26 @@ public enum Aarch64SystemRegisterId {
 
     /// `MDSCR_EL1` (`op0=2,op1=0,CRn=0,CRm=2,op2=2`) — controle do monitor de debug (`MDE`/`KDE`/
     /// `SS`/...). Armazenamento puro; nenhum bit tem efeito observável (sem debugger conectado).
-    MDSCR_EL1,
+    MDSCR_EL1(2, 0, 0, 2, 2),
     /// `OSLAR_EL1` (`op0=2,op1=0,CRn=1,CRm=0,op2=4`) — OS Lock Access Register. `WO` no hardware
     /// real; aqui é armazenamento puro leitura/escrita (ver javadoc da classe, "não travar o
     /// guest").
-    OSLAR_EL1,
+    OSLAR_EL1(2, 0, 1, 0, 4),
     /// `OSLSR_EL1` (`op0=2,op1=0,CRn=1,CRm=1,op2=4`) — OS Lock Status Register. `RO` no hardware
     /// real; aqui é armazenamento puro leitura/escrita, mesma disciplina de {@link #OSLAR_EL1}.
-    OSLSR_EL1,
+    OSLSR_EL1(2, 0, 1, 1, 4),
     /// `DBGBVR0_EL1` (`op0=2,op1=0,CRn=0,CRm=0,op2=4`) — valor de endereço do breakpoint 0.
     /// Armazenamento puro.
-    DBGBVR0_EL1,
+    DBGBVR0_EL1(2, 0, 0, 0, 4),
     /// `DBGBCR0_EL1` (`op0=2,op1=0,CRn=0,CRm=0,op2=5`) — controle do breakpoint 0. Armazenamento
     /// puro.
-    DBGBCR0_EL1,
+    DBGBCR0_EL1(2, 0, 0, 0, 5),
     /// `DBGWVR0_EL1` (`op0=2,op1=0,CRn=0,CRm=0,op2=6`) — valor de endereço do watchpoint 0.
     /// Armazenamento puro.
-    DBGWVR0_EL1,
+    DBGWVR0_EL1(2, 0, 0, 0, 6),
     /// `DBGWCR0_EL1` (`op0=2,op1=0,CRn=0,CRm=0,op2=7`) — controle do watchpoint 0. Armazenamento
     /// puro.
-    DBGWCR0_EL1,
+    DBGWCR0_EL1(2, 0, 0, 0, 7),
 
     /// `SYS`/`SYSL` `op0=2` (B19.6, bloco A) fora do subconjunto nomeado de B10.7 acima (qualquer
     /// `op1`/`CRn`/`CRm`/`op2` que não bata com `MDSCR_EL1`/`OSLAR_EL1`/`OSLSR_EL1`/
@@ -498,5 +505,43 @@ public enum Aarch64SystemRegisterId {
     /// emulador — ler de volta exatamente o que o próprio guest escreveu ali (ou 0, se nada foi
     /// escrito) evita tanto a exceção de decode (que travaria o boot em qualquer kernel com
     /// suporte a debug) quanto fingir um registrador distinto por combinação.
-    DEBUG_UNMODELED
+    DEBUG_UNMODELED;
+
+    /// Valor de {@link #encoding()} das constantes que não são um encoding único: os escaninhos
+    /// {@link #ID_RESERVED_RAZ}/{@link #DEBUG_UNMODELED} e {@link #PAR_EL1} (ainda sem `MRS`/`MSR`).
+    public static final int NO_ENCODING = -1;
+
+    private static final int OP0_SHIFT = 14;
+    private static final int OP1_SHIFT = 11;
+    private static final int CRN_SHIFT = 7;
+    private static final int CRM_SHIFT = 3;
+
+    private final int encoding;
+    private final Aarch64Feature requires;
+
+    Aarch64SystemRegisterId() {
+        this.encoding = NO_ENCODING;
+        this.requires = null;
+    }
+
+    Aarch64SystemRegisterId(int op0, int op1, int crn, int crm, int op2) {
+        this(op0, op1, crn, crm, op2, null);
+    }
+
+    Aarch64SystemRegisterId(int op0, int op1, int crn, int crm, int op2, Aarch64Feature requires) {
+        this.encoding = op0 << OP0_SHIFT | op1 << OP1_SHIFT | crn << CRN_SHIFT | crm << CRM_SHIFT | op2;
+        this.requires = requires;
+    }
+
+    /// E15.11: os 16 bits `op0:op1:CRn:CRm:op2` (`op0` no topo) — os mesmos `bits[20:5]` da instrução
+    /// `MRS`/`MSR` que acessa o registrador —, ou {@link #NO_ENCODING}.
+    public int encoding() {
+        return encoding;
+    }
+
+    /// E15.11: a feature sem a qual o registrador é UNDEFINED, ou `null` quando ele existe em todo preset
+    /// (exceção: sem SME, {@link #ID_AA64SMFR0_EL1} lê como {@link #ID_RESERVED_RAZ}, não UNDEFINED).
+    public Aarch64Feature requires() {
+        return requires;
+    }
 }

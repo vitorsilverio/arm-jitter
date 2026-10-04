@@ -8,6 +8,9 @@ o projeto segue [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 Próxima versão: **`2.0.0`** — o refactor estrutural (épico `E15`) quebra nomes de tipo da API pública.
 
 ### Adicionado
+- **`Aarch64SystemRegisterId#encoding()`/`#requires()` e `NO_ENCODING`** (`E15.11`): cada registrador de sistema declara
+  os 16 bits `op0:op1:CRn:CRm:op2` (os `bits[20:5]` de `MRS`/`MSR`) e a `Aarch64Feature` sem a qual é UNDEFINED. O decoder A64
+  monta uma linha de tabela por constante em vez da cascata de `if` por campo (comportamento idêntico, conferido por oráculo).
 - **`IrOp#regUse()`/`IrOp#regDef()` e `IrOperand#regUse()`** (`E15.6`): cada operação do IR de 32 bits declara os
   registradores `r0..r15` que lê e escreve (bitmask; default `0` = não toca GPR). `DeadCodeEliminationPass` perdeu os
   três `switch` por tipo e virou só o laço de vivência; a predicação (`condition() != AL` não mata vivência) continua
@@ -109,6 +112,11 @@ Próxima versão: **`2.0.0`** — o refactor estrutural (épico `E15`) quebra no
   | `IrMveReductionExecutor` (estática) | `MveVectorAddAcrossVector` · `MveVectorAddAcrossVectorLong` · `MveVectorAbsoluteDifferenceAccumulate` · `MveVectorDualAccumulate` · `MveVectorDualAccumulateLong` · `MveVectorRoundingDualAccumulateHigh` · `MveVectorMinMaxAcrossVector` · `MveVectorFpMinMaxAcrossVector` |
 
 ### Corrigido
+- **Classe branch/exceção/sistema do A64 aceitava encodings não alocados** (`E15.11`): `CBB`/`CBH` com `sf=1`; `ERET`
+  com `Rn≠11111`; hints, barreiras e `MSR` imediato com `L=1`, `op1` errado ou `Rt≠11111`; `CFINV`/`XAFLAG`/`AXFLAG`, `MSR
+  ALLINT`, `MSR SVCR*`, `SB`, `DSB nXS` e `WFET`/`WFIT` com `CRm` reservado — todos decodificavam como a instrução vizinha
+  (ex.: `0xd500201f`, `op1=000`, virava `NOP`). Agora são recusados; referência = padrões do `a64.decode` do QEMU (o `objdump`
+  imprime essas palavras como `msr s0_...`). A classe passou a ser tabela (`DecodeTable`, interno).
 - **A64: cinco encodings saíam como OUTRA instrução ou eram aceitos sem existir** (`E17`, achados pela conferência de
   assinatura da tabela de ISA): `MUL`/`MLA`/`MLS`/`SQDMULH` por elemento na forma `.s` (ex. `mul v3.4s, v2.4s, v1.s[0]`)
   executavam como `FMLAL` em todo preset com `FEAT_FHM` (ARMv8.2-A em diante); `PACIBSP`, `GCSB DSYNC` e todo hint com

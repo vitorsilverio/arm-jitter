@@ -2901,7 +2901,7 @@ class Aarch64DecoderCorpusTest {
     @Test
     void dcZvaStaysUnsupported() {
         // dc zva, x0 (0xd50b7420, CRm=0b0100/op2=1 — DELIBERADAMENTE fora de
-        // SYSTEM_INSTRUCTION_CACHE_OPS, ver Aarch64Decoder#decodeSystemInstructionSys):
+        // SYSTEM_INSTRUCTION_CACHE_OPS, ver SystemInstructionRows):
         // tem efeito observável real (zera memória) e já é anunciada como indisponível via
         // DCZID_EL0.DZP=1 (B6.10); um guest que a emita mesmo assim deve lançar, não virar NOP
         // silencioso. Não representável pelo corpus (`.s`/`.objdump.txt`) porque nunca é gerada
@@ -2917,7 +2917,7 @@ class Aarch64DecoderCorpusTest {
     // ── (CRm=0b1000 distingue), construídos à mão a partir do encoding real (ARM DDI 0487 C6.2.23)
     // ── — não representáveis pelo corpus (nunca gerados por este emulador). Achado real desta
     // ── task: ANTES do carve-out, essas palavras caíam incorretamente em CACHE_MAINTENANCE_NOP
-    // ── (ver javadoc de Aarch64Decoder#decodeSystemInstructionSys) — os testes abaixo confirmam
+    // ── (ver javadoc de SystemInstructionRows) — os testes abaixo confirmam
     // ── que agora viram SystemOp64.AddressTranslate de verdade.
 
     private static Ir64Op decodeAt(int word) {
@@ -3054,7 +3054,7 @@ class Aarch64DecoderCorpusTest {
     @Test
     void atS1e2ReservedOp2StaysUnsupported() {
         // op1=4/0b100, op2=2/3: reservado no regime EL2 (entre S1E2W=1 e S12E1R=4) — não pode ser
-        // confundido nem com S1E2*/S12E* pelo switch de decodeAddressTranslateEl2.
+        // confundido nem com S1E2*/S12E* pelo switch de SystemInstructionRows (AT EL2).
         assertThrows(UnsupportedOperationException.class,
                 () -> decodeAt(0xd5087800 | (0b100 << 16) | (0b010 << 5)));
         assertThrows(UnsupportedOperationException.class,
@@ -3759,7 +3759,7 @@ class Aarch64DecoderCorpusTest {
     @Test
     void tlbiVaePerVaFormDecodesAsInvalidateAll() {
         // tlbi vae1, x0 — B8.3 amplia TLBI para "qualquer forma do regime EL1", ver
-        // decodeSystemInstructionSys.
+        // SystemInstructionRows.
         SystemOp64.SystemInstruction op = (SystemOp64.SystemInstruction) DECODER.decode(memory, 0x5f0);
         assertEquals(Ir64SystemInstructionOp.TLBI_ALL, op.opcode());
     }

@@ -18,7 +18,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 /// **achado real desta task**: `CFINV` nunca tinha sido gateado por B11.7 (que só tocou
 /// `decodeAddSubtractCarryOrFlags`, um método diferente de onde `CFINV` vive), corrigido aqui junto
 /// com `XAFLAG`/`AXFLAG` por compartilharem o MESMO `switch` em
-/// `Aarch64Decoder#decodeFlagOrPstateImmediate`. Corpus REAL já existente em
+/// `SystemInstructionRows` (E15.11; antes `Aarch64Decoder#decodeFlagOrPstateImmediate`). Corpus REAL já existente em
 /// `src/test/resources/aarch64/corpus.bin` (offsets `0x5a8`/`0x5ac`/`0x5b0`, mesmas palavras que
 /// `Aarch64DecoderCorpusTest#cfinv`/`#xaflag`/`#axflag` validavam antes desta task).
 class Aarch64FlagManipulation2DecoderTest {

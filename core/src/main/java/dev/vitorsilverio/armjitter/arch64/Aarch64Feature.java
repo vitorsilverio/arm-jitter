@@ -305,7 +305,7 @@ public enum Aarch64Feature {
     /// **PMSA** (Protected Memory System Architecture) de 64 bits — mirror de
     /// {@link dev.vitorsilverio.armjitter.arch.ArmFeature#PMSA} (32-bit). Gateia os 5 registradores
     /// de sistema novos (`MPUIR_EL1`/`PRSELR_EL1`/`PRBAR_EL1`/`PRLAR_EL1`/`PRENR_EL1`,
-    /// `Aarch64Decoder#decodeSystemRegisterId`) e é consumida por
+    /// coluna `requires` de `Aarch64SystemRegisterId`, E15.11) e é consumida por
     /// {@link dev.vitorsilverio.armjitter.memory.mmu.Pmsav8SystemRegisters64}/
     /// {@link dev.vitorsilverio.armjitter.memory.mmu.Pmsav8AddressSpace64} (B20.8). **Mutuamente
     /// exclusiva com VMSA64** — nenhum preset A64 existente a declara, e o preset novo
