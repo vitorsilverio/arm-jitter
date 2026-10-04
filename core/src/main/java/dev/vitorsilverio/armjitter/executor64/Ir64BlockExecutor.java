@@ -23,7 +23,8 @@ import java.util.Objects;
 ///
 /// Cada {@link #step} decodifica exatamente UMA instrução de 4 bytes no PC atual, contabiliza
 /// {@link Ir64Op.Fetch}/{@link Ir64Op.Cycle} (G4: incondicionais, sempre executados) e executa a
-/// semântica decodificada.
+/// semântica decodificada. A palavra é lida da memória a todo `step` (uma leitura, como sem cache);
+/// o decode dela é guardado por `pc` e reaproveitado enquanto a palavra não mudar (E15.10b).
 ///
 /// Esta classe é só o laço (`step`/`run`/`executeBlock`). A semântica de cada operação vive nos
 /// executores por família deste pacote e é alcançada por {@link Ir64Op#execute} — um único dispatch
@@ -32,7 +33,22 @@ public final class Ir64BlockExecutor {
     /// Ciclos internos atribuídos a cada instrução nesta fatia (sem custo de memória/pipeline
     /// modelado ainda — ver B6.4).
     private static final int CYCLES_PER_INSTRUCTION = 1;
+    /// Entradas do cache de decode do {@link #step} (potência de 2: 32 KiB de código contíguo sem
+    /// colisão).
+    static final int DECODE_CACHE_ENTRIES = 1 << 13;
+    private static final int DECODE_CACHE_INDEX_MASK = DECODE_CACHE_ENTRIES - 1;
+    /// `log2` do tamanho da instrução: endereços de instrução alinhados viram índices consecutivos.
+    private static final int INSTRUCTION_ALIGNMENT_SHIFT = 2;
     private final Aarch64Decoder decoder;
+    /// E15.10b: op decodificada por `pc`, mapeamento direto. Cada entrada guarda a PALAVRA de onde a
+    /// op saiu e só vale se a palavra lida agora for a mesma — {@link Aarch64Decoder#decode(int, long)}
+    /// é função pura de `(palavra, pc)`, então o resultado é idêntico ao de decodificar de novo, sem
+    /// depender de `IC IVAU`, troca de tradução ou detecção de escrita. A entrada é um objeto imutável
+    /// (publicação segura se o executor for compartilhado entre threads).
+    private final DecodedInstruction[] decodeCache = new DecodedInstruction[DECODE_CACHE_ENTRIES];
+
+    private record DecodedInstruction(long pc, int word, Ir64Op op) {
+    }
 
     /// Cria um executor para {@link Aarch64Architecture#ARMV8_0_A} — equivalente ao comportamento
     /// deste executor antes de B11.2 (tudo que está implementado, incondicional).
@@ -88,7 +104,7 @@ public final class Ir64BlockExecutor {
             cycles = executeCycle(cycle);
             core.addCycles(cycles);
 
-            Ir64Op op = decoder.decode(core.memory(), pc);
+            Ir64Op op = decodeCached(core.memory().read32(pc), pc);
             boolean pcChanged = op.execute(core);
             if (!pcChanged) {
                 core.setProgramCounter(pc + Aarch64Decoder.instructionSizeBytes());
@@ -201,6 +217,19 @@ public final class Ir64BlockExecutor {
             core.enterSecureMonitorCall(lastFetchAddress);
         }
         return cycles;
+    }
+
+    /// A op de `word` em `pc`: a do cache se a entrada for desta mesma palavra neste mesmo `pc`, senão
+    /// decodifica e substitui a entrada. Encoding recusado pelo decoder lança e não entra no cache.
+    private Ir64Op decodeCached(int word, long pc) {
+        int index = (int) (pc >>> INSTRUCTION_ALIGNMENT_SHIFT) & DECODE_CACHE_INDEX_MASK;
+        DecodedInstruction entry = decodeCache[index];
+        if (entry != null && entry.pc == pc && entry.word == word) {
+            return entry.op;
+        }
+        Ir64Op op = decoder.decode(word, pc);
+        decodeCache[index] = new DecodedInstruction(pc, word, op);
+        return op;
     }
 
     private void executeFetch(Aarch64Core core, Ir64Op.Fetch op) {

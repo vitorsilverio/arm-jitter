@@ -2030,7 +2030,12 @@ public final class Aarch64Decoder {
     /// @return operação IR-64 correspondente
     /// @throws UnsupportedOperationException quando o encoding está fora da fatia B6.1
     public Ir64Op decode(AddressSpace64 memory, long address) {
-        int word = memory.read32(address);
+        return decode(memory.read32(address), address);
+    }
+
+    /// Mesmo que {@link #decode(AddressSpace64, long)} com a palavra já lida: função pura de `word` e
+    /// `address` (o `Ir64BlockExecutor#step` guarda o resultado por `pc`, E15.10b).
+    public Ir64Op decode(int word, long address) {
         Ir64Op op = decodeWord(word, address);
         // B18.2: só presets com FEAT_SME ganham o embrulho (G3) — a decisão depende de `PSTATE.SM`, que
         // só existe na execução.

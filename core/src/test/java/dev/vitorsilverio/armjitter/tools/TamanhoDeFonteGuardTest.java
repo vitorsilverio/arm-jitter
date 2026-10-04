@@ -55,9 +55,10 @@ class TamanhoDeFonteGuardTest {
     /// usuário). Na E17 +25 (5 misdecodes/G8 achados pela conferência de assinatura: `FMLAL_vi`
     /// `U≠top`, `WFI` com `CRm≠0`, `PAC*` `Z` com `Rn≠31`, `CASP` ímpar, add/sub imediato `bit23`; na
     /// medida, por escolha do usuário). Na E15.10 desceu para 7318 (a classe DP-imediato virou
-    /// `DataProcessingImmediateRows`).
+    /// `DataProcessingImmediateRows`). Na E15.10b +5 (`decode(int, long)` público para o cache do
+    /// `step`; na medida, por escolha do usuário).
     private static final Map<String, Integer> EXCEPTIONS = Map.ofEntries(
-            entry("decoder64/Aarch64Decoder.java", 7318),
+            entry("decoder64/Aarch64Decoder.java", 7323),
             entry("advsimd/AdvSimdLanes.java", 3677),
             entry("core64/Aarch64Core.java", 1848),
             entry("ir/StandardIrBuilder.java", 1352),
