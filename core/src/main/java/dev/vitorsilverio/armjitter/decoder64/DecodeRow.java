@@ -1,5 +1,6 @@
 package dev.vitorsilverio.armjitter.decoder64;
 
+import dev.vitorsilverio.armjitter.arch64.Aarch64Architecture;
 import dev.vitorsilverio.armjitter.arch64.Aarch64Feature;
 
 import java.util.Objects;
@@ -14,9 +15,10 @@ import java.util.Objects;
 /// @param mask bits fixos do encoding
 /// @param value valor dos bits fixos (`value & ~mask == 0`)
 /// @param requires feature exigida, ou `null` para a ISA base
+/// @param alsoRequires segunda feature exigida junto com `requires` (E15.12: `SETG*` = MOPS **e** MTE), ou `null`
 /// @param build constrói a operação a partir da palavra (só é chamado quando a linha casa)
 /// @param <T> tipo da operação decodificada
-record DecodeRow<T>(int mask, int value, Aarch64Feature requires, WordDecoder<T> build) {
+record DecodeRow<T>(int mask, int value, Aarch64Feature requires, Aarch64Feature alsoRequires, WordDecoder<T> build) {
     /// Constrói a operação de uma palavra que já casou a linha.
     @FunctionalInterface
     interface WordDecoder<T> {
@@ -36,9 +38,20 @@ record DecodeRow<T>(int mask, int value, Aarch64Feature requires, WordDecoder<T>
         Objects.requireNonNull(build, "build");
     }
 
+    /// Linha com uma feature só (ou nenhuma).
+    DecodeRow(int mask, int value, Aarch64Feature requires, WordDecoder<T> build) {
+        this(mask, value, requires, null, build);
+    }
+
     /// Cria a linha a partir de um padrão de 32 símbolos (`0`/`1` fixos, `.` livre, bit 31
     /// primeiro); espaços são ignorados e servem só para separar campos.
     static <T> DecodeRow<T> of(String pattern, Aarch64Feature requires, WordDecoder<T> build) {
+        return of(pattern, requires, null, build);
+    }
+
+    /// Como {@link #of(String, Aarch64Feature, WordDecoder)}, exigindo também `alsoRequires`.
+    static <T> DecodeRow<T> of(String pattern, Aarch64Feature requires, Aarch64Feature alsoRequires,
+            WordDecoder<T> build) {
         String bits = pattern.replace(" ", "");
         if (bits.length() != WORD_BITS) {
             throw new IllegalArgumentException("padrão sem 32 bits: " + pattern);
@@ -58,7 +71,13 @@ record DecodeRow<T>(int mask, int value, Aarch64Feature requires, WordDecoder<T>
                 default -> throw new IllegalArgumentException("símbolo inválido '" + symbol + "' em: " + pattern);
             }
         }
-        return new DecodeRow<>(mask, value, requires, build);
+        return new DecodeRow<>(mask, value, requires, alsoRequires, build);
+    }
+
+    /// `true` quando `architecture` declara as features da linha.
+    boolean supportedBy(Aarch64Architecture architecture) {
+        return (requires == null || architecture.has(requires))
+                && (alsoRequires == null || architecture.has(alsoRequires));
     }
 
     /// `true` quando os bits fixos de `word` são os desta linha.

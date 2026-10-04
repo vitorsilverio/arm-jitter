@@ -112,6 +112,12 @@ Próxima versão: **`2.0.0`** — o refactor estrutural (épico `E15`) quebra no
   | `IrMveReductionExecutor` (estática) | `MveVectorAddAcrossVector` · `MveVectorAddAcrossVectorLong` · `MveVectorAbsoluteDifferenceAccumulate` · `MveVectorDualAccumulate` · `MveVectorDualAccumulateLong` · `MveVectorRoundingDualAccumulateHigh` · `MveVectorMinMaxAcrossVector` · `MveVectorFpMinMaxAcrossVector` |
 
 ### Corrigido
+- **Classe Loads and Stores do A64 aceitava encodings não alocados** (`E15.12`): o espaço exclusivo/ordenado/`CAS` ignorava
+  `bit24` (palavras de `FEAT_LSUI` como `LDTXR`/`CAST` saíam `LDXR`/`STLR`); `CAS`/`CASP` com `Rt2≠11111` e `STLR`/`LDAR` com
+  `Rs`/`Rt2≠11111`; `LDAPUR`/`STLUR` e tags MTE com `bit26=1` (os `SETGO*` de `FEAT_MOPS_GO` saíam `LDAPUR`); `CPY*`/`SET*`/
+  `SETG*` e `LDCLRP`/`LDSETP`/`SWPP` com `size≠00`; `STGM`/`STZGM`/`LDGM` com `imm9≠0`; `LDPSW`/`STGP` sem alocação; AdvSIMD
+  múltiplo com `bit21=1`; `PRFUM` com `idx≠00` e `PRFM` registrador com `option<1>=0`; `LDR`/`STR` SIMD&FP com `idx=10`. Agora
+  são recusados (referência = `a64.decode` do QEMU, conferido no `objdump`). A classe passou a ser tabela (`DecodeTable`, interno).
 - **Classe branch/exceção/sistema do A64 aceitava encodings não alocados** (`E15.11`): `CBB`/`CBH` com `sf=1`; `ERET`
   com `Rn≠11111`; hints, barreiras e `MSR` imediato com `L=1`, `op1` errado ou `Rt≠11111`; `CFINV`/`XAFLAG`/`AXFLAG`, `MSR
   ALLINT`, `MSR SVCR*`, `SB`, `DSB nXS` e `WFET`/`WFIT` com `CRm` reservado — todos decodificavam como a instrução vizinha

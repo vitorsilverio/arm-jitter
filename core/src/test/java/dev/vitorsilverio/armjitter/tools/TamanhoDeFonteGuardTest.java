@@ -57,9 +57,10 @@ class TamanhoDeFonteGuardTest {
     /// medida, por escolha do usuário). Na E15.10 desceu para 7318 (a classe DP-imediato virou
     /// `DataProcessingImmediateRows`). Na E15.10b +5 (`decode(int, long)` público para o cache do
     /// `step`; na medida, por escolha do usuário). Na E15.11 desceu para 5617 (branch/exceção/sistema viraram
-    /// `BranchExceptionRows`/`SystemInstructionRows`/`SystemRegisterRows`).
+    /// `BranchExceptionRows`/`SystemInstructionRows`/`SystemRegisterRows`). Na E15.12 desceu para 4403
+    /// (load/store virou `LoadStoreRegisterRows`/`LoadStoreExclusiveRows`/`MemoryOperationRows`/`AdvSimdLoadStoreRows`).
     private static final Map<String, Integer> EXCEPTIONS = Map.ofEntries(
-            entry("decoder64/Aarch64Decoder.java", 5617),
+            entry("decoder64/Aarch64Decoder.java", 4403),
             entry("advsimd/AdvSimdLanes.java", 3677),
             entry("core64/Aarch64Core.java", 1848),
             entry("ir/StandardIrBuilder.java", 1352),

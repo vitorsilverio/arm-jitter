@@ -32,7 +32,7 @@ final class DecodeTable<T> {
     static <T> DecodeTable<T> forArchitecture(List<DecodeRow<T>> rows, Aarch64Architecture architecture) {
         List<DecodeRow<T>> kept = new ArrayList<>();
         for (DecodeRow<T> row : rows) {
-            if (row.requires() == null || architecture.has(row.requires())) {
+            if (row.supportedBy(architecture)) {
                 kept.add(row);
             }
         }

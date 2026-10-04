@@ -130,7 +130,8 @@ G5 = suites de gbaemu/ndsemu obrigatórias (regra do `tasks/README.md`).
 | [E15.10](e15.10-dp-imediato-por-tabela.md) | Classe DP-imediato → `DataProcessingImmediateRows` (28 linhas); `WordDecoder` ganha o endereço | não | ✅ 2026-10-03 (fechou 3 G8: 30 720 palavras) |
 | [E15.10b](e15.10b-cache-de-decode-no-step-a64.md) | Cache `pc → Ir64Op` no `step` interpretado A64 (o decode por tabela custa +8 ns/instrução; decisão do usuário: cache em vez de gate no formato da tabela) | não | ✅ 2026-10-03 |
 | [E15.11](e15.11-branch-excecao-sistema-por-tabela.md) | Branch/exceção/sistema → `BranchExceptionRows`/`SystemInstructionRows`/`SystemRegisterRows` (encoding no `Aarch64SystemRegisterId`; fallback = grupo de prioridade explícito) | não | ✅ 2026-10-04 (G8: `CBB`/`CBH` `sf=1`, `ERET`, ~145 mil de `op0=00`) |
-| E15.12–E15.15 | `Aarch64Decoder` grupo a grupo para tabela, um arquivo por grupo: load/store · DP-registrador · FP escalar · AdvSIMD | não | ⬜ [REFINAR] após E15.9 |
+| [E15.12](e15.12-load-store-por-tabela.md) | Loads and Stores → `LoadStoreRegisterRows`/`LoadStoreExclusiveRows`/`MemoryOperationRows`/`AdvSimdLoadStoreRows` (`DecodeRow#alsoRequires` para `SETG*` = MOPS e MTE) | não | ✅ 2026-10-04 (11 famílias G8, ~39 mil palavras da amostra) |
+| E15.13–E15.15 | `Aarch64Decoder` grupo a grupo para tabela, um arquivo por grupo: DP-registrador · FP escalar · AdvSIMD | não | ⬜ [REFINAR] após E15.9 |
 | E15.16 | Decoders de 32 bits (`ArmDecoder`, `VfpDecoder`, `Thumb2*`) para tabela | sim | ⬜ [REFINAR] após E15.15 |
 | E15.17 | `AdvSimdLanes` (3677) por família de operação; `Aarch64Core` (1848): banco de sysreg para fora | sim | ⬜ [REFINAR] |
 | E15.18–E15.21 | Fechar o resíduo semântico até 100%, um pacote por task: `advsimd` · `codegen.jvm` · `core`/`memory.mmu` · `debug` (`GdbServer` por socket de loopback) | conforme pacote | ⬜ [REFINAR] |

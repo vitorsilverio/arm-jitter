@@ -66,6 +66,20 @@ class DecodeTableTest {
         assertNull(rdmTable.decode(0x3, ADDRESS));
     }
 
+    /// E15.12: `alsoRequires` é conjunção — a linha só existe quando o preset declara as duas features.
+    @Test
+    void rowWithTwoFeaturesNeedsBoth() {
+        DecodeRow<String> both = DecodeRow.of("0000 0000 0000 0000 0000 0000 0000 0001", Aarch64Feature.RDM,
+                Aarch64Feature.LSE, (word, address) -> "both");
+        List<DecodeRow<String>> rows = List.of(both);
+
+        assertEquals(List.of(), DecodeTable.forArchitecture(rows, WITH_RDM).rows());
+        assertEquals(List.of(), DecodeTable.forArchitecture(rows, Aarch64Architecture.of("lse", Aarch64Feature.LSE)).rows());
+        DecodeTable<String> table = DecodeTable.forArchitecture(rows,
+                Aarch64Architecture.of("rdm+lse", Aarch64Feature.RDM, Aarch64Feature.LSE));
+        assertEquals("both", table.decode(0x1, ADDRESS));
+    }
+
     @Test
     void emptyTableDecodesNothing() {
         DecodeTable<String> table = DecodeTable.forArchitecture(List.of(), BASE);
