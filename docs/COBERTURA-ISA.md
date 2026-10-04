@@ -19,9 +19,14 @@ espaço de encoding" se cumpriu de um jeito inesperado: não por encoding novo, 
 estavam em `docs/isa-nao-aplicavel.tsv` medindo `·` nas 16 colunas; ao migrar a
 curadoria para o mapa de versão elas mediriam `✅`, e a sondagem direta mostrou que o
 decoder devolve OUTRA instrução (`FpOp64.LoadLiteral64`, `SystemInstruction[NOP_HINT]`,
-`VectorInsert*`). São dívida do invariante **G8**, listadas em
-`IsaCoverageReport.AARCH64_MISDECODED`. As ocorrências antigas de 32 bits
-(`VMOV_half` em MPCore/v7-A) seguem eliminadas pela B22.2.
+`VectorInsert*`). Eram dívida do invariante **G8**, listadas à mão. As ocorrências
+antigas de 32 bits (`VMOV_half` em MPCore/v7-A) seguem eliminadas pela B22.2.
+
+**A64 — o que ✅ confere desde a E17:** não basta o decoder aceitar a palavra; ela tem de
+sair como a instrução da linha. Toda palavra aceita é comparada com a assinatura
+revisada da linha em `docs/isa-a64-assinaturas.tsv` (nome do record + enum de operação);
+record diferente, ou linha sem assinatura revisada, mede `⚠️`. A lista manual de
+misdecodes da E12 virou redundante e saiu.
 
 **O que ✅ NÃO significa:** que a semântica está certa. `STREX` (E3) e `LDR/STR` alinhado
 (F3) decodificavam e estavam errados. Esta tabela elimina "não suporta" da lista de
@@ -49,7 +54,7 @@ Contadas todas as células (instrução × arquitetura) **aplicáveis**. É este
 que dispara o release do arm-jitter no Maven Central — ver `tasks/README.md`,
 secão "Marcos de cobertura de ISA".
 
-> **100%** — 29581 de 29581 células aplicáveis decodificam.
+> **99%** — 29485 de 29519 células aplicáveis decodificam.
 
 Por arquitetura:
 
@@ -69,22 +74,22 @@ Por arquitetura:
 | v6-M | **100%** (94/94) |
 | v7-M | **100%** (334/334) |
 | ARMv8.1-M+MVE | **100%** (735/735) |
-| ARMv8.0-A | **100%** (832/832) |
-| ARMv8.1-A | **100%** (864/864) |
-| ARMv8.2-A | **100%** (1008/1008) |
-| ARMv8.3-A | **100%** (1034/1034) |
-| ARMv8.4-A | **100%** (1046/1046) |
-| ARMv8.5-A | **100%** (1079/1079) |
-| ARMv8.6-A | **100%** (1092/1092) |
-| ARMv8.7-A | **100%** (1094/1094) |
-| ARMv8.8-A | **100%** (1107/1107) |
-| ARMv8.9-A | **100%** (1113/1113) |
-| ARMv9.0-A | **100%** (1484/1484) |
-| ARMv9.1-A | **100%** (1511/1511) |
-| ARMv9.2-A | **100%** (2146/2146) |
-| ARMv9.3-A | **100%** (2149/2149) |
-| ARMv9.4-A | **100%** (2165/2165) |
-| ARMv9.5-A | **100%** (2203/2203) |
+| ARMv8.0-A | **100%** (826/826) |
+| ARMv8.1-A | **100%** (858/858) |
+| ARMv8.2-A | **100%** (1002/1002) |
+| ARMv8.3-A | **100%** (1028/1028) |
+| ARMv8.4-A | **100%** (1040/1040) |
+| ARMv8.5-A | **99%** (1073/1075) |
+| ARMv8.6-A | **99%** (1086/1088) |
+| ARMv8.7-A | **99%** (1088/1090) |
+| ARMv8.8-A | **99%** (1101/1103) |
+| ARMv8.9-A | **99%** (1107/1113) |
+| ARMv9.0-A | **99%** (1478/1480) |
+| ARMv9.1-A | **99%** (1505/1507) |
+| ARMv9.2-A | **99%** (2140/2142) |
+| ARMv9.3-A | **99%** (2143/2145) |
+| ARMv9.4-A | **99%** (2159/2165) |
+| ARMv9.5-A | **99%** (2197/2203) |
 
 ## Resumo
 
@@ -100,7 +105,7 @@ Por arquitetura:
 | NEON — formas compartilhadas VFP/NEON | 23 | v8.6-A/32+NEON 100% (23/23) |
 | ARMv7-M — coprocessador ausente | 11 | v6-M 100% (11/11) · v7-M 100% (11/11) · ARMv8.1-M+MVE 100% (11/11) |
 | MVE (Helium) — ARMv8.1-M | 352 | ARMv8.1-M+MVE 100% (352/352) |
-| A64 — AArch64 | 1161 | ARMv8.0-A 100% (832/832) · ARMv8.1-A 100% (864/864) · ARMv8.2-A 100% (1008/1008) · ARMv8.3-A 100% (1034/1034) · ARMv8.4-A 100% (1046/1046) · ARMv8.5-A 100% (1079/1079) · ARMv8.6-A 100% (1092/1092) · ARMv8.7-A 100% (1094/1094) · ARMv8.8-A 100% (1107/1107) · ARMv8.9-A 100% (1113/1113) · ARMv9.0-A 100% (1079/1079) · ARMv9.1-A 100% (1092/1092) · ARMv9.2-A 100% (1095/1095) · ARMv9.3-A 100% (1107/1107) · ARMv9.4-A 100% (1121/1121) · ARMv9.5-A 100% (1146/1146) |
+| A64 — AArch64 | 1161 | ARMv8.0-A 100% (826/826) · ARMv8.1-A 100% (858/858) · ARMv8.2-A 100% (1002/1002) · ARMv8.3-A 100% (1028/1028) · ARMv8.4-A 100% (1040/1040) · ARMv8.5-A 99% (1073/1075) · ARMv8.6-A 99% (1086/1088) · ARMv8.7-A 99% (1088/1090) · ARMv8.8-A 99% (1101/1103) · ARMv8.9-A 99% (1107/1113) · ARMv9.0-A 99% (1073/1075) · ARMv9.1-A 99% (1086/1088) · ARMv9.2-A 99% (1089/1091) · ARMv9.3-A 99% (1101/1103) · ARMv9.4-A 99% (1115/1121) · ARMv9.5-A 99% (1140/1146) |
 | SVE/SVE2 — vetor escalável | 929 | ARMv9.0-A 100% (405/405) · ARMv9.1-A 100% (419/419) · ARMv9.2-A 100% (428/428) · ARMv9.3-A 100% (419/419) · ARMv9.4-A 100% (421/421) · ARMv9.5-A 100% (434/434) |
 | SME — extensão matricial | 623 | ARMv9.2-A 100% (623/623) · ARMv9.3-A 100% (623/623) · ARMv9.4-A 100% (623/623) · ARMv9.5-A 100% (623/623) |
 
@@ -1673,8 +1678,8 @@ Inventário: `a64.decode` · 1161 instruções.
 | `SUB_i` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | `SUBS_i` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | `SUBS_i` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| `ADDG_i` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| `SUBG_i` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `ADDG_i` | · | · | · | · | · | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
+| `SUBG_i` | · | · | · | · | · | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
 | `AND_i` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | `AND_i` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | `ORR_i` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
@@ -1689,10 +1694,10 @@ Inventário: `a64.decode` · 1161 instruções.
 | `MOVZ` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | `MOVK` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | `MOVK` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| `SMAX_i` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| `SMIN_i` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| `UMAX_i` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| `UMIN_i` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `SMAX_i` | · | · | · | · | · | · | · | · | · | ❌ | · | · | · | · | ❌ | ❌ |
+| `SMIN_i` | · | · | · | · | · | · | · | · | · | ❌ | · | · | · | · | ❌ | ❌ |
+| `UMAX_i` | · | · | · | · | · | · | · | · | · | ❌ | · | · | · | · | ❌ | ❌ |
+| `UMIN_i` | · | · | · | · | · | · | · | · | · | ❌ | · | · | · | · | ❌ | ❌ |
 | `SBFM` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | `SBFM` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | `BFM` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |

@@ -1594,9 +1594,11 @@ class Aarch64DecoderCorpusTest {
             assertDoesNotThrow(() -> DECODER.decode(scratch, 0),
                     () -> "0x" + Integer.toHexString(encoding) + " deveria decodificar (B8.1)");
         }
+        // E17: CASP exige `Rs`/`Rt` pares (ímpar = UNDEFINED); a base tem `Rs=11111` — `Rs=11110` aqui.
+        int caspEvenRs = ldxrWordFormCleared & ~(1 << 16);
         int[] lseForms = {
-                ldxrWordFormCleared | (0b001 << 21), // CASP (bit31=0)
-                ldxrWordFormCleared | (0b011 << 21), // CASP (bit31=0)
+                caspEvenRs | (0b001 << 21), // CASP (bit31=0)
+                caspEvenRs | (0b011 << 21), // CASP (bit31=0)
                 ldxrWordFormCleared | (0b101 << 21), // CAS
                 ldxrWordFormCleared | (0b111 << 21), // CAS
         };

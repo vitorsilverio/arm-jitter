@@ -11,10 +11,8 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
-import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -214,50 +212,10 @@ class IsaCoverageReportA64CurationGuardTest {
         assertTrue(offenders.isEmpty(), "instruções medidas antes da versão que as introduz: " + offenders);
     }
 
-    /// A dívida G8 medida pela E12 é `⚠️`, nunca `✅`: publicar `✅` para um encoding que o decoder
-    /// devolve como OUTRA instrução afirmaria trabalho concluído que não existe — pior que o `·`
-    /// que a TSV produzia antes.
-    @Test
-    void everyKnownMisdecodedLineIsMarkedFallbackNeverSupported() {
-        Set<String> pending = new LinkedHashSet<>(IsaCoverageReport.AARCH64_MISDECODED.keySet());
-        List<String> offenders = new ArrayList<>();
-        for (TableRow row : rows) {
-            String key = row.name() + "#" + row.occurrence();
-            if (!IsaCoverageReport.AARCH64_MISDECODED.containsKey(key)) {
-                continue;
-            }
-            pending.remove(key);
-            for (int i = 0; i < COLUMNS.size(); i++) {
-                String cell = row.cells().get(i);
-                if (SUPPORTED.equals(cell)) {
-                    offenders.add(key + " @ " + COLUMNS.get(i) + " mede ✅");
-                }
-            }
-        }
-        assertTrue(offenders.isEmpty(), "misdecode publicado como suporte real: " + offenders);
-        assertTrue(pending.isEmpty(),
-                "entradas de AARCH64_MISDECODED que não casam nenhuma linha do inventário "
-                        + "(mnemônico renomeado pelo QEMU?): " + pending);
-    }
-
-    /// Cada entrada de `AARCH64_MISDECODED` tem que produzir pelo menos uma célula `⚠️` de verdade.
-    /// Se o decoder for consertado, esta asserção falha e obriga a REMOVER a entrada — é o que
-    /// impede a lista de virar uma exclusão permanente disfarçada (regra máxima do `tasks/README.md`).
-    @Test
-    void everyKnownMisdecodedLineStillProducesAWarningCell() {
-        List<String> stale = new ArrayList<>();
-        for (TableRow row : rows) {
-            String key = row.name() + "#" + row.occurrence();
-            if (!IsaCoverageReport.AARCH64_MISDECODED.containsKey(key)) {
-                continue;
-            }
-            if (row.cells().stream().noneMatch(FALLBACK::equals)) {
-                stale.add(key);
-            }
-        }
-        assertTrue(stale.isEmpty(),
-                "estas linhas não misdecodificam mais — remova-as de AARCH64_MISDECODED: " + stale);
-    }
+    // E17: os dois testes da lista manual `AARCH64_MISDECODED` (misdecode conhecido mede ⚠️; entrada
+    // obsoleta tem de sair) saíram junto com a lista — a conferência por assinatura de TODA palavra
+    // aceita (`IsaCoverageReport#probeAarch64` + `docs/isa-a64-assinaturas.tsv`) cobre os dois casos, e
+    // `IsaA64SignatureGuardTest` guarda a consistência do TSV.
 
     /// `SEVL` é o achado que justifica o mecanismo 2 da porta: ISA base do A64, JÁ implementado, e
     /// a linha `SEVL	*	…` da TSV (correta para as 7 colunas de 32 bits) apagava 16 células `✅`

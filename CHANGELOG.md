@@ -109,6 +109,12 @@ Próxima versão: **`2.0.0`** — o refactor estrutural (épico `E15`) quebra no
   | `IrMveReductionExecutor` (estática) | `MveVectorAddAcrossVector` · `MveVectorAddAcrossVectorLong` · `MveVectorAbsoluteDifferenceAccumulate` · `MveVectorDualAccumulate` · `MveVectorDualAccumulateLong` · `MveVectorRoundingDualAccumulateHigh` · `MveVectorMinMaxAcrossVector` · `MveVectorFpMinMaxAcrossVector` |
 
 ### Corrigido
+- **A64: cinco encodings saíam como OUTRA instrução ou eram aceitos sem existir** (`E17`, achados pela conferência de
+  assinatura da tabela de ISA): `MUL`/`MLA`/`MLS`/`SQDMULH` por elemento na forma `.s` (ex. `mul v3.4s, v2.4s, v1.s[0]`)
+  executavam como `FMLAL` em todo preset com `FEAT_FHM` (ARMv8.2-A em diante); `PACIBSP`, `GCSB DSYNC` e todo hint com
+  `op2=011` e `CRm≠0` executavam como `WFI` (dormir até IRQ) em vez de NOP; `PACIA`…`AUTDB` com `Z=1` e `Rn≠31`,
+  e `CASP` com `Rs`/`Rt` ímpar, eram aceitos (UNDEFINED na ARM); add/sub imediato com `bit23=1` (`ADDG`/`SUBG`,
+  `SMAX`/`SMIN`/`UMAX`/`UMIN` imediato) saía como ADD/SUB — agora recusado até a implementação (`B19.30`).
 - **`DeadCodeEliminationPass` apagava escritas de registrador ainda lidas** (`E15.6b`, só no JIT de 32 bits — ASM e
   Truffle; o interpretador acertava): dezenas de records de `IrOp` liam GPR sem declarar em `regUse()`, e a DCE removia a
   `IntegerOp.Alu` anterior que escrevia aquele registrador quando ele era sobrescrito logo depois. Afetados, entre outros:

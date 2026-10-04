@@ -111,3 +111,129 @@ alguém achar por acaso.
 - `objdump` desmonta com todas as features ligadas e pode não conhecer extensões recentes (FP8/LUT/
   SME2p1) — conferir no `a64.decode` antes de chamar divergência de bug.
 - `awk` do Git Bash com saída Java CRLF: `tr -d '\r'` antes de comparar (armadilha da E15.9c).
+
+## Resultado
+
+### Item 1 — medição (2026-10-03)
+
+Scripts em `e17-scripts/`: `A64SignatureProbe.java` (linha × coluna × estratégia → palavra aceita e
+assinatura = classe do record sem `StreamingRestricted` + todo componente `enum`; aplicabilidade igual à
+do `appendGroup`), `objdump-mnemonicos.sh` (cruza cada palavra com o `objdump` do devkitA64) e
+`SignatureStats.java` (números). Roda em segundos.
+
+| Medida | Valor |
+|---|---|
+| pares (linha, palavra, assinatura) | 11 419 (11 398 palavras distintas) |
+| linhas com palavra aceita | 2 203 |
+| linhas com palavra aceita que o `objdump` chama de `undefined` | 24 (24 palavras) |
+| linhas com mnemônico do `objdump` ≠ base do nome-QEMU | 514 — 401 pares nome→mnemônico distintos, todos convenção de nome (`LDR` do QEMU cobre `ldrsh`/`ldtr`/`ldur`…) ou alias (`mov`, `cmp`…); nenhum misdecode apareceu por aqui |
+| linhas com mais de uma assinatura | 71 — 67 são enum de OPERANDO (tamanho, shift, extend, condição) que varia com a estratégia; 4 são misdecode por coluna (abaixo) |
+| assinaturas distintas | 1 138 · 433 compartilhadas por >1 linha · 99 por mnemônicos-base diferentes |
+
+**Conclusão de desenho:** o cruzamento nome-QEMU × mnemônico não acha misdecode (o `objdump` diz `mul`,
+o nome diz `MUL`; só o record está errado). O que acha é **assinatura → conjunto de mnemônicos do
+`objdump`**: um record com intruso de outra família (`FpMultiplyAddLongByElement` ← `mul`) salta à vista.
+Enum de operando não serve na assinatura de identidade (muda com a estratégia de preenchimento).
+
+**Misdecodes achados** (palavra válida → record de OUTRA instrução; todos medem `✅` hoje):
+
+| Linha(s) | Record devolvido | Colunas | Causa |
+|---|---|---|---|
+| `MUL_vi#2`/`MLA_vi#2`/`MLS_vi#2`/`SQDMULH_vi#2` (forma `.s`) | `FpMultiplyAddLongByElement` (`FMLAL`) | ARMv8.2-A+ (presets com `FEAT_FHM`) | o desvio do `FMLAL_vi` (`Aarch64Decoder` ~5520) confere `opcode & 0b0011 == 0` mas não `U == top` |
+| `PACIBSP#1`, `GCSB#1` (e todo hint com `op2=011`, `CRm≠0`) | `SystemInstruction/WFI` | todas | `decodeSystemInstruction` testa só `op2 == 011`, sem `CRm == 0` — um `PACIBSP` num preset sem PAuth DORME até IRQ em vez de NOP |
+| `SMAX_i`/`SMIN_i`/`UMAX_i`/`UMIN_i` (`FEAT_CSSC`) | `Alu64/ADD` | todas (inclusive ARMv8.0-A: falta o requisito de versão no mapa) | add/sub imediato não confere `bit23` |
+| `ADDG_i`/`SUBG_i` (`FEAT_MTE`) | `Alu64/ADD` / `Alu64/SUB` | todas | idem |
+
+**G8 (aceita o que não existe)**, `objdump` = `undefined`: `PACIA`/`PACIB`/`PACDA`/`PACDB`/`AUTIA`/`AUTIB`/
+`AUTDA`/`AUTDB` com `Z=1` e `Rn≠31` (8 linhas); `CASP` com `Rs` ímpar. As outras 15 palavras `undefined`
+são registradores sobrepostos (`LDP`/`LDPSW` com `Rt==Rt2`, `CPY*`/`SET*` com `Rd=Rs=Rn`) — CONSTRAINED
+UNPREDICTABLE, artefato da estratégia `{0,0,0,0}`, não bug.
+
+**Aproximações deliberadas e documentadas** (mesmo record para instruções diferentes, por decisão de
+task anterior — a assinatura precisa aceitá-las explicitamente, não esconder): `FRINTX`/`FRINTI` como
+`Round/NEAREST_TIES_EVEN`; `WFIT` = `WFI`, `WFET` = NOP; `GCSSTR`/`GCSSTTR` = `Store64`; `LDRAA`/`LDRAB` =
+`Load64` (B19.15, rota b); `BRAA`/`RETAA`/`ERETAA`… = forma sem PAC; hints PAC (`PACIASP`, `AUTIA1716`…)
+= `NOP_HINT`. Este último foi decidido na B6.6.7, ANTES de existir `FEAT_PAuth` real
+(`Aarch64Feature#POINTER_AUTHENTICATION`): num preset v8.3+ o `PACIA` explícito assina de verdade e o
+`AUTIASP` é NOP — mistura `pacia x30, sp` + `autiasp` deixa o PAC no `LR`. Semântica, fora da E17;
+candidata a task própria.
+
+### Decisões do usuário (2026-10-03, depois da medição)
+
+1. Assinatura = **classe + enum de operação**. Enums de operando (`Ir64MemSize`, `Ir64FpMemSize`,
+   `Ir64ShiftType`, `Ir64LogicalShiftType`, `Ir64ExtendType`, `Ir64AluExtendType`, `Ir64Condition`,
+   `Ir64CompareBranchCondition`, `Aarch64SystemRegisterId`) ficam de fora. Com isso as linhas com várias
+   assinaturas caíram de 71 para 6, todas legítimas (a linha do QEMU cobre duas instruções: `CCMP`/`CCMN`,
+   `CSEL`/`CSNEG`, `Vimm` `MOVI`/`BIC`, `UNPK`, `DOT_zzzz`, `LDRA` offset/pré-índice).
+2. **Corrigir aqui os misdecodes triviais**; o que exige implementação vira task (`B19.30`).
+3. Teto do `Aarch64Decoder` no `TamanhoDeFonteGuardTest`: subir na medida (7485 → 7510).
+
+### Itens 2–4 — o que foi feito
+
+- **`A64InstructionSignature`** (`tools/`, teste): a assinatura. **`docs/isa-a64-assinaturas.tsv`**: 2 197
+  linhas `grupo · nome#ocorrência · assinaturas · amostra(<coluna>:<palavra>)`, gerado e revisado (abaixo).
+- **`IsaCoverageReport#probeAarch64`** tenta TODAS as estratégias e confere cada palavra aceita: assinatura
+  fora do conjunto, ou linha sem entrada ⇒ `⚠️`; as divergências são listadas no fim da execução.
+  `-Disa.assinaturas.gravar=true` (= `./gerar-cobertura-isa.sh --assinaturas`) regrava o TSV a partir do
+  decoder atual para revisão. A sonda "máxima" do SVE (`column == null`) não registra nada — não é célula.
+- **`AARCH64_MISDECODED` saiu** (estava vazia desde a B19.24) junto com os dois testes dela no
+  `IsaCoverageReportA64CurationGuardTest`; o mecanismo novo cobre os dois casos.
+- **`IsaA64SignatureGuardTest`** (CI-safe, só arquivos versionados): (a) cada amostra do TSV decodifica
+  com uma assinatura da sua linha — é o **oráculo por linha das E15.10–E15.15** (migrar um grupo do decoder
+  para tabela e trocar a instrução de qualquer linha implementada quebra o `mvn test`); (b) TSV × linhas
+  `✅`/`⚠️` do `COBERTURA-ISA.md` batem nos dois sentidos (sem faltante, sem órfã); (c) regressão do aceite:
+  com a assinatura trocada pelo record que o código anterior à E15.9b devolvia para `fmaxnmp v28.8h`
+  (`AdvSimdMoveOp64.InsertElement`), a célula mede `⚠️`; com a certa, `✅`; sem entrada, `⚠️`.
+
+**Revisão do TSV:** a medição foi refeita com a assinatura oficial (`A64SignatureProbe` passou a chamá-la
+por reflexão) e cruzada com o `objdump`: em todas as 257 assinaturas com mais de um mnemônico, os
+mnemônicos são variantes da mesma instrução (campo booleano/tamanho, `2`, `s`, `al`…) ou uma das
+aproximações documentadas acima. Nenhum intruso de outra família sobrou. `undefined` no `objdump`: 24 → 15
+palavras, todas registradores sobrepostos (CONSTRAINED UNPREDICTABLE).
+
+### Correções no `Aarch64Decoder`
+
+| Achado | Checagem | Teste |
+|---|---|---|
+| `MUL`/`MLA`/`MLS`/`SQDMULH_vi` `.s` → `FMLAL` | `U == top` no desvio do `FMLAL_vi` | `Aarch64DecoderE17MisdecodeTest#integerByElementWordFormIsNotFmlal` |
+| hint `op2=011`, `CRm≠0` → `WFI` | `CRm == 0` para `WFI` | `#hintsWithWfiOp2ButNonZeroCrmAreNotWfi` |
+| `PAC*`/`AUT*` `Z=1`, `Rn≠31` aceito | `Z ⇒ Rn = 11111` | `#pointerAuthZeroModifierFormRequiresRnAllOnes` |
+| `CASP` `Rs`/`Rt` ímpar aceito | `(Rs | Rt) & 1 == 0` | `#compareAndSwapPairRequiresEvenRegisters` |
+| add/sub imediato `bit23=1` → ADD/SUB | recusa (→ `B19.30`) | `#addSubImmediateWithBit23IsRefused` |
+
+Sem as correções (`git stash` do `src/main`) 11 dos 15 casos falham. `Aarch64DecoderCorpusTest#
+exclusiveAtomicFormSpaceFullyDecodedByB81` usava `CASP` com `Rs=31` (o `objdump` diz `undefined`): passou a
+usar `Rs=30`. `SMAX_i`/`SMIN_i`/`UMAX_i`/`UMIN_i` e `ADDG_i`/`SUBG_i` ganharam requisito de versão
+(`FEAT_CSSC`/`FEAT_MTE`) — não tinham, por isso mediam desde ARMv8.0-A.
+
+### Diff de `docs/COBERTURA-ISA.md`
+
+Total 29581/29581 → **29485/29519 (99%)**. Só 6 linhas mudam, célula a célula:
+
+| Linha | Antes | Depois | O que saía antes |
+|---|---|---|---|
+| `ADDG_i`, `SUBG_i` | ✅ ×16 | `·` ARMv8.0–8.4, `❌` ARMv8.5+ (11 colunas) | `Alu64/ADD`, `Alu64/SUB` |
+| `SMAX_i`, `SMIN_i`, `UMAX_i`, `UMIN_i` | ✅ ×16 | `·`, `❌` em ARMv8.9-A/9.4-A/9.5-A | `Alu64/ADD` |
+
+Denominador −62 (células antes da feature), numerador −96 (62 + 34 `❌`). Os outros misdecodes não mudam
+célula: uma das estratégias já saía como a instrução certa e a regra antiga ("basta uma") marcava `✅`; com
+a regra nova eles mediriam `⚠️`, mas foram corrigidos na mesma task. Modo conferência depois de gravar o
+TSV: zero divergências, tabela idêntica.
+
+### Validação
+
+- `mvn -o -pl core verify` (JBR 25): 15 647 testes verdes, `jacoco:check` ok.
+- G5: não se aplica — `src/main` só em `decoder64/` (lista A64-only do `tasks/README.md`); o resto é teste,
+  `docs/` e scripts.
+- JaCoCo: todas as linhas novas/alteradas do `Aarch64Decoder` com 0 linha e 0 branch perdidos
+  (`jacoco.xml`, conferido linha a linha pelo diff).
+
+### Para as E15.10+
+
+- Migrar um grupo do decoder para tabela: `mvn test` (o `IsaA64SignatureGuardTest` decodifica as amostras)
+  + `./gerar-cobertura-isa.sh` sem diff e sem divergência listada. Uma amostra por linha não cobre todas as
+  estratégias — o gerador cobre.
+- Instrução nova: `./gerar-cobertura-isa.sh --assinaturas` e revisar o diff do TSV com
+  `e17-scripts/` (`A64SignatureProbe` → `objdump-mnemonicos.sh` → lista assinatura → mnemônicos).
+- Pendente (fora da E17): a mesma checagem nas colunas de 32 bits (task irmã, `arm-none-eabi-objdump`); a
+  incoerência hint-PAC NOP × `PACIA` real em preset v8.3+.

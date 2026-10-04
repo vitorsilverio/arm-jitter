@@ -52,9 +52,11 @@ class TamanhoDeFonteGuardTest {
     /// `Aarch64Decoder` +18 (checagens G8 de `bit31` e do copy, com constantes nomeadas; o usuário
     /// escolheu subir na medida — o arquivo encolhe nas E15.10–E15.15). Na E15.9c +90 (~20
     /// checagens G8 de campos reservados do AdvSIMD/FP escalar; de novo na medida, por escolha do
-    /// usuário).
+    /// usuário). Na E17 +25 (5 misdecodes/G8 achados pela conferência de assinatura: `FMLAL_vi`
+    /// `U≠top`, `WFI` com `CRm≠0`, `PAC*` `Z` com `Rn≠31`, `CASP` ímpar, add/sub imediato `bit23`; na
+    /// medida, por escolha do usuário).
     private static final Map<String, Integer> EXCEPTIONS = Map.ofEntries(
-            entry("decoder64/Aarch64Decoder.java", 7485),
+            entry("decoder64/Aarch64Decoder.java", 7510),
             entry("advsimd/AdvSimdLanes.java", 3677),
             entry("core64/Aarch64Core.java", 1848),
             entry("ir/StandardIrBuilder.java", 1352),

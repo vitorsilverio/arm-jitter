@@ -9,6 +9,7 @@ import dev.vitorsilverio.armjitter.decoder.DecodedInstruction;
 import dev.vitorsilverio.armjitter.decoder.InstructionKind;
 import dev.vitorsilverio.armjitter.decoder.ThumbDecoder;
 import dev.vitorsilverio.armjitter.decoder64.Aarch64Decoder;
+import dev.vitorsilverio.armjitter.ir64.Ir64Op;
 import dev.vitorsilverio.armjitter.memory.AddressSpace64;
 import dev.vitorsilverio.armjitter.support.TestAddressSpace;
 
@@ -21,6 +22,8 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
+import java.util.TreeSet;
 
 /// Gera `docs/COBERTURA-ISA.md`: a tabela de **cobertura de decode** do arm-jitter, instrução por
 /// instrução, por arquitetura.
@@ -112,7 +115,7 @@ public final class IsaCoverageReport {
     private static final Applicability NOT_IN_ANY_PRESET = arch -> false;
 
     /// Resultado da sondagem de uma instrução.
-    private enum Status {
+    enum Status {
         /// O decoder reconheceu o encoding.
         SUPPORTED("✅"),
         /// O decoder devolveu `UNIMPLEMENTED` (ou lançou) — não suporta.
@@ -223,7 +226,7 @@ public final class IsaCoverageReport {
     /// {@link #ARM_ARCHITECTURES} para o lado de 32 bits, usando os presets de
     /// {@link Aarch64Architecture} (B11.1) e o mapeamento mnemônico→feature de
     /// {@link #AARCH64_VERSION_REQUIREMENTS} (curadoria de B11.3).
-    private static final Map<String, Aarch64Architecture> AARCH64_ARCHITECTURES = new LinkedHashMap<>();
+    static final Map<String, Aarch64Architecture> AARCH64_ARCHITECTURES = new LinkedHashMap<>();
 
     static {
         AARCH64_ARCHITECTURES.put("ARMv8.0-A", Aarch64Architecture.ARMV8_0_A);
@@ -380,7 +383,9 @@ public final class IsaCoverageReport {
                 "FRINT64X_s", "FRINT32Z_v", "FRINT32X_v", "FRINT64Z_v", "FRINT64X_v");
         // FEAT_MTE2 (ARMv8.5-A) — Memory Tagging Extension
         require(Aarch64Feature.MEMORY_TAGGING, "STG", "LDG", "STZG", "ST2G", "STZ2G", "STGM", "LDGM",
-                "STZGM", "STGP", "GMI", "IRG", "SUBP", "SUBPS");
+                "STZGM", "STGP", "GMI", "IRG", "SUBP", "SUBPS",
+                // E17: `ADDG_i`/`SUBG_i` não tinham requisito — mediam ✅ desde ARMv8.0-A como ADD/SUB
+                "ADDG_i", "SUBG_i");
         // FEAT_BF16 (ARMv8.6-A) — bfloat16
         require(Aarch64Feature.BFLOAT16, "BFCVT_s", "BFCVTN_v", "BFDOT_v", "BFDOT_vi", "BFMMLA",
                 "BFMLAL_v", "BFMLAL_vi");
@@ -393,7 +398,9 @@ public final class IsaCoverageReport {
                 // B22.9: SETG* exigem FEAT_MOPS (ARMv8.8) E FEAT_MTE; o decoder já gateia por ambos
                 "SETGP", "SETGM", "SETGE");
         // FEAT_CSSC (ARMv8.9-A) — Common Short Sequence Compression
-        require(Aarch64Feature.COMMON_SHORT_SEQUENCE_COMPRESSION, "CTZ", "SMAX", "SMIN", "UMAX", "UMIN");
+        require(Aarch64Feature.COMMON_SHORT_SEQUENCE_COMPRESSION, "CTZ", "SMAX", "SMIN", "UMAX", "UMIN",
+                // E17: as formas imediatas (nome próprio no `a64.decode`) não tinham requisito
+                "SMAX_i", "SMIN_i", "UMAX_i", "UMIN_i");
         // FEAT_SME (ARMv9.2-A) — MSR SVCR (estado streaming-SVE/ZA)
         require(Aarch64Feature.SCALABLE_MATRIX_EXTENSION, "MSR_i_SVCR");
         // FEAT_GCS (ARMv9.4-A) — Guarded Control Stack
@@ -749,6 +756,16 @@ public final class IsaCoverageReport {
         totalApplicable = 0;
         inventoryRevision = resolveInventoryRevision(args, decodeDirectory);
         loadExclusions(Path.of(args.length > 2 ? args[2] : "docs/isa-nao-aplicavel.tsv"));
+        // E17: 5º argumento = TSV de assinaturas; `-Disa.assinaturas.gravar=true` regrava em vez de conferir.
+        Path signaturesFile = args.length > 4 ? Path.of(args[4]) : DEFAULT_SIGNATURES;
+        recordSignatures = Boolean.getBoolean("isa.assinaturas.gravar");
+        observedSignatures.clear();
+        observedSamples.clear();
+        signatureMismatches.clear();
+        A64_SIGNATURES.clear();
+        if (!recordSignatures) {
+            A64_SIGNATURES.putAll(readSignatures(signaturesFile));
+        }
         StringBuilder report = new StringBuilder();
         appendHeader(report);
         List<String> summary = new ArrayList<>();
@@ -788,6 +805,13 @@ public final class IsaCoverageReport {
         Files.createDirectories(output.toAbsolutePath().getParent());
         Files.writeString(output, full.toString(), StandardCharsets.UTF_8);
         System.out.println("escrito: " + output.toAbsolutePath());
+        if (recordSignatures) {
+            writeSignatures(signaturesFile);
+            System.out.println("assinaturas regravadas (revisar o diff): " + signaturesFile.toAbsolutePath());
+        } else if (!signatureMismatches.isEmpty()) {
+            System.out.println(signatureMismatches.size() + " palavra(s) A64 com assinatura divergente (célula ⚠️):");
+            signatureMismatches.forEach(mismatch -> System.out.println("  " + mismatch));
+        }
     }
 
     /// A revisão do inventário: 4º argumento se presente, senão o conteúdo de `<dir>/.rev`
@@ -836,9 +860,14 @@ public final class IsaCoverageReport {
                 estavam em `docs/isa-nao-aplicavel.tsv` medindo `·` nas 16 colunas; ao migrar a
                 curadoria para o mapa de versão elas mediriam `✅`, e a sondagem direta mostrou que o
                 decoder devolve OUTRA instrução (`FpOp64.LoadLiteral64`, `SystemInstruction[NOP_HINT]`,
-                `VectorInsert*`). São dívida do invariante **G8**, listadas em
-                `IsaCoverageReport.AARCH64_MISDECODED`. As ocorrências antigas de 32 bits
-                (`VMOV_half` em MPCore/v7-A) seguem eliminadas pela B22.2.
+                `VectorInsert*`). Eram dívida do invariante **G8**, listadas à mão. As ocorrências
+                antigas de 32 bits (`VMOV_half` em MPCore/v7-A) seguem eliminadas pela B22.2.
+
+                **A64 — o que ✅ confere desde a E17:** não basta o decoder aceitar a palavra; ela tem de
+                sair como a instrução da linha. Toda palavra aceita é comparada com a assinatura
+                revisada da linha em `docs/isa-a64-assinaturas.tsv` (nome do record + enum de operação);
+                record diferente, ou linha sem assinatura revisada, mede `⚠️`. A lista manual de
+                misdecodes da E12 virou redundante e saiu.
 
                 **O que ✅ NÃO significa:** que a semântica está certa. `STREX` (E3) e `LDR/STR` alinhado
                 (F3) decodificavam e estavam errados. Esta tabela elimina "não suporta" da lista de
@@ -872,8 +901,8 @@ public final class IsaCoverageReport {
         // B17.26/B18.13: `sve.decode` e `sme.decode` ganham coluna por versão mesmo com `Applicability`
         // `NOT_IN_ANY_PRESET` (que é sobre `ArmArchitecture` de 32 bits) — ver o Javadoc de
         // `probeScalableApplicability` sobre por que o mecanismo é diferente do de B11.5.
-        boolean sveVersioned = aarch64 && group.decodeFile().equals("sve.decode");
-        boolean smeVersioned = aarch64 && group.decodeFile().equals("sme.decode");
+        boolean sveVersioned = aarch64 && group.decodeFile().equals(SVE_DECODE_FILE);
+        boolean smeVersioned = aarch64 && group.decodeFile().equals(SME_DECODE_FILE);
         // B11.5: `a64.decode` (o grupo A64 com `applicability() != NOT_IN_ANY_PRESET`, ver GROUPS),
         // `sve.decode` (B17.26) e `sme.decode` (B18.13) ganham colunas por versão. Com isso nenhum
         // grupo da tabela fica em "não se aplica a nenhum preset atual".
@@ -902,7 +931,7 @@ public final class IsaCoverageReport {
                 if (sveVersioned || smeVersioned) {
                     SveCell cell = sveVersioned
                             ? probeScalableApplicability(instruction, occurrence, aarch64Architecture,
-                                    Aarch64Feature.SVE)
+                                    Aarch64Feature.SVE, column)
                             : probeSmeApplicability(instruction, occurrence, aarch64Architecture, column);
                     applicable = cell.applicable();
                     status = cell.status();
@@ -923,7 +952,7 @@ public final class IsaCoverageReport {
                 totalApplicable++;
                 if (status == null) {
                     status = aarch64
-                            ? probeAarch64(instruction, occurrence, aarch64Architecture)
+                            ? probeAarch64(instruction, occurrence, aarch64Architecture, group.decodeFile(), column)
                             : probeArm(instruction, architecture, group);
                 }
                 if (status == Status.SUPPORTED) {
@@ -1089,49 +1118,74 @@ public final class IsaCoverageReport {
                 && java.util.Objects.equals(a.liftedOp(), b.liftedOp());
     }
 
-    /// Linhas do inventário A64 cujo encoding o `Aarch64Decoder` REIVINDICA mas decodifica como
-    /// **outra instrução** — dívida do invariante **G8**, medida pela E12. Chave `"NOME#ocorrência"`.
+    /// **E17** — assinatura revisada de cada linha A64 (`a64.decode`/`sve.decode`/`sme.decode`), lida de
+    /// `docs/isa-a64-assinaturas.tsv`. Chave {@link #signatureKey}; valor = as assinaturas
+    /// ({@link A64InstructionSignature}) que uma palavra daquela linha pode produzir.
     ///
-    /// Elas medem `⚠️`, não `✅`: o símbolo existe desde a E5 exatamente para isto ("decodifica como
-    /// OUTRA coisa … não é suporte — é o decoder não sabendo recusar"), e o cabeçalho da tabela já
-    /// previa que ele voltasse a ocorrer "ao abrir um novo espaço de encoding". `⚠️` conta no
-    /// denominador e NÃO no numerador, igual a `❌` — é trabalho pendente.
-    ///
-    /// **Como a E12 as encontrou**: as 10 estavam em `docs/isa-nao-aplicavel.tsv` com arquitetura
-    /// `A64`, medindo `·` nas 16 colunas. Ao migrar a curadoria para o mapa de versão, elas
-    /// passariam a medir `✅` — um falso positivo PIOR que o `·` anterior, porque afirmaria trabalho
-    /// concluído. A sondagem direta mostrou o que o decoder devolve de verdade (a classe citada em
-    /// cada linha abaixo).
-    ///
-    /// **Isto NÃO é uma exclusão** (regra máxima do `tasks/README.md`): a instrução continua contando
-    /// como falta, e a entrada some sozinha do relatório quando alguém consertar o decoder —
-    /// `IsaCoverageReportA64CurationGuardTest` falha se uma destas voltar a decodificar de verdade,
-    /// obrigando a remover a linha.
-    static final Map<String, String> AARCH64_MISDECODED = new LinkedHashMap<>();
+    /// Toda palavra que o decoder aceita numa célula medida é conferida aqui: assinatura fora do
+    /// conjunto (ou linha sem entrada) mede `⚠️`, não `✅`. Substitui a lista manual de misdecodes da E12
+    /// (`AARCH64_MISDECODED`), que só continha o que alguém já tinha achado por acaso — e que deixou
+    /// passar como `✅` o `FSCALE_h`, o `FAMAX_h`, os `F*P_v _h` e as 38 células `_h` sem `FEAT_FP16`.
+    static final Map<String, Set<String>> A64_SIGNATURES = new LinkedHashMap<>();
+    /// Caminho default do TSV de assinaturas (relativo à raiz do repositório).
+    static final Path DEFAULT_SIGNATURES = Path.of("docs/isa-a64-assinaturas.tsv");
+    /// Modo `--assinaturas` de `gerar-cobertura-isa.sh`: aceita qualquer assinatura e regrava o TSV com o
+    /// que o decoder devolveu — o diff do TSV é o que se revisa (ver o cabeçalho dele).
+    private static boolean recordSignatures;
+    /// Assinaturas observadas nesta execução, por chave, na ordem do inventário.
+    private static final Map<String, Set<String>> observedSignatures = new LinkedHashMap<>();
+    /// Amostra observada por chave: `<coluna>:<palavra hex>` da coluna mais nova medida.
+    private static final Map<String, String> observedSamples = new LinkedHashMap<>();
+    /// Divergências desta execução, para o resumo no fim do `main`.
+    private static final List<String> signatureMismatches = new ArrayList<>();
 
-    static {
-        // `FEAT_PAuth` (ARMv8.3-A): `LDRAA`/`LDRAB` caíam no catch-all de hint-space (o check de
-        // PRFM em `decodeLoadStoreSingle` não olhava `idx`/`bit21`). B19.15 (2026-09-11)
-        // interceptou `LDRA*` ANTES desse catch-all e implementou a rota (b) (delega para `LDR`
-        // comum) — sai da lista de MISDECODE, vira `✅` honesto.
-        // `FEAT_MTE2` (ARMv8.5-A) e `FEAT_MOPS` (ARMv8.8-A): eram a MESMA classe de bug que a
-        // B11.3 corrigiu para o `LDR (literal)` INTEIRO (`LITERAL_SUBCLASS_RESERVED_BIT_SHIFT`) —
-        // sobrava o caminho de literal de PONTO FLUTUANTE. A B19.16 (2026-09-10) corrigiu a
-        // ROTEAMENTO para as 9 células do bucket inteiro (não só as 6 daqui): `CPYP`/`CPYM`/`CPYE`
-        // ganharam decode de verdade (saem da lista); `SETGP`/`SETGM`/`SETGE` (variantes com tag,
-        // B19.14, ainda não implementadas) agora recusam explicitamente em vez de misdecodificar —
-        // também saem da lista de MISDECODE (viram `❌` honesto, não `⚠️`).
-        // `FSCALE` (`FEAT_FP8`, Armv9.5-A) sofria da MESMA classe de bug (B19.11e, 2026-09-12):
-        // `FSCALE_h` (1ª ocorrência) colidia com `INS_element` por falta de decode dedicado no
-        // espaço `bit21=0`; corrigido interceptando ANTES do fallback EXT/permute/copy. Ambas as
-        // ocorrências decodificam de verdade agora — fora da lista de MISDECODE.
-        // `FEAT_FAMINMAX` (ARMv9.4-A) sofria da MESMA classe de bug (B19.24, 2026-09-12): `FAMAX_h`/
-        // `FAMIN_h` (1ª ocorrência de cada) colidiam com `INS_element`/`AdvSimdMoveOp64.InsertGeneral` por
-        // falta de decode dedicado no MESMO espaço `bit21=0`; corrigido interceptando ANTES do
-        // fallback EXT/permute/copy, mesma disciplina de `FSCALE_h`. As formas `_sd` (2ª ocorrência)
-        // já mediam `❌` honestamente (decode ausente em `decodeVectorFpThreeSameOpcode`, nunca
-        // misdecode). Ambas as ocorrências decodificam de verdade agora — fora da lista de
-        // MISDECODE.
+    static String signatureKey(String decodeFile, String instruction, int occurrence) {
+        return decodeFile + "\t" + instruction + "#" + occurrence;
+    }
+
+    /// Lê o TSV de assinaturas: `grupo · instrução#ocorrência · assinaturas (separadas por espaço) ·
+    /// amostra`. `#` começa comentário.
+    static Map<String, Set<String>> readSignatures(Path file) throws IOException {
+        Map<String, Set<String>> signatures = new LinkedHashMap<>();
+        for (String line : Files.readAllLines(file, StandardCharsets.UTF_8)) {
+            if (line.isBlank() || line.startsWith("#")) {
+                continue;
+            }
+            String[] columns = line.split("\t");
+            signatures.put(columns[0] + "\t" + columns[1], new TreeSet<>(List.of(columns[2].split(" "))));
+        }
+        return signatures;
+    }
+
+    private static void writeSignatures(Path file) throws IOException {
+        StringBuilder text = new StringBuilder();
+        text.append("""
+                # Assinatura revisada de cada linha A64 de `docs/COBERTURA-ISA.md` (E17).
+                #
+                # Uma célula A64 só mede ✅ se TODA palavra de amostra aceita pelo `Aarch64Decoder` sair com
+                # uma das assinaturas da linha: nome do record do IR (com o tipo que o aninha) + `/` + cada
+                # enum de OPERAÇÃO (enums de operando — tamanho, shift, extend, condição, registrador de
+                # sistema — ficam de fora, ver `A64InstructionSignature`). Sem entrada, ou fora do conjunto: ⚠️.
+                #
+                # Gerado por `./gerar-cobertura-isa.sh --assinaturas` a partir do decoder ATUAL — então o
+                # arquivo só vale depois de REVISADO: cada linha nova/alterada no diff tem de bater com o
+                # mnemônico real da instrução (`objdump` do devkitA64, ver
+                # `tasks/trilha-e-manutencao/e17-scripts/`). Misdecode aceito aqui vira ✅ falso.
+                #
+                # `amostra` = `<coluna>:<palavra>` que decodifica com a assinatura (coluna mais nova medida;
+                # linhas de `sme.decode` sondadas com as sub-features SME opcionais ligadas, como na tabela).
+                # O `IsaA64SignatureGuardTest` decodifica cada amostra no CI — é o oráculo por linha das
+                # migrações do decoder para tabela (E15.10+).
+                #
+                # Não copia o `.decode` do QEMU: só o nome da linha (já público na tabela) e nomes nossos.
+                #
+                # grupo	instrução	assinaturas	amostra
+                """);
+        for (Map.Entry<String, Set<String>> entry : observedSignatures.entrySet()) {
+            text.append(entry.getKey()).append('\t').append(String.join(" ", entry.getValue()))
+                    .append('\t').append(observedSamples.get(entry.getKey())).append('\n');
+        }
+        Files.writeString(file, text.toString(), StandardCharsets.UTF_8);
     }
 
     /// **B17.26** — features SVE/SVE2 "extras" que NENHUM dos 16 presets de `AARCH64_ARCHITECTURES`
@@ -1169,7 +1223,7 @@ public final class IsaCoverageReport {
     /// sonda interna, nunca uma coluna real da tabela. Serve só para
     /// {@link #probeScalableApplicability} distinguir "esta versão não tem a sub-feature que o encoding
     /// exige" (não aplicável) de "isto não está implementado em lugar nenhum" (gap real).
-    private static Aarch64Architecture maximalSveProbeArchitecture(Aarch64Architecture base) {
+    static Aarch64Architecture maximalSveProbeArchitecture(Aarch64Architecture base) {
         return SVE_MAXIMAL_PROBE_CACHE.computeIfAbsent(base, b -> Aarch64Architecture.extending(b,
                 b.name() + " (sonda SVE máxima, interna)", SVE_PROBE_EXTRA_FEATURES));
     }
@@ -1197,15 +1251,16 @@ public final class IsaCoverageReport {
     ///    baseline `SVE` já presente justifica medir a célula) e `❌`.
     private static SveCell probeScalableApplicability(DecodeTreeSpec.Instruction instruction, int occurrence,
                                                        Aarch64Architecture architecture,
-                                                       Aarch64Feature baseFeature) {
+                                                       Aarch64Feature baseFeature, String column) {
         if (!architecture.has(baseFeature)) {
             return SveCell.NOT_APPLICABLE;
         }
-        Status direct = probeAarch64(instruction, occurrence, architecture);
+        Status direct = probeAarch64(instruction, occurrence, architecture, SVE_DECODE_FILE, column);
         if (direct != Status.MISSING) {
             return new SveCell(true, direct);
         }
-        Status maximal = probeAarch64(instruction, occurrence, maximalSveProbeArchitecture(architecture));
+        Status maximal = probeAarch64(instruction, occurrence, maximalSveProbeArchitecture(architecture),
+                SVE_DECODE_FILE, null);
         return maximal != Status.MISSING ? SveCell.NOT_APPLICABLE : new SveCell(true, Status.MISSING);
     }
 
@@ -1215,6 +1270,10 @@ public final class IsaCoverageReport {
     /// SME opcional ligado", não uma baseline mandatória.
     private static final java.util.Set<String> SME_COLUMNS =
             java.util.Set.of("ARMv9.2-A", "ARMv9.3-A", "ARMv9.4-A", "ARMv9.5-A");
+
+    /// Inventários A64 com coluna por versão além de `a64.decode` (B17.26/B18.13).
+    static final String SVE_DECODE_FILE = "sve.decode";
+    static final String SME_DECODE_FILE = "sme.decode";
 
     /// **B18.13** — aplicabilidade de uma linha `sme.decode` numa coluna. Diferente da sonda de SVE
     /// ({@link #probeScalableApplicability}), NÃO há `·` por "falta sub-feature": nenhuma coluna
@@ -1227,35 +1286,72 @@ public final class IsaCoverageReport {
         if (!SME_COLUMNS.contains(column)) {
             return SveCell.NOT_APPLICABLE;
         }
-        return new SveCell(true, probeAarch64(instruction, occurrence, maximalSveProbeArchitecture(architecture)));
+        return new SveCell(true, probeAarch64(instruction, occurrence, maximalSveProbeArchitecture(architecture),
+                SME_DECODE_FILE, column));
     }
 
     /// `architecture` é `null` para os grupos A64 não versionados ainda (`sme.decode`, ver
-        /// {@link #appendGroup}) — nesse caso usa o decoder default (B11.2: equivalente a `ARMV8_0_A`,
-        /// mesmo comportamento de antes de B11.5).
+    /// {@link #appendGroup}) — nesse caso usa o decoder default (B11.2: equivalente a `ARMV8_0_A`,
+    /// mesmo comportamento de antes de B11.5).
     ///
-    /// `occurrence` serve só para consultar {@link #AARCH64_MISDECODED} — ver o Javadoc de lá.
+    /// **E17**: TODA estratégia é tentada, e cada palavra aceita tem a assinatura conferida contra
+    /// {@link #A64_SIGNATURES} (chave `decodeFile` + nome + `occurrence`): uma só fora do conjunto, ou a
+    /// linha sem entrada, faz a célula medir `⚠️` — uma palavra que decodifica como outra instrução é
+    /// misdecode mesmo que outra estratégia acerte. `column` identifica a célula para o registro de
+    /// assinaturas e divergências; `null` = sonda auxiliar que não é célula da tabela (a "máxima" de
+    /// {@link #probeScalableApplicability}), sem registro.
     static Status probeAarch64(DecodeTreeSpec.Instruction instruction, int occurrence,
-                                        Aarch64Architecture architecture) {
+                               Aarch64Architecture architecture, String decodeFile, String column) {
         Aarch64Decoder decoder = architecture == null ? new Aarch64Decoder() : new Aarch64Decoder(architecture);
         if (instruction.name().equals(RESERVED_ENCODING_NAME)) {
             return probeReservedAarch64(instruction, decoder);
         }
+        String key = signatureKey(decodeFile, instruction.name(), occurrence);
+        Set<String> expected = A64_SIGNATURES.get(key);
+        boolean accepted = false;
+        boolean mismatch = false;
+        String sample = null;
         for (int[] strategy : FILL_STRATEGIES) {
             int word = encode(instruction, strategy);
+            Ir64Op op;
             try {
                 TestAddressSpace raw = new TestAddressSpace(8);
                 raw.put32(0, word);
-                if (decoder.decode(AddressSpace64.wrapping(raw), 0) != null) {
-                    return AARCH64_MISDECODED.containsKey(instruction.name() + "#" + occurrence)
-                            ? Status.FALLBACK
-                            : Status.SUPPORTED;
-                }
+                op = decoder.decode(AddressSpace64.wrapping(raw), 0);
             } catch (RuntimeException e) {
-                // `unsupported`: encoding fora da fatia implementada — tenta a próxima estratégia.
+                continue; // `unsupported`: encoding fora da fatia implementada — tenta a próxima estratégia.
+            }
+            if (op == null) {
+                continue;
+            }
+            accepted = true;
+            String signature = A64InstructionSignature.of(op);
+            boolean matches = recordSignatures || (expected != null && expected.contains(signature));
+            if (column == null) {
+                mismatch |= !matches;
+                continue;
+            }
+            if (recordSignatures) {
+                observedSignatures.computeIfAbsent(key, unused -> new TreeSet<>()).add(signature);
+            }
+            if (matches) {
+                if (sample == null) {
+                    sample = column + ":" + String.format(Locale.ROOT, "%08x", word);
+                }
+            } else {
+                mismatch = true;
+                signatureMismatches.add(String.format(Locale.ROOT, "%s @ %s: %08x → %s (esperado: %s)",
+                        key.replace('\t', ' '), column, word, signature,
+                        expected == null ? "sem entrada" : String.join(" ", expected)));
             }
         }
-        return Status.MISSING;
+        if (sample != null && column != null) {
+            observedSamples.put(key, sample); // colunas em ordem crescente: fica a mais nova
+        }
+        if (!accepted) {
+            return Status.MISSING;
+        }
+        return mismatch ? Status.FALLBACK : Status.SUPPORTED;
     }
 
     /// Nome que o QEMU dá, nos `.decode`, aos encodings **reservados** (`INVALID`): não são instruções, são
@@ -1264,7 +1360,7 @@ public final class IsaCoverageReport {
 
     /// Mede uma linha `INVALID` ao contrário das demais: `✅` = o decoder recusa o encoding reservado em TODAS as
     /// estratégias de preenchimento (era o que o `❌` antigo já fazia, só que lido como "falta implementar");
-    /// `⚠️` = decodificou algo — dívida de G8, a mesma classe das {@link #AARCH64_MISDECODED}. Nenhuma linha
+    /// `⚠️` = decodificou algo — dívida de G8, a mesma classe de um misdecode (E17, {@link #A64_SIGNATURES}). Nenhuma linha
     /// sai do denominador: se o decoder passar a aceitar um reservado, a célula denuncia.
     private static Status probeReservedAarch64(DecodeTreeSpec.Instruction instruction, Aarch64Decoder decoder) {
         for (int[] strategy : FILL_STRATEGIES) {

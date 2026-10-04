@@ -26,8 +26,21 @@
 #      em `docs/isa-nao-aplicavel.tsv` (regra máxima do `tasks/README.md`);
 #   4. commit separado, só com o bump de `QEMU_REV` e a tabela regenerada.
 #
-# Uso:  ./gerar-cobertura-isa.sh
+# ── ASSINATURAS A64 (E17) ───────────────────────────────────────────────────────────────────
+# Uma célula A64 só mede ✅ se toda palavra aceita sair com a assinatura revisada da linha em
+# `docs/isa-a64-assinaturas.tsv`. Ao implementar/corrigir uma instrução A64, rode com
+# `--assinaturas`: o TSV é regravado a partir do decoder atual e o DIFF dele é o que se revisa
+# (cada linha nova ou alterada tem de bater com o mnemônico real — `objdump` do devkitA64, ver
+# `tasks/trilha-e-manutencao/e17-scripts/`). Sem a flag, o TSV só é lido e cada divergência é
+# listada no fim da execução.
+#
+# Uso:  ./gerar-cobertura-isa.sh [--assinaturas]
 set -euo pipefail
+
+RECORD_SIGNATURES="false"
+if [ "${1:-}" = "--assinaturas" ]; then
+    RECORD_SIGNATURES="true"
+fi
 
 # QEMU commit `2931a675e9d3fcddedf673509fe9759955fc616d` (2026-08-21, "target/arm: Make Thumb
 # T1 hint space UNDEF before v6T2"). Escolhido pela E11 (2026-09-03) como primeira revisão
@@ -63,5 +76,6 @@ done
 echo "$QEMU_REV" > "$REV_FILE"
 
 mvn -o -q -pl core test-compile
-java -cp "core/target/classes;core/target/test-classes" \
-     dev.vitorsilverio.armjitter.tools.IsaCoverageReport "$DECODE_DIR" docs/COBERTURA-ISA.md docs/isa-nao-aplicavel.tsv "$QEMU_REV"
+java -Disa.assinaturas.gravar="$RECORD_SIGNATURES" -cp "core/target/classes;core/target/test-classes" \
+     dev.vitorsilverio.armjitter.tools.IsaCoverageReport "$DECODE_DIR" docs/COBERTURA-ISA.md docs/isa-nao-aplicavel.tsv \
+     "$QEMU_REV" docs/isa-a64-assinaturas.tsv

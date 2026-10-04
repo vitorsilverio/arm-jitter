@@ -173,6 +173,8 @@ public final class Aarch64Decoder {
     private static final int ADD_SUB_SHIFT_FIELD_SHIFT = 22;
     private static final int ADD_SUB_SHIFT_FIELD_MASK = 0b11;
     private static final int ADD_SUB_SHIFT_LSL_12 = 0b01;
+    /// Bit alto do campo `shift` (= `bit23` da palavra): `1` não é ADD/SUB imediato (E17).
+    private static final int ADD_SUB_SHIFT_FIELD_BIT23 = 0b10;
     private static final int IMM12_SHIFT = 10;
     private static final int IMM12_MASK = 0xFFF;
     private static final int RN_SHIFT = 5;
@@ -682,12 +684,13 @@ public final class Aarch64Decoder {
     private static final int SYSTEM_INSTRUCTION_BARRIER_OP2_ISB = 0b110;
 
     // ── B6.6.7: "Hints" (`op0=0`, CRn=0b0010 fixo — mesmo subgrupo de encoding das barreiras
-    // ── acima, `CRm`(11:8) reservado/`RES0` na forma canônica de cada hint, não checado aqui,
-    // ── mesma simplificação já aplicada às barreiras) — `NOP`/`YIELD`/`SEV`/`SEVL` viram NOP puro
+    // ── acima; `CRm`(11:8) só é checado para separar `WFI` (`CRm=0`) dos outros hints de `op2=011`,
+    // ── E17) — `NOP`/`YIELD`/`SEV`/`SEVL` viram NOP puro
     // ── (mesmo tratamento das barreiras); `WFE` também NOP nesta task (sem event-stream modelado,
     // ── ver a task B6.6.7 "Não inclui"); só `WFI` tem semântica própria (durma até IRQ).
     private static final int SYSTEM_INSTRUCTION_HINT_CRN = 0b0010;
     private static final int SYSTEM_INSTRUCTION_HINT_OP2_WFI = 0b011;
+    private static final int SYSTEM_INSTRUCTION_HINT_CRM_WFI = 0b0000;
 
     // ── B8.3: `WFET`/`WFIT` (`FEAT_WFxT`) — subgrupo PRÓPRIO "System instructions with register
     // ── argument" (`op0=0`, CRn=0b0001 — DIFERENTE do subgrupo "Hints" acima, `CRn=0b0010`), único
@@ -2000,6 +2003,10 @@ public final class Aarch64Decoder {
     /// (fixo em `11111` no encoding).
     private static final int PAUTH_IN_PLACE_TOP2_XPAC = 0b01;
     private static final int PAUTH_IN_PLACE_XPAC_RN_FIXED = 0b1_1111;
+    /// `opcode` bit3 = `Z` nas 8 formas de propósito geral: `PACIZA`/…/`AUTDZB` (modificador zero).
+    private static final int PAUTH_IN_PLACE_Z_BIT = 0b1000;
+    /// Com `Z=1`, `Rn` é fixo em `11111` no encoding; outro valor é não alocado (E17, G8).
+    private static final int PAUTH_IN_PLACE_Z_RN_FIXED = 0b1_1111;
 
     // ── Data-processing (3 source), B8.2: SMADDL/SMSUBL/UMADDL/UMSUBL/SMULH/UMULH — mesmo campo ──
     // ── de 8 bits fixos em bits[28:21] de MADD/MSUB (MADD_MSUB_FIXED_PATTERN), mas com valores ────
@@ -2240,7 +2247,7 @@ public final class Aarch64Decoder {
             if (!architecture.has(Aarch64Feature.LSE)) {
                 throw unsupported(word, address);
             }
-            return decodeCompareAndSwapPair(word);
+            return decodeCompareAndSwapPair(word, address);
         }
         // formIgnoringL == EXCLUSIVE_FORM_CAS: as 8 combinações do campo de 3 bits já foram
         // esgotadas pelos ramos acima (000/010/100/110/001/011), só resta 101/111 = CAS.
@@ -2478,11 +2485,14 @@ public final class Aarch64Decoder {
         return new MemoryOp64.StoreExclusivePair(rs, rt, rt2, rn, wide, acquireRelease);
     }
 
-    private Ir64Op decodeCompareAndSwapPair(int word) {
+    private Ir64Op decodeCompareAndSwapPair(int word, long address) {
         boolean wide = ((word >>> PAIR_OPC_SHIFT) & 1) != 0; // bit30; bit31 fixo=0 em CASP
         int rs = (word >>> EXCLUSIVE_RS_SHIFT) & REGISTER_FIELD_MASK;
         int rn = (word >>> RN_SHIFT) & REGISTER_FIELD_MASK;
         int rt = word & REGISTER_FIELD_MASK;
+        if (((rs | rt) & 1) != 0) {
+            throw unsupported(word, address); // E17: `Rs`/`Rt` ímpar = UNDEFINED (par de registradores)
+        }
         return new MemoryOp64.CompareAndSwapPair(rs, rt, rn, wide);
     }
 
@@ -3056,7 +3066,7 @@ public final class Aarch64Decoder {
 
     private Ir64Op decodeDataProcessingImmediate(int word, long address) {
         if ((word & BIT_25) == 0) {
-            return (word & BIT_24) == 0 ? decodePcRelative(word, address) : decodeAddSubImmediate(word);
+            return (word & BIT_24) == 0 ? decodePcRelative(word, address) : decodeAddSubImmediate(word, address);
         }
         int subgroup = (word >>> SUBGROUP_24_23_SHIFT) & SUBGROUP_24_23_MASK;
         if (subgroup == SUBGROUP_LOGICAL_IMMEDIATE) {
@@ -3162,11 +3172,16 @@ public final class Aarch64Decoder {
         return new IntegerOp64.PcRelative(rd, address, immediate, page);
     }
 
-    private Ir64Op decodeAddSubImmediate(int word) {
+    private Ir64Op decodeAddSubImmediate(int word, long address) {
         boolean wide = ((word >>> SF_SHIFT) & 1) != 0;
         boolean isSub = ((word >>> ADD_SUB_OP_SHIFT) & 1) != 0;
         boolean setFlags = ((word >>> SET_FLAGS_SHIFT) & 1) != 0;
         int shiftField = (word >>> ADD_SUB_SHIFT_FIELD_SHIFT) & ADD_SUB_SHIFT_FIELD_MASK;
+        if ((shiftField & ADD_SUB_SHIFT_FIELD_BIT23) != 0) {
+            // E17: `bit23=1` é outro subgrupo — `ADDG`/`SUBG` (`FEAT_MTE`) e `SMAX`/`SMIN`/`UMAX`/
+            // `UMIN` imediato (`FEAT_CSSC`), ainda não implementados; antes saíam como ADD/SUB (G8).
+            throw unsupported(word, address);
+        }
         long imm12 = (word >>> IMM12_SHIFT) & IMM12_MASK;
         long immediate = shiftField == ADD_SUB_SHIFT_LSL_12 ? (imm12 << 12) : imm12;
         int rn = (word >>> RN_SHIFT) & REGISTER_FIELD_MASK;
@@ -3502,6 +3517,9 @@ public final class Aarch64Decoder {
                 default -> throw new AssertionError("low3 de 3 bits só tem 8 valores possíveis");
             };
             int rn = (word >>> RN_SHIFT) & REGISTER_FIELD_MASK;
+            if ((opcode & PAUTH_IN_PLACE_Z_BIT) != 0 && rn != PAUTH_IN_PLACE_Z_RN_FIXED) {
+                throw unsupported(word, address); // E17: forma `Z` (`PACIZA`…) só existe com `Rn=11111`
+            }
             return new IntegerOp64.PointerAuthInPlace(op, rd, rn);
         }
         if (top2 == PAUTH_IN_PLACE_TOP2_XPAC) {
@@ -5520,8 +5538,12 @@ public final class Aarch64Decoder {
         // real (não checados como valor `U` separado: `U` sempre replica o bit `top`, achado medido
         // contra corpus real, então basta o `opcode` cru). Sem forma escalar. Medido bit a bit
         // contra `arm-linux-gnu-as -march=armv8.2-a+fp16+fp16fml` (WSL).
+        // E17: `U` TEM de replicar o bit `top` — os 4 pares `(U, opcode)` com `U ≠ top` são
+        // `MUL_vi`(0,1000)/`MLA_vi`(1,0000)/`MLS_vi`(1,0100)/`SQDMULH_vi`(0,1100) da forma `.s`, que
+        // sem esta checagem saíam como `FMLAL` em todo preset com `FEAT_FHM`.
         if (!scalar && sizeField == ADVSIMD_INDEXED_SIZE_WORD
                 && (opcode & ADVSIMD_FHM_INDEXED_OPCODE_RESERVED_MASK) == 0
+                && u == ((opcode & ADVSIMD_FHM_INDEXED_OPCODE_TOP_BIT) != 0)
                 && architecture.has(Aarch64Feature.FP16_FUSED_MULTIPLY_ADD_LONG)) {
             int rmH = (word >>> ADVSIMD_INT_RM_SHIFT) & ADVSIMD_INDEXED_RM_H_MASK;
             int lm = (word >>> ADVSIMD_INDEXED_LM_SHIFT) & ADVSIMD_INDEXED_LM_MASK;
@@ -6657,7 +6679,10 @@ public final class Aarch64Decoder {
             };
         }
         if (crn == SYSTEM_INSTRUCTION_HINT_CRN) {
-            if (op2 == SYSTEM_INSTRUCTION_HINT_OP2_WFI) {
+            // E17: `WFI` é só `CRm=0000` — `op2=011` com outro `CRm` é outro hint (`GCSB DSYNC`=#19,
+            // `PACIBSP`=#27) ou reservado, NOP em qualquer caso; antes dormia até IRQ.
+            int crm = (word >>> SYSTEM_REGISTER_CRM_SHIFT) & SYSTEM_REGISTER_CRM_MASK;
+            if (op2 == SYSTEM_INSTRUCTION_HINT_OP2_WFI && crm == SYSTEM_INSTRUCTION_HINT_CRM_WFI) {
                 return new SystemOp64.SystemInstruction(Ir64SystemInstructionOp.WFI);
             }
             // NOP/YIELD/WFE/SEV/SEVL (e qualquer combinação reservada de CRm/op2 dentro do
