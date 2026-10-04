@@ -17,10 +17,11 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class DecodeTableTest {
     private static final Aarch64Architecture BASE = Aarch64Architecture.ARMV8_0_A;
     private static final Aarch64Architecture WITH_RDM = Aarch64Architecture.of("rdm", Aarch64Feature.RDM);
+    private static final long ADDRESS = 0x4000L;
 
     @Test
     void patternParsesFixedAndFreeBits() {
-        DecodeRow<String> row = DecodeRow.of("1... .... .... .... .... .... .... ..01", null, word -> "x");
+        DecodeRow<String> row = DecodeRow.of("1... .... .... .... .... .... .... ..01", null, (word, address) -> "x");
         assertEquals(0x8000_0003, row.mask());
         assertEquals(0x8000_0001, row.value());
         assertTrue(row.matches(0xFFFF_FFFD));
@@ -29,18 +30,18 @@ class DecodeTableTest {
 
     @Test
     void patternWithWrongLengthIsRejected() {
-        assertThrows(IllegalArgumentException.class, () -> DecodeRow.of("0101", null, word -> "x"));
+        assertThrows(IllegalArgumentException.class, () -> DecodeRow.of("0101", null, (word, address) -> "x"));
     }
 
     @Test
     void patternWithUnknownSymbolIsRejected() {
         assertThrows(IllegalArgumentException.class,
-                () -> DecodeRow.of("x... .... .... .... .... .... .... ....", null, word -> "x"));
+                () -> DecodeRow.of("x... .... .... .... .... .... .... ....", null, (word, address) -> "x"));
     }
 
     @Test
     void valueOutsideMaskIsRejected() {
-        assertThrows(IllegalArgumentException.class, () -> new DecodeRow<>(0x1, 0x2, null, word -> "x"));
+        assertThrows(IllegalArgumentException.class, () -> new DecodeRow<>(0x1, 0x2, null, (word, address) -> "x"));
     }
 
     @Test
@@ -50,38 +51,38 @@ class DecodeTableTest {
 
     @Test
     void rowsWithAbsentFeatureAreDroppedAndBaseRowsKept() {
-        DecodeRow<String> base = new DecodeRow<>(0xF, 0x1, null, word -> "base");
-        DecodeRow<String> rdm = new DecodeRow<>(0xF, 0x2, Aarch64Feature.RDM, word -> "rdm");
+        DecodeRow<String> base = new DecodeRow<>(0xF, 0x1, null, (word, address) -> "base");
+        DecodeRow<String> rdm = new DecodeRow<>(0xF, 0x2, Aarch64Feature.RDM, (word, address) -> "rdm");
         List<DecodeRow<String>> rows = List.of(base, rdm);
 
         DecodeTable<String> baseTable = DecodeTable.forArchitecture(rows, BASE);
         assertEquals(List.of(base), baseTable.rows());
-        assertEquals("base", baseTable.decode(0x1));
-        assertNull(baseTable.decode(0x2));
+        assertEquals("base", baseTable.decode(0x1, ADDRESS));
+        assertNull(baseTable.decode(0x2, ADDRESS));
 
         DecodeTable<String> rdmTable = DecodeTable.forArchitecture(rows, WITH_RDM);
         assertEquals(List.of(base, rdm), rdmTable.rows());
-        assertEquals("rdm", rdmTable.decode(0x2));
-        assertNull(rdmTable.decode(0x3));
+        assertEquals("rdm", rdmTable.decode(0x2, ADDRESS));
+        assertNull(rdmTable.decode(0x3, ADDRESS));
     }
 
     @Test
     void emptyTableDecodesNothing() {
         DecodeTable<String> table = DecodeTable.forArchitecture(List.of(), BASE);
         assertEquals(0, table.keyMask());
-        assertNull(table.decode(0x1234_5678));
+        assertNull(table.decode(0x1234_5678, ADDRESS));
     }
 
     @Test
     void keyUsesOnlyBitsFixedInEveryRowThatSplitTheRows() {
         // bit0 separa as linhas; bit4 é fixo nas duas mas igual (não separa); bit8 só é fixo numa.
-        DecodeRow<String> a = new DecodeRow<>(0x111, 0x010, null, word -> "a");
-        DecodeRow<String> b = new DecodeRow<>(0x011, 0x011, null, word -> "b");
+        DecodeRow<String> a = new DecodeRow<>(0x111, 0x010, null, (word, address) -> "a");
+        DecodeRow<String> b = new DecodeRow<>(0x011, 0x011, null, (word, address) -> "b");
         DecodeTable<String> table = DecodeTable.forArchitecture(List.of(a, b), BASE);
         assertEquals(0x1, table.keyMask());
-        assertEquals("a", table.decode(0x010));
-        assertEquals("b", table.decode(0x111));
-        assertNull(table.decode(0x110)); // bucket de `a`, mas bit8 diverge
+        assertEquals("a", table.decode(0x010, ADDRESS));
+        assertEquals("b", table.decode(0x111, ADDRESS));
+        assertNull(table.decode(0x110, ADDRESS)); // bucket de `a`, mas bit8 diverge
     }
 
     @Test
@@ -91,7 +92,7 @@ class DecodeTableTest {
         int fixed = 0xFFF;
         for (int value = 0; value < 4096; value++) {
             int v = value;
-            rows.add(new DecodeRow<>(fixed, v, null, word -> v));
+            rows.add(new DecodeRow<>(fixed, v, null, (word, address) -> v));
         }
         DecodeTable<Integer> table = DecodeTable.forArchitecture(rows, BASE);
         assertEquals(DecodeTable.MAX_KEY_BITS, Integer.bitCount(table.keyMask()));
@@ -102,9 +103,16 @@ class DecodeTableTest {
     }
 
     @Test
+    void buildReceivesTheInstructionAddress() {
+        DecodeRow<Long> row = DecodeRow.of("1... .... .... .... .... .... .... ....", null, (word, address) -> address);
+        DecodeTable<Long> table = DecodeTable.forArchitecture(List.of(row), BASE);
+        assertEquals(ADDRESS, table.decode(0x8000_0000, ADDRESS));
+    }
+
+    @Test
     void overlapIsDetected() {
-        DecodeRow<String> a = new DecodeRow<>(0x3, 0x1, null, word -> "a");
-        DecodeRow<String> b = new DecodeRow<>(0x1, 0x1, null, word -> "b");
+        DecodeRow<String> a = new DecodeRow<>(0x3, 0x1, null, (word, address) -> "a");
+        DecodeRow<String> b = new DecodeRow<>(0x1, 0x1, null, (word, address) -> "b");
         assertThrows(AssertionError.class, () -> DecodeTableInvariants.assertNoOverlap(List.of(a, b)));
     }
 }

@@ -55,7 +55,7 @@ class AdvSimdBit21ZeroRowsTest {
         SplittableRandom random = new SplittableRandom(0xE159L);
         for (DecodeRow<Ir64Op> row : AdvSimdBit21ZeroRows.ROWS) {
             int word = row.value() | (random.nextInt() & ~row.mask());
-            assertEquals(row.build().decode(word), decodeWord(decoder, word), Integer.toHexString(word));
+            assertEquals(row.build().decode(word, 0L), decodeWord(decoder, word), Integer.toHexString(word));
         }
     }
 

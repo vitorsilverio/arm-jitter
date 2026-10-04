@@ -102,6 +102,8 @@ public final class Aarch64Decoder {
     private final Aarch64SmeDecoder smeDecoder;
     /// E15.9: formas com feature do espaço AdvSIMD `bit21=0`, já filtradas por {@link #architecture}.
     private final DecodeTable<Ir64Op> advSimdBit21ZeroTable;
+    /// E15.10: a classe "Data Processing — Immediate" inteira (`bits[28:26]=100`).
+    private final DecodeTable<Ir64Op> dataProcessingImmediateTable;
 
     /// Cria um decoder para {@link Aarch64Architecture#ARMV8_0_A} — equivalente ao comportamento
     /// deste decoder antes de B11.2 (tudo que está implementado, incondicional).
@@ -117,6 +119,7 @@ public final class Aarch64Decoder {
         this.sveDecoder = new Aarch64SveDecoder(architecture);
         this.smeDecoder = new Aarch64SmeDecoder(architecture);
         this.advSimdBit21ZeroTable = DecodeTable.forArchitecture(AdvSimdBit21ZeroRows.ROWS, architecture);
+        this.dataProcessingImmediateTable = DecodeTable.forArchitecture(DataProcessingImmediateRows.ROWS, architecture);
     }
 
     /// Retorna a arquitetura configurada para este decoder (B11.2).
@@ -134,61 +137,29 @@ public final class Aarch64Decoder {
     /// B17.28: `bits[28:26] = 000` — o espaço da SME (com `bit31 = 1`), onde moram os `LD1`/`ST1` multi-vetor de SVE2.1.
     private static final int CLASS_SME_SPACE = 0b000;
 
-    // ── Sub-grupos de "Data Processing Immediate" (bit 25 e bits 24:23) ─────────────────────
-    private static final int BIT_25 = 1 << 25;
+    // ── bit24: `o1` do B.cond, `op` de CBZ/TBZ, forma imediata do CB<cc> ──────────────────────
     private static final int BIT_24 = 1 << 24;
-    private static final int SUBGROUP_24_23_SHIFT = 23;
-    private static final int SUBGROUP_24_23_MASK = 0b11;
-    private static final int SUBGROUP_LOGICAL_IMMEDIATE = 0b00;
-    private static final int SUBGROUP_MOVE_WIDE = 0b01;
-    private static final int SUBGROUP_BITFIELD = 0b10;
 
-    // ── Logical (immediate): sf(31) opc(30:29) 100100(28:23) N(22) immr(21:16) imms(15:10) ────
-    // ── Rn(9:5) Rd(4:0) ──────────────────────────────────────────────────────────────────────
+    // ── `opc` de Logical (shifted register) — mesmo mapeamento da forma imediata, que desde a ──
+    // ── E15.10 é a tabela `DataProcessingImmediateRows` ──────────────────────────────────────
     private static final int LOGICAL_IMM_OPC_SHIFT = 29;
     private static final int LOGICAL_IMM_OPC_MASK = 0b11;
     private static final int LOGICAL_IMM_OPC_AND = 0b00;
     private static final int LOGICAL_IMM_OPC_ORR = 0b01;
     private static final int LOGICAL_IMM_OPC_EOR = 0b10;
     private static final int LOGICAL_IMM_OPC_ANDS = 0b11;
-    private static final int LOGICAL_IMM_N_SHIFT = 22;
-    private static final int LOGICAL_IMM_IMMR_SHIFT = 16;
-    private static final int LOGICAL_IMM_IMMS_SHIFT = 10;
-    private static final int LOGICAL_IMM_FIELD_MASK = 0b11_1111;
 
-    // ── PC-rel addressing (ADR/ADRP): op(31) immlo(30:29) 10000(28:24) immhi(23:5) Rd(4:0) ──
+    // ── bit31 = `link` de B/BL ───────────────────────────────────────────────────────────────
     private static final int PC_REL_OP_SHIFT = 31;
-    private static final int PC_REL_IMMLO_SHIFT = 29;
-    private static final int PC_REL_IMMLO_MASK = 0b11;
-    private static final int PC_REL_IMMHI_SHIFT = 5;
-    private static final int PC_REL_IMMHI_BITS = 19;
-    private static final int PC_REL_IMM_TOTAL_BITS = 21;
-    private static final int ADRP_PAGE_SHIFT = 12;
 
-    // ── Add/sub (immediate): sf(31) op(30) S(29) 10001(28:24) shift(23:22) imm12(21:10) ─────
-    // ── Rn(9:5) Rd(4:0) ──────────────────────────────────────────────────────────────────────
+    // ── Campos comuns de Data Processing: sf(31) op(30) S(29) ... Rn(9:5) Rd(4:0) ─────────────
     private static final int SF_SHIFT = 31;
     private static final int ADD_SUB_OP_SHIFT = 30;
     private static final int SET_FLAGS_SHIFT = 29;
-    private static final int ADD_SUB_SHIFT_FIELD_SHIFT = 22;
-    private static final int ADD_SUB_SHIFT_FIELD_MASK = 0b11;
-    private static final int ADD_SUB_SHIFT_LSL_12 = 0b01;
-    /// Bit alto do campo `shift` (= `bit23` da palavra): `1` não é ADD/SUB imediato (E17).
-    private static final int ADD_SUB_SHIFT_FIELD_BIT23 = 0b10;
-    private static final int IMM12_SHIFT = 10;
-    private static final int IMM12_MASK = 0xFFF;
     private static final int RN_SHIFT = 5;
     private static final int REGISTER_FIELD_MASK = 0b1_1111;
 
-    // ── Move wide (immediate): sf(31) opc(30:29) 100101(28:23) hw(22:21) imm16(20:5) Rd(4:0) ─
-    private static final int MOVE_WIDE_OPC_SHIFT = 29;
-    private static final int MOVE_WIDE_OPC_MASK = 0b11;
-    private static final int MOVE_WIDE_OPC_MOVN = 0b00;
-    private static final int MOVE_WIDE_OPC_MOVZ = 0b10;
-    private static final int MOVE_WIDE_OPC_MOVK = 0b11;
-    private static final int MOVE_WIDE_HW_SHIFT = 21;
-    private static final int MOVE_WIDE_HW_MASK = 0b11;
-    private static final int MOVE_WIDE_HW_UNIT_BITS = 16;
+    // ── imm16(20:5) de exception generating (SVC/HVC/SMC/BRK/HLT/...) ─────────────────────────
     private static final int IMM16_SHIFT = 5;
     private static final int IMM16_MASK = 0xFFFF;
 
@@ -2049,31 +2020,6 @@ public final class Aarch64Decoder {
     /// `SETF16` avalia o HALFWORD baixo.
     private static final int EVALUATE_FLAGS_SIZE_16 = 16;
 
-    // ── Extract (EXTR), subgrupo `11` de Data Processing Immediate (B8.2) — MESMA posição de bit ──
-    // ── `N` (bit22) que Bitfield (BITFIELD_N_SHIFT, reaproveitado: deve ser igual a `sf`), bit21 ───
-    // ── fixo em `0` (`op0` do subgrupo, distinto do `1` reservado que indicaria outra família). ───
-    private static final int EXTRACT_OP21_SHIFT = 21;
-    /// Forma de 32 bits (`sf=0`) não tem os 6 bits completos de `imm` — bit15 é fixo em `0`
-    /// (`imm5`, não `imm6`); combinação `sf=0`+bit15=1 é reservada.
-    private static final int EXTRACT_NARROW_RESERVED_BIT = 1 << 15;
-    private static final int EXTRACT_SHIFT_FIELD_SHIFT = 10;
-    private static final int EXTRACT_IMM6_MASK = 0b11_1111;
-    private static final int EXTRACT_IMM5_MASK = 0b1_1111;
-
-    // ── Bitfield (SBFM/BFM/UBFM), subgrupo `10` de Data Processing Immediate (B6.3.2): ─────────
-    // ── sf(31) opc(30:29) 100110(28:23) N(22) immr(21:16) imms(15:10) Rn(9:5) Rd(4:0) — MESMAS ──
-    // ── posições de bit de Logical (immediate), reaproveitadas com nomes próprios (G6). ─────────
-    private static final int BITFIELD_OPC_SHIFT = 29;
-    private static final int BITFIELD_OPC_MASK = 0b11;
-    private static final int BITFIELD_OPC_SBFM = 0b00;
-    private static final int BITFIELD_OPC_BFM = 0b01;
-    private static final int BITFIELD_OPC_UBFM = 0b10;
-    private static final int BITFIELD_OPC_RESERVED_EXTR = 0b11;
-    private static final int BITFIELD_N_SHIFT = 22;
-    private static final int BITFIELD_IMMR_SHIFT = 16;
-    private static final int BITFIELD_IMMS_SHIFT = 10;
-    private static final int BITFIELD_FIELD_MASK = 0b11_1111;
-
     private static final int INSTRUCTION_SIZE_BYTES = 4;
     private static final int BYTES_PER_BRANCH_UNIT = 4;
 
@@ -3064,151 +3010,13 @@ public final class Aarch64Decoder {
         return new FpOp64.LoadLiteral64(vt, address + offset, size);
     }
 
+    /// E15.10: tabela {@link DataProcessingImmediateRows}; o que não casa nenhuma linha é recusado (G8).
     private Ir64Op decodeDataProcessingImmediate(int word, long address) {
-        if ((word & BIT_25) == 0) {
-            return (word & BIT_24) == 0 ? decodePcRelative(word, address) : decodeAddSubImmediate(word, address);
-        }
-        int subgroup = (word >>> SUBGROUP_24_23_SHIFT) & SUBGROUP_24_23_MASK;
-        if (subgroup == SUBGROUP_LOGICAL_IMMEDIATE) {
-            return decodeLogicalImmediate(word, address);
-        }
-        if (subgroup == SUBGROUP_MOVE_WIDE) {
-            return decodeMoveWide(word);
-        }
-        if (subgroup == SUBGROUP_BITFIELD) {
-            return decodeBitfield(word, address);
-        }
-        // subgroup == 0b11: Extract (EXTR, B8.2).
-        return decodeExtract(word, address);
-    }
-
-    /// `EXTR` (B8.2) — MESMA posição de bit `N`(22) que {@link #decodeBitfield} (deve ser igual a
-    /// `sf`); a forma de 32 bits não tem os 6 bits completos de `imm` (bit15 fixo em `0`).
-    private Ir64Op decodeExtract(int word, long address) {
-        boolean wide = ((word >>> SF_SHIFT) & 1) != 0;
-        int n = (word >>> BITFIELD_N_SHIFT) & 1;
-        if (n != (wide ? 1 : 0)) {
+        Ir64Op op = dataProcessingImmediateTable.decode(word, address);
+        if (op == null) {
             throw unsupported(word, address);
         }
-        if (((word >>> EXTRACT_OP21_SHIFT) & 1) != 0) {
-            throw unsupported(word, address);
-        }
-        if (!wide && (word & EXTRACT_NARROW_RESERVED_BIT) != 0) {
-            throw unsupported(word, address);
-        }
-        int rm = (word >>> ADDSUB_REGISTER_RM_SHIFT) & REGISTER_FIELD_MASK;
-        int lsb = wide
-                ? (word >>> EXTRACT_SHIFT_FIELD_SHIFT) & EXTRACT_IMM6_MASK
-                : (word >>> EXTRACT_SHIFT_FIELD_SHIFT) & EXTRACT_IMM5_MASK;
-        int rn = (word >>> RN_SHIFT) & REGISTER_FIELD_MASK;
-        int rd = word & REGISTER_FIELD_MASK;
-        return new IntegerOp64.Extract(rd, rn, rm, lsb, wide);
-    }
-
-    /// `SBFM`/`BFM`/`UBFM` (D2 da task B6.3.2): produz {@link IntegerOp64.Bitfield} sempre a partir dos
-    /// campos crus `immr`/`imms` — nenhum dos 11 aliases do épico (`UBFX`/`SBFX`/`BFI`/`BFXIL`/
-    /// `LSL`/`LSR`/`ASR`/`UXTB`/`UXTH`/`SXTB`/`SXTH`/`SXTW`) exige reconhecimento aqui, só valores
-    /// específicos desses campos que o assembler já resolveu (Fatos de referência #2 da task).
-    private Ir64Op decodeBitfield(int word, long address) {
-        boolean wide = ((word >>> SF_SHIFT) & 1) != 0;
-        int opc = (word >>> BITFIELD_OPC_SHIFT) & BITFIELD_OPC_MASK;
-        if (opc == BITFIELD_OPC_RESERVED_EXTR) {
-            // opc=11 é EXTR (mesmo subgrupo, fora de escopo) — ver Armadilhas da task B6.3.2.
-            throw unsupported(word, address);
-        }
-        int n = (word >>> BITFIELD_N_SHIFT) & 1;
-        if (n != (wide ? 1 : 0)) {
-            // N deve ser igual a sf (mesma regra de Logical (immediate), Fatos de referência #2
-            // da task B6.3.1) — combinação contrária é UNDEFINED.
-            throw unsupported(word, address);
-        }
-        Ir64BitfieldOp opcode = switch (opc) {
-            case BITFIELD_OPC_SBFM -> Ir64BitfieldOp.SBFM;
-            case BITFIELD_OPC_BFM -> Ir64BitfieldOp.BFM;
-            case BITFIELD_OPC_UBFM -> Ir64BitfieldOp.UBFM;
-            default -> throw new IllegalStateException("unreachable");
-        };
-        int immr = (word >>> BITFIELD_IMMR_SHIFT) & BITFIELD_FIELD_MASK;
-        int imms = (word >>> BITFIELD_IMMS_SHIFT) & BITFIELD_FIELD_MASK;
-        int rn = (word >>> RN_SHIFT) & REGISTER_FIELD_MASK;
-        int rd = word & REGISTER_FIELD_MASK;
-        return new IntegerOp64.Bitfield(opcode, rd, rn, immr, imms, wide);
-    }
-
-    private Ir64Op decodeLogicalImmediate(int word, long address) {
-        boolean wide = ((word >>> SF_SHIFT) & 1) != 0;
-        int n = (word >>> LOGICAL_IMM_N_SHIFT) & 1;
-        if (n == 1 && !wide) {
-            // N=1 (elemento de 64 bits) não existe em operação W (sf=0) — UNDEFINED, ver
-            // Fatos de referência #2 da task B6.3.1.
-            throw unsupported(word, address);
-        }
-        int immr = (word >>> LOGICAL_IMM_IMMR_SHIFT) & LOGICAL_IMM_FIELD_MASK;
-        int imms = (word >>> LOGICAL_IMM_IMMS_SHIFT) & LOGICAL_IMM_FIELD_MASK;
-        long immediate = Aarch64LogicalImmediate.decodeBitMasks(n, imms, immr);
-        int opc = (word >>> LOGICAL_IMM_OPC_SHIFT) & LOGICAL_IMM_OPC_MASK;
-        Ir64AluOp opcode = switch (opc) {
-            case LOGICAL_IMM_OPC_AND, LOGICAL_IMM_OPC_ANDS -> Ir64AluOp.AND;
-            case LOGICAL_IMM_OPC_ORR -> Ir64AluOp.ORR;
-            case LOGICAL_IMM_OPC_EOR -> Ir64AluOp.EOR;
-            default -> throw new IllegalStateException("unreachable");
-        };
-        boolean setFlags = opc == LOGICAL_IMM_OPC_ANDS;
-        int rn = (word >>> RN_SHIFT) & REGISTER_FIELD_MASK;
-        int rd = word & REGISTER_FIELD_MASK;
-        // AND/ORR/EOR (imediato) NUNCA têm forma SP em Rd/Rn (diferente de ADD/SUB imediato) —
-        // decisão D2 da task B6.3.1, setado explicitamente aqui (não deixado implícito).
-        return new IntegerOp64.Alu64(opcode, rd, rn, immediate, wide, setFlags, false, false);
-    }
-
-    private Ir64Op decodePcRelative(int word, long address) {
-        boolean page = ((word >>> PC_REL_OP_SHIFT) & 1) != 0;
-        int immlo = (word >>> PC_REL_IMMLO_SHIFT) & PC_REL_IMMLO_MASK;
-        int immhi = (word >>> PC_REL_IMMHI_SHIFT) & (int) bitMask(PC_REL_IMMHI_BITS);
-        int rawImm = (immhi << 2) | immlo;
-        long imm = signExtend(rawImm, PC_REL_IMM_TOTAL_BITS);
-        int rd = word & REGISTER_FIELD_MASK;
-        long immediate = page ? (imm << ADRP_PAGE_SHIFT) : imm;
-        return new IntegerOp64.PcRelative(rd, address, immediate, page);
-    }
-
-    private Ir64Op decodeAddSubImmediate(int word, long address) {
-        boolean wide = ((word >>> SF_SHIFT) & 1) != 0;
-        boolean isSub = ((word >>> ADD_SUB_OP_SHIFT) & 1) != 0;
-        boolean setFlags = ((word >>> SET_FLAGS_SHIFT) & 1) != 0;
-        int shiftField = (word >>> ADD_SUB_SHIFT_FIELD_SHIFT) & ADD_SUB_SHIFT_FIELD_MASK;
-        if ((shiftField & ADD_SUB_SHIFT_FIELD_BIT23) != 0) {
-            // E17: `bit23=1` é outro subgrupo — `ADDG`/`SUBG` (`FEAT_MTE`) e `SMAX`/`SMIN`/`UMAX`/
-            // `UMIN` imediato (`FEAT_CSSC`), ainda não implementados; antes saíam como ADD/SUB (G8).
-            throw unsupported(word, address);
-        }
-        long imm12 = (word >>> IMM12_SHIFT) & IMM12_MASK;
-        long immediate = shiftField == ADD_SUB_SHIFT_LSL_12 ? (imm12 << 12) : imm12;
-        int rn = (word >>> RN_SHIFT) & REGISTER_FIELD_MASK;
-        int rd = word & REGISTER_FIELD_MASK;
-        // ARM DDI 0487 C6.2.4/C6.2.339: sem `S` (ADD/SUB), Rd|SP; com `S` (ADDS/SUBS), Rd é
-        // sempre um registrador normal (ZR quando 31). Rn é sempre Rn|SP nas duas formas.
-        boolean dstIsStackPointer = !setFlags;
-        return new IntegerOp64.Alu64(
-                isSub ? Ir64AluOp.SUB : Ir64AluOp.ADD, rd, rn, immediate, wide, setFlags,
-                dstIsStackPointer, true);
-    }
-
-    private Ir64Op decodeMoveWide(int word) {
-        boolean wide = ((word >>> SF_SHIFT) & 1) != 0;
-        int opc = (word >>> MOVE_WIDE_OPC_SHIFT) & MOVE_WIDE_OPC_MASK;
-        Ir64MoveWideOp opcode = switch (opc) {
-            case MOVE_WIDE_OPC_MOVN -> Ir64MoveWideOp.MOVN;
-            case MOVE_WIDE_OPC_MOVZ -> Ir64MoveWideOp.MOVZ;
-            case MOVE_WIDE_OPC_MOVK -> Ir64MoveWideOp.MOVK;
-            default -> throw new UnsupportedOperationException(
-                    "AArch64: move-wide opc reservado (01): 0x" + Integer.toHexString(word));
-        };
-        int hw = (word >>> MOVE_WIDE_HW_SHIFT) & MOVE_WIDE_HW_MASK;
-        int shift = hw * MOVE_WIDE_HW_UNIT_BITS;
-        int imm16 = (word >>> IMM16_SHIFT) & IMM16_MASK;
-        int rd = word & REGISTER_FIELD_MASK;
-        return new IntegerOp64.MoveWide(opcode, rd, imm16, shift, wide);
+        return op;
     }
 
     /// Sub-dispatch da classe "Data Processing — Register" (D1 da task B6.3.1, estendido por
@@ -3703,7 +3511,7 @@ public final class Aarch64Decoder {
 
     /// `AND`/`ORR`/`EOR`/`ANDS` (`n=0`) e `BIC`/`ORN`/`EON`/`BICS` (`n=1`), forma "shifted
     /// register" (B6.9). Reaproveita o mesmo mapeamento de `opc` já usado por
-    /// {@link #decodeLogicalImmediate} (`LOGICAL_IMM_OPC_*`: `00`=`AND`,`01`=`ORR`,`10`=`EOR`,
+    /// a forma imediata ({@link DataProcessingImmediateRows}, `LOGICAL_IMM_OPC_*`: `00`=`AND`,`01`=`ORR`,`10`=`EOR`,
     /// `11`=`ANDS`) e os mesmos deslocamentos de bit de {@link #decodeAddSubShiftedRegister}
     /// (`st`/`sa`/`Rm`/`Rn`/`Rd` caem nas MESMAS posições — só o padrão de grupo em bits[28:24]
     /// muda). Ao contrário daquele método, `st=11` (`ROR`) é VÁLIDO aqui (Fatos de referência #2
@@ -3772,7 +3580,7 @@ public final class Aarch64Decoder {
         int rn = (word >>> RN_SHIFT) & REGISTER_FIELD_MASK;
         int rd = word & REGISTER_FIELD_MASK;
         // ARM DDI 0487 C6.2.4/C6.2.339 (extended): Rn é SEMPRE Rn|SP; Rd é Rd|SP só sem `S`
-        // (mesma regra da forma imediata, ver decodeAddSubImmediate) — resolvido pelo EXECUTOR
+        // (mesma regra da forma imediata, ver DataProcessingImmediateRows) — resolvido pelo EXECUTOR
         // checando o índice, nunca incondicionalmente (ver IntegerOp64.AluExtendedRegister javadoc).
         boolean dstIsStackPointer = !setFlags;
         return new IntegerOp64.AluExtendedRegister(
@@ -4038,7 +3846,7 @@ public final class Aarch64Decoder {
             // FP8DOT4/FCMA) são linhas de {@link AdvSimdBit21ZeroRows}; a tabela já vem filtrada pelo
             // preset, e a exclusão mútua entre as linhas é verificada por teste. O que não casar segue
             // para EXT/permute/TBL/copy/SHA abaixo.
-            Ir64Op tableOp = advSimdBit21ZeroTable.decode(word);
+            Ir64Op tableOp = advSimdBit21ZeroTable.decode(word, address);
             if (tableOp != null) {
                 return tableOp;
             }

@@ -1,7 +1,6 @@
 package dev.vitorsilverio.armjitter.decoder64;
 
 import dev.vitorsilverio.armjitter.arch64.Aarch64Feature;
-import dev.vitorsilverio.armjitter.decoder64.DecodeRow.WordDecoder;
 import dev.vitorsilverio.armjitter.ir64.AdvSimdFpOp64;
 import dev.vitorsilverio.armjitter.ir64.AdvSimdIntegerOp64;
 import dev.vitorsilverio.armjitter.ir64.Ir64Op;
@@ -139,21 +138,27 @@ final class AdvSimdBit21ZeroRows {
     private AdvSimdBit21ZeroRows() {
     }
 
-    private static DecodeRow<Ir64Op> row(String pattern, Aarch64Feature requires, WordDecoder<Ir64Op> build) {
-        return DecodeRow.of(pattern, requires, build);
+    /// Construtor de op desta tabela: nenhuma forma do espaço guarda o endereço da instrução.
+    @FunctionalInterface
+    private interface AddressFree {
+        Ir64Op decode(int word);
     }
 
-    private static WordDecoder<Ir64Op> rdm(Ir64VectorThreeSameOp op) {
+    private static DecodeRow<Ir64Op> row(String pattern, Aarch64Feature requires, AddressFree build) {
+        return DecodeRow.of(pattern, requires, (word, address) -> build.decode(word));
+    }
+
+    private static AddressFree rdm(Ir64VectorThreeSameOp op) {
         return word -> new AdvSimdIntegerOp64.ArithmeticThreeSame(op, scalar(word), q(word), esz(word),
                 rd(word), rn(word), rm(word));
     }
 
-    private static WordDecoder<Ir64Op> fp16(Ir64VectorFpThreeSameOp op) {
+    private static AddressFree fp16(Ir64VectorFpThreeSameOp op) {
         return word -> new AdvSimdFpOp64.FpArithmeticThreeSame(op, scalar(word), q(word), ESZ_HALFWORD,
                 rd(word), rn(word), rm(word));
     }
 
-    private static WordDecoder<Ir64Op> fp16Pairwise(Ir64VectorFpPairwiseOp op) {
+    private static AddressFree fp16Pairwise(Ir64VectorFpPairwiseOp op) {
         return word -> new AdvSimdFpOp64.FpArithmeticPairwise(op, false, q(word), ESZ_HALFWORD,
                 rd(word), rn(word), rm(word));
     }
@@ -166,7 +171,7 @@ final class AdvSimdBit21ZeroRows {
         return new AdvSimdFpOp64.FpScaleByInt(q(word), ESZ_HALFWORD, rd(word), rn(word), rm(word));
     }
 
-    private static WordDecoder<Ir64Op> absoluteMaxMin(boolean max) {
+    private static AddressFree absoluteMaxMin(boolean max) {
         return word -> new AdvSimdFpOp64.FpAbsoluteMaxMin(max, q(word), ESZ_HALFWORD, rd(word), rn(word), rm(word));
     }
 
@@ -179,7 +184,7 @@ final class AdvSimdBit21ZeroRows {
         return new AdvSimdFpOp64.Fp8FusedMultiplyAddLong(true, idxn, rd(word), rn(word), rm(word));
     }
 
-    private static WordDecoder<Ir64Op> dot(boolean single) {
+    private static AddressFree dot(boolean single) {
         return word -> new AdvSimdFpOp64.Fp8DotProduct(single, q(word), rd(word), rn(word), rm(word));
     }
 
@@ -188,7 +193,7 @@ final class AdvSimdBit21ZeroRows {
         return new AdvSimdFpOp64.FpComplexMultiplyAccumulate(q(word), esz(word), rotation, rd(word), rn(word), rm(word));
     }
 
-    private static WordDecoder<Ir64Op> complexAdd(int rotation) {
+    private static AddressFree complexAdd(int rotation) {
         return word -> new AdvSimdFpOp64.FpComplexAdd(q(word), esz(word), rotation, rd(word), rn(word), rm(word));
     }
 

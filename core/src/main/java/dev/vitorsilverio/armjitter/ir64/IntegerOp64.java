@@ -461,7 +461,7 @@ public sealed interface IntegerOp64 extends Ir64Op permits IntegerOp64.Alu64, In
             int src2,
             /// Deslocamento da janela dentro da concatenação de 2×largura (`0`-`31` quando
             /// `!`{@link #wide}, `0`-`63` quando {@link #wide} — já validado pelo decoder via o
-            /// bit reservado da forma de 32 bits, ver `Aarch64Decoder#decodeExtract`).
+            /// bit reservado da forma de 32 bits, ver `DataProcessingImmediateRows`).
             int lsb,
             /// `true` para operação de 64 bits (`X`); `false` para 32 bits (`W`).
             boolean wide) implements IntegerOp64 {

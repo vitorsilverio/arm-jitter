@@ -89,12 +89,12 @@ final class DecodeTable<T> {
         return keyMask;
     }
 
-    /// Decodifica `word` pela linha que casa, ou devolve `null` quando nenhuma casa (o chamador
-    /// segue para o resto do espaço ou recusa a palavra, G8).
-    T decode(int word) {
+    /// Decodifica `word` (lida em `address`) pela linha que casa, ou devolve `null` quando nenhuma
+    /// casa (o chamador segue para o resto do espaço ou recusa a palavra, G8).
+    T decode(int word, long address) {
         for (DecodeRow<T> row : buckets[Integer.compress(word, keyMask)]) {
             if (row.matches(word)) {
-                return row.build().decode(word);
+                return row.build().decode(word, address);
             }
         }
         return null;

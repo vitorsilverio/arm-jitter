@@ -20,8 +20,11 @@ record DecodeRow<T>(int mask, int value, Aarch64Feature requires, WordDecoder<T>
     /// Constrói a operação de uma palavra que já casou a linha.
     @FunctionalInterface
     interface WordDecoder<T> {
-        /// Decodifica `word`; nunca devolve `null` (as restrições de campo são linhas próprias).
-        T decode(int word);
+        /// Decodifica `word`, lida em `address` (E15.10: `ADR`/`ADRP`, branches e load literal guardam o
+        /// endereço da instrução). Nunca devolve `null`: as restrições de campo são linhas próprias. A
+        /// exceção é restrição de VALOR que não cabe em máscara (a bitmask reservada do logical
+        /// imediato): aí o construtor lança `UnsupportedOperationException`, como o resto do decoder.
+        T decode(int word, long address);
     }
 
     private static final int WORD_BITS = Integer.SIZE;

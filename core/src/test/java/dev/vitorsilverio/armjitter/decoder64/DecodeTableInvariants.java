@@ -20,6 +20,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 ///   todo construtor de op.
 final class DecodeTableInvariants {
     private static final int SAMPLES_PER_ROW = 16;
+    /// Endereço da instrução nas amostras (nenhum invariante depende dele).
+    private static final long ADDRESS = 0x1000L;
 
     private DecodeTableInvariants() {
     }
@@ -48,9 +50,9 @@ final class DecodeTableInvariants {
         for (DecodeRow<T> row : table.rows()) {
             for (int sample = 0; sample < SAMPLES_PER_ROW; sample++) {
                 int word = row.value() | (random.nextInt() & ~row.mask() & ~fixedZero);
-                T expected = row.build().decode(word);
+                T expected = row.build().decode(word, ADDRESS);
                 assertNotNull(expected, () -> "build devolveu null para " + Integer.toHexString(word));
-                assertEquals(expected, table.decode(word), () -> "palavra " + Integer.toHexString(word));
+                assertEquals(expected, table.decode(word, ADDRESS), () -> "palavra " + Integer.toHexString(word));
             }
         }
     }
