@@ -398,7 +398,8 @@ public final class IsaCoverageReport {
                 // B22.9: SETG* exigem FEAT_MOPS (ARMv8.8) E FEAT_MTE; o decoder já gateia por ambos
                 "SETGP", "SETGM", "SETGE");
         // FEAT_CSSC (ARMv8.9-A) — Common Short Sequence Compression
-        require(Aarch64Feature.COMMON_SHORT_SEQUENCE_COMPRESSION, "CTZ", "SMAX", "SMIN", "UMAX", "UMIN",
+        // E15.13: `CNT` (de registrador geral) é da mesma extensão — media ✅ desde ARMv8.0-A porque o decoder não gateava
+        require(Aarch64Feature.COMMON_SHORT_SEQUENCE_COMPRESSION, "CTZ", "CNT", "SMAX", "SMIN", "UMAX", "UMIN",
                 // E17: as formas imediatas (nome próprio no `a64.decode`) não tinham requisito
                 "SMAX_i", "SMIN_i", "UMAX_i", "UMIN_i");
         // FEAT_SME (ARMv9.2-A) — MSR SVCR (estado streaming-SVE/ZA)

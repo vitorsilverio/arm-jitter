@@ -46,6 +46,8 @@ import static org.junit.jupiter.api.Assertions.*;
 class Aarch64DecoderCorpusTest {
     private static AddressSpace64 memory;
     private static final Aarch64Decoder DECODER = new Aarch64Decoder();
+    /// E15.13: `CNT` escalar é `FEAT_CSSC` (ARMv8.9-A) — a versão em cascata não gateava.
+    private static final Aarch64Decoder CSSC_DECODER = new Aarch64Decoder(Aarch64Architecture.ARMV8_9_A);
 
     @BeforeAll
     static void loadCorpus() throws IOException {
@@ -3548,7 +3550,7 @@ class Aarch64DecoderCorpusTest {
 
     @Test
     void cntWide() {
-        IntegerOp64.DataProcessing1Source op = (IntegerOp64.DataProcessing1Source) DECODER.decode(memory, 0x57c);
+        IntegerOp64.DataProcessing1Source op = (IntegerOp64.DataProcessing1Source) CSSC_DECODER.decode(memory, 0x57c);
         assertEquals(Ir64OneSourceOp.CNT, op.opcode());
         assertEquals(22, op.dst());
         assertEquals(23, op.src());
@@ -3556,7 +3558,7 @@ class Aarch64DecoderCorpusTest {
 
     @Test
     void cntNarrow() {
-        IntegerOp64.DataProcessing1Source op = (IntegerOp64.DataProcessing1Source) DECODER.decode(memory, 0x580);
+        IntegerOp64.DataProcessing1Source op = (IntegerOp64.DataProcessing1Source) CSSC_DECODER.decode(memory, 0x580);
         assertEquals(Ir64OneSourceOp.CNT, op.opcode());
         assertFalse(op.wide());
     }
