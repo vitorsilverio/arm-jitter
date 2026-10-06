@@ -132,7 +132,8 @@ G5 = suites de gbaemu/ndsemu obrigatórias (regra do `tasks/README.md`).
 | [E15.11](e15.11-branch-excecao-sistema-por-tabela.md) | Branch/exceção/sistema → `BranchExceptionRows`/`SystemInstructionRows`/`SystemRegisterRows` (encoding no `Aarch64SystemRegisterId`; fallback = grupo de prioridade explícito) | não | ✅ 2026-10-04 (G8: `CBB`/`CBH` `sf=1`, `ERET`, ~145 mil de `op0=00`) |
 | [E15.12](e15.12-load-store-por-tabela.md) | Loads and Stores → `LoadStoreRegisterRows`/`LoadStoreExclusiveRows`/`MemoryOperationRows`/`AdvSimdLoadStoreRows` (`DecodeRow#alsoRequires` para `SETG*` = MOPS e MTE) | não | ✅ 2026-10-04 (11 famílias G8, ~39 mil palavras da amostra) |
 | [E15.13](e15.13-dp-registrador-por-tabela.md) | DP-registrador → `DataProcessingRegisterRows` (`CNT` escalar ganha a coluna `FEAT_CSSC`) | não | ✅ 2026-10-04 (6 famílias G8, 38 787 palavras da amostra) |
-| E15.14–E15.15 | `Aarch64Decoder` grupo a grupo para tabela, um arquivo por grupo: FP escalar · AdvSIMD | não | ⬜ [REFINAR] após E15.9 |
+| [E15.14](e15.14-fp-escalar-por-tabela.md) | FP escalar → `ScalarFpRows` (refactor puro: o resíduo G8 já tinha sido fechado pela E15.9c) | não | ✅ 2026-10-06 (achado: `type=11`/`FEAT_FP16` da aritmética escalar ausente e medido ✅) |
+| E15.15 | `Aarch64Decoder`: AdvSIMD para tabela | não | ⬜ [REFINAR] |
 | E15.16 | Decoders de 32 bits (`ArmDecoder`, `VfpDecoder`, `Thumb2*`) para tabela | sim | ⬜ [REFINAR] após E15.15 |
 | E15.17 | `AdvSimdLanes` (3677) por família de operação; `Aarch64Core` (1848): banco de sysreg para fora | sim | ⬜ [REFINAR] |
 | E15.18–E15.21 | Fechar o resíduo semântico até 100%, um pacote por task: `advsimd` · `codegen.jvm` · `core`/`memory.mmu` · `debug` (`GdbServer` por socket de loopback) | conforme pacote | ⬜ [REFINAR] |
