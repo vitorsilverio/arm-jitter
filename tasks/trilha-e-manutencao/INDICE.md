@@ -48,5 +48,6 @@ Título, dependências e status de cada task da trilha. Quando o status diz "ver
 | [E18](e18-cobertura-isa-mede-cada-esz.md) | 🆕 `COBERTURA-ISA.md`: célula A64 só ✅ se TODOS os tamanhos de elemento (`%esz_hsd`…) decodificam — hoje basta um, o que escondeu o FP16 escalar inteiro (achado da E15.14); status novo `🟡` parcial | E17 | ⬜ |
 | [E19](e19-ir64-interop-sem-executor.md) | 🆕 JIT A64: `Ir64OpInterop`/`Ir64AsmRuntimeHelpers` deixam de guardar `Ir64BlockExecutor` por op (`executeOp` é só `op.execute` desde a E15.4) — pendência da E15.7 | E15.4 | ⬜ |
 | [E20](e20-cobertura-isa-sonda-registradores-altos.md) | 🆕 `COBERTURA-ISA.md`: o medidor só preenche registradores com valores ≤ 8 — decoder que recusa `Ra`/`Rm`… ≥ 16 sai ✅ (escondeu o `Ra` de 4 bits de `EOR3`/`BCAX`/`SM3SS1`, achado da E15.15a); sonda de registrador alto | E17 | ⬜ |
+| [E21](e21-decode-por-tabela-sem-chamada-megamorfica.md) | 🆕 Perf: decode por `DecodeTable` ~7–9 ns mais lento que a cascata (construtor-lambda megamórfico); `switch` por id de linha / bytecode gerado / cache palavra→op | E15 inteiro | ⬜ — só depois do fim do E15 (decisão do usuário, 2026-10-06) |
 
 Legenda: ⬜ pendente · 🟡 em andamento · ✅ concluída
