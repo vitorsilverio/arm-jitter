@@ -20,7 +20,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 /// E15.15a: EXT/TBL/permute/copy como tabela ({@link AdvSimdPermuteCopyRows}) e a tabela AdvSIMD inteira
-/// do `Aarch64Decoder` (as três classes de linhas juntas). Comportamento idêntico ao da cascata (oráculo
+/// do `Aarch64Decoder` (todas as classes de linhas juntas). Comportamento idêntico ao da cascata (oráculo
 /// `e15.15a-scripts/AdvSimdBit21ZeroOracle.java`: o único diff é o `Ra` de 5 bits de {@link CryptoRows}).
 class AdvSimdPermuteCopyRowsTest {
     private static final long ADDRESS = 0x1000L;
@@ -35,6 +35,7 @@ class AdvSimdPermuteCopyRowsTest {
         List<DecodeRow<Ir64Op>> rows = new ArrayList<>(AdvSimdBit21ZeroRows.ROWS);
         rows.addAll(AdvSimdPermuteCopyRows.ROWS);
         rows.addAll(CryptoRows.ROWS);
+        rows.addAll(AdvSimdThreeSameRows.ROWS);
         return rows;
     }
 
@@ -44,7 +45,7 @@ class AdvSimdPermuteCopyRowsTest {
         DecodeTableInvariants.assertNoOverlap(AdvSimdPermuteCopyRows.ROWS);
     }
 
-    /// A tabela não tem prioridade: as três classes de linhas também não podem se sobrepor entre si.
+    /// A tabela não tem prioridade: as classes de linhas também não podem se sobrepor entre si.
     @Test
     void advSimdTableRowsNeverOverlap() {
         DecodeTableInvariants.assertNoOverlap(advSimdTableRows());

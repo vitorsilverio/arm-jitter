@@ -20,7 +20,6 @@ import dev.vitorsilverio.armjitter.ir64.Ir64VectorFpThreeSameOp;
 import dev.vitorsilverio.armjitter.ir64.Ir64VectorFpUnaryOp;
 import dev.vitorsilverio.armjitter.ir64.Ir64VectorNarrowOp;
 import dev.vitorsilverio.armjitter.ir64.Ir64VectorNarrowUnaryOp;
-import dev.vitorsilverio.armjitter.ir64.Ir64VectorPairwiseOp;
 import dev.vitorsilverio.armjitter.ir64.Ir64VectorShiftNarrowOp;
 import dev.vitorsilverio.armjitter.ir64.Ir64VectorShiftOp;
 import dev.vitorsilverio.armjitter.ir64.Ir64VectorShiftWidenOp;
@@ -69,9 +68,10 @@ public final class Aarch64Decoder {
     private final boolean streamingModeRestrictions;
     private final Aarch64SveDecoder sveDecoder;
     private final Aarch64SmeDecoder smeDecoder;
-    /// E15.9/E15.15a: o AdvSIMD já migrado para tabela — o espaço `bit21=0` inteiro
-    /// ({@link AdvSimdBit21ZeroRows}, {@link AdvSimdPermuteCopyRows}) e a criptografia fora do
-    /// `bit21=1` ({@link CryptoRows}), já filtrados por {@link #architecture}.
+    /// E15.9/E15.15a/E15.15b: o AdvSIMD já migrado para tabela — o espaço `bit21=0` inteiro
+    /// ({@link AdvSimdBit21ZeroRows}, {@link AdvSimdPermuteCopyRows}), a criptografia fora do
+    /// `bit21=1` ({@link CryptoRows}) e o "three same" inteiro ({@link AdvSimdThreeSameRows}), já
+    /// filtrados por {@link #architecture}.
     private final DecodeTable<Ir64Op> advSimdTable;
     /// E15.10: a classe "Data Processing — Immediate" inteira (`bits[28:26]=100`).
     private final DecodeTable<Ir64Op> dataProcessingImmediateTable;
@@ -103,7 +103,7 @@ public final class Aarch64Decoder {
         this.sveDecoder = new Aarch64SveDecoder(architecture);
         this.smeDecoder = new Aarch64SmeDecoder(architecture);
         this.advSimdTable = DecodeTable.forArchitecture(concat(concat(AdvSimdBit21ZeroRows.ROWS,
-                AdvSimdPermuteCopyRows.ROWS), CryptoRows.ROWS), architecture);
+                AdvSimdPermuteCopyRows.ROWS), concat(CryptoRows.ROWS, AdvSimdThreeSameRows.ROWS)), architecture);
         this.dataProcessingImmediateTable = DecodeTable.forArchitecture(DataProcessingImmediateRows.ROWS, architecture);
         this.dataProcessingRegisterTable = DecodeTable.forArchitecture(DataProcessingRegisterRows.ROWS, architecture);
         this.scalarFpTable = DecodeTable.forArchitecture(ScalarFpRows.ROWS, architecture);
@@ -244,7 +244,7 @@ public final class Aarch64Decoder {
     /// B19.24 (`FEAT_FAMINMAX`): opcode (bits[15:11]) de `FAMAX_sd`/`FAMIN_sd` dentro de
     /// {@link #decodeVectorFpThreeSameOpcode} — MESMO valor de `MUL`/`MULX`, discriminado pelas keys
     /// `(u,a)=0b010`/`0b110` que nenhum dos dois usa (ver Javadoc do intercept em
-    /// {@link #decodeAdvancedSimdThreeSameShape}).
+    /// {@link #decodeAdvancedSimdThreeSameFp}).
     private static final int ADVSIMD_FAMINMAX_OPCODE_SD = 0b1_1011;
     /// B19.11b (`FEAT_FP8FMA`): opcode (bits[15:12]) de `FMLAL_hb_vi` dentro de
     /// {@link #decodeAdvancedSimdIndexedElement} — hijacka o MESMO slot `sizeField=DOUBLEWORD`
@@ -307,6 +307,9 @@ public final class Aarch64Decoder {
     /// nunca tamanho). Conferido contra `a64.decode` real do QEMU (`@qrrr_sd`/`@qrr_sd`: `esz=%esz_sd`
     /// deriva só de `sz`, bit22).
     private static final int ADVSIMD_FP_A_BIT_SHIFT = 23;
+    /// E15.15b: menor `opcode` (bits[15:11]) de "three same (FP)" — abaixo dele o espaço `bit10=1` é
+    /// todo inteiro ({@link AdvSimdThreeSameRows}).
+    private static final int ADVSIMD_THREE_SAME_FP_FIRST_OPCODE = 0b1_1000;
     /// B19.13 (`FEAT_FHM`): `opcode` (bits[15:11]) de "AdvSIMD three same (FP)" que `FMLAL_v`/
     /// `FMLSL_v` (`u=0`) reaproveitam — medido bit a bit contra `a64.decode`/corpus real
     /// (`arm-linux-gnu-as -march=armv8.2-a+fp16+fp16fml`).
@@ -643,7 +646,7 @@ public final class Aarch64Decoder {
         // sem duplicar o dispatch. Achado: isso também CORRIGE um bug latente da B8.7 — antes desta
         // task, `esz` era forçado a `3` mesmo quando os bits reais não eram `11`, então um encoding
         // reservado (`ADD_s` com `size!=11`) era silenciosamente decodificado como `ADD_s` válido
-        // em vez de cair em `UNIMPLEMENTED` (G8); agora `decodeAdvancedSimdThreeSameShape`/
+        // em vez de cair em `UNIMPLEMENTED` (G8); agora as linhas de {@link AdvSimdThreeSameRows}/
         // `decodeVectorUnaryOpcode` validam o `esz` real contra o que cada opcode aceita.
         int esz = (word >>> ADVSIMD_INT_SIZE_SHIFT) & ADVSIMD_INT_SIZE_MASK;
         boolean u = ((word >>> ADVSIMD_INT_U_SHIFT) & 1) != 0;
@@ -653,7 +656,12 @@ public final class Aarch64Decoder {
         int rd = word & REGISTER_FIELD_MASK;
         boolean threeSameShape = ((word >>> ADVSIMD_INT_BIT10_SHIFT) & 1) != 0;
         if (threeSameShape) {
-            return decodeAdvancedSimdThreeSameShape(word, address, scalar, q, esz, u, opcode, rn, rd, rm);
+            // E15.15b: o "three same" inteiro é {@link AdvSimdThreeSameRows}; o resto é o FP.
+            Ir64Op op = advSimdTable.decode(word, address);
+            if (op != null) {
+                return op;
+            }
+            return decodeAdvancedSimdThreeSameFp(word, address, scalar, q, esz, u, opcode, rn, rd, rm);
         }
         // E8: bug pré-existente (achado na B8.11, não corrigido lá) — o discriminador REAL entre
         // "three different" (`SMULL`/`PMULL`/..., `Rm` é um registrador livre `0`-`31`) e as formas
@@ -998,53 +1006,19 @@ public final class Aarch64Decoder {
         throw unsupported(word, address);
     }
 
-    /// "AdvSIMD three same"/"three same pairwise" (`bit10=1`): opcodes das duas famílias NUNCA
-    /// colidem entre si (conferido contra `a64.decode` real), então um único `switch` resolve as
-    /// duas. A forma ESCALAR só aceita o subconjunto realmente definido pelo manual, e cada
-    /// subconjunto tem uma restrição de `esz` DIFERENTE (`ADD_s`/`CM**_s`/`SSHL_s`/`SRSHL_s` são
-    /// D-only; `SQADD_s`/`SQSHL_s`/`SQRSHL_s` aceitam qualquer tamanho; `SQDMULH_s`/`SQRDMULH_s`
-    /// só H/S) — validado por {@link #validateScalarThreeSameEsz}, não mais um simples booleano
-    /// "tem forma escalar" (B8.7 só precisava do booleano porque todo escalar que tratava era
-    /// D-only).
-    private Ir64Op decodeAdvancedSimdThreeSameShape(int word, long address, boolean scalar, boolean q, int esz,
+    /// "AdvSIMD three same (FP)"/"three same pairwise (FP)" (`bit10=1`), o que sobra do espaço depois de
+    /// {@link AdvSimdThreeSameRows} (E15.15b; vira tabela na E15.15c).
+    private Ir64Op decodeAdvancedSimdThreeSameFp(int word, long address, boolean scalar, boolean q, int esz,
             boolean u, int opcode, int rn, int rd, int rm) {
-        // B8.18: "AdvSIMD three same" LÓGICO (`AND`/`BIC`/`ORR`/`ORN`/`EOR`/`BSL`/`BIT`/`BIF`) vive
-        // no MESMO opcode fixo (`ADVSIMD_THREE_SAME_LOGICAL_OPCODE`) deste slot, mas o campo que
-        // para o resto da tabela é `esz` aqui é só mais opcode (bitwise não distingue lane; `esz=0`
-        // fixo no record, ver {@link #decodeVectorLogicalOpcode}). Sem forma escalar real (G8:
-        // `scalar` cai no `throw unsupported` do fim deste método).
-        if (!scalar && opcode == ADVSIMD_THREE_SAME_LOGICAL_OPCODE) {
-            Ir64VectorThreeSameOp logicalOp = decodeVectorLogicalOpcode(u, esz);
-            if (logicalOp != null) {
-                return new AdvSimdIntegerOp64.ArithmeticThreeSame(logicalOp, false, q, 0, rd, rn, rm);
-            }
-            throw unsupported(word, address);
-        }
-        Ir64VectorThreeSameOp threeSameOp = decodeVectorThreeSameOpcode(u, opcode);
-        if (threeSameOp != null) {
-            if (scalar) {
-                validateScalarThreeSameEsz(word, address, threeSameOp, esz);
-            } else {
-                validateVectorThreeSameEsz(word, address, threeSameOp, q, esz);
-            }
-            return new AdvSimdIntegerOp64.ArithmeticThreeSame(threeSameOp, scalar, q, esz, rd, rn, rm);
-        }
-        if (!scalar) {
-            Ir64VectorPairwiseOp pairwiseOp = decodeVectorPairwiseOpcode(u, opcode);
-            if (pairwiseOp != null) {
-                // E15.9c: `ADDP` tem `.2d` (não `.1d`); `SMAXP`/`SMINP`/`UMAXP`/`UMINP` não têm
-                // elemento de 64 bits (G8).
-                if (esz == ADVSIMD_INT_SCALAR_ESZ && (pairwiseOp != Ir64VectorPairwiseOp.ADD || !q)) {
-                    throw unsupported(word, address);
-                }
-                return new AdvSimdIntegerOp64.ArithmeticPairwise(pairwiseOp, q, esz, rd, rn, rm);
-            }
-        }
         // B8.9: "AdvSIMD three same (FP)"/"three same pairwise (FP)" — MESMO prefixo/bit10 do
         // inteiro, opcodes NUNCA colidem com a tabela inteira (conferido exaustivamente contra
         // `a64.decode` real: os opcodes FP começam sempre em `0b11000`, acima do maior opcode
-        // inteiro desta tabela). `esz` aqui é ainda o valor cru bits[23:22], que para FP precisa
-        // ser desmontado em `a`(bit23, discriminador de opcode)/`sz`(bit22, tamanho real).
+        // inteiro). O inteiro que não casou nenhuma linha (`size` reservado) é recusado aqui (G8).
+        if (opcode < ADVSIMD_THREE_SAME_FP_FIRST_OPCODE) {
+            throw unsupported(word, address);
+        }
+        // `esz` aqui é ainda o valor cru bits[23:22], que para FP precisa ser desmontado em
+        // `a`(bit23, discriminador de opcode)/`sz`(bit22, tamanho real).
         boolean a = ((esz >>> 1) & 1) != 0;
         int floatEsz = 2 + (esz & 1);
         if (!scalar && isSingleDoublewordArrangement(floatEsz, q)) {
@@ -1228,35 +1202,10 @@ public final class Aarch64Decoder {
         };
     }
 
-    /// `esz` mínimo/máximo aceito por cada subconjunto ESCALAR de "three same" (B8.8) — nomeado em
-    /// vez de literal solto (G6): `H`/`S` são os únicos tamanhos reais de `SQDMULH_s`/`SQRDMULH_s`.
+    /// Valores de `esz` (`bits[23:22]`) com nome (G6): elemento de 16 e de 32 bits.
     private static final int ADVSIMD_ESZ_HALFWORD = 1;
     private static final int ADVSIMD_ESZ_WORD = 2;
 
-    private void validateScalarThreeSameEsz(int word, long address, Ir64VectorThreeSameOp op, int esz) {
-        switch (op) {
-            case ADD, SUB, CMGT, CMHI, CMGE, CMHS, CMTST, CMEQ, SSHL, USHL, SRSHL, URSHL -> {
-                if (esz != ADVSIMD_INT_SCALAR_ESZ) {
-                    // Real: `ADD_s`/`SSHL_s`/... exigem `size=11` literalmente no encoding — G8.
-                    throw unsupported(word, address);
-                }
-            }
-            case SQADD, UQADD, SQSUB, UQSUB, SQSHL, UQSHL, SQRSHL, UQRSHL -> {
-            }
-            case SQDMULH, SQRDMULH -> {
-                if (esz != ADVSIMD_ESZ_HALFWORD && esz != ADVSIMD_ESZ_WORD) {
-                    throw unsupported(word, address);
-                }
-            }
-            default ->
-                // `SHADD`/`SMAX`/`MUL`/... não têm equivalente escalar puro real.
-                throw unsupported(word, address);
-        }
-    }
-
-    /// E15.9c: `size` aceito por cada operação VETORIAL de "three same" inteiro (ARM DDI 0487): as
-    /// que têm elemento de 64 bits só o aceitam com `Q=1` (não existe `.1d`); as de "b/h/s" não o
-    /// aceitam; `SQDMULH`/`SQRDMULH` são só H/S; `PMUL` só byte.
     /// E15.9c: elemento de 64 bits sem `Q` — o arranjo `.1d`, que nenhuma instrução AdvSIMD vetorial
     /// aritmética tem.
     private static boolean isSingleDoublewordArrangement(int esz, boolean q) {
@@ -1267,86 +1216,6 @@ public final class Aarch64Decoder {
     /// do campo `size` lido como `esz`) é `1` fixo; com `0` nada está alocado nos slots `Rm=1100x`.
     private static boolean isFp16TwoRegisterMiscBit22Set(int esz) {
         return (esz & 1) != 0;
-    }
-
-    private void validateVectorThreeSameEsz(int word, long address, Ir64VectorThreeSameOp op, boolean q, int esz) {
-        boolean doubleword = esz == ADVSIMD_INT_SCALAR_ESZ;
-        boolean valid = switch (op) {
-            case ADD, SUB, CMGT, CMHI, CMGE, CMHS, CMTST, CMEQ, SSHL, USHL, SRSHL, URSHL,
-                 SQADD, UQADD, SQSUB, UQSUB, SQSHL, UQSHL, SQRSHL, UQRSHL -> !isSingleDoublewordArrangement(esz, q);
-            case SQDMULH, SQRDMULH -> esz == ADVSIMD_ESZ_HALFWORD || esz == ADVSIMD_ESZ_WORD;
-            case PMUL -> esz == 0;
-            // `SHADD`/`SRHADD`/`SHSUB`/`SMAX`/`SMIN`/`SABD`/`SABA` (e as `U`), `MUL`/`MLA`/`MLS`.
-            default -> !doubleword;
-        };
-        if (!valid) {
-            throw unsupported(word, address);
-        }
-    }
-
-    private static Ir64VectorThreeSameOp decodeVectorThreeSameOpcode(boolean u, int opcode) {
-        return switch (opcode) {
-            case 0b1_0000 -> u ? Ir64VectorThreeSameOp.SUB : Ir64VectorThreeSameOp.ADD;
-            case 0b0_0110 -> u ? Ir64VectorThreeSameOp.CMHI : Ir64VectorThreeSameOp.CMGT;
-            case 0b0_0111 -> u ? Ir64VectorThreeSameOp.CMHS : Ir64VectorThreeSameOp.CMGE;
-            case 0b1_0001 -> u ? Ir64VectorThreeSameOp.CMEQ : Ir64VectorThreeSameOp.CMTST;
-            case 0b0_0000 -> u ? Ir64VectorThreeSameOp.UHADD : Ir64VectorThreeSameOp.SHADD;
-            case 0b0_0100 -> u ? Ir64VectorThreeSameOp.UHSUB : Ir64VectorThreeSameOp.SHSUB;
-            case 0b0_0010 -> u ? Ir64VectorThreeSameOp.URHADD : Ir64VectorThreeSameOp.SRHADD;
-            case 0b0_1100 -> u ? Ir64VectorThreeSameOp.UMAX : Ir64VectorThreeSameOp.SMAX;
-            case 0b0_1101 -> u ? Ir64VectorThreeSameOp.UMIN : Ir64VectorThreeSameOp.SMIN;
-            case 0b0_1110 -> u ? Ir64VectorThreeSameOp.UABD : Ir64VectorThreeSameOp.SABD;
-            case 0b0_1111 -> u ? Ir64VectorThreeSameOp.UABA : Ir64VectorThreeSameOp.SABA;
-            case 0b1_0011 -> u ? Ir64VectorThreeSameOp.PMUL : Ir64VectorThreeSameOp.MUL;
-            case 0b1_0010 -> u ? Ir64VectorThreeSameOp.MLS : Ir64VectorThreeSameOp.MLA;
-            // B8.8: saturante/deslocamento por registrador/multiplicação dobrada.
-            case 0b0_0001 -> u ? Ir64VectorThreeSameOp.UQADD : Ir64VectorThreeSameOp.SQADD;
-            case 0b0_0101 -> u ? Ir64VectorThreeSameOp.UQSUB : Ir64VectorThreeSameOp.SQSUB;
-            case 0b0_1000 -> u ? Ir64VectorThreeSameOp.USHL : Ir64VectorThreeSameOp.SSHL;
-            case 0b0_1010 -> u ? Ir64VectorThreeSameOp.URSHL : Ir64VectorThreeSameOp.SRSHL;
-            case 0b0_1001 -> u ? Ir64VectorThreeSameOp.UQSHL : Ir64VectorThreeSameOp.SQSHL;
-            case 0b0_1011 -> u ? Ir64VectorThreeSameOp.UQRSHL : Ir64VectorThreeSameOp.SQRSHL;
-            case 0b1_0110 -> u ? Ir64VectorThreeSameOp.SQRDMULH : Ir64VectorThreeSameOp.SQDMULH;
-            default -> null;
-        };
-    }
-
-    /// B8.18: opcode fixo (bits[15:11]) compartilhado por toda a família "AdvSIMD three same
-    /// (lógico)" — ver {@link #decodeVectorLogicalOpcode}.
-    private static final int ADVSIMD_THREE_SAME_LOGICAL_OPCODE = 0b0_0011;
-
-    /// `AND`/`BIC`/`ORR`/`ORN` (`u=0`)/`EOR`/`BSL`/`BIT`/`BIF` (`u=1`) — B8.18. O campo que para o
-    /// resto de {@link #decodeVectorThreeSameOpcode} é `esz` (bits[23:22]) aqui é a ÚNICA coisa que
-    /// distingue as 4 mnemônicas de cada `u` (conferido bit a bit contra `a64.decode` real do QEMU:
-    /// `AND_v`=`u0,size00`; `BIC_v`=`u0,size01`; `ORR_v`=`u0,size10`; `ORN_v`=`u0,size11`;
-    /// `EOR_v`=`u1,size00`; `BSL_v`=`u1,size01`; `BIT_v`=`u1,size10`; `BIF_v`=`u1,size11`) — nenhuma
-    /// combinação de `(u,esz)` neste opcode é reservada, `default` nunca dispara de verdade.
-    private static Ir64VectorThreeSameOp decodeVectorLogicalOpcode(boolean u, int esz) {
-        if (!u) {
-            return switch (esz) {
-                case 0 -> Ir64VectorThreeSameOp.AND;
-                case 1 -> Ir64VectorThreeSameOp.BIC;
-                case 2 -> Ir64VectorThreeSameOp.ORR;
-                case 3 -> Ir64VectorThreeSameOp.ORN;
-                default -> null;
-            };
-        }
-        return switch (esz) {
-            case 0 -> Ir64VectorThreeSameOp.EOR;
-            case 1 -> Ir64VectorThreeSameOp.BSL;
-            case 2 -> Ir64VectorThreeSameOp.BIT;
-            case 3 -> Ir64VectorThreeSameOp.BIF;
-            default -> null;
-        };
-    }
-
-    private static Ir64VectorPairwiseOp decodeVectorPairwiseOpcode(boolean u, int opcode) {
-        return switch (opcode) {
-            case 0b1_0111 -> u ? null : Ir64VectorPairwiseOp.ADD;
-            case 0b1_0100 -> u ? Ir64VectorPairwiseOp.UMAX : Ir64VectorPairwiseOp.SMAX;
-            case 0b1_0101 -> u ? Ir64VectorPairwiseOp.UMIN : Ir64VectorPairwiseOp.SMIN;
-            default -> null;
-        };
     }
 
     private static Ir64VectorUnaryOp decodeVectorUnaryOpcode(boolean u, int opcode, boolean scalar) {

@@ -60,9 +60,10 @@ class TamanhoDeFonteGuardTest {
     /// `BranchExceptionRows`/`SystemInstructionRows`/`SystemRegisterRows`). Na E15.12 desceu para 4403
     /// (load/store virou `LoadStoreRegisterRows`/`LoadStoreExclusiveRows`/`MemoryOperationRows`/`AdvSimdLoadStoreRows`). Na E15.13
     /// desceu para 3584 (DP-registrador virou `DataProcessingRegisterRows`). Na E15.14 desceu para 2935 (FP
-    /// escalar virou `ScalarFpRows`).
+    /// escalar virou `ScalarFpRows`), na E15.15a para 2288 (AdvSIMD `bit21=0` e cripto viraram tabela) e na
+    /// E15.15b para 2157 ("three same" inteiro virou `AdvSimdThreeSameRows`).
     private static final Map<String, Integer> EXCEPTIONS = Map.ofEntries(
-            entry("decoder64/Aarch64Decoder.java", 2288),
+            entry("decoder64/Aarch64Decoder.java", 2157),
             entry("advsimd/AdvSimdLanes.java", 3677),
             entry("core64/Aarch64Core.java", 1848),
             entry("ir/StandardIrBuilder.java", 1352),
