@@ -7,25 +7,17 @@ import dev.vitorsilverio.armjitter.arch64.Aarch64Feature;
 import dev.vitorsilverio.armjitter.ir64.AdvSimdFpOp64;
 import dev.vitorsilverio.armjitter.ir64.AdvSimdIntegerOp64;
 import dev.vitorsilverio.armjitter.ir64.AdvSimdMoveOp64;
-import dev.vitorsilverio.armjitter.ir64.CryptoOp64;
 import dev.vitorsilverio.armjitter.ir64.FpOp64;
-import dev.vitorsilverio.armjitter.ir64.Ir64CryptoAesOp;
-import dev.vitorsilverio.armjitter.ir64.Ir64CryptoShaTwoRegisterOp;
 import dev.vitorsilverio.armjitter.ir64.Ir64Op;
-import dev.vitorsilverio.armjitter.ir64.Ir64VectorAcrossLanesOp;
-import dev.vitorsilverio.armjitter.ir64.Ir64VectorFpAcrossLanesOp;
 import dev.vitorsilverio.armjitter.ir64.Ir64VectorFpConvertPrecisionOp;
-import dev.vitorsilverio.armjitter.ir64.Ir64VectorFpPairwiseOp;
 import dev.vitorsilverio.armjitter.ir64.Ir64VectorFpThreeSameOp;
 import dev.vitorsilverio.armjitter.ir64.Ir64VectorFpUnaryOp;
-import dev.vitorsilverio.armjitter.ir64.Ir64VectorNarrowOp;
 import dev.vitorsilverio.armjitter.ir64.Ir64VectorNarrowUnaryOp;
 import dev.vitorsilverio.armjitter.ir64.Ir64VectorShiftNarrowOp;
 import dev.vitorsilverio.armjitter.ir64.Ir64VectorShiftOp;
 import dev.vitorsilverio.armjitter.ir64.Ir64VectorShiftWidenOp;
 import dev.vitorsilverio.armjitter.ir64.Ir64VectorThreeSameOp;
 import dev.vitorsilverio.armjitter.ir64.Ir64VectorUnaryOp;
-import dev.vitorsilverio.armjitter.ir64.Ir64VectorWideOp;
 import dev.vitorsilverio.armjitter.ir64.Ir64VectorWideningOp;
 import dev.vitorsilverio.armjitter.memory.AddressSpace64;
 
@@ -71,7 +63,9 @@ public final class Aarch64Decoder {
     /// E15.9/E15.15a–c: o AdvSIMD já migrado para tabela — o espaço `bit21=0` inteiro
     /// ({@link AdvSimdBit21ZeroRows}, {@link AdvSimdPermuteCopyRows}), a criptografia fora do
     /// `bit21=1` ({@link CryptoRows}) e o "three same" inteiro e FP ({@link AdvSimdThreeSameRows},
-    /// {@link AdvSimdThreeSameFpRows}), já filtrados por {@link #architecture}.
+    /// {@link AdvSimdThreeSameFpRows}); E15.15d: "three different" ({@link AdvSimdThreeDifferentRows}),
+    /// across lanes e scalar pairwise ({@link AdvSimdAcrossLanesRows}) e AES/SHA de dois registradores
+    /// (também em {@link CryptoRows}) — já filtrados por {@link #architecture}.
     private final DecodeTable<Ir64Op> advSimdTable;
     /// E15.10: a classe "Data Processing — Immediate" inteira (`bits[28:26]=100`).
     private final DecodeTable<Ir64Op> dataProcessingImmediateTable;
@@ -103,8 +97,9 @@ public final class Aarch64Decoder {
         this.sveDecoder = new Aarch64SveDecoder(architecture);
         this.smeDecoder = new Aarch64SmeDecoder(architecture);
         this.advSimdTable = DecodeTable.forArchitecture(concat(concat(AdvSimdBit21ZeroRows.ROWS,
-                AdvSimdPermuteCopyRows.ROWS), concat(CryptoRows.ROWS, concat(AdvSimdThreeSameRows.ROWS,
-                AdvSimdThreeSameFpRows.ROWS))), architecture);
+                AdvSimdPermuteCopyRows.ROWS), concat(concat(CryptoRows.ROWS, concat(AdvSimdThreeSameRows.ROWS,
+                AdvSimdThreeSameFpRows.ROWS)), concat(AdvSimdThreeDifferentRows.ROWS, AdvSimdAcrossLanesRows.ROWS))),
+                architecture);
         this.dataProcessingImmediateTable = DecodeTable.forArchitecture(DataProcessingImmediateRows.ROWS, architecture);
         this.dataProcessingRegisterTable = DecodeTable.forArchitecture(DataProcessingRegisterRows.ROWS, architecture);
         this.scalarFpTable = DecodeTable.forArchitecture(ScalarFpRows.ROWS, architecture);
@@ -281,16 +276,6 @@ public final class Aarch64Decoder {
     /// `0b1_1111` = `FCVTZS`/`FCVTZU` (FP→int). `u` (bit29) distingue assinado/não.
     private static final int ADVSIMD_SHIFT_FCVT_FIXED_TO_FLOAT_OPCODE = 0b1_1100;
     private static final int ADVSIMD_SHIFT_FCVT_FIXED_TO_INT_OPCODE = 0b1_1111;
-    /// `Rm[4:1]` fixo="1000" (`Rm=0b10000`/`0b10001`, bit0 livre) — "across lanes" (`ADDV`/...)/
-    /// `ADDP_s`. E8: só bit4 setado NÃO basta (`Rm=0b11000`/`0b11000+` também tem bit4 setado e é um
-    /// registrador livre válido de "three different" — ver o achado de bit11 em
-    /// {@link #decodeAdvancedSimdInteger}); a máscara/padrão exigem os 4 bits altos exatos.
-    private static final int ADVSIMD_INT_RM_ACROSS_LANES_MASK = 0b1_1110;
-    private static final int ADVSIMD_INT_RM_ACROSS_LANES_PATTERN = 0b1_0000;
-    /// B8.11: `Rm` fixo="01000" — `AESE`/`AESD`/`AESMC`/`AESIMC` ("Cryptographic AES" do
-    /// `a64.decode` real, que aliasa neste mesmo espaço de bits — ver
-    /// {@link #decodeAdvancedSimdInteger}).
-    private static final int ADVSIMD_AES_RM = 0b0_1000;
     /// B8.9: bit `a` do encoding real de "AdvSIMD three same (FP)"/"two-register misc (FP)" —
     /// posição IDÊNTICA ao bit alto de {@link #ADVSIMD_INT_SIZE_SHIFT} (`esz` inteiro reaproveita
     /// essa posição como campo livre de 2 bits; nas formas FP, só o bit BAIXO — `bit22`, "sz" — é o
@@ -642,72 +627,15 @@ public final class Aarch64Decoder {
             // ({@link AdvSimdThreeSameFpRows}); o que não casa é recusado (G8).
             return decodeAdvSimdTable(word, address);
         }
-        // E8: bug pré-existente (achado na B8.11, não corrigido lá) — o discriminador REAL entre
-        // "three different" (`SMULL`/`PMULL`/..., `Rm` é um registrador livre `0`-`31`) e as formas
-        // que reaproveitam `Rm` como opcode disfarçado (two-register misc/narrow-unário/across-lanes/
-        // AES/`ADDP_s` escalar) é o bit11 do word (LSB do campo `opcode` de 5 bits lido acima), NUNCA
-        // o valor de `Rm`: no encoding real, "three different" tem um campo opcode de só 4 bits em
-        // bits[15:12] com bit11 fixo em `0`, enquanto as outras formas sempre têm bit11=`1`.
-        // Confirmado bit a bit via corpus real (`aarch64-none-elf-as`/`objdump`, devkitA64):
-        // `smull v0.8h,v1.8b,v16.8b` (`Rm=0b10000`) tem `Rm` IDÊNTICO ao `Rm` fixo de `SADDLV`, e
-        // `smull v0.8h,v1.8b,v0.8b` (`Rm=0`) tem `Rm` IDÊNTICO ao `Rm` fixo de `ABS`/two-reg-misc —
-        // nos dois casos bit11 vale `0` (three-different) contra bit11=`1` das outras (SADDLV/ABS),
-        // provando que `Rm` sozinho é ambíguo e bit11 nunca é. A checagem antiga (`Rm`&bit4) tratava
-        // só o subconjunto `Rm=16-31`; o caso `Rm=0`/`Rm=1` (colidindo com two-reg-misc/narrow-unário)
-        // era um bug igualmente real, não documentado pela B8.11.
+        // E15.15d: "three different" (`bit11=0`, `Rm` registrador livre — {@link AdvSimdThreeDifferentRows}), "across
+        // lanes"/"scalar pairwise" (`Rm=1000x`, {@link AdvSimdAcrossLanesRows}) e AES/SHA de dois registradores
+        // (`Rm=01000`, {@link CryptoRows}) são tabela. E8: o discriminador entre "three different" e as formas que
+        // reaproveitam `Rm` como opcode é o `bit11` (o bit baixo do `opcode` de 5 bits lido acima), NUNCA o valor de
+        // `Rm` — `smull v0.8h, v1.8b, v0.8b` tem o `Rm` do two-register misc. Só o two-register misc (`bit11=1`,
+        // `Rm` `0000x`/`1100x`) segue na cascata abaixo, até a E15.15e.
         boolean rmEncodesFixedOpcode = (opcode & 1) != 0;
-        if (!rmEncodesFixedOpcode) {
-            if (scalar) {
-                // B8.20: `SQDMULL`/`SQDMLAL`/`SQDMLSL` ESCALARES sem índice — os ÚNICOS mnemônicos
-                // de "three different" com forma escalar real (ARM DDI 0487); todo o resto deste
-                // espaço (`SMULL`/`SADDL`/`SABAL`/.../`PMULL`) só existe vetorial (G8). `U=1` não
-                // tem forma real aqui (não existe `UQDMULL`), e a forma escalar só aceita `H`→`S`/
-                // `S`→`D` (nunca `B`/`D` — `esz=0` já é rejeitado dentro de
-                // {@link #decodeAdvancedSimdThreeDifferent}, `esz=3` rejeitado aqui).
-                boolean isSaturatingDoublingOpcode = !u
-                        && (opcode == 0b1_1010 || opcode == 0b1_0010 || opcode == 0b1_0110);
-                if (!isSaturatingDoublingOpcode || esz == ADVSIMD_INT_SCALAR_ESZ) {
-                    throw unsupported(word, address);
-                }
-                return decodeAdvancedSimdThreeDifferent(word, address, true, false, esz, u, opcode, rn, rd, rm);
-            }
-            // "three different" vetorial. B8.11: EXCEÇÃO — `PMULL_p64` (`opcode=0b11100`) é a ÚNICA
-            // "three different" real com `esz=3`/doubleword (produz o registro `Q` inteiro, não um
-            // elemento `esz+1` comum).
-            if (esz == ADVSIMD_INT_SCALAR_ESZ && opcode != 0b1_1100) {
-                // Doubleword não tem forma alargada/estreitada real (ARM DDI 0487) — exceto
-                // PMULL_p64 acima; G8.
-                throw unsupported(word, address);
-            }
-            return decodeAdvancedSimdThreeDifferent(word, address, false, q, esz, u, opcode, rn, rd, rm);
-        }
-        // B8.11: `AESE`/`AESD`/`AESMC`/`AESIMC` (Cryptographic Extension) vivem no MESMO espaço de
-        // bits que "three different" (prefixo vetorial `01110`, `bit21=1`, `bit10=0`) — no
-        // encoding real (`a64.decode` do QEMU, seção "Cryptographic AES") são `Q=1`/`U=0`/`size=00`
-        // sempre fixos e `Rm=0b01000` sempre fixo (a diferença entre as 4 instruções mora inteira
-        // no campo `opcode`, `9`/`11`/`13`/`15` — nenhum desses 4 valores colide com os opcodes
-        // PARES já usados por `AdvSimdIntegerOp64.ArithmeticWidening`/`Wide`/`Narrow` em
-        // {@link #decodeAdvancedSimdThreeDifferent}, conferido exaustivamente). Checado ANTES do
-        // resto do dispatch de "three different" porque usa um record totalmente diferente (2
-        // registradores reais, não 3).
-        if (q && !u && esz == 0 && rm == ADVSIMD_AES_RM) {
-            Ir64CryptoAesOp aesOp = decodeCryptoAesOpcode(opcode);
-            if (aesOp != null) {
-                return new CryptoOp64.Aes(aesOp, rd, rn);
-            }
-        }
-        // B8.11b: `SHA1H`/`SHA1SU1`/`SHA256SU0` ("Cryptographic two-register SHA") vivem no MESMO
-        // slot `Rm`/`opcode` que `AESE`/etc, mas do lado ESCALAR do dispatch (`q` acima é forçado a
-        // `false` para qualquer forma escalar — ver a definição de `q` no início desta função — por
-        // isso não pode reaproveitar a checagem `q && ...` de cima, que só é alcançável quando
-        // `!scalar`). Achado real: `AESE`/etc exigem `!scalar` (`Q=1` vetorial de verdade); este
-        // slot exige `scalar` (mesmo `Rm`/`esz`/`U` fixos, discriminados só pelo `opcode`, ver
-        // decodeCryptoShaTwoRegisterOpcode) — os dois são mutuamente exclusivos, nunca colidem.
-        if (scalar && !u && esz == 0 && rm == ADVSIMD_AES_RM) {
-            Ir64CryptoShaTwoRegisterOp shaOp = decodeCryptoShaTwoRegisterOpcode(opcode);
-            if (shaOp != null) {
-                return new CryptoOp64.ShaTwoRegister(shaOp, rd, rn);
-            }
+        if (!rmEncodesFixedOpcode || !isTwoRegisterMiscSlot(rm)) {
+            return decodeAdvSimdTable(word, address);
         }
         if (rm == ADVSIMD_INT_RM_TWO_REG_MISC) {
             // B8.18: `CNT`/`NOT`/`RBIT` compartilham o MESMO opcode (`0b0_1011`) neste slot — o
@@ -887,102 +815,37 @@ public final class Aarch64Decoder {
             }
             throw unsupported(word, address);
         }
-        if (rm == ADVSIMD_INT_RM_FP16_NARROW_UNARY) {
-            // B19.5.4 (`FEAT_FP16`): MESMO slot `Rm=00001`. `FRECPX_s` continua exigindo o `if`
-            // EXPLÍCITO antes da tabela compartilhada (mesma colisão de opcode com `SQRT`, U=0 x
-            // U=1, que a B19.3 documentou) — o resto (`FSQRT_v`/`FRINTx_v`/`FRECPE`/`FRSQRTE`/
-            // `SCVTF`/`UCVTF`/as 10 conversões `FCVTx{S,U}` vetoriais+escalares) reusa
-            // `decodeVectorFpUnaryRmOneOpcode` sem tabela nova. BF16/FP8 (`F1CVTL`/`F2CVTL`/
-            // `BF1CVTL`/`BF2CVTL`/`BFCVTN_v`) moram no slot `0b0_0001` de verdade (Armadilha 4) —
-            // este bloco nunca os alcança.
-            if (!architecture.has(Aarch64Feature.FP16) || !isFp16TwoRegisterMiscBit22Set(esz)) {
-                throw unsupported(word, address);
-            }
-            if (scalar && !u && opcode == ADVSIMD_FRECPX_OPCODE && ((esz >>> 1) & 1) != 0) {
-                return new AdvSimdFpOp64.FpArithmeticUnary(
-                        Ir64VectorFpUnaryOp.FRECPX, true, false, ADVSIMD_ESZ_HALFWORD, rd, rn);
-            }
-            boolean fpHalfOneA = ((esz >>> 1) & 1) != 0;
-            Ir64VectorFpUnaryOp fpHalfOneOp = decodeVectorFpUnaryRmOneOpcode(u, fpHalfOneA, opcode);
-            if (fpHalfOneOp != null) {
-                // E15.9c: `FRINT32*`/`FRINT64*` só têm `s`/`d` — a forma `_h` não existe (G8).
-                if ((scalar && !fpUnaryOpHasScalarForm(fpHalfOneOp)) || isDirectedRoundingToIntegral(fpHalfOneOp)) {
-                    throw unsupported(word, address);
-                }
-                return new AdvSimdFpOp64.FpArithmeticUnary(fpHalfOneOp, scalar, q, ADVSIMD_ESZ_HALFWORD, rd, rn);
-            }
+        // O slot que sobra é {@link #ADVSIMD_INT_RM_FP16_NARROW_UNARY} (`Rm=11001`).
+        // B19.5.4 (`FEAT_FP16`): MESMO slot `Rm=00001`. `FRECPX_s` continua exigindo o `if`
+        // EXPLÍCITO antes da tabela compartilhada (mesma colisão de opcode com `SQRT`, U=0 x
+        // U=1, que a B19.3 documentou) — o resto (`FSQRT_v`/`FRINTx_v`/`FRECPE`/`FRSQRTE`/
+        // `SCVTF`/`UCVTF`/as 10 conversões `FCVTx{S,U}` vetoriais+escalares) reusa
+        // `decodeVectorFpUnaryRmOneOpcode` sem tabela nova. BF16/FP8 (`F1CVTL`/`F2CVTL`/
+        // `BF1CVTL`/`BF2CVTL`/`BFCVTN_v`) moram no slot `0b0_0001` de verdade (Armadilha 4) —
+        // este bloco nunca os alcança.
+        if (!architecture.has(Aarch64Feature.FP16) || !isFp16TwoRegisterMiscBit22Set(esz)) {
             throw unsupported(word, address);
         }
-        if ((rm & ADVSIMD_INT_RM_ACROSS_LANES_MASK) == ADVSIMD_INT_RM_ACROSS_LANES_PATTERN) {
-            if (scalar) {
-                // Único mnemônico escalar desta forma: `ADDP_s` (`U=0`,`Rm=0b10001`,`opcode=0b10111`
-                // — valores conferidos contra o corpus real, não decompostos mais finamente). B8.8:
-                // `esz` agora é lido cru (ver comentário acima) — `ADDP_s` exige literalmente
-                // `size=11` no encoding real, então valida aqui (G8; antes o hardcode de B8.7
-                // tornava essa checagem desnecessária).
-                if (!u && rm == 0b1_0001 && opcode == 0b1_0111 && esz == ADVSIMD_INT_SCALAR_ESZ) {
-                    return new AdvSimdIntegerOp64.ScalarPairwiseAdd(rd, rn);
-                }
-                // B19.2: AdvSIMD "scalar pairwise (FP)" (`FADDP_s`/`FMAXP_s`/`FMINP_s`/`FMAXNMP_s`/
-                // `FMINNMP_s`) vive neste MESMO espaço (`rm`=`0b1_0000` fixo, `bit10=0`), ao lado do
-                // `ADDP_s` inteiro. `esz` bits[23:22] → `a`(bit23, discriminador)/`sz`(bit22).
-                // B19.5.3 (`FEAT_FP16`): a MESMA tabela de opcodes vale para as formas `_h`
-                // (conferido bit a bit contra `a64.decode`) — só o `U` inverte (`_sd`→`u=1`,
-                // `_h`→`u=0`) e `esz` da forma `_h` é SEMPRE `HALFWORD` (o `sz`/bit22 lido acima
-                // não existe de verdade nesse encoding, é bit fixo em `0`).
-                boolean fpA = ((esz >>> 1) & 1) != 0;
-                Ir64VectorFpPairwiseOp fpPairwiseOp = decodeVectorFpScalarPairwiseOpcode(fpA, opcode);
-                // E15.9c: só `Rm=10000` — com `10001` saía como a mesma instrução (G8).
-                if (fpPairwiseOp != null && rm == ADVSIMD_INT_RM_ACROSS_LANES_PATTERN) {
-                    if (u) {
-                        int fpFloatEsz = 2 + (esz & 1);
-                        return new AdvSimdFpOp64.FpArithmeticPairwise(fpPairwiseOp, true, false, fpFloatEsz, rd, rn, rn);
-                    }
-                    // E15.9c: a forma `_h` tem `bit22=0` fixo (G8).
-                    if (architecture.has(Aarch64Feature.FP16) && (esz & 1) == 0) {
-                        return new AdvSimdFpOp64.FpArithmeticPairwise(
-                                fpPairwiseOp, true, false, ADVSIMD_ESZ_HALFWORD, rd, rn, rn);
-                    }
-                }
-                throw unsupported(word, address);
-            }
-            Ir64VectorAcrossLanesOp op = decodeVectorAcrossLanesOpcode(u, rm, opcode);
-            if (op != null) {
-                if (esz == ADVSIMD_INT_SCALAR_ESZ || (esz == ADVSIMD_ESZ_WORD && !q)) {
-                    // Nenhuma destas operações reduz doubleword (ARM DDI 0487, "across lanes"; G8).
-                    // E15.9c: nem `.2s` — reduzir 2 elementos é a forma pareada; só `.4s` existe.
-                    throw unsupported(word, address);
-                }
-                return new AdvSimdIntegerOp64.AcrossLanes(op, q, esz, rd, rn);
-            }
-            if (rm != ADVSIMD_INT_RM_ACROSS_LANES_PATTERN || (esz & 1) != 0) {
-                // E15.9c: as 4 reduções FP (`_s` e `_h`) só existem com `Rm=10000` e `sz`(bit22)=0.
-                throw unsupported(word, address);
-            }
-            // B8.10: `FMAXNMV`/`FMINNMV`/`FMAXV`/`FMINV` vivem no MESMO slot `Rm[4]=1` do inteiro
-            // "across lanes" — `U=1` sempre (nunca colide com os `U`s usados pelo inteiro acima,
-            // conferido contra `a64.decode` real) e `Q=1` sempre (só existe arranjo `4S`, sem forma
-            // doubleword). B19.5.3: as formas `_h` (`FEAT_FP16`) vivem no MESMO `if`, `U=0` — o
-            // MESMO `opcode`/`a` (bit23) do `decodeVectorFpAcrossLanesOpcode` acima, mas `Q` é
-            // LIVRE (arranjo `4H`/`8H`, ao contrário de `_s`, que só tem `4S`).
-            if (u && q) {
-                Ir64VectorFpAcrossLanesOp fpOp = decodeVectorFpAcrossLanesOpcode(opcode, esz);
-                if (fpOp != null) {
-                    return new AdvSimdFpOp64.FpAcrossLanes(fpOp, true, ADVSIMD_ESZ_WORD, rd, rn);
-                }
-            }
-            if (!u && architecture.has(Aarch64Feature.FP16)) {
-                Ir64VectorFpAcrossLanesOp fpOp = decodeVectorFpAcrossLanesOpcode(opcode, esz);
-                if (fpOp != null) {
-                    return new AdvSimdFpOp64.FpAcrossLanes(fpOp, q, ADVSIMD_ESZ_HALFWORD, rd, rn);
-                }
-            }
-            throw unsupported(word, address);
+        if (scalar && !u && opcode == ADVSIMD_FRECPX_OPCODE && ((esz >>> 1) & 1) != 0) {
+            return new AdvSimdFpOp64.FpArithmeticUnary(
+                    Ir64VectorFpUnaryOp.FRECPX, true, false, ADVSIMD_ESZ_HALFWORD, rd, rn);
         }
-        // E8: bit11=1 mas `Rm` não bate com nenhum dos padrões fixos conhecidos (two-reg-misc/
-        // narrow-unário/AES/across-lanes) — encoding reservado, não "three different" (esse já foi
-        // tratado acima, antes de bit11=1 sequer ser checado); G8.
+        boolean fpHalfOneA = ((esz >>> 1) & 1) != 0;
+        Ir64VectorFpUnaryOp fpHalfOneOp = decodeVectorFpUnaryRmOneOpcode(u, fpHalfOneA, opcode);
+        if (fpHalfOneOp != null) {
+            // E15.9c: `FRINT32*`/`FRINT64*` só têm `s`/`d` — a forma `_h` não existe (G8).
+            if ((scalar && !fpUnaryOpHasScalarForm(fpHalfOneOp)) || isDirectedRoundingToIntegral(fpHalfOneOp)) {
+                throw unsupported(word, address);
+            }
+            return new AdvSimdFpOp64.FpArithmeticUnary(fpHalfOneOp, scalar, q, ADVSIMD_ESZ_HALFWORD, rd, rn);
+        }
         throw unsupported(word, address);
+    }
+
+    /// E15.15d: os 4 slots de `Rm` do two-register misc — `0000x` (inteiro e FP `_sd`) e `1100x` (FP16).
+    private static boolean isTwoRegisterMiscSlot(int rm) {
+        int slot = rm & ~ADVSIMD_INT_RM_NARROW_UNARY;
+        return slot == ADVSIMD_INT_RM_TWO_REG_MISC || slot == ADVSIMD_INT_RM_FP16_TWO_REG_MISC;
     }
 
     /// B19.3: quais operações de {@link #decodeVectorFpUnaryRmZeroOpcode}/
@@ -1000,22 +863,6 @@ public final class Aarch64Decoder {
                  FCVTNS, FCVTNU, FCVTPS, FCVTPU, FCVTMS, FCVTMU, FCVTZS, FCVTZU, FCVTAS, FCVTAU -> true;
             case ABS, NEG, SQRT, RINTN, RINTM, RINTP, RINTZ, RINTA, RINTX, RINTI, FRECPX, FCVTXN,
                  RINT32Z, RINT32X, RINT64Z, RINT64X -> false;
-        };
-    }
-
-    /// B19.2: AdvSIMD "scalar pairwise (FP)" (`FADDP_s`/`FMAXP_s`/`FMINP_s`/`FMAXNMP_s`/`FMINNMP_s`,
-    /// `ARM DDI 0487` C4.1.95 `01 U 11110 0 sz 11000 opcode 10 Rn Rd`). Classe PRÓPRIA — `opcode`
-    /// (bits[15:11]) tem valores diferentes do pareado vetorial ({@link AdvSimdThreeSameFpRows}),
-    /// então tabela separada. `a` é o bit23 (`FMAXP`/`FMAXNMP` → `a=0`, `FMINP`/`FMINNMP` → `a=1`).
-    /// Conferido bit a bit contra corpus real (devkitA64). **B19.5.3**: esta tabela vale IGUAL para
-    /// as formas `_h` (`FEAT_FP16`, `U=0`) — o `U` só distingue `_sd`/`_h`, nunca o `opcode`/`a`;
-    /// por isso o parâmetro `u` saiu da assinatura e o chamador decide o gate.
-    private static Ir64VectorFpPairwiseOp decodeVectorFpScalarPairwiseOpcode(boolean a, int opcode) {
-        return switch (opcode) {
-            case 0b1_1011 -> a ? null : Ir64VectorFpPairwiseOp.ADD;
-            case 0b1_1111 -> a ? Ir64VectorFpPairwiseOp.MIN : Ir64VectorFpPairwiseOp.MAX;
-            case 0b1_1001 -> a ? Ir64VectorFpPairwiseOp.MINNM : Ir64VectorFpPairwiseOp.MAXNM;
-            default -> null;
         };
     }
 
@@ -1243,128 +1090,6 @@ public final class Aarch64Decoder {
             case RINT32Z, RINT32X, RINT64Z, RINT64X -> true;
             default -> false;
         };
-    }
-
-    /// B8.11: `AESE`(`opcode=9`)/`AESD`(`11`)/`AESMC`(`13`)/`AESIMC`(`15`) — os 4 valores ÍMPARES
-    /// de `opcode` dentro do slot `Rm=`{@link #ADVSIMD_AES_RM}, conferidos bit a bit contra
-    /// `a64.decode` real (seção "Cryptographic AES"/"Cryptographic two-register SHA" do QEMU).
-    private static Ir64CryptoAesOp decodeCryptoAesOpcode(int opcode) {
-        return switch (opcode) {
-            case 0b0_1001 -> Ir64CryptoAesOp.AESE;
-            case 0b0_1011 -> Ir64CryptoAesOp.AESD;
-            case 0b0_1101 -> Ir64CryptoAesOp.AESMC;
-            case 0b0_1111 -> Ir64CryptoAesOp.AESIMC;
-            default -> null;
-        };
-    }
-
-    /// B8.11b: `SHA1H`(`opcode=1`)/`SHA1SU1`(`3`)/`SHA256SU0`(`5`) — "Cryptographic two-register
-    /// SHA" vive no MESMO slot `Rm=`{@link #ADVSIMD_AES_RM} que `AESE`/etc (`q=1`/`u=0`/`esz=0`,
-    /// checado pelo chamador), distinguido pelos mesmos 5 bits de `opcode` de
-    /// {@link #decodeCryptoAesOpcode} — valores ÍMPARES baixos (`1`/`3`/`5`), nenhum colide com os
-    /// 4 valores ÍMPARES altos (`9`/`11`/`13`/`15`) de AES. Conferido contra corpus real
-    /// (`aarch64-none-elf-as`/`objdump`, devkitA64, `.arch armv8-a+crypto`).
-    private static Ir64CryptoShaTwoRegisterOp decodeCryptoShaTwoRegisterOpcode(int opcode) {
-        return switch (opcode) {
-            case 0b0_0001 -> Ir64CryptoShaTwoRegisterOp.SHA1H;
-            case 0b0_0011 -> Ir64CryptoShaTwoRegisterOp.SHA1SU1;
-            case 0b0_0101 -> Ir64CryptoShaTwoRegisterOp.SHA256SU0;
-            default -> null;
-        };
-    }
-
-    private static Ir64VectorAcrossLanesOp decodeVectorAcrossLanesOpcode(boolean u, int rm, int opcode) {
-        // E15.9c: `ADDV` é `Rm=10001` e `SADDLV`/`UADDLV` são `Rm=10000` — antes o bit baixo de `Rm`
-        // era ignorado nas três (G8).
-        boolean rmLowBit = (rm & 1) != 0;
-        return switch (opcode) {
-            case 0b1_0111 -> u || !rmLowBit ? null : Ir64VectorAcrossLanesOp.ADDV;
-            case 0b0_0111 -> rmLowBit ? null : u ? Ir64VectorAcrossLanesOp.UADDLV : Ir64VectorAcrossLanesOp.SADDLV;
-            // `SMAXV`/`SMINV`/`UMAXV`/`UMINV` compartilham `opcode=0b10101` — só o bit baixo de
-            // `Rm` distingue MAX (`0`) de MIN (`1`), conferido contra o corpus real.
-            case 0b1_0101 -> switch ((rm & 1) << 1 | (u ? 1 : 0)) {
-                case 0b00 -> Ir64VectorAcrossLanesOp.SMAXV;
-                case 0b01 -> Ir64VectorAcrossLanesOp.UMAXV;
-                case 0b10 -> Ir64VectorAcrossLanesOp.SMINV;
-                default -> Ir64VectorAcrossLanesOp.UMINV;
-            };
-            default -> null;
-        };
-    }
-
-    /// AdvSIMD "across lanes (FP)" (B8.10): `opcode` distingue NM (`0b1_1001`) de não-NM
-    /// (`0b1_1111`); `esz` bit1 (`a`, mesma técnica de {@link #ADVSIMD_FP_A_BIT_SHIFT}) distingue
-    /// MAX (`0`) de MIN (`1`) — conferido linha a linha contra `a64.decode` real do QEMU
-    /// (`FMAXNMV_s`/`FMINNMV_s`/`FMAXV_s`/`FMINV_s`). Só a forma simples-precisão (`esz` bit0
-    /// sempre `0` no encoding real desta família — `Q`/`U`=1 fixos, checados pelo chamador).
-    private static Ir64VectorFpAcrossLanesOp decodeVectorFpAcrossLanesOpcode(int opcode, int esz) {
-        boolean a = ((esz >>> 1) & 1) != 0;
-        return switch (opcode) {
-            case 0b1_1001 -> a ? Ir64VectorFpAcrossLanesOp.FMINNMV : Ir64VectorFpAcrossLanesOp.FMAXNMV;
-            case 0b1_1111 -> a ? Ir64VectorFpAcrossLanesOp.FMINV : Ir64VectorFpAcrossLanesOp.FMAXV;
-            default -> null;
-        };
-    }
-
-    /// "AdvSIMD three different" (`bit10=0`, `Rm` livre): alargando (`Rd` em `esz+1` cheio),
-    /// largo+estreito (`Rd`/`Rn` já em `esz+1`, só `Rm` estreito) ou estreitando (`Rn`/`Rm` em
-    /// `esz+1`, `Rd` em `esz`) — os 3 conjuntos de opcodes NUNCA colidem entre si (conferido contra
-    /// `a64.decode` real).
-    private Ir64Op decodeAdvancedSimdThreeDifferent(int word, long address, boolean scalar, boolean q, int esz,
-            boolean u, int opcode, int rn, int rd, int rm) {
-        Ir64VectorWideningOp wideningOp = switch (opcode) {
-            case 0b1_1000 -> u ? Ir64VectorWideningOp.UMULL : Ir64VectorWideningOp.SMULL;
-            case 0b1_0000 -> u ? Ir64VectorWideningOp.UMLAL : Ir64VectorWideningOp.SMLAL;
-            case 0b1_0100 -> u ? Ir64VectorWideningOp.UMLSL : Ir64VectorWideningOp.SMLSL;
-            case 0b0_0000 -> u ? Ir64VectorWideningOp.UADDL : Ir64VectorWideningOp.SADDL;
-            case 0b0_0100 -> u ? Ir64VectorWideningOp.USUBL : Ir64VectorWideningOp.SSUBL;
-            case 0b0_1010 -> u ? Ir64VectorWideningOp.UABAL : Ir64VectorWideningOp.SABAL;
-            case 0b0_1110 -> u ? Ir64VectorWideningOp.UABDL : Ir64VectorWideningOp.SABDL;
-            // B8.8: `SQDMULL`/`SQDMLAL`/`SQDMLSL` — SEM forma `U=1` (não existe `UQDMULL`, `U=1`
-            // com estes opcodes é reservado, `u?null:...` rejeita).
-            case 0b1_1010 -> u ? null : Ir64VectorWideningOp.SQDMULL;
-            case 0b1_0010 -> u ? null : Ir64VectorWideningOp.SQDMLAL;
-            case 0b1_0110 -> u ? null : Ir64VectorWideningOp.SQDMLSL;
-            default -> null;
-        };
-        if (wideningOp != null) {
-            boolean isSaturatingDoubling = wideningOp == Ir64VectorWideningOp.SQDMULL
-                    || wideningOp == Ir64VectorWideningOp.SQDMLAL || wideningOp == Ir64VectorWideningOp.SQDMLSL;
-            if (isSaturatingDoubling && esz == 0) {
-                // `SQDMULL`/`SQDMLAL`/`SQDMLSL` só existem H→S/S→D — sem forma `byte` (G8).
-                throw unsupported(word, address);
-            }
-            return new AdvSimdIntegerOp64.ArithmeticWidening(wideningOp, scalar, q, esz, rd, rn, rm);
-        }
-        Ir64VectorWideOp wideOp = switch (opcode) {
-            case 0b0_0010 -> u ? Ir64VectorWideOp.UADDW : Ir64VectorWideOp.SADDW;
-            case 0b0_0110 -> u ? Ir64VectorWideOp.USUBW : Ir64VectorWideOp.SSUBW;
-            default -> null;
-        };
-        if (wideOp != null) {
-            return new AdvSimdIntegerOp64.ArithmeticWide(wideOp, q, esz, rd, rn, rm);
-        }
-        Ir64VectorNarrowOp narrowOp = switch (opcode) {
-            case 0b0_1000 -> u ? Ir64VectorNarrowOp.RADDHN : Ir64VectorNarrowOp.ADDHN;
-            case 0b0_1100 -> u ? Ir64VectorNarrowOp.RSUBHN : Ir64VectorNarrowOp.SUBHN;
-            default -> null;
-        };
-        if (narrowOp != null) {
-            return new AdvSimdIntegerOp64.ArithmeticNarrow(narrowOp, q, esz, rd, rn, rm);
-        }
-        // B8.11: `PMULL`/`PMULL2` (`opcode=0b11100`, `u` sempre `false` no encoding real — mesmo
-        // slot que a triagem original desta task previa, conferido bit a bit contra `a64.decode`
-        // real). `esz` distingue `p8` (`00`, 8 lanes de byte→halfword) de `p64` (`11`,
-        // doubleword→128 bits inteiro); `01`/`10` são reservados (G8).
-        if (opcode == 0b1_1100 && !u) {
-            if (esz == 0) {
-                return new AdvSimdIntegerOp64.PolynomialMultiplyLong(false, q, rd, rn, rm);
-            }
-            if (esz == 3) {
-                return new AdvSimdIntegerOp64.PolynomialMultiplyLong(true, q, rd, rn, rm);
-            }
-        }
-        throw unsupported(word, address);
     }
 
     /// "AdvSIMD vector/scalar × indexed element" (B8.19) — entra já sabendo que o prefixo bateu e

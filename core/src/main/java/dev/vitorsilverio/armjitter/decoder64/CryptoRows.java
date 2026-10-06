@@ -2,7 +2,9 @@ package dev.vitorsilverio.armjitter.decoder64;
 
 import dev.vitorsilverio.armjitter.arch64.Aarch64Feature;
 import dev.vitorsilverio.armjitter.ir64.CryptoOp64;
+import dev.vitorsilverio.armjitter.ir64.Ir64CryptoAesOp;
 import dev.vitorsilverio.armjitter.ir64.Ir64CryptoSha3Op;
+import dev.vitorsilverio.armjitter.ir64.Ir64CryptoShaTwoRegisterOp;
 import dev.vitorsilverio.armjitter.ir64.Ir64CryptoSha512Op;
 import dev.vitorsilverio.armjitter.ir64.Ir64CryptoShaThreeRegisterOp;
 import dev.vitorsilverio.armjitter.ir64.Ir64CryptoSm3Op;
@@ -11,13 +13,15 @@ import dev.vitorsilverio.armjitter.ir64.Ir64Op;
 
 import java.util.List;
 
-/// E15.15a: as instruções criptográficas fora do espaço AdvSIMD `bit21=1` — antes
-/// `Aarch64Decoder#decodeCryptoSha3` (B11.12, B19.10) e o ramo SHA de `decodeAdvancedSimdInteger`
-/// (B8.11b). Duas regiões:
+/// E15.15a/E15.15d: toda a criptografia do A64 fora do SVE — antes
+/// `Aarch64Decoder#decodeCryptoSha3` (B11.12, B19.10) e os ramos AES/SHA de `decodeAdvancedSimdInteger`
+/// (B8.11, B8.11b). Três regiões:
 ///
 /// - **"Cryptographic three-register SHA"** (`SHA1C`…`SHA256SU1`): `01011110 000`, opcode em
 ///   `bits[15:10]` com `bits[11:10]=00` e `bit15=0`. ISA base (a feature `FEAT_SHA1`/`FEAT_SHA256` não
 ///   existe em `Aarch64Feature`; o decoder sempre aceitou estas formas).
+/// - **"Cryptographic AES"** (`01001110 00 10100`) e **"two-register SHA"** (`01011110 00 10100`): opcode
+///   em `bits[16:12]`, `bits[11:10]=10` (E15.15d). Também ISA base no decoder (sem `FEAT_AES`).
 /// - **Prefixo `11001110`** (`FEAT_SHA3`/`FEAT_SHA512`/`FEAT_SM3`/`FEAT_SM4`): `op0` em `bits[23:21]`
 ///   e, conforme o `op0`, `Ra`/`imm6`/`imm2`/opcode em `bits[15:10]`. Cada linha tem a SUA feature —
 ///   SHA-512 e SM3 dividem o `op0=011` com o `RAX1` do SHA3.
@@ -53,6 +57,15 @@ final class CryptoRows {
             row("0 1 0 11110 00 0 ..... 010000 ..... .....", null, sha(Ir64CryptoShaThreeRegisterOp.SHA256H)),
             row("0 1 0 11110 00 0 ..... 010100 ..... .....", null, sha(Ir64CryptoShaThreeRegisterOp.SHA256H2)),
             row("0 1 0 11110 00 0 ..... 011000 ..... .....", null, sha(Ir64CryptoShaThreeRegisterOp.SHA256SU1)),
+            // AES (prefixo 01110) e two-register SHA (11110): 0 1 0 prefixo 00 10100 opcode(16:12) 10 Rn Rd
+            row("0 1 0 01110 00 10100 00100 10 ..... .....", null, aes(Ir64CryptoAesOp.AESE)),
+            row("0 1 0 01110 00 10100 00101 10 ..... .....", null, aes(Ir64CryptoAesOp.AESD)),
+            row("0 1 0 01110 00 10100 00110 10 ..... .....", null, aes(Ir64CryptoAesOp.AESMC)),
+            row("0 1 0 01110 00 10100 00111 10 ..... .....", null, aes(Ir64CryptoAesOp.AESIMC)),
+            row("0 1 0 11110 00 10100 00000 10 ..... .....", null, shaTwoRegister(Ir64CryptoShaTwoRegisterOp.SHA1H)),
+            row("0 1 0 11110 00 10100 00001 10 ..... .....", null, shaTwoRegister(Ir64CryptoShaTwoRegisterOp.SHA1SU1)),
+            row("0 1 0 11110 00 10100 00010 10 ..... .....", null,
+                    shaTwoRegister(Ir64CryptoShaTwoRegisterOp.SHA256SU0)),
             // four-register: Ra(14:10)
             row("11001110 000 ..... 0 ..... ..... .....", SHA3, fourRegister(Ir64CryptoSha3Op.EOR3)),
             row("11001110 001 ..... 0 ..... ..... .....", SHA3, fourRegister(Ir64CryptoSha3Op.BCAX)),
@@ -92,6 +105,14 @@ final class CryptoRows {
 
     private static AddressFree sha(Ir64CryptoShaThreeRegisterOp op) {
         return word -> new CryptoOp64.ShaThreeRegister(op, rd(word), rn(word), rm(word));
+    }
+
+    private static AddressFree aes(Ir64CryptoAesOp op) {
+        return word -> new CryptoOp64.Aes(op, rd(word), rn(word));
+    }
+
+    private static AddressFree shaTwoRegister(Ir64CryptoShaTwoRegisterOp op) {
+        return word -> new CryptoOp64.ShaTwoRegister(op, rd(word), rn(word));
     }
 
     private static AddressFree fourRegister(Ir64CryptoSha3Op op) {

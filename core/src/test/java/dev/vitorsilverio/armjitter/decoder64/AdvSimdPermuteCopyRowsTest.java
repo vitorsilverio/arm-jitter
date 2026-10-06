@@ -37,6 +37,8 @@ class AdvSimdPermuteCopyRowsTest {
         rows.addAll(CryptoRows.ROWS);
         rows.addAll(AdvSimdThreeSameRows.ROWS);
         rows.addAll(AdvSimdThreeSameFpRows.ROWS);
+        rows.addAll(AdvSimdThreeDifferentRows.ROWS);
+        rows.addAll(AdvSimdAcrossLanesRows.ROWS);
         return rows;
     }
 
