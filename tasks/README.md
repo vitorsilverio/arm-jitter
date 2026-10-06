@@ -88,6 +88,13 @@ subprojeto. Ver memória do agente `feedback-100-cobertura-antes-subprojetos`.
    Faça um commit por task (mensagem em português, começando com o ID da task, ex.:
    `B1.2: ...`).
 8. **`git push` em TODO repositório que a task tocou** — ver "Push obrigatório" abaixo.
+9. **Achou problema fora do escopo da task? CRIE A TASK na mesma sessão** (regra do usuário,
+   2026-10-06). Instrução ausente, gate faltando, G8, lacuna da ferramenta de cobertura, bug — vira um
+   arquivo de spec na trilha certa (`Contexto` com a medição que achou, `Objetivo`, `Inclui`/`Não
+   inclui`, `Aceite`, `Armadilhas`), linha `🆕 … ⬜` no `INDICE.md` da trilha e citação na fila, no
+   mesmo commit da task que achou. **Nunca** deixar só como "candidata a task" no `## Resultado` —
+   achados das E15.11–E15.14 ficaram assim e se perderam de vista. Exceção única: o achado já tem task
+   (citar o link).
 
 ## Push obrigatório (regra nova, 2026-08-21)
 
