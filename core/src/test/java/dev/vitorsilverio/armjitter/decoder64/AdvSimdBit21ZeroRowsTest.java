@@ -19,15 +19,17 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 /// pelo {@link Aarch64Decoder} e a regressão do bug G8 do FP16 (`bit14` ignorado). E15.9b: `bit31`,
 /// `bits[23:22]` do copy e as pareadas `_h`.
 class AdvSimdBit21ZeroRowsTest {
-    /// Só as 8 features do piloto: com `FEAT_SME` o `decode` embrulharia o op AdvSIMD em
-    /// `StreamingRestricted`.
+    /// Só as 12 features da tabela (8 do piloto + 4 da E15.15a): com `FEAT_SME` o `decode` embrulharia
+    /// o op AdvSIMD em `StreamingRestricted`.
     private static final Aarch64Architecture ALL_FEATURES = Aarch64Architecture.of("piloto E15.9",
             Aarch64Feature.RDM, Aarch64Feature.FP16, Aarch64Feature.FP8, Aarch64Feature.FP_ABSOLUTE_MAX_MIN,
             Aarch64Feature.FP8_FUSED_MULTIPLY_ADD, Aarch64Feature.FP8_DOT_PRODUCT_2WAY,
-            Aarch64Feature.FP8_DOT_PRODUCT_4WAY, Aarch64Feature.COMPLEX_NUMBER_ARITHMETIC);
+            Aarch64Feature.FP8_DOT_PRODUCT_4WAY, Aarch64Feature.COMPLEX_NUMBER_ARITHMETIC,
+            Aarch64Feature.BFLOAT16, Aarch64Feature.INT8_MATRIX_MULTIPLY, Aarch64Feature.DOT_PRODUCT,
+            Aarch64Feature.LOOKUP_TABLE);
     private static final int BIT31 = 1 << 31;
     private static final int BIT14 = 1 << 14;
-    private static final int ROW_COUNT = 58;
+    private static final int ROW_COUNT = 71;
     private static final int ESZ_HALFWORD = 1;
 
     private static Ir64Op decodeWord(Aarch64Decoder decoder, int word) {

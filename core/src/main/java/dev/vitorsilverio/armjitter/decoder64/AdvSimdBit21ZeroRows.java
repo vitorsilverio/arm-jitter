@@ -3,6 +3,7 @@ package dev.vitorsilverio.armjitter.decoder64;
 import dev.vitorsilverio.armjitter.arch64.Aarch64Feature;
 import dev.vitorsilverio.armjitter.ir64.AdvSimdFpOp64;
 import dev.vitorsilverio.armjitter.ir64.AdvSimdIntegerOp64;
+import dev.vitorsilverio.armjitter.ir64.AdvSimdMoveOp64;
 import dev.vitorsilverio.armjitter.ir64.Ir64Op;
 import dev.vitorsilverio.armjitter.ir64.Ir64VectorFpPairwiseOp;
 import dev.vitorsilverio.armjitter.ir64.Ir64VectorFpThreeSameOp;
@@ -16,8 +17,9 @@ import java.util.List;
 /// encoding é uma linha e a exclusão mútua é verificada por máquina (`AdvSimdBit21ZeroRowsTest`).
 ///
 /// Layout das linhas (bit 31 → 0): `b31 Q U prefixo(28:24) a(23) b22 b21 Rm opcode(15:11) b10 Rn Rd`.
-/// Prefixo `01110` = vetorial; `11110` com `bit30=1` = escalar (D-only, sem `Q`). O que não cai
-/// em nenhuma linha segue para EXT/permute/TBL/copy/SHA no chamador.
+/// Prefixo `01110` = vetorial; `11110` com `bit30=1` = escalar (D-only, sem `Q`). Desde a E15.15a
+/// as formas sem feature do mesmo espaço são {@link AdvSimdPermuteCopyRows} e {@link CryptoRows}, na
+/// MESMA tabela (sem prioridade entre linhas).
 ///
 /// `bit31` é `0` em toda linha: AdvSIMD nunca tem `bit31=1` (E15.9b; o chamador também recusa antes
 /// de chegar aqui, a coluna fixa só deixa o padrão igual ao do ARM ARM).
@@ -41,6 +43,11 @@ import java.util.List;
 ///   `Q` normal; mesmo opcode de `FMLAL_hb_v`, que se separa por `a`.
 /// - **B19.20 `FEAT_FCMA`** — `FCMLA` (opcode `110rr`, rotação `rr × 90°`)/`FCADD` 90°/270°;
 ///   `esz=0` reservado e `esz=3` só com `Q=1` (par complexo de dupla não cabe em 64 bits).
+/// - **E15.15a** — o resto do "three same extra" e o "lookup table", que eram `if (has(...))` em
+///   `decodeAdvancedSimdExtractPermuteTable`: **B19.7 `FEAT_BF16`** (`BFDOT_v`, `BFMLAL_v` com `bit30`
+///   = `B`/`T`, `BFMMLA` com `Q=1`), **B19.12 `FEAT_I8MM`** (`USDOT_v`; `SMMLA`/`UMMLA`/`USMMLA` com
+///   `Q=1`), **B19.23 `FEAT_DotProd`** (`SDOT_v`/`UDOT_v`) e **B19.8 `FEAT_LUT`** (`LUTI2`/`LUTI4`,
+///   `Q=1`, índice terminando no `bit14`).
 final class AdvSimdBit21ZeroRows {
     private static final int SCALAR_BIT_SHIFT = 28;
     private static final int Q_SHIFT = 30;
@@ -53,7 +60,13 @@ final class AdvSimdBit21ZeroRows {
     private static final int FCMA_ROTATION_MASK = 0b11;
     private static final int ROTATION_UNIT_DEGREES = 90;
     private static final int FCADD_270_DEGREES = 3 * ROTATION_UNIT_DEGREES;
+    private static final int ESZ_BYTE = 0;
     private static final int ESZ_HALFWORD = 1;
+    /// Bits `[14:0]`: o índice do `LUTI2`/`LUTI4` termina no `bit14`.
+    private static final int LUTI_IDX_FIELD_MASK = (1 << 15) - 1;
+    private static final int LUTI_IDX1_SHIFT = 14;
+    private static final int LUTI_IDX2_SHIFT = 13;
+    private static final int LUTI_IDX3_SHIFT = 12;
 
     private static final Aarch64Feature RDM = Aarch64Feature.RDM;
     private static final Aarch64Feature FP16 = Aarch64Feature.FP16;
@@ -63,8 +76,12 @@ final class AdvSimdBit21ZeroRows {
     private static final Aarch64Feature FP8DOT2 = Aarch64Feature.FP8_DOT_PRODUCT_2WAY;
     private static final Aarch64Feature FP8DOT4 = Aarch64Feature.FP8_DOT_PRODUCT_4WAY;
     private static final Aarch64Feature FCMA = Aarch64Feature.COMPLEX_NUMBER_ARITHMETIC;
+    private static final Aarch64Feature BF16 = Aarch64Feature.BFLOAT16;
+    private static final Aarch64Feature I8MM = Aarch64Feature.INT8_MATRIX_MULTIPLY;
+    private static final Aarch64Feature DOTPROD = Aarch64Feature.DOT_PRODUCT;
+    private static final Aarch64Feature LUT = Aarch64Feature.LOOKUP_TABLE;
 
-    /// As 53 linhas do piloto. Colunas do padrão: `b31 Q U prefixo a b22 b21 Rm opcode b10 Rn Rd`.
+    /// As 53 linhas do piloto e as 13 da E15.15a. Colunas do padrão: `b31 Q U prefixo a b22 b21 Rm opcode b10 Rn Rd`.
     static final List<DecodeRow<Ir64Op>> ROWS = List.of(
             // RDM — vetorial e escalar, esz H/S
             row("0 . 1 01110 01 0 ..... 10000 1 ..... .....", RDM, rdm(Ir64VectorThreeSameOp.SQRDMLAH)),
@@ -132,7 +149,24 @@ final class AdvSimdBit21ZeroRows {
             row("0 1 1 01110 11 0 ..... 11100 1 ..... .....", FCMA, complexAdd(ROTATION_UNIT_DEGREES)),
             row("0 . 1 01110 01 0 ..... 11110 1 ..... .....", FCMA, complexAdd(FCADD_270_DEGREES)),
             row("0 . 1 01110 10 0 ..... 11110 1 ..... .....", FCMA, complexAdd(FCADD_270_DEGREES)),
-            row("0 1 1 01110 11 0 ..... 11110 1 ..... .....", FCMA, complexAdd(FCADD_270_DEGREES))
+            row("0 1 1 01110 11 0 ..... 11110 1 ..... .....", FCMA, complexAdd(FCADD_270_DEGREES)),
+            // BF16: BFDOT_v (size=01) / BFMLAL_v (size=11, Q = B/T) / BFMMLA (Q=1)
+            row("0 . 1 01110 01 0 ..... 11111 1 ..... .....", BF16, AdvSimdBit21ZeroRows::bfloat16Dot),
+            row("0 . 1 01110 11 0 ..... 11111 1 ..... .....", BF16, AdvSimdBit21ZeroRows::bfloat16MultiplyAddLong),
+            row("0 1 1 01110 01 0 ..... 11101 1 ..... .....", BF16, AdvSimdBit21ZeroRows::bfloat16MatrixMultiply),
+            // I8MM: USDOT_v / SMMLA (U=0) / UMMLA (U=1) / USMMLA — MMLA só com Q=1
+            row("0 . 0 01110 10 0 ..... 10011 1 ..... .....", I8MM, integerDot(false, true)),
+            row("0 1 0 01110 10 0 ..... 10100 1 ..... .....", I8MM, matrixMultiply(true, true)),
+            row("0 1 1 01110 10 0 ..... 10100 1 ..... .....", I8MM, matrixMultiply(false, false)),
+            row("0 1 0 01110 10 0 ..... 10101 1 ..... .....", I8MM, matrixMultiply(false, true)),
+            // DotProd: SDOT_v (U=0) / UDOT_v (U=1)
+            row("0 . 0 01110 10 0 ..... 10010 1 ..... .....", DOTPROD, integerDot(true, true)),
+            row("0 . 1 01110 10 0 ..... 10010 1 ..... .....", DOTPROD, integerDot(false, false)),
+            // LUT: LUTI2 (size 10 = .16b, 11 = .8h) / LUTI4 (size 01) — Q=1 fixo, índice em bits[14:..]
+            row("0 1 0 01110 10 0 ..... 0 .. 100 ..... .....", LUT, lookupTable(false, ESZ_BYTE, LUTI_IDX2_SHIFT)),
+            row("0 1 0 01110 11 0 ..... 0 ... 00 ..... .....", LUT, lookupTable(false, ESZ_HALFWORD, LUTI_IDX3_SHIFT)),
+            row("0 1 0 01110 01 0 ..... 0 . 1000 ..... .....", LUT, lookupTable(true, ESZ_BYTE, LUTI_IDX1_SHIFT)),
+            row("0 1 0 01110 01 0 ..... 0 .. 100 ..... .....", LUT, lookupTable(true, ESZ_HALFWORD, LUTI_IDX2_SHIFT))
     );
 
     private AdvSimdBit21ZeroRows() {
@@ -186,6 +220,33 @@ final class AdvSimdBit21ZeroRows {
 
     private static AddressFree dot(boolean single) {
         return word -> new AdvSimdFpOp64.Fp8DotProduct(single, q(word), rd(word), rn(word), rm(word));
+    }
+
+    private static Ir64Op bfloat16Dot(int word) {
+        return new AdvSimdFpOp64.FpDotProductBFloat16(q(word), rd(word), rn(word), rm(word));
+    }
+
+    /// `BFMLALB`/`BFMLALT`: o `bit30` é o seletor `B`/`T`, não a largura (`Vd.4S` sempre).
+    private static Ir64Op bfloat16MultiplyAddLong(int word) {
+        return new AdvSimdFpOp64.FpMultiplyAddLongBFloat16(q(word), rd(word), rn(word), rm(word));
+    }
+
+    private static Ir64Op bfloat16MatrixMultiply(int word) {
+        return new AdvSimdFpOp64.FpMatrixMultiplyAccumulateBFloat16(rd(word), rn(word), rm(word));
+    }
+
+    private static AddressFree integerDot(boolean signedN, boolean signedM) {
+        return word -> new AdvSimdIntegerOp64.IntegerDotProduct(q(word), signedN, signedM, rd(word), rn(word), rm(word));
+    }
+
+    private static AddressFree matrixMultiply(boolean signedN, boolean signedM) {
+        return word -> new AdvSimdIntegerOp64.IntegerMatrixMultiplyAccumulate(signedN, signedM, rd(word), rn(word), rm(word));
+    }
+
+    /// `LUTI2`/`LUTI4`: o índice ocupa de `bit14` até `idxShift`.
+    private static AddressFree lookupTable(boolean four, int esz, int idxShift) {
+        return word -> new AdvSimdMoveOp64.LookupTable(four, esz, (word & LUTI_IDX_FIELD_MASK) >>> idxShift,
+                rd(word), rn(word), rm(word));
     }
 
     private static Ir64Op complexMultiplyAccumulate(int word) {

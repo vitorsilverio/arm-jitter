@@ -62,7 +62,7 @@ class TamanhoDeFonteGuardTest {
     /// desceu para 3584 (DP-registrador virou `DataProcessingRegisterRows`). Na E15.14 desceu para 2935 (FP
     /// escalar virou `ScalarFpRows`).
     private static final Map<String, Integer> EXCEPTIONS = Map.ofEntries(
-            entry("decoder64/Aarch64Decoder.java", 2935),
+            entry("decoder64/Aarch64Decoder.java", 2288),
             entry("advsimd/AdvSimdLanes.java", 3677),
             entry("core64/Aarch64Core.java", 1848),
             entry("ir/StandardIrBuilder.java", 1352),

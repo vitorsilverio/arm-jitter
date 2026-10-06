@@ -70,10 +70,9 @@ public sealed interface CryptoOp64 extends AdvSimdOp64 permits CryptoOp64.Aes,
 
     /// "Cryptographic four-register" (`FEAT_SHA3`, ARMv8.2-A, B11.12) — `EOR3`/`BCAX`. Sempre opera
     /// nos 128 bits inteiros ({@code 16B}, sem forma de tamanho de elemento — a operação é bit a
-    /// bit e não depende de arranjo). {@link #ra} vem de um campo de SÓ 4 bits no encoding real
-    /// (`ARM DDI 0487`), diferente de {@link #rd}/{@link #rn}/{@link #rm} (5 bits) — restringe o
-    /// registrador `Va` real a `V0`-`V15`, confirmado bit a bit contra corpus real (ver
-    /// `Aarch64CryptoSha3DecoderTest`).
+    /// bit e não depende de arranjo). {@link #ra} tem 5 bits (`bits[14:10]`, `V0`-`V31`) como os
+    /// outros registradores — E15.15a corrigiu a leitura de 4 bits da B11.12, que recusava `Ra ≥ 16`
+    /// (`eor3 v0.16b, v1.16b, v2.16b, v20.16b` = `0xce025020` no `aarch64-none-elf-as`).
     record Sha3FourRegister(
             /// Operação a executar (`EOR3` ou `BCAX`).
             Ir64CryptoSha3Op op,
@@ -83,7 +82,7 @@ public sealed interface CryptoOp64 extends AdvSimdOp64 permits CryptoOp64.Aes,
             int rn,
             /// Segundo operando fonte.
             int rm,
-            /// Terceiro operando fonte — campo de 4 bits no encoding real, só `V0`-`V15`.
+            /// Terceiro operando fonte (`bits[14:10]`).
             int ra) implements CryptoOp64 {
         @Override public int kind() { return Kind.CRYPTO_SHA3_FOUR_REGISTER; }
         @Override public boolean execute(Aarch64Core core) {
@@ -168,9 +167,9 @@ public sealed interface CryptoOp64 extends AdvSimdOp64 permits CryptoOp64.Aes,
     /// `SM3SS1` (`FEAT_SM3`, ARMv8.2-A, B19.10) — função pura de {@link #rn}/{@link #rm}/
     /// {@link #ra} (`Rd` atual nunca é lido); só a palavra ALTA (elemento `3`, bits[127:96]) de
     /// cada operando participa da fórmula (`ARM DDI 0487`), e só a palavra alta de {@link #rd} é
-    /// escrita — as 3 palavras baixas são zeradas. {@link #ra} vem do MESMO campo de 4 bits
-    /// (bits[13:10], `V0`-`V15`) que {@link Sha3FourRegister#ra}, MESMO layout de encoding
-    /// (`op0=0b010`, bits[15:14]="00").
+    /// escrita — as 3 palavras baixas são zeradas. {@link #ra} vem do MESMO campo de 5 bits
+    /// (`bits[14:10]`) que {@link Sha3FourRegister#ra}, MESMO layout de encoding (`op0=0b010`,
+    /// `bit15=0`).
     record Sm3FourRegister(
             /// Registrador `V` de destino.
             int rd,
@@ -178,7 +177,7 @@ public sealed interface CryptoOp64 extends AdvSimdOp64 permits CryptoOp64.Aes,
             int rn,
             /// Segundo operando fonte.
             int rm,
-            /// Terceiro operando fonte — campo de 4 bits no encoding real, só `V0`-`V15`.
+            /// Terceiro operando fonte (`bits[14:10]`).
             int ra) implements CryptoOp64 {
         @Override public int kind() { return Kind.CRYPTO_SM3_FOUR_REGISTER; }
         @Override public boolean execute(Aarch64Core core) {

@@ -97,9 +97,10 @@ class AdvSimdFpResidueG8Test {
     private static final int OPCODE_SHIFT = 10;
     private static final int REGISTER_PAIR_BITS = 10;
     /// Conferidos contra o `objdump` 2.46 do devkitA64 em 2026-10-03 (E15.9c): nenhuma das palavras
-    /// aceitas é `undefined`.
-    private static final int ACCEPTED_COUNT = 69_428;
-    private static final String ACCEPTED_SHA256 = "43a6f6a52e32b9bf5c54e55b8f542eab6264d345e2fc2db69a3e3f2a7a227e96";
+    /// aceitas é `undefined`. E15.15a (2026-10-06): +1 536 palavras `0xce…` — `EOR3`/`BCAX`/`SM3SS1`
+    /// com `Ra ≥ 16`, antes recusadas; conferidas de novo, 0 `undefined`.
+    private static final int ACCEPTED_COUNT = 70_964;
+    private static final String ACCEPTED_SHA256 = "2b7201a586c021292895a97f97301db443b8a7352ff56ed65e9142d742b4e84b";
 
     /// Guarda permanente do G8 neste espaço (decisão do usuário na E15.9c): enumera o mesmo espaço de
     /// `e15.9c-scripts/AdvSimdRmOracle.java` (os 4 prefixos de bits[28:24]; bits 31..29, 23..21,

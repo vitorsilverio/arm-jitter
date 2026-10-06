@@ -302,9 +302,18 @@ class Aarch64CryptoSha512Sm3Sm4DecoderTest {
 
     @Test
     void sm3MixReservedBit15_14PatternIsUnsupported() {
-        // op0=0b010 com bits[15:14]="01" (nem SM3SS1 nem SM3TT) — reservado.
-        int reservedWord = 0xce424020; // mesmo esqueleto de sm3tt1a, bits[15:14] forçado a "01"
+        // op0=0b010 com bits[15:14]="11" (nem SM3SS1, `bit15=0`, nem SM3TT, `10`) — reservado.
+        int reservedWord = 0xce42c020; // mesmo esqueleto de sm3tt1a, bits[15:14] forçado a "11"
         assertThrows(UnsupportedOperationException.class, () -> decodeWord(FULL_DECODER, reservedWord));
+    }
+
+    @Test
+    void sm3ss1ReadsAFiveBitRa() {
+        // E15.15a: `sm3ss1 v0.4s, v1.4s, v2.4s, v17.4s` (`aarch64-none-elf-as`) — bits[15:14]="01" é
+        // `Ra ≥ 16`, não reservado; a versão em cascata lia `Ra` com 4 bits e recusava a palavra.
+        CryptoOp64.Sm3FourRegister op = (CryptoOp64.Sm3FourRegister) decodeWord(FULL_DECODER, 0xce424420);
+        assertEquals(17, op.ra());
+        assertEquals(2, op.rm());
     }
 
     @Test

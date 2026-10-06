@@ -133,7 +133,7 @@ G5 = suites de gbaemu/ndsemu obrigatórias (regra do `tasks/README.md`).
 | [E15.12](e15.12-load-store-por-tabela.md) | Loads and Stores → `LoadStoreRegisterRows`/`LoadStoreExclusiveRows`/`MemoryOperationRows`/`AdvSimdLoadStoreRows` (`DecodeRow#alsoRequires` para `SETG*` = MOPS e MTE) | não | ✅ 2026-10-04 (11 famílias G8, ~39 mil palavras da amostra) |
 | [E15.13](e15.13-dp-registrador-por-tabela.md) | DP-registrador → `DataProcessingRegisterRows` (`CNT` escalar ganha a coluna `FEAT_CSSC`) | não | ✅ 2026-10-04 (6 famílias G8, 38 787 palavras da amostra) |
 | [E15.14](e15.14-fp-escalar-por-tabela.md) | FP escalar → `ScalarFpRows` (refactor puro: o resíduo G8 já tinha sido fechado pela E15.9c) | não | ✅ 2026-10-06 (achado: `type=11`/`FEAT_FP16` da aritmética escalar ausente e medido ✅) |
-| E15.15 | `Aarch64Decoder`: AdvSIMD para tabela | não | ⬜ [REFINAR] |
+| [E15.15](e15.15-advsimd-por-tabela.md) | `Aarch64Decoder`: AdvSIMD para tabela — escada de 7 sub-tasks (a–g), tabela `advSimdTable` única | não | 🟡 refinada 2026-10-06; [E15.15a](e15.15a-advsimd-bit21-zero-e-cripto.md) ✅ (`bit21=0` + cripto `0xce`; corrigiu `Ra` de 4 bits) |
 | E15.16 | Decoders de 32 bits (`ArmDecoder`, `VfpDecoder`, `Thumb2*`) para tabela | sim | ⬜ [REFINAR] após E15.15 |
 | E15.17 | `AdvSimdLanes` (3677) por família de operação; `Aarch64Core` (1848): banco de sysreg para fora | sim | ⬜ [REFINAR] |
 | E15.18–E15.21 | Fechar o resíduo semântico até 100%, um pacote por task: `advsimd` · `codegen.jvm` · `core`/`memory.mmu` · `debug` (`GdbServer` por socket de loopback) | conforme pacote | ⬜ [REFINAR] |

@@ -74,6 +74,27 @@ class Aarch64CryptoSha3DecoderTest {
     }
 
     @Test
+    void fourRegisterFormsReadAFiveBitRa() {
+        // E15.15a: `Ra` ocupa bits[14:10] (5 bits). `aarch64-none-elf-as` (devkitA64):
+        // `eor3 v0.16b, v1.16b, v2.16b, v20.16b` = 0xce025020, `bcax ..., v31.16b` = 0xce227c20 — a
+        // versão em cascata lia 4 bits, exigia bit14=0 e recusava as duas.
+        CryptoOp64.Sha3FourRegister eor3 = (CryptoOp64.Sha3FourRegister) decodeWord(SHA3_DECODER, 0xce025020);
+        assertEquals(Ir64CryptoSha3Op.EOR3, eor3.op());
+        assertEquals(20, eor3.ra());
+        CryptoOp64.Sha3FourRegister bcax = (CryptoOp64.Sha3FourRegister) decodeWord(SHA3_DECODER, 0xce227c20);
+        assertEquals(Ir64CryptoSha3Op.BCAX, bcax.op());
+        assertEquals(31, bcax.ra());
+        assertEquals(2, bcax.rm());
+    }
+
+    @Test
+    void fourRegisterFormsWithBit15SetAreUnsupported() {
+        // bit15 é o único bit fixo entre `Rm` e `Ra` (`0`) — com `1` não há nada alocado em op0=000/001.
+        assertThrows(UnsupportedOperationException.class, () -> decodeWord(SHA3_DECODER, 0xce02d020));
+        assertThrows(UnsupportedOperationException.class, () -> decodeWord(SHA3_DECODER, 0xce22fc20));
+    }
+
+    @Test
     void rax1() {
         // `rax1 v0.2d, v1.2d, v2.2d`
         CryptoOp64.Sha3TwoSourceRotate op =

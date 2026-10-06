@@ -10,11 +10,6 @@ import dev.vitorsilverio.armjitter.ir64.AdvSimdMoveOp64;
 import dev.vitorsilverio.armjitter.ir64.CryptoOp64;
 import dev.vitorsilverio.armjitter.ir64.FpOp64;
 import dev.vitorsilverio.armjitter.ir64.Ir64CryptoAesOp;
-import dev.vitorsilverio.armjitter.ir64.Ir64CryptoSha3Op;
-import dev.vitorsilverio.armjitter.ir64.Ir64CryptoSha512Op;
-import dev.vitorsilverio.armjitter.ir64.Ir64CryptoSm3Op;
-import dev.vitorsilverio.armjitter.ir64.Ir64CryptoSm3TtOp;
-import dev.vitorsilverio.armjitter.ir64.Ir64CryptoShaThreeRegisterOp;
 import dev.vitorsilverio.armjitter.ir64.Ir64CryptoShaTwoRegisterOp;
 import dev.vitorsilverio.armjitter.ir64.Ir64Op;
 import dev.vitorsilverio.armjitter.ir64.Ir64VectorAcrossLanesOp;
@@ -26,7 +21,6 @@ import dev.vitorsilverio.armjitter.ir64.Ir64VectorFpUnaryOp;
 import dev.vitorsilverio.armjitter.ir64.Ir64VectorNarrowOp;
 import dev.vitorsilverio.armjitter.ir64.Ir64VectorNarrowUnaryOp;
 import dev.vitorsilverio.armjitter.ir64.Ir64VectorPairwiseOp;
-import dev.vitorsilverio.armjitter.ir64.Ir64VectorPermuteOp;
 import dev.vitorsilverio.armjitter.ir64.Ir64VectorShiftNarrowOp;
 import dev.vitorsilverio.armjitter.ir64.Ir64VectorShiftOp;
 import dev.vitorsilverio.armjitter.ir64.Ir64VectorShiftWidenOp;
@@ -75,8 +69,10 @@ public final class Aarch64Decoder {
     private final boolean streamingModeRestrictions;
     private final Aarch64SveDecoder sveDecoder;
     private final Aarch64SmeDecoder smeDecoder;
-    /// E15.9: formas com feature do espaço AdvSIMD `bit21=0`, já filtradas por {@link #architecture}.
-    private final DecodeTable<Ir64Op> advSimdBit21ZeroTable;
+    /// E15.9/E15.15a: o AdvSIMD já migrado para tabela — o espaço `bit21=0` inteiro
+    /// ({@link AdvSimdBit21ZeroRows}, {@link AdvSimdPermuteCopyRows}) e a criptografia fora do
+    /// `bit21=1` ({@link CryptoRows}), já filtrados por {@link #architecture}.
+    private final DecodeTable<Ir64Op> advSimdTable;
     /// E15.10: a classe "Data Processing — Immediate" inteira (`bits[28:26]=100`).
     private final DecodeTable<Ir64Op> dataProcessingImmediateTable;
     /// E15.13: a classe "Data Processing — Register" (`op0 = x101`, `bit26=0`).
@@ -106,7 +102,8 @@ public final class Aarch64Decoder {
         this.streamingModeRestrictions = architecture.has(Aarch64Feature.SCALABLE_MATRIX_EXTENSION);
         this.sveDecoder = new Aarch64SveDecoder(architecture);
         this.smeDecoder = new Aarch64SmeDecoder(architecture);
-        this.advSimdBit21ZeroTable = DecodeTable.forArchitecture(AdvSimdBit21ZeroRows.ROWS, architecture);
+        this.advSimdTable = DecodeTable.forArchitecture(concat(concat(AdvSimdBit21ZeroRows.ROWS,
+                AdvSimdPermuteCopyRows.ROWS), CryptoRows.ROWS), architecture);
         this.dataProcessingImmediateTable = DecodeTable.forArchitecture(DataProcessingImmediateRows.ROWS, architecture);
         this.dataProcessingRegisterTable = DecodeTable.forArchitecture(DataProcessingRegisterRows.ROWS, architecture);
         this.scalarFpTable = DecodeTable.forArchitecture(ScalarFpRows.ROWS, architecture);
@@ -167,9 +164,6 @@ public final class Aarch64Decoder {
     private static final int SCALAR_FP_FIXED_PREFIX_SHIFT = 24;
     private static final int SCALAR_FP_FIXED_PREFIX_MASK = 0b111_1111;
     private static final int SCALAR_FP_FIXED_PREFIX_PATTERN = 0b001_1110;
-
-    // ── `Rm`(20:16) das formas AdvSIMD/cripto que leem um terceiro registrador.
-    private static final int FP_RM_SHIFT = 16;
 
     // ── Floating-point data-processing (3 source), B8.4: o prefixo usa os 8 bits (bits[31:24]="00011111")
     // ── porque bits[28:24]="11111" é também "Advanced SIMD scalar x indexed element"/"scalar shift by
@@ -306,16 +300,6 @@ public final class Aarch64Decoder {
     /// `a64.decode` real, que aliasa neste mesmo espaço de bits — ver
     /// {@link #decodeAdvancedSimdInteger}).
     private static final int ADVSIMD_AES_RM = 0b0_1000;
-    /// B8.11b: campo `opcode` de "Cryptographic three-register SHA" — 6 bits em bits[15:10]
-    /// (diferente do `opcode` de 5 bits em bits[15:11] usado pelo resto de `decodeAdvancedSimdInteger`,
-    /// porque esta forma nunca checa `bit10` como "threeSameShape" — layout próprio, conferido
-    /// contra corpus real).
-    private static final int CRYPTO_SHA_THREE_REG_OPCODE_SHIFT = 10;
-    private static final int CRYPTO_SHA_THREE_REG_OPCODE_MASK = 0b11_1111;
-    /// B19.6 bloco E: `DUP_element_s` (Advanced SIMD scalar copy) — MESMO campo `opcode` de 6 bits
-    /// do comentário acima, valor `0b000001` (bit10=1, único ponto do espaço "escalar bit21=0" com
-    /// esse bit setado — as 7 opcodes SHA reais são todas pares).
-    private static final int ADVSIMD_SCALAR_COPY_OPCODE = 0b00_0001;
     /// B8.9: bit `a` do encoding real de "AdvSIMD three same (FP)"/"two-register misc (FP)" —
     /// posição IDÊNTICA ao bit alto de {@link #ADVSIMD_INT_SIZE_SHIFT} (`esz` inteiro reaproveita
     /// essa posição como campo livre de 2 bits; nas formas FP, só o bit BAIXO — `bit22`, "sz" — é o
@@ -338,162 +322,12 @@ public final class Aarch64Decoder {
     /// Bit2 do `opcode` indexado: `0`=soma (`FMLAL*`), `1`=subtração (`FMLSL*`).
     private static final int ADVSIMD_FHM_INDEXED_OPCODE_SUBTRACT_BIT = 0b0100;
 
-    // ── B11.12 (`FEAT_SHA3`): `EOR3`/`BCAX` ("Cryptographic four-register") e `RAX1`/`XAR`
-    // ── ("Cryptographic three-register, imm2") — espaço de encoding PRÓPRIO, nunca examinado por
-    // ── nenhuma task anterior (achado desta sessão: `Aarch64Feature.SHA3`/B11.3/B11.11 diziam
-    // ── "implementado sem gate desde B8.11b", mas B8.11b só cobriu SHA1/SHA256 — EOR3/BCAX/RAX1/
-    // ── XAR nunca tiveram decoder algum). Prefixo fixo de 8 bits em bits[31:24] ("11001110"),
-    // ── DIFERENTE do prefixo de 5 bits (bits[28:24]) que {@link #decodeAdvancedSimdInteger} usa
-    // ── para distinguir vetorial/escalar — mas bits[28:24]="01110" sozinho colide de fato com o
-    // ── prefixo "vetorial" de lá (`bit31`/`bit29` nunca são checados naquele método). Por isso este
-    // ── prefixo precisa ser checado ANTES de cair em {@link #decodeAdvancedSimdInteger}, senão o
-    // ── encoding real do SHA3 seria silenciosamente tratado como AdvSIMD comum (G8) — conferido bit
-    // ── a bit contra corpus real (`aarch64-linux-gnu-as`/`objdump`, `.arch armv8.2-a+sha3`).
+    // ── B11.12/B19.10: prefixo fixo de 8 bits (`11001110`) da criptografia SHA3/SHA-512/SM3/SM4
+    // ── ({@link CryptoRows}). `bits[28:24]="01110"` sozinho colide com o prefixo vetorial do AdvSIMD
+    // ── (`bit31` decide), por isso o prefixo inteiro é testado antes de {@link #decodeAdvancedSimdInteger}.
     private static final int CRYPTO_SHA3_PREFIX_SHIFT = 24;
     private static final int CRYPTO_SHA3_PREFIX_MASK = 0xFF;
     private static final int CRYPTO_SHA3_PREFIX_PATTERN = 0b1100_1110;
-    /// Campo `Op0` (bits[23:21], 3 bits) que discrimina as 4 operações dentro do prefixo acima.
-    private static final int CRYPTO_SHA3_OP0_SHIFT = 21;
-    private static final int CRYPTO_SHA3_OP0_MASK = 0b111;
-    private static final int CRYPTO_SHA3_OP0_EOR3 = 0b000;
-    private static final int CRYPTO_SHA3_OP0_BCAX = 0b001;
-    private static final int CRYPTO_SHA3_OP0_RAX1 = 0b011;
-    private static final int CRYPTO_SHA3_OP0_XAR = 0b100;
-    /// `Ra` de `EOR3`/`BCAX` (bits[13:10]) — campo de SÓ 4 bits no encoding real (`V0`-`V15`),
-    /// diferente de `Rd`/`Rn`/`Rm` (5 bits, `REGISTER_FIELD_MASK`) — confirmado bit a bit contra
-    /// corpus real (assembler recusa `Va` fora de `V0`-`V15` com erro "operand out of range").
-    private static final int CRYPTO_SHA3_RA_SHIFT = 10;
-    private static final int CRYPTO_SHA3_RA_MASK = 0b1111;
-    /// `EOR3`/`BCAX`: bits[15:14] fixo="00" (posição ocupada por `imm6`/opcode nas outras formas
-    /// deste prefixo) — G8, recusar se não bater em vez de ignorar.
-    private static final int CRYPTO_SHA3_FOUR_REG_BIT15_14_SHIFT = 14;
-    private static final int CRYPTO_SHA3_FOUR_REG_BIT15_14_MASK = 0b11;
-    /// `RAX1`: bits[15:10] fixo="100011" — sem `Ra`/imediato (só 2 registradores fonte), este campo
-    /// de 6 bits é puro preenchimento fixo do encoding, não um opcode livre.
-    private static final int CRYPTO_SHA3_RAX1_BIT15_10_SHIFT = 10;
-    private static final int CRYPTO_SHA3_RAX1_BIT15_10_MASK = 0b11_1111;
-    private static final int CRYPTO_SHA3_RAX1_BIT15_10_PATTERN = 0b10_0011;
-    /// `XAR`: `imm6` (bits[15:10], rotação à direita, `0`-`63`).
-    private static final int CRYPTO_SHA3_XAR_IMM6_SHIFT = 10;
-    private static final int CRYPTO_SHA3_XAR_IMM6_MASK = 0b11_1111;
-    /// `RAX1` não tem campo de imediato real — o decoder passa `0` para
-    /// {@link CryptoOp64.Sha3TwoSourceRotate#rotateAmount()} (nunca lido pelo executor para esta
-    /// operação, ver o javadoc do record).
-    private static final int CRYPTO_SHA3_RAX1_UNUSED_ROTATE_AMOUNT = 0;
-
-    // ── B19.10 (`FEAT_SHA512`/`FEAT_SM3`/`FEAT_SM4`): as 13 linhas vizinhas que a B11.12 deixou no
-    // ── MESMO prefixo 0xCE, sem dono. `Op0` ganha 2 valores novos: `0b010` (`SM3SS1`, layout
-    // ── IDÊNTICO a `EOR3`/`BCAX` — 4 registradores com `Ra` de 4 bits — e `SM3TT1A/1B/2A/2B`,
-    // ── layout PRÓPRIO com `op`+`imm2`, discriminados por bits[15:14]) e `0b110` (`SHA512SU0`/
-    // ── `SM4E`, forma de 2 registradores com `Rm`(bits[20:16]) fixo em zero). `Op0=0b011` (já
-    // ── reivindicado por `RAX1`) ganha 6 vizinhos NOVOS no mesmo campo de opcode de 6 bits
-    // ── (bits[15:10]): `SHA512H`/`SHA512H2`/`SHA512SU1` e `SM3PARTW1`/`SM3PARTW2`/`SM4EKEY`.
-    private static final int CRYPTO_SHA3_OP0_SM3_MIX = 0b010;
-    private static final int CRYPTO_SHA3_OP0_TWO_REGISTER = 0b110;
-    /// Campo de opcode de 6 bits (bits[15:10]) dentro de `Op0=0b011` — MESMA posição/largura de
-    /// {@link #CRYPTO_SHA3_RAX1_BIT15_10_SHIFT}/{@link #CRYPTO_SHA3_RAX1_BIT15_10_MASK}, generalizada
-    /// aqui porque agora discrimina 7 operações, não só `RAX1`.
-    private static final int CRYPTO_THREE_REGISTER_OPCODE6_SHIFT = 10;
-    private static final int CRYPTO_THREE_REGISTER_OPCODE6_MASK = 0b11_1111;
-    private static final int CRYPTO_OPCODE6_SHA512H = 0b10_0000;
-    private static final int CRYPTO_OPCODE6_SHA512H2 = 0b10_0001;
-    private static final int CRYPTO_OPCODE6_SHA512SU1 = 0b10_0010;
-    private static final int CRYPTO_OPCODE6_SM3PARTW1 = 0b11_0000;
-    private static final int CRYPTO_OPCODE6_SM3PARTW2 = 0b11_0001;
-    private static final int CRYPTO_OPCODE6_SM4EKEY = 0b11_0010;
-    /// `Op0=0b110`: `Rm` (bits[20:16], normalmente o 3º registrador fonte) é fixo em zero — só 2
-    /// registradores reais (`Rn`/`Rd`), MESMO truque de `AESE`/`AESD` (B8.11) mas aqui o campo
-    /// sobra no encoding em vez de simplesmente não existir.
-    private static final int CRYPTO_TWO_REGISTER_RM_FIXED_SHIFT = 16;
-    private static final int CRYPTO_TWO_REGISTER_RM_FIXED_MASK = 0b1_1111;
-    private static final int CRYPTO_TWO_REGISTER_RM_FIXED_PATTERN = 0;
-    /// Opcode de 6 bits (bits[15:10]) dentro de `Op0=0b110` — só 2 valores usados dos 64 possíveis.
-    private static final int CRYPTO_TWO_REGISTER_OPCODE6_SHIFT = 10;
-    private static final int CRYPTO_TWO_REGISTER_OPCODE6_MASK = 0b11_1111;
-    private static final int CRYPTO_OPCODE6_SHA512SU0 = 0b10_0000;
-    private static final int CRYPTO_OPCODE6_SM4E = 0b10_0001;
-    /// `Op0=0b010`: MESMO bits[15:14] de `EOR3`/`BCAX` (`CRYPTO_SHA3_FOUR_REG_BIT15_14_*`) — `00`
-    /// seleciona `SM3SS1` (forma de 4 registradores, `Ra` no mesmo campo de 4 bits); `10` seleciona
-    /// `SM3TT1A/1B/2A/2B` (forma própria, `op`+`imm2`).
-    private static final int CRYPTO_SM3_MIX_BIT15_14_SM3SS1 = 0b00;
-    private static final int CRYPTO_SM3_MIX_BIT15_14_SM3TT = 0b10;
-    /// `SM3TT*`: `op` (bits[11:10], seleciona a variante — `00`=`TT1A`, `01`=`TT1B`, `10`=`TT2A`,
-    /// `11`=`TT2B`) e `imm2` (bits[13:12], operando real da instrução — CAMPOS DIFERENTES, ver a
-    /// Armadilha 3 da task B19.10; confirmado empiricamente contra corpus real: `sm3tt1a v5,v6,v7[3]`
-    /// codifica bits[13:12]=`11` e bits[11:10]=`00` — se fosse o inverso, mudar só o `imm2` teria
-    /// trocado o MNEMÔNICO para `SM3TT2B`, o que o assembler nunca faria).
-    private static final int CRYPTO_SM3TT_OP_SHIFT = 10;
-    private static final int CRYPTO_SM3TT_OP_MASK = 0b11;
-    private static final int CRYPTO_SM3TT_IMM2_SHIFT = 12;
-    private static final int CRYPTO_SM3TT_IMM2_MASK = 0b11;
-
-    /// B8.10: bit alto (bit15, único bit de {@link #ADVSIMD_INT_OPCODE_SHIFT} acima do campo de 4
-    /// bits de `EXT`/permute/`TBL`/`TBX`) — quando setado (com `bit10=0`), o encoding é reservado
-    /// dentro do espaço EXT/permute/TBL — ver {@link #decodeAdvancedSimdExtractPermuteTable}.
-    /// B8.12: usado também dentro de `INS_element` (`bit10=1`), onde `bit15` fixo em `1` é
-    /// igualmente reservado — ver {@link #decodeAdvancedSimdCopy}.
-    private static final int ADVSIMD_EXTRACT_PERMUTE_BIT15_MASK = 0b1_0000;
-    /// B8.10: `imm4` de `EXT` (bits[14:11]) — igual ao campo `opcode` inteiro quando
-    /// {@link #ADVSIMD_EXTRACT_PERMUTE_BIT15_MASK} não está setado. B8.12: MESMA posição de bits
-    /// reaproveitada por `imm4` de `DUP`/`INS_general`/`SMOV`/`UMOV` e por `si` (índice fonte) de
-    /// `INS_element` — ver {@link #decodeAdvancedSimdCopy}.
-    private static final int ADVSIMD_EXTRACT_IMM_MASK = 0b1111;
-    /// B8.10: bit alto de `imm4` (bit14) — só existe na forma `Q` real (`imm3`, 3 bits, na forma
-    /// `D`); setado sem `Q` é reservado (G8).
-    private static final int ADVSIMD_EXTRACT_IMM_Q_BIT = 0b1000;
-    /// B8.12: valores de `imm4` (bits[14:11], ver {@link #ADVSIMD_EXTRACT_IMM_MASK}) que
-    /// selecionam cada instrução de "AdvSIMD copy" com `U=0` — conferidos bit a bit contra corpus
-    /// real (`aarch64-none-elf-as`/`objdump`, devkitA64). Valores fora desta lista são reservados.
-    private static final int ADVSIMD_COPY_DUP_ELEMENT = 0b0000;
-    private static final int ADVSIMD_COPY_DUP_GENERAL = 0b0001;
-    private static final int ADVSIMD_COPY_INS_GENERAL = 0b0011;
-    private static final int ADVSIMD_COPY_SMOV = 0b0101;
-    private static final int ADVSIMD_COPY_UMOV = 0b0111;
-    /// E15.9b: "AdvSIMD copy" é `0 Q op 01110000 imm5 0 imm4 1` — `bits[23:22]` (o campo `size` do
-    /// resto do espaço) fixos em `00`; qualquer outro valor que chegue ao copy é reservado (G8).
-    private static final int ADVSIMD_COPY_BITS23_22_PATTERN = 0b00;
-    /// E15.9c: `EXT` (`0 Q 101110 op2 0 Rm 0 imm4 0`) e as formas escalares `bit21=0` que sobram
-    /// depois da tabela (`SHA*` three-register e `DUP_element_s`, ambas `01011110 000`) têm
-    /// `bits[23:22]` fixos em `00` — o mesmo valor do copy.
-    private static final int ADVSIMD_BIT21_ZERO_FIXED_SIZE_PATTERN = ADVSIMD_COPY_BITS23_22_PATTERN;
-
-    /// B19.8 (`FEAT_LUT`): `LUTI2`/`LUTI4` vivem no MESMO espaço `bit21=0`/`u=0`/`bit10=0`/`bit15=0`
-    /// de {@link #decodeAdvancedSimdExtractPermuteTable} que `EXT`(`u=1`)/permute(`bit11=1`)/`TBL`
-    /// (`bit11=0`,`esz=00` fixo) — nunca colidem hoje: as 4 linhas caem em `esz!=0` dentro do ramo
-    /// `TBL` (bits[23:22] ∈ {`10`,`11`,`01`}, nunca `00`) e continuam `unsupported` sem a feature,
-    /// mesma prova de G3/G8 que a B11.4 já fez para `FEAT_RDM`. Discriminador: bits[23:21] (3 bits,
-    /// bit21 já é `0` pelo chamador) separa as 3 famílias; dentro de `LUTI4` (`0b010`), bits[14:10]
-    /// (`idx`+bits fixos, ver abaixo) separam `_1b` de `_2h`.
-    private static final int ADVSIMD_LUTI_HIGH_BITS_SHIFT = 21;
-    private static final int ADVSIMD_LUTI_HIGH_BITS_MASK = 0b111;
-    private static final int ADVSIMD_LUTI2_1B_PATTERN = 0b100;
-    private static final int ADVSIMD_LUTI2_1H_PATTERN = 0b110;
-    private static final int ADVSIMD_LUTI4_PATTERN = 0b010;
-    /// Campo bits[14:10] (5 bits): `idx` + os bits fixos que o encoding real intercala com ele —
-    /// ler como bloco único evita separar `idx` dos bits fixos do meio (armadilha 1 da task:
-    /// `LUTI4_1b`/`LUTI4_2h` só diferem aqui, nunca em bits[23:22]).
-    private static final int ADVSIMD_LUTI_LOW_FIELD_SHIFT = 10;
-    private static final int ADVSIMD_LUTI_LOW_FIELD_MASK = 0b1_1111;
-    /// `LUTI2_1b`: `idx`(2 bits, alto) + `100` fixo (3 bits, baixo) — `idx = low >>> 3`.
-    private static final int ADVSIMD_LUTI2_1B_FIXED_MASK = 0b111;
-    private static final int ADVSIMD_LUTI2_1B_FIXED_VALUE = 0b100;
-    private static final int ADVSIMD_LUTI2_1B_IDX_SHIFT = 3;
-    /// `LUTI2_1h`: `idx`(3 bits, alto) + `00` fixo (2 bits, baixo) — `idx = low >>> 2`.
-    private static final int ADVSIMD_LUTI2_1H_FIXED_MASK = 0b11;
-    private static final int ADVSIMD_LUTI2_1H_FIXED_VALUE = 0b00;
-    private static final int ADVSIMD_LUTI2_1H_IDX_SHIFT = 2;
-    /// `LUTI4_1b`: `idx`(1 bit, alto) + `1000` fixo (4 bits, baixo) — `idx = low >>> 4`.
-    private static final int ADVSIMD_LUTI4_1B_FIXED_MASK = 0b1111;
-    private static final int ADVSIMD_LUTI4_1B_FIXED_VALUE = 0b1000;
-    private static final int ADVSIMD_LUTI4_1B_IDX_SHIFT = 4;
-    /// `LUTI4_2h`: `idx`(2 bits, alto) + `100` fixo (3 bits, baixo) — `idx = low >>> 3` (MESMA
-    /// máscara/deslocamento fixo de `LUTI2_1b`, discriminados só pelo `ADVSIMD_LUTI4_PATTERN`
-    /// externo, nunca pelo campo baixo sozinho).
-    private static final int ADVSIMD_LUTI4_2H_FIXED_MASK = 0b111;
-    private static final int ADVSIMD_LUTI4_2H_FIXED_VALUE = 0b100;
-    private static final int ADVSIMD_LUTI4_2H_IDX_SHIFT = 3;
-    private static final int ADVSIMD_LUTI_ESZ_BYTE = 0;
-    private static final int ADVSIMD_LUTI_ESZ_HALFWORD = 1;
 
     // ── "Advanced SIMD shift by immediate" (B8.8): prefixo bits[28:24]="01111" (vetorial, `Q`=bit30
     // ── real) OU "11111"+bit30=1 (escalar) — UM BIT A MAIS que o prefixo de "three same"/
@@ -575,32 +409,9 @@ public final class Aarch64Decoder {
     /// {@link #decodeAdvancedSimdIndexedElement}.
     private static final int ADVSIMD_BFLOAT16_INDEXED_OPCODE = 0b1111;
 
-    // ── B19.7 (`FEAT_BF16`): `BFDOT_v`/`BFMLAL_v`/`BFMMLA` vetorial/matricial (não-indexado) — ver
-    // ── {@link #decodeAdvancedSimdExtractPermuteTable}. Vivem no MESMO espaço `bit21=0` de EXT/
-    // ── permute/TBL/copy (`U`=1, `bit10`=1, `opcode`(bits[15:11], 5 bits) distinto).
-    private static final int ADVSIMD_BF16_OPCODE_DOT_OR_MLAL = 0b1_1111;
-    private static final int ADVSIMD_BFMMLA_OPCODE = 0b1_1101;
-    private static final int ADVSIMD_BF16_SIZE_HALFWORD = 0b01;
-    private static final int ADVSIMD_BF16_SIZE_DOUBLEWORD = 0b11;
-
-    // ── B19.12 (`FEAT_I8MM`): `USDOT_v`/`SMMLA`/`UMMLA`/`USMMLA` vetorial/matricial (não-indexado) —
-    // ── ver {@link #decodeAdvancedSimdExtractPermuteTable}. MESMO espaço `bit21=0` de EXT/permute/
-    // ── TBL/copy/`BFDOT_v`/`BFMLAL_v`/`BFMMLA` acima, mas com `U=0` (ao contrário do BF16, que usa
-    // ── `U=1`) — sem colisão, conferido bit a bit contra corpus real (`aarch64-linux-gnu-as
-    // ── -march=armv8.6-a+i8mm`). `size`(23:22) é sempre `10` ("S", o resultado é sempre uma lane
-    // ── `int32`) nas três; `Q` é livre em `USDOT_v` mas FIXO em `1` em `SMMLA`/`UMMLA`/`USMMLA`
-    // ── (não há forma de 64 bits, mesma disciplina de `BFMMLA`).
-    private static final int ADVSIMD_I8MM_OPCODE_USDOT = 0b1_0011;
-    private static final int ADVSIMD_I8MM_OPCODE_MMLA = 0b1_0100;
-    private static final int ADVSIMD_I8MM_OPCODE_USMMLA = 0b1_0101;
+    /// B19.12 (`FEAT_I8MM`): `size`(23:22) `10` ("S") de `USDOT_vi` — as formas não indexadas
+    /// (`USDOT_v`/`SMMLA`/`UMMLA`/`USMMLA`) são linhas de {@link AdvSimdBit21ZeroRows} desde a E15.15a.
     private static final int ADVSIMD_I8MM_SIZE_WORD = 0b10;
-
-    /// B19.23 (`FEAT_DotProd` residual): `opcode`(bits[15:11], 5 bits) de `SDOT_v`/`UDOT_v` — vizinho
-    /// direto de {@link #ADVSIMD_I8MM_OPCODE_USDOT} (`0b1_0011`), MESMO espaço `bit21=0`/`bit10=1`
-    /// de {@link #decodeAdvancedSimdExtractPermuteTable}. `U` distingue `SDOT`(`u=0`, sinal nos dois
-    /// operandos) de `UDOT`(`u=1`, sem sinal nos dois) — `size`(23:22) sempre
-    /// {@link #ADVSIMD_I8MM_SIZE_WORD} (`10`), mesma disciplina de `USDOT_v`.
-    private static final int ADVSIMD_DOTPRODUCT_OPCODE = 0b1_0010;
 
     /// B19.12 (`FEAT_I8MM`): `opcode`(bits[15:12]) de `USDOT_vi`/`SUDOT_vi` — MESMO valor cru de
     /// {@link #ADVSIMD_BFLOAT16_INDEXED_OPCODE} (nomeado à parte para não confundir as duas
@@ -754,12 +565,11 @@ public final class Aarch64Decoder {
             }
             return op;
         }
-        // B11.12: `EOR3`/`BCAX`/`RAX1`/`XAR` (`FEAT_SHA3`) — prefixo de 8 bits próprio, checado
-        // ANTES do resto (ver o comentário de `CRYPTO_SHA3_PREFIX_PATTERN`: sem isto, o encoding
-        // real cairia silenciosamente em `decodeAdvancedSimdInteger`, G8).
+        // B11.12/B19.10: prefixo `11001110` (`FEAT_SHA3`/`SHA512`/`SM3`/`SM4`) — linhas de
+        // {@link CryptoRows} na {@link #advSimdTable} (E15.15a); o que não casa é recusado (G8).
         int crypto3Prefix = (word >>> CRYPTO_SHA3_PREFIX_SHIFT) & CRYPTO_SHA3_PREFIX_MASK;
         if (crypto3Prefix == CRYPTO_SHA3_PREFIX_PATTERN) {
-            return decodeCryptoSha3(word, address);
+            return decodeAdvSimdTable(word, address);
         }
         // B8.7: Advanced SIMD vetorial (prefixo(28:24)="01110") ou escalar D-only inteiro
         // (prefixo(28:24)="11110" com bit30=1, mesmo truque de prefixo de
@@ -770,131 +580,13 @@ public final class Aarch64Decoder {
         return decodeAdvancedSimdInteger(word, address);
     }
 
-    /// `EOR3`/`BCAX`/`RAX1`/`XAR` (`FEAT_SHA3`, ARMv8.2-A, B11.12) e, desde a B19.10, os vizinhos que
-    /// moram no MESMO prefixo de 8 bits (`FEAT_SHA512`/`FEAT_SM3`/`FEAT_SM4`) — ver o comentário de
-    /// {@link #CRYPTO_SHA3_PREFIX_PATTERN}. Cada família tem seu PRÓPRIO gate (G3/G8: sem a feature
-    /// correta, `unsupported` — nunca uma checagem em bloco, ver o Aceite da B19.10 sobre
-    /// independência dos gates).
-    private Ir64Op decodeCryptoSha3(int word, long address) {
-        int op0 = (word >>> CRYPTO_SHA3_OP0_SHIFT) & CRYPTO_SHA3_OP0_MASK;
-        int rd = word & REGISTER_FIELD_MASK;
-        int rn = (word >>> RN_SHIFT) & REGISTER_FIELD_MASK;
-        int rm = (word >>> FP_RM_SHIFT) & REGISTER_FIELD_MASK;
-        return switch (op0) {
-            case CRYPTO_SHA3_OP0_EOR3, CRYPTO_SHA3_OP0_BCAX -> {
-                if (!architecture.has(Aarch64Feature.SHA3)) {
-                    throw unsupported(word, address);
-                }
-                int bit15_14 = (word >>> CRYPTO_SHA3_FOUR_REG_BIT15_14_SHIFT) & CRYPTO_SHA3_FOUR_REG_BIT15_14_MASK;
-                if (bit15_14 != 0) {
-                    throw unsupported(word, address);
-                }
-                int ra = (word >>> CRYPTO_SHA3_RA_SHIFT) & CRYPTO_SHA3_RA_MASK;
-                Ir64CryptoSha3Op op = op0 == CRYPTO_SHA3_OP0_EOR3 ? Ir64CryptoSha3Op.EOR3 : Ir64CryptoSha3Op.BCAX;
-                yield new CryptoOp64.Sha3FourRegister(op, rd, rn, rm, ra);
-            }
-            // B19.10: `SM3SS1` (4 registradores, MESMO layout de `EOR3`/`BCAX` — `Ra` de 4 bits) e
-            // `SM3TT1A/1B/2A/2B` (layout próprio) convivem em `op0=0b010`, discriminados por
-            // bits[15:14] — nenhum dos dois grupos existia antes da B19.10 (espaço inteiro `null`
-            // no `default` do switch antigo, aqui a primeira vez que é reivindicado).
-            case CRYPTO_SHA3_OP0_SM3_MIX -> {
-                int bit15_14 = (word >>> CRYPTO_SHA3_FOUR_REG_BIT15_14_SHIFT) & CRYPTO_SHA3_FOUR_REG_BIT15_14_MASK;
-                if (bit15_14 == CRYPTO_SM3_MIX_BIT15_14_SM3SS1) {
-                    if (!architecture.has(Aarch64Feature.SM3)) {
-                        throw unsupported(word, address);
-                    }
-                    int ra = (word >>> CRYPTO_SHA3_RA_SHIFT) & CRYPTO_SHA3_RA_MASK;
-                    yield new CryptoOp64.Sm3FourRegister(rd, rn, rm, ra);
-                }
-                if (bit15_14 == CRYPTO_SM3_MIX_BIT15_14_SM3TT) {
-                    if (!architecture.has(Aarch64Feature.SM3)) {
-                        throw unsupported(word, address);
-                    }
-                    int ttOp = (word >>> CRYPTO_SM3TT_OP_SHIFT) & CRYPTO_SM3TT_OP_MASK;
-                    int imm2 = (word >>> CRYPTO_SM3TT_IMM2_SHIFT) & CRYPTO_SM3TT_IMM2_MASK;
-                    Ir64CryptoSm3TtOp op = switch (ttOp) {
-                        case 0 -> Ir64CryptoSm3TtOp.TT1A;
-                        case 1 -> Ir64CryptoSm3TtOp.TT1B;
-                        case 2 -> Ir64CryptoSm3TtOp.TT2A;
-                        default -> Ir64CryptoSm3TtOp.TT2B;
-                    };
-                    yield new CryptoOp64.Sm3ThreeRegisterImm2(op, rd, rn, rm, imm2);
-                }
-                throw unsupported(word, address);
-            }
-            // B19.10: `op0=0b011` era só `RAX1` (`bits[15:10]="100011"`) — os outros 63 valores do
-            // mesmo campo de 6 bits caíam em `unsupported` porque nada mais existia. Agora 6
-            // vizinhos reais (SHA-512/SM3/SM4) usam o MESMO campo, cada um com feature própria.
-            case CRYPTO_SHA3_OP0_RAX1 -> {
-                int opcode6 = (word >>> CRYPTO_THREE_REGISTER_OPCODE6_SHIFT) & CRYPTO_THREE_REGISTER_OPCODE6_MASK;
-                if (opcode6 == CRYPTO_SHA3_RAX1_BIT15_10_PATTERN) {
-                    if (!architecture.has(Aarch64Feature.SHA3)) {
-                        throw unsupported(word, address);
-                    }
-                    yield new CryptoOp64.Sha3TwoSourceRotate(
-                            Ir64CryptoSha3Op.RAX1, rd, rn, rm, CRYPTO_SHA3_RAX1_UNUSED_ROTATE_AMOUNT);
-                }
-                Ir64CryptoSha512Op sha512Op = switch (opcode6) {
-                    case CRYPTO_OPCODE6_SHA512H -> Ir64CryptoSha512Op.SHA512H;
-                    case CRYPTO_OPCODE6_SHA512H2 -> Ir64CryptoSha512Op.SHA512H2;
-                    case CRYPTO_OPCODE6_SHA512SU1 -> Ir64CryptoSha512Op.SHA512SU1;
-                    default -> null;
-                };
-                if (sha512Op != null) {
-                    if (!architecture.has(Aarch64Feature.SHA512)) {
-                        throw unsupported(word, address);
-                    }
-                    yield new CryptoOp64.Sha512ThreeRegister(sha512Op, rd, rn, rm);
-                }
-                Ir64CryptoSm3Op sm3Op = switch (opcode6) {
-                    case CRYPTO_OPCODE6_SM3PARTW1 -> Ir64CryptoSm3Op.PARTW1;
-                    case CRYPTO_OPCODE6_SM3PARTW2 -> Ir64CryptoSm3Op.PARTW2;
-                    default -> null;
-                };
-                if (sm3Op != null) {
-                    if (!architecture.has(Aarch64Feature.SM3)) {
-                        throw unsupported(word, address);
-                    }
-                    yield new CryptoOp64.Sm3ThreeRegister(sm3Op, rd, rn, rm);
-                }
-                if (opcode6 == CRYPTO_OPCODE6_SM4EKEY) {
-                    if (!architecture.has(Aarch64Feature.SM4)) {
-                        throw unsupported(word, address);
-                    }
-                    yield new CryptoOp64.Sm4KeyUpdate(rd, rn, rm);
-                }
-                throw unsupported(word, address);
-            }
-            case CRYPTO_SHA3_OP0_XAR -> {
-                if (!architecture.has(Aarch64Feature.SHA3)) {
-                    throw unsupported(word, address);
-                }
-                int imm6 = (word >>> CRYPTO_SHA3_XAR_IMM6_SHIFT) & CRYPTO_SHA3_XAR_IMM6_MASK;
-                yield new CryptoOp64.Sha3TwoSourceRotate(Ir64CryptoSha3Op.XAR, rd, rn, rm, imm6);
-            }
-            // B19.10: `SHA512SU0`/`SM4E` — forma de 2 registradores, `Rm`(bits[20:16]) fixo em zero.
-            case CRYPTO_SHA3_OP0_TWO_REGISTER -> {
-                int rmFixed = (word >>> CRYPTO_TWO_REGISTER_RM_FIXED_SHIFT) & CRYPTO_TWO_REGISTER_RM_FIXED_MASK;
-                if (rmFixed != CRYPTO_TWO_REGISTER_RM_FIXED_PATTERN) {
-                    throw unsupported(word, address);
-                }
-                int opcode6 = (word >>> CRYPTO_TWO_REGISTER_OPCODE6_SHIFT) & CRYPTO_TWO_REGISTER_OPCODE6_MASK;
-                if (opcode6 == CRYPTO_OPCODE6_SHA512SU0) {
-                    if (!architecture.has(Aarch64Feature.SHA512)) {
-                        throw unsupported(word, address);
-                    }
-                    yield new CryptoOp64.Sha512TwoRegister(rd, rn);
-                }
-                if (opcode6 == CRYPTO_OPCODE6_SM4E) {
-                    if (!architecture.has(Aarch64Feature.SM4)) {
-                        throw unsupported(word, address);
-                    }
-                    yield new CryptoOp64.Sm4Encrypt(rd, rn);
-                }
-                throw unsupported(word, address);
-            }
-            default -> throw unsupported(word, address);
-        };
+    /// E15.15a: {@link #advSimdTable}; o que não casa nenhuma linha é recusado (G8).
+    private Ir64Op decodeAdvSimdTable(int word, long address) {
+        Ir64Op op = advSimdTable.decode(word, address);
+        if (op == null) {
+            throw unsupported(word, address);
+        }
+        return op;
     }
 
     /// Sub-dispatch de "AdvSIMD inteiro — aritmética e comparação" (B8.7): entra já sabendo que
@@ -938,57 +630,10 @@ public final class Aarch64Decoder {
         }
         boolean q = !scalar && ((word >>> ADVSIMD_INT_Q_SHIFT) & 1) != 0;
         if (((word >>> ADVSIMD_INT_BIT21_SHIFT) & 1) == 0) {
-            // E15.9: as formas com feature deste espaço (RDM/FP16/FP8/FAMINMAX/FP8FMA/FP8DOT2/
-            // FP8DOT4/FCMA) são linhas de {@link AdvSimdBit21ZeroRows}; a tabela já vem filtrada pelo
-            // preset, e a exclusão mútua entre as linhas é verificada por teste. O que não casar segue
-            // para EXT/permute/TBL/copy/SHA abaixo.
-            Ir64Op tableOp = advSimdBit21ZeroTable.decode(word, address);
-            if (tableOp != null) {
-                return tableOp;
-            }
-            // B8.10: `EXT`/`UZP1`/`UZP2`/`TRN1`/`TRN2`/`ZIP1`/`ZIP2`/`TBL`/`TBX` vivem no MESMO
-            // prefixo vetorial "01110", `bit21=0` — espaço que B8.7-B8.9 nunca examinaram (só
-            // tratavam `bit21=1`, lançando `unsupported` direto para o resto). B8.12: `DUP`/`INS`/
-            // `SMOV`/`UMOV` (AdvSIMD copy) TAMBÉM vivem aqui (`bit10=1`, oposto das famílias
-            // acima) — ver {@link #decodeAdvancedSimdCopy}.
-            if (!scalar) {
-                Ir64Op op = decodeAdvancedSimdExtractPermuteTable(word, address, q);
-                if (op != null) {
-                    return op;
-                }
-            } else if (((word >>> ADVSIMD_INT_U_SHIFT) & 1) == 0
-                    &&((word >>> ADVSIMD_INT_SIZE_SHIFT) & ADVSIMD_INT_SIZE_MASK) == ADVSIMD_BIT21_ZERO_FIXED_SIZE_PATTERN) {
-                // E15.9c: SHA three-register e `DUP_element_s` são `01011110 000` — `U`(bit29)=0 e
-                // `bits[23:22]=00` fixos; antes qualquer valor desses bits saía como SHA/DUP (G8).
-                // B8.11b: "Cryptographic three-register SHA" (`SHA1C`/`SHA1P`/`SHA1M`/`SHA1SU0`/
-                // `SHA256H`/`SHA256H2`/`SHA256SU1`) vive no MESMO prefixo "escalar" que `AESE`/etc
-                // (bit30=1/bit21=0), espaço nunca examinado antes (B8.11 só tratava `bit21=1`).
-                // CONFERIDO bit a bit contra corpus real (`aarch64-none-elf-as`/`objdump`,
-                // devkitA64, `.arch armv8-a+crypto`): `Rm`(20:16)/`opcode`(15:10, 6 bits)/`Rn`(9:5)/
-                // `Rd`(4:0) — layout PRÓPRIO, diferente do resto de `decodeAdvancedSimdInteger`
-                // (sem `size`/`U` reais nesta forma).
-                int rm = (word >>> ADVSIMD_INT_RM_SHIFT) & ADVSIMD_INT_RM_MASK;
-                int opcode = (word >>> CRYPTO_SHA_THREE_REG_OPCODE_SHIFT) & CRYPTO_SHA_THREE_REG_OPCODE_MASK;
-                int rn = (word >>> RN_SHIFT) & REGISTER_FIELD_MASK;
-                int rd = word & REGISTER_FIELD_MASK;
-                // B19.6 bloco E: `DUP_element_s` (Advanced SIMD scalar copy) vive no MESMO prefixo
-                // escalar, discriminada de SHA-three-register por `opcode==0b000001` (bit10=1 —
-                // todas as 7 opcodes SHA reais têm bit10=0, ver os valores pares de
-                // `decodeCryptoShaThreeRegisterOpcode`). `rm` aqui não é `Rm`: é `imm5` cru (bits
-                // [20:16], MESMA posição que {@link #decodeAdvancedSimdCopy} usa para a forma
-                // vetorial).
-                if (opcode == ADVSIMD_SCALAR_COPY_OPCODE) {
-                    Ir64Op dup = decodeAdvancedSimdScalarDuplicateElement(rm, rn, rd);
-                    if (dup != null) {
-                        return dup;
-                    }
-                }
-                Ir64CryptoShaThreeRegisterOp shaOp = decodeCryptoShaThreeRegisterOpcode(opcode);
-                if (shaOp != null) {
-                    return new CryptoOp64.ShaThreeRegister(shaOp, rd, rn, rm);
-                }
-            }
-            throw unsupported(word, address);
+            // E15.9/E15.15a: o espaço `bit21=0` inteiro (formas com feature, EXT/permute/TBL/copy, SHA
+            // de três registradores) é a {@link #advSimdTable}, já filtrada pelo preset; a exclusão
+            // mútua entre as linhas é verificada por teste. O que não casa é recusado (G8).
+            return decodeAdvSimdTable(word, address);
         }
         // B8.8: campo `size` real SEMPRE lido, mesmo escalar — B8.7 assumia `esz=3` fixo para TODO
         // escalar (válido só para `ADD_s`/`SUB_s`/`CM**_s`/`ABS_s`/`NEG_s`/`CM**0_s`, que exigem
@@ -1351,281 +996,6 @@ public final class Aarch64Decoder {
         // narrow-unário/AES/across-lanes) — encoding reservado, não "three different" (esse já foi
         // tratado acima, antes de bit11=1 sequer ser checado); G8.
         throw unsupported(word, address);
-    }
-
-    /// `EXT`(`U=1`)/`UZP1``UZP2``TRN1``TRN2``ZIP1``ZIP2`(`U=0`,`bit11=1`)/`TBL``TBX`(`U=0`,
-    /// `bit11=0`) — B8.10: as três famílias que vivem no prefixo vetorial "01110", `bit21=0`,
-    /// `bit10=0` (espaço nunca examinado por B8.7-B8.9, que só tratavam `bit21=1` e lançavam
-    /// `unsupported` direto para o resto). B8.12: `DUP`/`INS`/`SMOV`/`UMOV` (AdvSIMD copy) vivem
-    /// no MESMO prefixo com `bit10=1` — despachadas para {@link #decodeAdvancedSimdCopy} antes de
-    /// qualquer checagem deste método (ver ali). Este método continua devolvendo `null` (nunca um
-    /// encoding ERRADO, G8) para qualquer combinação reservada dentro do seu próprio espaço
-    /// (`bit10=0`); o chamador lança `unsupported`. Discriminadores conferidos linha a linha
-    /// contra `a64.decode` real do QEMU (seções "Advanced SIMD extract"/"permute"/"table
-    /// lookup").
-    private Ir64Op decodeAdvancedSimdExtractPermuteTable(int word, long address, boolean q) {
-        boolean u = ((word >>> ADVSIMD_INT_U_SHIFT) & 1) != 0;
-        int rm = (word >>> ADVSIMD_INT_RM_SHIFT) & ADVSIMD_INT_RM_MASK;
-        // `opcode` reaproveita o MESMO campo bits[15:11] de {@link #decodeAdvancedSimdInteger}
-        // (`bit15` é o bit mais alto, `bit11` o mais baixo) — as três famílias abaixo o
-        // desmontam de formas diferentes (EXT: `imm4` cru; permute: 3 bits de opcode + `bit11=1`
-        // fixo; TBL/TBX: `len`+`tbx` + `bit11=0` fixo).
-        int opcode = (word >>> ADVSIMD_INT_OPCODE_SHIFT) & ADVSIMD_INT_OPCODE_MASK;
-        int rn = (word >>> RN_SHIFT) & REGISTER_FIELD_MASK;
-        int rd = word & REGISTER_FIELD_MASK;
-        boolean bit15 = (opcode & ADVSIMD_EXTRACT_PERMUTE_BIT15_MASK) != 0;
-        boolean bit11 = (opcode & 1) != 0;
-        boolean bit10 = ((word >>> ADVSIMD_INT_BIT10_SHIFT) & 1) != 0;
-        // B19.8 (`FEAT_LUT`): `LUTI2`/`LUTI4` checados ANTES do resto (EXT/permute/TBL/copy),
-        // mesmo padrão de RDM (B11.4, hoje em {@link AdvSimdBit21ZeroRows}) —
-        // sem a feature, os 4 padrões já caem em `unsupported` pelo fallback de `TBL` abaixo
-        // (`esz` nunca `0` para eles), então a ordem só evita trabalho à toa quando a feature ESTÁ
-        // presente.
-        // E15.9c: `Q` é fixo em `1` nas 4 formas (só existe `.16b`/`.8h`) — `Q=0` era aceito (G8).
-        if (architecture.has(Aarch64Feature.LOOKUP_TABLE) && q && !u && !bit10 && !bit15) {
-            Ir64Op lutiOp = decodeAdvancedSimdLookupTable(word, rm, rn, rd);
-            if (lutiOp != null) {
-                return lutiOp;
-            }
-        }
-        // B19.7 (`FEAT_BF16`): `BFDOT_v`/`BFMLAL_v`/`BFMMLA` também vivem em `bit10=1` (MESMO
-        // espaço que "AdvSIMD copy" abaixo usa), discriminados por `U`=1 + `opcode`(bits[15:11])
-        // fixo — checados ANTES de `decodeAdvancedSimdCopy` (senão nunca seriam alcançados: `bit10`
-        // desviaria para lá primeiro). Sem a feature, ou sem bater `opcode`/`size`, cai no mesmo
-        // `unsupported` de sempre (G8) — `decodeAdvancedSimdCopy` já rejeitava estes bits antes
-        // desta task, então a ordem não regride nada.
-        if (u && bit10 && architecture.has(Aarch64Feature.BFLOAT16)) {
-            int size = (word >>> ADVSIMD_INT_SIZE_SHIFT) & ADVSIMD_INT_SIZE_MASK;
-            if (opcode == ADVSIMD_BF16_OPCODE_DOT_OR_MLAL) {
-                if (size == ADVSIMD_BF16_SIZE_HALFWORD) {
-                    return new AdvSimdFpOp64.FpDotProductBFloat16(q, rd, rn, rm);
-                }
-                if (size == ADVSIMD_BF16_SIZE_DOUBLEWORD) {
-                    // `q` aqui é o seletor `B`/`T` (`top`) — `Vd.4S` é sempre 128 bits nesta
-                    // família, ver Javadoc de {@link AdvSimdFpOp64.FpMultiplyAddLongBFloat16#top}.
-                    return new AdvSimdFpOp64.FpMultiplyAddLongBFloat16(q, rd, rn, rm);
-                }
-            } else if (opcode == ADVSIMD_BFMMLA_OPCODE && size == ADVSIMD_BF16_SIZE_HALFWORD && q) {
-                // `Q` é FIXO em `1` no encoding real de `BFMMLA` (não há forma de 64 bits) —
-                // `q=false` aqui é combinação reservada (G8), cai no `unsupported` de sempre.
-                return new AdvSimdFpOp64.FpMatrixMultiplyAccumulateBFloat16(rd, rn, rm);
-            }
-        }
-        // B19.12 (`FEAT_I8MM`): `USDOT_v`/`SMMLA`/`UMMLA`/`USMMLA` também vivem em `bit10=1` (MESMO
-        // espaço) — checados ANTES de `decodeAdvancedSimdCopy` pelo MESMO motivo do bloco `BFLOAT16`
-        // acima (senão `bit10` desviaria para lá primeiro). Ao contrário do BF16 (`U` fixo em `1`),
-        // aqui `U` varia por instrução: `USDOT`/`USMMLA` só existem com `U=0` (`U=1` no MESMO opcode
-        // é reservado — `UDOT_v`/`FEAT_DotProd` vive no opcode VIZINHO `0b10010`, não neste, ver
-        // {@link #ADVSIMD_DOTPRODUCT_OPCODE}, B19.23), `UMMLA` é `U=1`, `SMMLA` é `U=0` no MESMO
-        // opcode de `UMMLA`.
-        if (bit10 && architecture.has(Aarch64Feature.INT8_MATRIX_MULTIPLY)) {
-            int size = (word >>> ADVSIMD_INT_SIZE_SHIFT) & ADVSIMD_INT_SIZE_MASK;
-            if (size == ADVSIMD_I8MM_SIZE_WORD) {
-                if (!u && opcode == ADVSIMD_I8MM_OPCODE_USDOT) {
-                    // `USDOT`: `Rn` sem sinal, `Rm` com sinal (não existe `SUDOT` vetorial).
-                    return new AdvSimdIntegerOp64.IntegerDotProduct(q, false, true, rd, rn, rm);
-                }
-                // `SMMLA`/`UMMLA`/`USMMLA`: `Q` FIXO em `1` no encoding real (sem forma de 64 bits)
-                // — `q=false` aqui é combinação reservada (G8), cai no `unsupported` de sempre.
-                if (q && opcode == ADVSIMD_I8MM_OPCODE_MMLA) {
-                    // `U` distingue `SMMLA`(assinado/assinado, `u=0`) de `UMMLA`(sem sinal/sem
-                    // sinal, `u=1`).
-                    return new AdvSimdIntegerOp64.IntegerMatrixMultiplyAccumulate(!u, !u, rd, rn, rm);
-                }
-                if (q && !u && opcode == ADVSIMD_I8MM_OPCODE_USMMLA) {
-                    // `USMMLA`: `Rn` sem sinal, `Rm` com sinal (não existe `SUMMLA`, `u=1` reservado).
-                    return new AdvSimdIntegerOp64.IntegerMatrixMultiplyAccumulate(false, true, rd, rn, rm);
-                }
-            }
-        }
-        // B19.23 (`FEAT_DotProd` residual): `SDOT_v`/`UDOT_v` vivem no MESMO espaço `bit10=1` que
-        // `USDOT_v` acima, `opcode`=0b10010 vizinho do 0b10011 de `USDOT_v`, `size` sempre
-        // {@link #ADVSIMD_I8MM_SIZE_WORD} — checados ANTES de `decodeAdvancedSimdCopy` pelo mesmo
-        // motivo do bloco `INT8_MATRIX_MULTIPLY` acima. Reusa o MESMO record `AdvSimdIntegerOp64.IntegerDotProduct`
-        // do `USDOT_v` (B19.12), com sinal IGUAL nos dois operandos em vez de misto.
-        if (bit10 && architecture.has(Aarch64Feature.DOT_PRODUCT)) {
-            int size = (word >>> ADVSIMD_INT_SIZE_SHIFT) & ADVSIMD_INT_SIZE_MASK;
-            if (size == ADVSIMD_I8MM_SIZE_WORD && opcode == ADVSIMD_DOTPRODUCT_OPCODE) {
-                // `SDOT`: os dois operandos com sinal (`u=0`); `UDOT`: os dois sem sinal (`u=1`).
-                return new AdvSimdIntegerOp64.IntegerDotProduct(q, !u, !u, rd, rn, rm);
-            }
-        }
-        if (bit10) {
-            // B8.12: `bit10=1` é exatamente o espaço de "AdvSIMD copy" (`DUP`/`INS`/`SMOV`/
-            // `UMOV`) — oposto de EXT/permute/TBL/TBX abaixo, que exigem `bit10=0`. Layout de
-            // campos (imm5/imm4/si) não tem nada a ver com o resto desta função — método próprio.
-            return decodeAdvancedSimdCopy(word, address, q);
-        }
-        if (u) {
-            // `EXT`: único mnemônico desta forma; `imm` lido cru como 4 bits (bits[14:11], que são
-            // exatamente `opcode` quando `bit15=0`) — válido sem checar `q` separadamente porque a
-            // forma D (`q=false`) exige literalmente bit14=0 no encoding real (campo `imm3`, não
-            // `imm4`); violar isso é reservado (G8).
-            // E15.9c: `op2` (`bits[23:22]`) ≠ `00` é reservado.
-            if (bit15 || ((word >>> ADVSIMD_INT_SIZE_SHIFT) & ADVSIMD_INT_SIZE_MASK)
-                    != ADVSIMD_BIT21_ZERO_FIXED_SIZE_PATTERN) {
-                return null;
-            }
-            int imm = opcode & ADVSIMD_EXTRACT_IMM_MASK;
-            if (!q && (imm & ADVSIMD_EXTRACT_IMM_Q_BIT) != 0) {
-                // `imm` >= 8 sem `Q`: bit14 real não existe na forma D (reservado), G8.
-                return null;
-            }
-            return new AdvSimdMoveOp64.Extract(q, imm, rd, rn, rm);
-        }
-        if (bit15) {
-            // Reservado dentro do espaço EXT/permute/TBL (`bit10=0`) — `AdvSIMD copy` já foi
-            // desviada acima antes de chegar aqui.
-            return null;
-        }
-        if (bit11) {
-            // `UZP1`/`UZP2`/`TRN1`/`TRN2`/`ZIP1`/`ZIP2`: `bits[11:10]="10"` fixo (`bit11=1`,
-            // `bit10=0` já checado acima); `esz` é o campo `size` livre de sempre; os 3 bits de
-            // opcode (`bits[14:12]`) selecionam a operação.
-            int esz = (word >>> ADVSIMD_INT_SIZE_SHIFT) & ADVSIMD_INT_SIZE_MASK;
-            int permuteOpcode = (opcode >>> 1) & 0b111;
-            Ir64VectorPermuteOp op = switch (permuteOpcode) {
-                case 0b001 -> Ir64VectorPermuteOp.UZP1;
-                case 0b101 -> Ir64VectorPermuteOp.UZP2;
-                case 0b010 -> Ir64VectorPermuteOp.TRN1;
-                case 0b110 -> Ir64VectorPermuteOp.TRN2;
-                case 0b011 -> Ir64VectorPermuteOp.ZIP1;
-                case 0b111 -> Ir64VectorPermuteOp.ZIP2;
-                default -> null;
-            };
-            // E15.9c: `size=11` sem `Q` seria o arranjo `.1d`, que não existe.
-            if (op == null || isSingleDoublewordArrangement(esz, q)) {
-                return null;
-            }
-            return new AdvSimdMoveOp64.Permute(op, q, esz, rd, rn, rm);
-        }
-        // `TBL`/`TBX`: `bits[11:10]="00"` fixo (`bit11=0`,`bit10=0`); `bits[23:22]="00"` fixo
-        // (parte do padrão real "000" junto com `bit21`, já garantido `0` pelo chamador) —
-        // encoding reservado se `esz!=0` aqui (G8).
-        int esz = (word >>> ADVSIMD_INT_SIZE_SHIFT) & ADVSIMD_INT_SIZE_MASK;
-        if (esz != 0) {
-            return null;
-        }
-        int len = (opcode >>> 2) & 0b11;
-        boolean tbx = ((opcode >>> 1) & 1) != 0;
-        return new AdvSimdMoveOp64.TableLookup(tbx, len, q, rd, rn, rm);
-    }
-
-    /// `LUTI2`/`LUTI4` (AdvSIMD lookup table, `FEAT_LUT`, B19.8) — chamado só quando `u=0`,
-    /// `bit10=0`, `bit15=0` (checado pelo chamador). Discrimina as 3 famílias por bits[23:21]
-    /// (`rn`/`rm`/`rd` já extraídos pelo chamador — layout idêntico ao resto de
-    /// {@link #decodeAdvancedSimdExtractPermuteTable}) e, dentro de `LUTI4`, as 2 formas por
-    /// bits[14:10] — ver as constantes `ADVSIMD_LUTI_*`. Retorna `null` (nunca decodifica errado,
-    /// G8) para qualquer combinação que não bata EXATAMENTE um dos 4 padrões reais.
-    private static Ir64Op decodeAdvancedSimdLookupTable(int word, int rm, int rn, int rd) {
-        int highBits = (word >>> ADVSIMD_LUTI_HIGH_BITS_SHIFT) & ADVSIMD_LUTI_HIGH_BITS_MASK;
-        int lowField = (word >>> ADVSIMD_LUTI_LOW_FIELD_SHIFT) & ADVSIMD_LUTI_LOW_FIELD_MASK;
-        return switch (highBits) {
-            case ADVSIMD_LUTI2_1B_PATTERN -> {
-                if ((lowField & ADVSIMD_LUTI2_1B_FIXED_MASK) != ADVSIMD_LUTI2_1B_FIXED_VALUE) {
-                    yield null;
-                }
-                int idx = lowField >>> ADVSIMD_LUTI2_1B_IDX_SHIFT;
-                yield new AdvSimdMoveOp64.LookupTable(false, ADVSIMD_LUTI_ESZ_BYTE, idx, rd, rn, rm);
-            }
-            case ADVSIMD_LUTI2_1H_PATTERN -> {
-                if ((lowField & ADVSIMD_LUTI2_1H_FIXED_MASK) != ADVSIMD_LUTI2_1H_FIXED_VALUE) {
-                    yield null;
-                }
-                int idx = lowField >>> ADVSIMD_LUTI2_1H_IDX_SHIFT;
-                yield new AdvSimdMoveOp64.LookupTable(false, ADVSIMD_LUTI_ESZ_HALFWORD, idx, rd, rn, rm);
-            }
-            case ADVSIMD_LUTI4_PATTERN -> {
-                if ((lowField & ADVSIMD_LUTI4_1B_FIXED_MASK) == ADVSIMD_LUTI4_1B_FIXED_VALUE) {
-                    int idx = lowField >>> ADVSIMD_LUTI4_1B_IDX_SHIFT;
-                    yield new AdvSimdMoveOp64.LookupTable(true, ADVSIMD_LUTI_ESZ_BYTE, idx, rd, rn, rm);
-                }
-                if ((lowField & ADVSIMD_LUTI4_2H_FIXED_MASK) == ADVSIMD_LUTI4_2H_FIXED_VALUE) {
-                    int idx = lowField >>> ADVSIMD_LUTI4_2H_IDX_SHIFT;
-                    yield new AdvSimdMoveOp64.LookupTable(true, ADVSIMD_LUTI_ESZ_HALFWORD, idx, rd, rn, rm);
-                }
-                yield null;
-            }
-            default -> null;
-        };
-    }
-
-    /// `DUP`/`INS`/`SMOV`/`UMOV` (AdvSIMD copy, B8.12) — quarta família do prefixo vetorial
-    /// "01110", `bit21=0`, discriminada de EXT/permute/TBL/TBX (que ficam em
-    /// {@link #decodeAdvancedSimdExtractPermuteTable}) por `bit10=1`. `U`(bit29) separa
-    /// `INS_element` (`u=1`, dois registradores `V`, índice fonte em `si`) das outras quatro
-    /// (`u=0`, `imm4` em bits[14:11] seleciona a instrução —
-    /// {@link #ADVSIMD_COPY_DUP_ELEMENT}/{@link #ADVSIMD_COPY_DUP_GENERAL}/
-    /// {@link #ADVSIMD_COPY_INS_GENERAL}/{@link #ADVSIMD_COPY_SMOV}/{@link #ADVSIMD_COPY_UMOV}).
-    /// `esz`/índice vêm SEMPRE de `imm5` (bits[20:16], mesma posição de `Rm`/`di` alhures) pelo
-    /// truque padrão do ARM DDI 0487 "AdvSIMD copy": `esz = LowestSetBit(imm5)`, `index =
-    /// imm5 >>> (esz+1)` — `imm5==0` ou `esz>3` é reservado (G8). Encodings conferidos bit a bit
-    /// contra corpus real (`aarch64-none-elf-as`/`objdump`, devkitA64).
-    /// `DUP <V><d>, <Vn>.<T>[<index>]` (B19.6 bloco E, "Advanced SIMD scalar copy") — MESMO truque
-    /// de `esz`/`index` de {@link #decodeAdvancedSimdCopy} (`esz = LowestSetBit(imm5)`, `index =
-    /// imm5 >>> (esz+1)`), mas nunca `esz==3` exige `Q` aqui (não existe conceito de `Q` na forma
-    /// escalar — todo `esz` é válido). `imm5==0` ou `esz>3` é reservado (`null`, G8 — o chamador
-    /// decide o que fazer, mesmo padrão de {@link #decodeAdvancedSimdExtractPermuteTable}).
-    private static Ir64Op decodeAdvancedSimdScalarDuplicateElement(int imm5, int rn, int rd) {
-        int esz = imm5 == 0 ? -1 : Integer.numberOfTrailingZeros(imm5);
-        if (esz < 0 || esz > ADVSIMD_INT_SCALAR_ESZ) {
-            return null;
-        }
-        int index = imm5 >>> (esz + 1);
-        return new AdvSimdMoveOp64.DuplicateElementScalar(esz, rd, rn, index);
-    }
-
-    private Ir64Op decodeAdvancedSimdCopy(int word, long address, boolean q) {
-        if (((word >>> ADVSIMD_INT_SIZE_SHIFT) & ADVSIMD_INT_SIZE_MASK) != ADVSIMD_COPY_BITS23_22_PATTERN) {
-            // E15.9b: antes lia `imm5` sem olhar estes bits — toda palavra `bit21=0`/`bit10=1`
-            // que nenhuma forma anterior reclamava virava `INS`/`DUP`/`UMOV` com campos sem sentido.
-            return null;
-        }
-        boolean u = ((word >>> ADVSIMD_INT_U_SHIFT) & 1) != 0;
-        int imm5 = (word >>> ADVSIMD_INT_RM_SHIFT) & ADVSIMD_INT_RM_MASK;
-        int rn = (word >>> RN_SHIFT) & REGISTER_FIELD_MASK;
-        int rd = word & REGISTER_FIELD_MASK;
-        int esz = imm5 == 0 ? -1 : Integer.numberOfTrailingZeros(imm5);
-        if (esz < 0 || esz > ADVSIMD_INT_SCALAR_ESZ) {
-            // `imm5==0` (nenhum bit de tamanho marcado) ou `esz==4` (bit4 sozinho — tamanho maior
-            // que doubleword não existe em AdvSIMD) — reservado.
-            return null;
-        }
-        int index = imm5 >>> (esz + 1);
-        int opcode = (word >>> ADVSIMD_INT_OPCODE_SHIFT) & ADVSIMD_INT_OPCODE_MASK;
-        boolean bit15 = (opcode & ADVSIMD_EXTRACT_PERMUTE_BIT15_MASK) != 0;
-        if (u) {
-            // `INS_element`: `Q` é fixo em `1` no encoding real (literal, não uma escolha de
-            // arranjo — inserir um elemento sempre referencia o registrador `V` inteiro); `bit15`
-            // fixo em `0` (`si` ocupa só os 4 bits baixos de `opcode`, bits[14:11]).
-            if (!q || bit15) {
-                return null;
-            }
-            int srcIndex = (opcode & ADVSIMD_EXTRACT_IMM_MASK) >>> esz;
-            return new AdvSimdMoveOp64.InsertElement(esz, rd, rn, index, srcIndex);
-        }
-        if (bit15) {
-            return null;
-        }
-        int imm4 = opcode & ADVSIMD_EXTRACT_IMM_MASK;
-        return switch (imm4) {
-            case ADVSIMD_COPY_DUP_ELEMENT -> (esz == ADVSIMD_INT_SCALAR_ESZ && !q)
-                    ? null // doubleword exige `Q=1` (não existe arranjo "1D"), G8
-                    : new AdvSimdMoveOp64.DuplicateElement(q, esz, rd, rn, index);
-            case ADVSIMD_COPY_DUP_GENERAL -> (esz == ADVSIMD_INT_SCALAR_ESZ && !q)
-                    ? null
-                    : new AdvSimdMoveOp64.DuplicateGeneral(q, esz, rd, rn);
-            case ADVSIMD_COPY_INS_GENERAL -> !q
-                    ? null // `Q=1` fixo no encoding real, mesma regra de `INS_element`
-                    : new AdvSimdMoveOp64.InsertGeneral(esz, rd, rn, index);
-            case ADVSIMD_COPY_SMOV -> (esz == ADVSIMD_INT_SCALAR_ESZ || (esz == 2 && !q))
-                    ? null // `SMOV` não existe p/ doubleword; `esz=2`(word) só sign-estende p/ `Xd`
-                    : new AdvSimdMoveOp64.MoveElement(true, q, esz, rd, rn, index);
-            case ADVSIMD_COPY_UMOV -> q != (esz == ADVSIMD_INT_SCALAR_ESZ)
-                    ? null // `Q` é sempre `esz==3` p/ `UMOV` (sem forma "estendida" redundante)
-                    : new AdvSimdMoveOp64.MoveElement(false, q, esz, rd, rn, index);
-            default -> null;
-        };
     }
 
     /// "AdvSIMD three same"/"three same pairwise" (`bit10=1`): opcodes das duas famílias NUNCA
@@ -2213,23 +1583,6 @@ public final class Aarch64Decoder {
             case 0b0_0001 -> Ir64CryptoShaTwoRegisterOp.SHA1H;
             case 0b0_0011 -> Ir64CryptoShaTwoRegisterOp.SHA1SU1;
             case 0b0_0101 -> Ir64CryptoShaTwoRegisterOp.SHA256SU0;
-            default -> null;
-        };
-    }
-
-    /// B8.11b: `SHA1C`(`0`)/`SHA1P`(`4`)/`SHA1M`(`8`)/`SHA1SU0`(`12`)/`SHA256H`(`16`)/
-    /// `SHA256H2`(`20`)/`SHA256SU1`(`24`) — os 7 valores do campo `opcode` de 6 bits (bits[15:10])
-    /// de "Cryptographic three-register SHA", conferidos contra corpus real (mesma sessão de
-    /// `decodeCryptoShaTwoRegisterOpcode`).
-    private static Ir64CryptoShaThreeRegisterOp decodeCryptoShaThreeRegisterOpcode(int opcode) {
-        return switch (opcode) {
-            case 0b00_0000 -> Ir64CryptoShaThreeRegisterOp.SHA1C;
-            case 0b00_0100 -> Ir64CryptoShaThreeRegisterOp.SHA1P;
-            case 0b00_1000 -> Ir64CryptoShaThreeRegisterOp.SHA1M;
-            case 0b00_1100 -> Ir64CryptoShaThreeRegisterOp.SHA1SU0;
-            case 0b01_0000 -> Ir64CryptoShaThreeRegisterOp.SHA256H;
-            case 0b01_0100 -> Ir64CryptoShaThreeRegisterOp.SHA256H2;
-            case 0b01_1000 -> Ir64CryptoShaThreeRegisterOp.SHA256SU1;
             default -> null;
         };
     }
