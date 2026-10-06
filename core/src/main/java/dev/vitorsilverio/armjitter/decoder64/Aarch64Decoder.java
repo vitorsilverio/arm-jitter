@@ -68,10 +68,10 @@ public final class Aarch64Decoder {
     private final boolean streamingModeRestrictions;
     private final Aarch64SveDecoder sveDecoder;
     private final Aarch64SmeDecoder smeDecoder;
-    /// E15.9/E15.15a/E15.15b: o AdvSIMD já migrado para tabela — o espaço `bit21=0` inteiro
+    /// E15.9/E15.15a–c: o AdvSIMD já migrado para tabela — o espaço `bit21=0` inteiro
     /// ({@link AdvSimdBit21ZeroRows}, {@link AdvSimdPermuteCopyRows}), a criptografia fora do
-    /// `bit21=1` ({@link CryptoRows}) e o "three same" inteiro ({@link AdvSimdThreeSameRows}), já
-    /// filtrados por {@link #architecture}.
+    /// `bit21=1` ({@link CryptoRows}) e o "three same" inteiro e FP ({@link AdvSimdThreeSameRows},
+    /// {@link AdvSimdThreeSameFpRows}), já filtrados por {@link #architecture}.
     private final DecodeTable<Ir64Op> advSimdTable;
     /// E15.10: a classe "Data Processing — Immediate" inteira (`bits[28:26]=100`).
     private final DecodeTable<Ir64Op> dataProcessingImmediateTable;
@@ -103,7 +103,8 @@ public final class Aarch64Decoder {
         this.sveDecoder = new Aarch64SveDecoder(architecture);
         this.smeDecoder = new Aarch64SmeDecoder(architecture);
         this.advSimdTable = DecodeTable.forArchitecture(concat(concat(AdvSimdBit21ZeroRows.ROWS,
-                AdvSimdPermuteCopyRows.ROWS), concat(CryptoRows.ROWS, AdvSimdThreeSameRows.ROWS)), architecture);
+                AdvSimdPermuteCopyRows.ROWS), concat(CryptoRows.ROWS, concat(AdvSimdThreeSameRows.ROWS,
+                AdvSimdThreeSameFpRows.ROWS))), architecture);
         this.dataProcessingImmediateTable = DecodeTable.forArchitecture(DataProcessingImmediateRows.ROWS, architecture);
         this.dataProcessingRegisterTable = DecodeTable.forArchitecture(DataProcessingRegisterRows.ROWS, architecture);
         this.scalarFpTable = DecodeTable.forArchitecture(ScalarFpRows.ROWS, architecture);
@@ -236,16 +237,6 @@ public final class Aarch64Decoder {
     /// (`Rm=00001`) — `!u` = `FCVTL_v` (ISA base); `u` = `F1CVTL`/`F2CVTL`/`BF1CVTL`/`BF2CVTL`
     /// (`FEAT_FP8`, B19.11).
     private static final int ADVSIMD_FCVTL_OPCODE = 0b0_1111;
-    /// B19.11e (`FEAT_FP8`): opcode (bits[15:11]) de `FSCALE_sd` dentro de
-    /// {@link #decodeVectorFpThreeSameOpcode} — MESMO valor de `DIV`/`RECPS`/`RSQRTS`, discriminado
-    /// pela key `(u,a)=0b110` que nenhum dos três usa (ver Javadoc de
-    /// `FSCALE_h` em {@link AdvSimdBit21ZeroRows}).
-    private static final int ADVSIMD_FP8_SCALE_OPCODE_SD = 0b1_1111;
-    /// B19.24 (`FEAT_FAMINMAX`): opcode (bits[15:11]) de `FAMAX_sd`/`FAMIN_sd` dentro de
-    /// {@link #decodeVectorFpThreeSameOpcode} — MESMO valor de `MUL`/`MULX`, discriminado pelas keys
-    /// `(u,a)=0b010`/`0b110` que nenhum dos dois usa (ver Javadoc do intercept em
-    /// {@link #decodeAdvancedSimdThreeSameFp}).
-    private static final int ADVSIMD_FAMINMAX_OPCODE_SD = 0b1_1011;
     /// B19.11b (`FEAT_FP8FMA`): opcode (bits[15:12]) de `FMLAL_hb_vi` dentro de
     /// {@link #decodeAdvancedSimdIndexedElement} — hijacka o MESMO slot `sizeField=DOUBLEWORD`
     /// (`0b11`) que `BFMLAL_vi` usa (opcode `0b1111`), nunca colide. Confirmado byte a byte contra
@@ -307,15 +298,6 @@ public final class Aarch64Decoder {
     /// nunca tamanho). Conferido contra `a64.decode` real do QEMU (`@qrrr_sd`/`@qrr_sd`: `esz=%esz_sd`
     /// deriva só de `sz`, bit22).
     private static final int ADVSIMD_FP_A_BIT_SHIFT = 23;
-    /// E15.15b: menor `opcode` (bits[15:11]) de "three same (FP)" — abaixo dele o espaço `bit10=1` é
-    /// todo inteiro ({@link AdvSimdThreeSameRows}).
-    private static final int ADVSIMD_THREE_SAME_FP_FIRST_OPCODE = 0b1_1000;
-    /// B19.13 (`FEAT_FHM`): `opcode` (bits[15:11]) de "AdvSIMD three same (FP)" que `FMLAL_v`/
-    /// `FMLSL_v` (`u=0`) reaproveitam — medido bit a bit contra `a64.decode`/corpus real
-    /// (`arm-linux-gnu-as -march=armv8.2-a+fp16+fp16fml`).
-    private static final int ADVSIMD_FHM_THREE_SAME_OPCODE_LOW = 0b1_1101;
-    /// Idem, para `FMLAL2_v`/`FMLSL2_v` (`u=1`).
-    private static final int ADVSIMD_FHM_THREE_SAME_OPCODE_HIGH = 0b1_1001;
     /// B19.13: bits[1:0] do `opcode` indexado (4 bits) reservados/sempre `0` em
     /// `FMLAL_vi`/`FMLSL_vi`/`FMLAL2_vi`/`FMLSL2_vi` — qualquer valor fora de
     /// `0000`/`0100`/`1000`/`1100` não é desta família.
@@ -656,12 +638,9 @@ public final class Aarch64Decoder {
         int rd = word & REGISTER_FIELD_MASK;
         boolean threeSameShape = ((word >>> ADVSIMD_INT_BIT10_SHIFT) & 1) != 0;
         if (threeSameShape) {
-            // E15.15b: o "three same" inteiro é {@link AdvSimdThreeSameRows}; o resto é o FP.
-            Ir64Op op = advSimdTable.decode(word, address);
-            if (op != null) {
-                return op;
-            }
-            return decodeAdvancedSimdThreeSameFp(word, address, scalar, q, esz, u, opcode, rn, rd, rm);
+            // E15.15b/E15.15c: o "three same" inteiro ({@link AdvSimdThreeSameRows}) e FP
+            // ({@link AdvSimdThreeSameFpRows}); o que não casa é recusado (G8).
+            return decodeAdvSimdTable(word, address);
         }
         // E8: bug pré-existente (achado na B8.11, não corrigido lá) — o discriminador REAL entre
         // "three different" (`SMULL`/`PMULL`/..., `Rm` é um registrador livre `0`-`31`) e as formas
@@ -1006,168 +985,6 @@ public final class Aarch64Decoder {
         throw unsupported(word, address);
     }
 
-    /// "AdvSIMD three same (FP)"/"three same pairwise (FP)" (`bit10=1`), o que sobra do espaço depois de
-    /// {@link AdvSimdThreeSameRows} (E15.15b; vira tabela na E15.15c).
-    private Ir64Op decodeAdvancedSimdThreeSameFp(int word, long address, boolean scalar, boolean q, int esz,
-            boolean u, int opcode, int rn, int rd, int rm) {
-        // B8.9: "AdvSIMD three same (FP)"/"three same pairwise (FP)" — MESMO prefixo/bit10 do
-        // inteiro, opcodes NUNCA colidem com a tabela inteira (conferido exaustivamente contra
-        // `a64.decode` real: os opcodes FP começam sempre em `0b11000`, acima do maior opcode
-        // inteiro). O inteiro que não casou nenhuma linha (`size` reservado) é recusado aqui (G8).
-        if (opcode < ADVSIMD_THREE_SAME_FP_FIRST_OPCODE) {
-            throw unsupported(word, address);
-        }
-        // `esz` aqui é ainda o valor cru bits[23:22], que para FP precisa ser desmontado em
-        // `a`(bit23, discriminador de opcode)/`sz`(bit22, tamanho real).
-        boolean a = ((esz >>> 1) & 1) != 0;
-        int floatEsz = 2 + (esz & 1);
-        if (!scalar && isSingleDoublewordArrangement(floatEsz, q)) {
-            // E15.9c: `sz=1` sem `Q` seria `.1d` — reservado em todo o "three same (FP)" vetorial
-            // (`FMLAL`/`FMLSL` abaixo exigem `sz=0`, nada se perde).
-            throw unsupported(word, address);
-        }
-        // B19.13 (`FEAT_FHM`): `FMLAL_v`/`FMLSL_v` (`opcode=0b1_1101`, `u=0`) e `FMLAL2_v`/
-        // `FMLSL2_v` (`opcode=0b1_1001`, `u=1`) reaproveitam o MESMO espaço "three same (FP)"
-        // normal, em chaves `(u,opcode)` que `decodeVectorFpThreeSameOpcode` não usa (conferido bit
-        // a bit: opcode `0b1_1101` só mapeia `key=0b100/0b110` = `FACGE`/`FACGT`, opcode `0b1_1001`
-        // só mapeia `key=0b000/0b010` = `MLA`/`MLS` — nenhum bate `key=0/0b010`/`0b100`/`0b110` nas
-        // combinações que `u`/`a` produzem aqui, sem colisão real). `a`(bit23) escolhe soma
-        // (`FMLAL`/`FMLAL2`) ou subtração (`FMLSL`/`FMLSL2`); `sz`(bit22, `esz&1`) é sempre `0` no
-        // encoding real — `1` é reservado (G8, cai no `throw` do fim deste método). Sem forma
-        // escalar real. `q` aqui controla largura de VERDADE (`Vd.2S`/`Vd.4S`), diferente de
-        // `BFMLALB`/`BFMLALT` (B19.7) — ver Javadoc de {@link AdvSimdFpOp64.FpMultiplyAddLong}.
-        if (!scalar && (esz & 1) == 0 && architecture.has(Aarch64Feature.FP16_FUSED_MULTIPLY_ADD_LONG)) {
-            if (opcode == ADVSIMD_FHM_THREE_SAME_OPCODE_LOW && !u) {
-                return new AdvSimdFpOp64.FpMultiplyAddLong(q, false, a, rd, rn, rm);
-            }
-            if (opcode == ADVSIMD_FHM_THREE_SAME_OPCODE_HIGH && u) {
-                return new AdvSimdFpOp64.FpMultiplyAddLong(q, true, a, rd, rn, rm);
-            }
-        }
-        // B19.2: a forma "three same (FP)" TAMBÉM tem forma AdvSIMD-escalar (`FMULX_s`/`FCMEQ_s`/
-        // `FCMGE_s`/`FCMGT_s`/`FACGE_s`/`FACGT_s`/`FABD_s`/`FRECPS_s`/`FRSQRTS_s`) — MESMO triplo
-        // `(u,a,opcode)` da vetorial (conferido contra corpus real devkitA64). As demais entradas de
-        // `decodeVectorFpThreeSameOpcode` (`ADD`/`SUB`/`DIV`/`MUL`/`MAX`/`MIN`/`MAXNM`/`MINNM`/`MLA`/
-        // `MLS`) NÃO têm forma escalar real: com prefixo escalar, esses encodings são reservados ⇒
-        // `unsupported` (G8), nunca `AdvSimdFpOp64.FpArithmeticThreeSame` nem a forma vetorial.
-        // B19.11e (`FEAT_FP8`): `FSCALE_sd` vive no MESMO opcode ({@link
-        // #ADVSIMD_FP8_SCALE_OPCODE_SD}) que `DIV`/`RECPS`/`RSQRTS` em
-        // {@link #decodeVectorFpThreeSameOpcode}, discriminado pela key `(u=1,a=1)=0b110` que
-        // NENHUM dos três usa (medido bit a bit: `decodeVectorFpThreeSameOpcode` já devolve `null`
-        // para essa key — não é um misdecode a corrigir ali, é decode ausente a acrescentar aqui).
-        // Sem forma escalar real.
-        if (!scalar && opcode == ADVSIMD_FP8_SCALE_OPCODE_SD && u && a
-                && architecture.has(Aarch64Feature.FP8)) {
-            return new AdvSimdFpOp64.FpScaleByInt(q, floatEsz, rd, rn, rm);
-        }
-        // B19.24 (`FEAT_FAMINMAX`): `FAMAX_sd`/`FAMIN_sd` vivem no MESMO opcode ({@link
-        // #ADVSIMD_FAMINMAX_OPCODE_SD}) que `MUL`/`MULX` em {@link #decodeVectorFpThreeSameOpcode},
-        // discriminados pelas keys `(u=0,a=1)=0b010`/`(u=1,a=1)=0b110` que nenhum dos dois usa
-        // (medido bit a bit: `decodeVectorFpThreeSameOpcode` já devolve `null` para essas keys —
-        // não é um misdecode a corrigir ali, é decode ausente a acrescentar aqui, mesma disciplina
-        // de `FSCALE_sd`/B19.11e). Sem forma escalar real.
-        if (!scalar && opcode == ADVSIMD_FAMINMAX_OPCODE_SD && a
-                && architecture.has(Aarch64Feature.FP_ABSOLUTE_MAX_MIN)) {
-            return new AdvSimdFpOp64.FpAbsoluteMaxMin(!u, q, floatEsz, rd, rn, rm);
-        }
-        Ir64VectorFpThreeSameOp fpOp = decodeVectorFpThreeSameOpcode(u, a, opcode);
-        if (fpOp != null) {
-            if (scalar && !fpThreeSameOpHasScalarForm(fpOp)) {
-                throw unsupported(word, address);
-            }
-            return new AdvSimdFpOp64.FpArithmeticThreeSame(fpOp, scalar, q, floatEsz, rd, rn, rm);
-        }
-        // A "three same pairwise (FP)" vetorial NÃO tem forma escalar aqui — a `FADDP_s`/etc mora na
-        // classe "AdvSIMD scalar pairwise" (`bit10=0`), tratada em {@link #decodeAdvancedSimdInteger}.
-        if (!scalar) {
-            Ir64VectorFpPairwiseOp fpPairwiseOp = decodeVectorFpPairwiseOpcode(u, a, opcode);
-            if (fpPairwiseOp != null) {
-                return new AdvSimdFpOp64.FpArithmeticPairwise(fpPairwiseOp, false, q, floatEsz, rd, rn, rm);
-            }
-        }
-        throw unsupported(word, address);
-    }
-
-    /// AdvSIMD "three same (FP)" — tabela `(u, a, opcode)` conferida linha a linha contra
-    /// `a64.decode` real do QEMU (`FADD_v`/.../`FRSQRTS_v`, formas `sd` só — `h`/meia-precisão
-    /// excluída, `FEAT_FP16`). `a` é o bit23 (ver {@link #ADVSIMD_FP_A_BIT_SHIFT}), NUNCA um
-    /// tamanho de elemento.
-    private static Ir64VectorFpThreeSameOp decodeVectorFpThreeSameOpcode(boolean u, boolean a, int opcode) {
-        int key = (u ? 0b100 : 0) | (a ? 0b010 : 0);
-        return switch (opcode) {
-            case 0b1_1010 -> switch (key) {
-                case 0b000 -> Ir64VectorFpThreeSameOp.ADD;
-                case 0b010 -> Ir64VectorFpThreeSameOp.SUB;
-                case 0b110 -> Ir64VectorFpThreeSameOp.ABD;
-                default -> null;
-            };
-            case 0b1_1111 -> switch (key) {
-                case 0b100 -> Ir64VectorFpThreeSameOp.DIV;
-                case 0b000 -> Ir64VectorFpThreeSameOp.RECPS;
-                case 0b010 -> Ir64VectorFpThreeSameOp.RSQRTS;
-                default -> null;
-            };
-            case 0b1_1011 -> switch (key) {
-                case 0b100 -> Ir64VectorFpThreeSameOp.MUL;
-                case 0b000 -> Ir64VectorFpThreeSameOp.MULX;
-                default -> null;
-            };
-            case 0b1_1110 -> switch (key) {
-                case 0b000 -> Ir64VectorFpThreeSameOp.MAX;
-                case 0b010 -> Ir64VectorFpThreeSameOp.MIN;
-                default -> null;
-            };
-            case 0b1_1000 -> switch (key) {
-                case 0b000 -> Ir64VectorFpThreeSameOp.MAXNM;
-                case 0b010 -> Ir64VectorFpThreeSameOp.MINNM;
-                default -> null;
-            };
-            case 0b1_1001 -> switch (key) {
-                case 0b000 -> Ir64VectorFpThreeSameOp.MLA;
-                case 0b010 -> Ir64VectorFpThreeSameOp.MLS;
-                default -> null;
-            };
-            case 0b1_1100 -> switch (key) {
-                case 0b000 -> Ir64VectorFpThreeSameOp.CMEQ;
-                case 0b100 -> Ir64VectorFpThreeSameOp.CMGE;
-                case 0b110 -> Ir64VectorFpThreeSameOp.CMGT;
-                default -> null;
-            };
-            case 0b1_1101 -> switch (key) {
-                case 0b100 -> Ir64VectorFpThreeSameOp.FACGE;
-                case 0b110 -> Ir64VectorFpThreeSameOp.FACGT;
-                default -> null;
-            };
-            default -> null;
-        };
-    }
-
-    /// AdvSIMD "three same pairwise (FP)" — mesma disciplina de
-    /// {@link #decodeVectorFpThreeSameOpcode}. Opcodes reaproveitados (`26`/`30`/`24`) só colidem
-    /// com combinações `(u,a)` NÃO usadas pela tabela não-pareada (conferido acima).
-    private static Ir64VectorFpPairwiseOp decodeVectorFpPairwiseOpcode(boolean u, boolean a, int opcode) {
-        if (!u) {
-            return null;
-        }
-        return switch (opcode) {
-            case 0b1_1010 -> a ? null : Ir64VectorFpPairwiseOp.ADD;
-            case 0b1_1110 -> a ? Ir64VectorFpPairwiseOp.MIN : Ir64VectorFpPairwiseOp.MAX;
-            case 0b1_1000 -> a ? Ir64VectorFpPairwiseOp.MINNM : Ir64VectorFpPairwiseOp.MAXNM;
-            default -> null;
-        };
-    }
-
-    /// B19.2: quais operações de {@link #decodeVectorFpThreeSameOpcode} têm forma AdvSIMD-ESCALAR
-    /// real (`ARM DDI 0487`, "Advanced SIMD scalar three same FP"). As de fora (`ADD`/`SUB`/`DIV`/
-    /// `MUL`/`MAX`/`MIN`/`MAXNM`/`MINNM`/`MLA`/`MLS`) só existem vetoriais — um encoding escalar que
-    /// case uma delas é reservado ⇒ `unsupported` (G8).
-    private static boolean fpThreeSameOpHasScalarForm(Ir64VectorFpThreeSameOp op) {
-        return switch (op) {
-            case MULX, ABD, RECPS, RSQRTS, CMEQ, CMGE, CMGT, FACGE, FACGT -> true;
-            case ADD, SUB, MUL, DIV, MAX, MIN, MAXNM, MINNM, MLA, MLS -> false;
-        };
-    }
-
     /// B19.3: quais operações de {@link #decodeVectorFpUnaryRmZeroOpcode}/
     /// {@link #decodeVectorFpUnaryRmOneOpcode} têm forma AdvSIMD-ESCALAR real ("two-register
     /// miscellaneous" escalar + conversões `@icvt` escalares). As de fora (`ABS`/`NEG` FP,
@@ -1188,7 +1005,7 @@ public final class Aarch64Decoder {
 
     /// B19.2: AdvSIMD "scalar pairwise (FP)" (`FADDP_s`/`FMAXP_s`/`FMINP_s`/`FMAXNMP_s`/`FMINNMP_s`,
     /// `ARM DDI 0487` C4.1.95 `01 U 11110 0 sz 11000 opcode 10 Rn Rd`). Classe PRÓPRIA — `opcode`
-    /// (bits[15:11]) tem valores diferentes de {@link #decodeVectorFpPairwiseOpcode} (não-pareada),
+    /// (bits[15:11]) tem valores diferentes do pareado vetorial ({@link AdvSimdThreeSameFpRows}),
     /// então tabela separada. `a` é o bit23 (`FMAXP`/`FMAXNMP` → `a=0`, `FMINP`/`FMINNMP` → `a=1`).
     /// Conferido bit a bit contra corpus real (devkitA64). **B19.5.3**: esta tabela vale IGUAL para
     /// as formas `_h` (`FEAT_FP16`, `U=0`) — o `U` só distingue `_sd`/`_h`, nunca o `opcode`/`a`;

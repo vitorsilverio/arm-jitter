@@ -2115,7 +2115,7 @@ class Aarch64DecoderCorpusTest {
         // decodificada pelas tasks B6.5.x/B8.4/B8.5, mas prefixo(28:24) DIFERENTE — "01110" em vez
         // de "11110") — encoding real via aarch64-none-elf-as. Até a B8.9 esta asserção era
         // NEGATIVA (fora de escopo, herdado de B6.5.3); agora `FADD_v`/... (AdvSIMD "three same" de
-        // ponto flutuante) fazem parte do escopo implementado, ver `decodeVectorFpThreeSameOpcode`.
+        // ponto flutuante) fazem parte do escopo implementado, ver `AdvSimdThreeSameFpRows`.
         int word = 0x4e22d420;
         TestAddressSpace raw = new TestAddressSpace(4);
         raw.put32(0, word);

@@ -36,6 +36,7 @@ class AdvSimdPermuteCopyRowsTest {
         rows.addAll(AdvSimdPermuteCopyRows.ROWS);
         rows.addAll(CryptoRows.ROWS);
         rows.addAll(AdvSimdThreeSameRows.ROWS);
+        rows.addAll(AdvSimdThreeSameFpRows.ROWS);
         return rows;
     }
 
