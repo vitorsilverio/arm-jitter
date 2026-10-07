@@ -466,9 +466,9 @@ public sealed interface AdvSimdIntegerOp64 extends AdvSimdOp64 permits
     }
 
     /// `USDOT`/`SUDOT` indexados (`FEAT_I8MM`, B19.12) — como {@link IntegerDotProduct}, mas
-    /// {@link #rm} sempre contribui o MESMO grupo de 4 bytes (`Vm.4B[index]`, restrito a `V0`-`V15`,
-    /// índice de 2 bits `H:L` — mesma disciplina de {@link AdvSimdFpOp64.FpDotProductBFloat16ByElement},
-    /// embora aqui a família tenha 4 grupos em vez de 2). `USDOT_vi` (`Rn` sem sinal, `Rm` com
+    /// {@link #rm} sempre contribui o MESMO grupo de 4 bytes (`Vm.4B[index]`, `Rm` de 5 bits `M:Rm` e
+    /// índice de 2 bits `H:L` — layout `@qrrx_s`, o mesmo de {@link AdvSimdFpOp64.FpDotProductBFloat16ByElement};
+    /// até a E15.15g o decoder descartava o `M`). Também `SDOT_vi`/`UDOT_vi` (B19.23). `USDOT_vi` (`Rn` sem sinal, `Rm` com
     /// sinal) e `SUDOT_vi` (`Rn` com sinal, `Rm` sem sinal) se distinguem no ENCODING por
     /// bits[23:22] (`10`×`00`), nunca pelo bit `U` (os dois têm `U=0`) — o decoder já resolveu isso
     /// em {@link #signedN}/{@link #signedM}.

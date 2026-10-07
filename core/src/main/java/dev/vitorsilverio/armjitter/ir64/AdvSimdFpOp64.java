@@ -341,7 +341,8 @@ public sealed interface AdvSimdFpOp64 extends AdvSimdOp64 permits
             int rd,
             /// Registrador `V` fonte 1 (lido par a par).
             int rn,
-            /// Registrador `V` fonte 2 — só o PAR complexo em {@link #index} é lido, replicado.
+            /// Registrador `V` fonte 2 (5 bits `M:Rm` nas duas formas) — só o PAR complexo em {@link #index} é
+            /// lido, replicado.
             int rm,
             /// Índice do PAR complexo de {@link #rm} (não do elemento individual real/imaginário).
             int index) implements AdvSimdFpOp64 {
@@ -579,8 +580,8 @@ public sealed interface AdvSimdFpOp64 extends AdvSimdOp64 permits
     }
 
     /// `BFDOT` indexado (`BFDOT_vi`, `FEAT_BF16`, B19.7) — como {@link FpDotProductBFloat16},
-    /// mas {@link #rm} sempre contribui o MESMO par `bf16` (`Vm.2H[index]`, restrito a `V0`-`V15`,
-    /// mesma disciplina de índice halfword de B8.19/B19.12).
+    /// mas {@link #rm} sempre contribui o MESMO par `bf16` (`Vm.2H[index]`, layout `@qrrx_s`: `Rm` de 5
+    /// bits `M:Rm`, índice `H:L` — até a E15.15g o decoder descartava o `M` e o `H`).
     record FpDotProductBFloat16ByElement(
             /// `true` para arranjo de 128 bits (`Vd.4S`), `false` para 64 bits (`Vd.2S`).
             boolean q,
@@ -590,7 +591,7 @@ public sealed interface AdvSimdFpOp64 extends AdvSimdOp64 permits
             int rn,
             /// Registrador `V` fonte 2 — só o par `bf16` {@link #index} é lido, replicado.
             int rm,
-            /// Índice do par `bf16` de {@link #rm} usado em TODA a operação (`0`-`1`).
+            /// Índice do par `bf16` de {@link #rm} usado em TODA a operação (`0`-`3`).
             int index) implements AdvSimdFpOp64 {
         @Override public int kind() { return Kind.VECTOR_FP_DOT_PRODUCT_BFLOAT16_BY_ELEMENT; }
         @Override public boolean execute(Aarch64Core core) {

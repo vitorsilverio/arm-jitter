@@ -65,7 +65,8 @@ class TamanhoDeFonteGuardTest {
     /// same (FP)" virou `AdvSimdThreeSameFpRows`) e na E15.15d para 1699 ("three different", reduções e AES/SHA de
     /// dois registradores viraram `AdvSimdThreeDifferentRows`/`AdvSimdAcrossLanesRows`/`CryptoRows`) e na E15.15e para
     /// 1165 (two-register misc virou `AdvSimdTwoRegisterMiscRows`) e na E15.15f para 928 (shift by immediate e modified
-    /// immediate viraram `AdvSimdShiftImmediateRows`).
+    /// immediate viraram `AdvSimdShiftImmediateRows`); na E15.15g saiu da lista (376 linhas: indexed element virou
+    /// `AdvSimdIndexedElementRows` e o roteamento do AdvSIMD é só a tabela).
     private static final Map<String, Integer> EXCEPTIONS = Map.ofEntries(
             entry("advsimd/AdvSimdLanes.java", 3677),
             entry("core64/Aarch64Core.java", 1848),
@@ -78,7 +79,6 @@ class TamanhoDeFonteGuardTest {
             entry("core/ArmCore.java", 1048),
             entry("arch/ArmArchitecture.java", 1001),
             entry("executor64/Ir64VectorArithmeticExecutor.java", 968),
-            entry("decoder64/Aarch64Decoder.java", 928),
             entry("codegen/executor/IrVfpExecutor.java", 928),
             entry("decoder64/Aarch64SmeDecoder.java", 905),
             entry("executor64/Ir64VectorFpArithmeticExecutor.java", 846),

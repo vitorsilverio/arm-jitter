@@ -41,6 +41,7 @@ class AdvSimdPermuteCopyRowsTest {
         rows.addAll(AdvSimdAcrossLanesRows.ROWS);
         rows.addAll(AdvSimdTwoRegisterMiscRows.ROWS);
         rows.addAll(AdvSimdShiftImmediateRows.ROWS);
+        rows.addAll(AdvSimdIndexedElementRows.ROWS);
         return rows;
     }
 
