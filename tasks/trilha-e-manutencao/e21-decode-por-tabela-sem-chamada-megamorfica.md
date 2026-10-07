@@ -26,6 +26,13 @@ coluna, teste de sobreposição, oráculos).
    bastar; exige teste de equivalência com a tabela interpretada.
 3. **Cache palavra → op** no `Aarch64Decoder` (mapeamento direto; linhas que leem `address` ficam fora por flag).
    Independente das outras, soma ganho no decode frio; conferir imutabilidade das ops.
+4. **Balde grande na `advSimdTable`** (achado da E15.15e): a chave é a interseção das máscaras de TODAS as linhas,
+   e na `advSimdTable` isso dá só 5 bits (`keyMask 30208400`, 32 baldes). Com 506 linhas, o balde do
+   two-register misc tem 63 linhas (eram 20 antes da E15.15e) e o decode dele foi de 26,7 para 41,1 ns. Já as outras
+   famílias ficaram 3–5 ns mais rápidas. A chamada megamórfica não explica isso: a causa é a varredura linear. Saídas
+   possíveis: chave em dois níveis (sub-tabela por balde com chave própria, escolhida sobre as linhas DAQUELE balde)
+   ou uma chave que aceite bit livre em parte das linhas (a linha entra nos dois baldes daquele bit). Medir com
+   `e15.15e-scripts/BucketProbe.java` (tamanho do balde por palavra, via reflexão).
 
 ## Aceite (a refinar)
 

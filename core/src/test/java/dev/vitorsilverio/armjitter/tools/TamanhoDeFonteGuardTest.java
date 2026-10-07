@@ -63,9 +63,10 @@ class TamanhoDeFonteGuardTest {
     /// escalar virou `ScalarFpRows`), na E15.15a para 2288 (AdvSIMD `bit21=0` e cripto viraram tabela) e na
     /// E15.15b para 2157 ("three same" inteiro virou `AdvSimdThreeSameRows`), na E15.15c para 1974 ("three
     /// same (FP)" virou `AdvSimdThreeSameFpRows`) e na E15.15d para 1699 ("three different", reduções e AES/SHA de
-    /// dois registradores viraram `AdvSimdThreeDifferentRows`/`AdvSimdAcrossLanesRows`/`CryptoRows`).
+    /// dois registradores viraram `AdvSimdThreeDifferentRows`/`AdvSimdAcrossLanesRows`/`CryptoRows`) e na E15.15e para
+    /// 1165 (two-register misc virou `AdvSimdTwoRegisterMiscRows`).
     private static final Map<String, Integer> EXCEPTIONS = Map.ofEntries(
-            entry("decoder64/Aarch64Decoder.java", 1699),
+            entry("decoder64/Aarch64Decoder.java", 1165),
             entry("advsimd/AdvSimdLanes.java", 3677),
             entry("core64/Aarch64Core.java", 1848),
             entry("ir/StandardIrBuilder.java", 1352),
