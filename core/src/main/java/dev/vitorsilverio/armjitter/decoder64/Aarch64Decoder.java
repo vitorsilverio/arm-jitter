@@ -1,7 +1,5 @@
 package dev.vitorsilverio.armjitter.decoder64;
 
-import dev.vitorsilverio.armjitter.advsimd.AdvSimdModifiedImmediate;
-import dev.vitorsilverio.armjitter.advsimd.AdvSimdModifiedImmediateOp;
 import dev.vitorsilverio.armjitter.arch64.Aarch64Architecture;
 import dev.vitorsilverio.armjitter.arch64.Aarch64Feature;
 import dev.vitorsilverio.armjitter.ir64.AdvSimdFpOp64;
@@ -10,9 +8,6 @@ import dev.vitorsilverio.armjitter.ir64.AdvSimdMoveOp64;
 import dev.vitorsilverio.armjitter.ir64.FpOp64;
 import dev.vitorsilverio.armjitter.ir64.Ir64Op;
 import dev.vitorsilverio.armjitter.ir64.Ir64VectorFpThreeSameOp;
-import dev.vitorsilverio.armjitter.ir64.Ir64VectorShiftNarrowOp;
-import dev.vitorsilverio.armjitter.ir64.Ir64VectorShiftOp;
-import dev.vitorsilverio.armjitter.ir64.Ir64VectorShiftWidenOp;
 import dev.vitorsilverio.armjitter.ir64.Ir64VectorThreeSameOp;
 import dev.vitorsilverio.armjitter.ir64.Ir64VectorWideningOp;
 import dev.vitorsilverio.armjitter.memory.AddressSpace64;
@@ -61,7 +56,9 @@ public final class Aarch64Decoder {
     /// `bit21=1` ({@link CryptoRows}) e o "three same" inteiro e FP ({@link AdvSimdThreeSameRows},
     /// {@link AdvSimdThreeSameFpRows}); E15.15d: "three different" ({@link AdvSimdThreeDifferentRows}),
     /// across lanes e scalar pairwise ({@link AdvSimdAcrossLanesRows}) e AES/SHA de dois registradores
-    /// (também em {@link CryptoRows}) — já filtrados por {@link #architecture}.
+    /// (também em {@link CryptoRows}); E15.15e: two-register misc ({@link AdvSimdTwoRegisterMiscRows}); E15.15f:
+    /// shift by immediate e modified immediate ({@link AdvSimdShiftImmediateRows}) — já filtrados por
+    /// {@link #architecture}.
     private final DecodeTable<Ir64Op> advSimdTable;
     /// E15.10: a classe "Data Processing — Immediate" inteira (`bits[28:26]=100`).
     private final DecodeTable<Ir64Op> dataProcessingImmediateTable;
@@ -95,7 +92,8 @@ public final class Aarch64Decoder {
         this.advSimdTable = DecodeTable.forArchitecture(concat(concat(AdvSimdBit21ZeroRows.ROWS,
                 AdvSimdPermuteCopyRows.ROWS), concat(concat(CryptoRows.ROWS, concat(AdvSimdThreeSameRows.ROWS,
                 AdvSimdThreeSameFpRows.ROWS)), concat(concat(AdvSimdThreeDifferentRows.ROWS,
-                AdvSimdAcrossLanesRows.ROWS), AdvSimdTwoRegisterMiscRows.ROWS))), architecture);
+                AdvSimdAcrossLanesRows.ROWS), concat(AdvSimdTwoRegisterMiscRows.ROWS,
+                AdvSimdShiftImmediateRows.ROWS)))), architecture);
         this.dataProcessingImmediateTable = DecodeTable.forArchitecture(DataProcessingImmediateRows.ROWS, architecture);
         this.dataProcessingRegisterTable = DecodeTable.forArchitecture(DataProcessingRegisterRows.ROWS, architecture);
         this.scalarFpTable = DecodeTable.forArchitecture(ScalarFpRows.ROWS, architecture);
@@ -186,8 +184,6 @@ public final class Aarch64Decoder {
     private static final int ADVSIMD_INT_SIZE_MASK = 0b11;
     private static final int ADVSIMD_INT_RM_SHIFT = 16;
     private static final int ADVSIMD_INT_RM_MASK = 0b1_1111;
-    private static final int ADVSIMD_INT_OPCODE_SHIFT = 11;
-    private static final int ADVSIMD_INT_OPCODE_MASK = 0b1_1111;
     private static final int ADVSIMD_INT_BIT10_SHIFT = 10;
     /// Tamanho fixo do escalar D-only (`esz=3`) — a forma vetorial NUNCA produz `esz=3`/`q=false`
     /// de verdade (doubleword exige `q=true` no hardware real, só existe `.2d`), então este par é
@@ -220,11 +216,6 @@ public final class Aarch64Decoder {
     /// — nunca colidem, discriminados só por `sizeField`. Confirmado byte a byte contra
     /// `target/isa-decode/a64.decode:1356-1357`.
     private static final int ADVSIMD_FP8_DOT_INDEXED_OPCODE = 0b0000;
-    /// B19.3: opcodes (bits[15:11]) da classe "AdvSIMD shift by immediate" que na verdade são
-    /// conversão FP↔ponto fixo (`@fcvt_fixed`): `0b1_1100` = `SCVTF`/`UCVTF` (int→FP),
-    /// `0b1_1111` = `FCVTZS`/`FCVTZU` (FP→int). `u` (bit29) distingue assinado/não.
-    private static final int ADVSIMD_SHIFT_FCVT_FIXED_TO_FLOAT_OPCODE = 0b1_1100;
-    private static final int ADVSIMD_SHIFT_FCVT_FIXED_TO_INT_OPCODE = 0b1_1111;
     /// B8.9: bit `a` do encoding real de "AdvSIMD three same (FP)"/"two-register misc (FP)" —
     /// posição IDÊNTICA ao bit alto de {@link #ADVSIMD_INT_SIZE_SHIFT} (`esz` inteiro reaproveita
     /// essa posição como campo livre de 2 bits; nas formas FP, só o bit BAIXO — `bit22`, "sz" — é o
@@ -248,40 +239,12 @@ public final class Aarch64Decoder {
     private static final int CRYPTO_SHA3_PREFIX_MASK = 0xFF;
     private static final int CRYPTO_SHA3_PREFIX_PATTERN = 0b1100_1110;
 
-    // ── "Advanced SIMD shift by immediate" (B8.8): prefixo bits[28:24]="01111" (vetorial, `Q`=bit30
-    // ── real) OU "11111"+bit30=1 (escalar) — UM BIT A MAIS que o prefixo de "three same"/
-    // ── "two-register miscellaneous" acima ("01110"/"11110": bit24 é o único bit que muda,
-    // ── `0`→three-same, `1`→shift-immediate; conferido bit a bit contra `a64.decode` real, mesma
-    // ── técnica de {@link #ADVSIMD_INT_PREFIX_SHIFT}). Layout de campos totalmente diferente:
-    // ── `U`(29)/`Q`(30, só vetorial)/`immh`(22:19)/`immb`(18:16)/`opcode`(15:11)/bit10=1 fixo/
-    // ── `Rn`(9:5)/`Rd`(4:0) — SEM `size`/`Rm` (o "tamanho do elemento" é DERIVADO do bit mais alto
-    // ── setado de `immh`, nunca um campo de 2 bits solto; a forma D-only escalar EXIGE `immh`
-    // ── com bit3 setado, senão é UNALLOCATED — diferente do truque `esz=3` fixo usado acima).
+    // ── "Advanced SIMD shift by immediate" (B8.8) e "× indexed element" (B8.19): prefixo bits[28:24]="01111"
+    // ── (vetorial, `Q`=bit30 real) OU "11111"+bit30=1 (escalar) — UM BIT A MAIS que o prefixo de "three same"/
+    // ── "two-register miscellaneous" acima ("01110"/"11110"). O shift by immediate (e o modified immediate,
+    // ── `immh=0000`) é {@link AdvSimdShiftImmediateRows} desde a E15.15f.
     private static final int ADVSIMD_SHIFT_PREFIX_VECTOR_PATTERN = 0b0_1111;
     private static final int ADVSIMD_SHIFT_PREFIX_SCALAR_PATTERN = 0b1_1111;
-    private static final int ADVSIMD_SHIFT_IMMH_SHIFT = 19;
-    private static final int ADVSIMD_SHIFT_IMMH_MASK = 0b1111;
-    /// E15.9c: bit logo acima de `immh` — fixo em `0` em "shift by immediate" e em "modified
-    /// immediate" (`0 Q U 011110 0 immh immb opcode 1`); com `1` e `bit10=1` não há nada alocado.
-    private static final int ADVSIMD_SHIFT_BIT23_SHIFT = 23;
-    private static final int ADVSIMD_SHIFT_IMMB_SHIFT = 16;
-    private static final int ADVSIMD_SHIFT_IMMB_MASK = 0b111;
-
-    // ── B19.6 bloco G: `Vimm`/`FMOVI_v_h` (`%abcdefgh` real do `a64.decode`: bits[18:16] = "abc" ────
-    // ── (topo de `imm8`), bits[9:5] = "defgh" (base) — MESMA posição que `immb`/`Rn` ocupariam se ────
-    // ── esta fosse mesmo uma instrução "shift by immediate" de verdade, achado que também vale do ───
-    // ── lado A32 para `Vimm_1r`, B13.7). ─────────────────────────────────────────────────────────
-    private static final int ADVSIMD_MODIFIED_IMM_TOP_SHIFT = 16;
-    private static final int ADVSIMD_MODIFIED_IMM_BOTTOM_SHIFT = 5;
-    /// bits[15:10] cru — `FMOVI_v_h` exige os 6 bits fixos em `1`; `Vimm` usa os 4 bits altos como
-    /// `cmode` e exige os 2 baixos fixos em `01` (checado separadamente, ver
-    /// {@link #ADVSIMD_MODIFIED_IMM_FIXED2_SHIFT}).
-    private static final int ADVSIMD_MODIFIED_IMM_SUFFIX_SHIFT = 10;
-    private static final int ADVSIMD_MODIFIED_IMM_FMOVI_H_SUFFIX = 0b11_1111;
-    private static final int ADVSIMD_MODIFIED_IMM_FIXED2_SHIFT = 10;
-    private static final int ADVSIMD_MODIFIED_IMM_FIXED2_PATTERN = 0b01;
-    private static final int ADVSIMD_MODIFIED_IMM_CMODE_SHIFT = 12;
-    private static final int ADVSIMD_MODIFIED_IMM_OP_SHIFT = 29;
 
     // ── "Advanced SIMD vector/scalar × indexed element" (B8.19): MESMO prefixo bits[28:24] de ────
     // ── "shift by immediate" acima ("01111"/"11111") — discriminados só por bit10 (`1`=shift-
@@ -511,8 +474,8 @@ public final class Aarch64Decoder {
     /// Sub-dispatch de "AdvSIMD inteiro — aritmética e comparação" (B8.7): entra já sabendo que
     /// `bit26=1` e que o prefixo escalar-FP (D1 acima) NÃO bateu. Distingue vetorial (prefixo
     /// bits[28:24]="01110", `Q`=bit30 real) de escalar D-only (prefixo="11110"+bit30=1, mesmo
-    /// truque de {@link #decodeDataProcessingScalarFpSimd}). Shift by immediate e indexed element (prefixo
-    /// `x1111`) ainda são cascata; o resto é a {@link #advSimdTable} (E15.15a–E15.15e).
+    /// truque de {@link #decodeDataProcessingScalarFpSimd}). Só o indexed element (prefixo `x1111`
+    /// com `bit10=0`) ainda é cascata; o resto é a {@link #advSimdTable} (E15.15a–E15.15f).
     private Ir64Op decodeAdvancedSimdInteger(int word, long address) {
         // E15.9b: um ponto só, antes de qualquer desvio (shift/indexed, `bit21=0`/`1`) — toda forma
         // AdvSIMD tem `bit31=0`; sem isto metade do espaço `bit31=1` saía como a instrução de
@@ -521,42 +484,27 @@ public final class Aarch64Decoder {
             throw unsupported(word, address);
         }
         int prefix = (word >>> ADVSIMD_INT_PREFIX_SHIFT) & ADVSIMD_INT_PREFIX_MASK;
-        // B8.8: "Advanced SIMD shift by immediate" tem prefixo PRÓPRIO (bits[28:24], um bit a mais
-        // que o das tabelas acima: `01111` vetorial/`11111` escalar, contra `01110`/`11110` das
-        // demais) — checado ANTES do resto porque usa um layout de campos totalmente diferente
-        // (`immh:immb` em vez de `size`+`Rm`).
-        boolean shiftPrefixVector = prefix == ADVSIMD_SHIFT_PREFIX_VECTOR_PATTERN;
-        boolean shiftPrefixScalar = prefix == ADVSIMD_SHIFT_PREFIX_SCALAR_PATTERN
-                && ((word >>> ADVSIMD_INT_SCALAR_BIT30_SHIFT) & 1) != 0;
-        if (shiftPrefixVector || shiftPrefixScalar) {
-            // B8.19: MESMO prefixo de "shift by immediate", discriminado por bit10 (`1`=shift,
-            // `0`=indexed-element) — ver o comentário de {@link #ADVSIMD_INDEXED_OPCODE_SHIFT}.
-            if (((word >>> ADVSIMD_INT_BIT10_SHIFT) & 1) != 0) {
-                return decodeAdvancedSimdShiftByImmediate(word, address);
-            }
-            return decodeAdvancedSimdIndexedElement(word, address, shiftPrefixScalar);
-        }
-        // E15.15a–E15.15e: vetorial (prefixo `01110`) ou escalar (`11110` com `bit30=1`) — o espaço inteiro
-        // (`bit21=0`, "three same", "three different", reduções, AES/SHA de dois registradores e two-register misc)
-        // é a {@link #advSimdTable}, já filtrada pelo preset; o que não casa é recusado (G8).
-        boolean vector = prefix == ADVSIMD_INT_PREFIX_VECTOR_PATTERN;
-        boolean scalar = prefix == ADVSIMD_INT_PREFIX_SCALAR_PATTERN
+        // B8.8: "shift by immediate" e "indexed element" têm prefixo PRÓPRIO (`01111` vetorial/`11111` escalar,
+        // um bit a mais que o `01110`/`11110` das demais), discriminados por `bit10` (`1`=shift, `0`=indexed).
+        boolean shiftPrefix = prefix == ADVSIMD_SHIFT_PREFIX_VECTOR_PATTERN
+                || prefix == ADVSIMD_SHIFT_PREFIX_SCALAR_PATTERN;
+        boolean vector = prefix == ADVSIMD_INT_PREFIX_VECTOR_PATTERN || prefix == ADVSIMD_SHIFT_PREFIX_VECTOR_PATTERN;
+        boolean scalar = (prefix == ADVSIMD_INT_PREFIX_SCALAR_PATTERN || prefix == ADVSIMD_SHIFT_PREFIX_SCALAR_PATTERN)
                 && ((word >>> ADVSIMD_INT_SCALAR_BIT30_SHIFT) & 1) != 0;
         if (!vector && !scalar) {
             throw unsupported(word, address);
         }
+        if (shiftPrefix && ((word >>> ADVSIMD_INT_BIT10_SHIFT) & 1) == 0) {
+            return decodeAdvancedSimdIndexedElement(word, address, scalar);
+        }
+        // E15.15a–E15.15f: o resto do espaço (`bit21=0`, "three same", "three different", reduções, AES/SHA de dois
+        // registradores, two-register misc, shift by immediate e modified immediate) é a {@link #advSimdTable}, já
+        // filtrada pelo preset; o que não casa é recusado (G8).
         return decodeAdvSimdTable(word, address);
     }
 
-    /// Valores de `esz` (`bits[23:22]`) com nome (G6): elemento de 16 e de 32 bits.
+    /// Valor de `esz` com nome (G6): elemento de 16 bits.
     private static final int ADVSIMD_ESZ_HALFWORD = 1;
-    private static final int ADVSIMD_ESZ_WORD = 2;
-
-    /// E15.9c: elemento de 64 bits sem `Q` — o arranjo `.1d`, que nenhuma instrução AdvSIMD vetorial
-    /// aritmética tem.
-    private static boolean isSingleDoublewordArrangement(int esz, boolean q) {
-        return esz == ADVSIMD_INT_SCALAR_ESZ && !q;
-    }
 
     /// "AdvSIMD vector/scalar × indexed element" (B8.19) — entra já sabendo que o prefixo bateu e
     /// `bit10=0` (ver o desvio em {@link #decodeAdvancedSimdInteger}). Escopo ARMv8.0/Cortex-A53:
@@ -897,141 +845,6 @@ public final class Aarch64Decoder {
         return new AdvSimdIntegerOp64.ArithmeticWideningByElement(wideningOp, scalar, q, esz, rd, rn, rm, index);
     }
 
-    /// "AdvSIMD shift by immediate" (B8.8) — entra já sabendo que o prefixo bateu
-    /// ({@link #ADVSIMD_SHIFT_PREFIX_VECTOR_PATTERN}/{@link #ADVSIMD_SHIFT_PREFIX_SCALAR_PATTERN}).
-    /// O tamanho do elemento é DERIVADO do bit mais alto setado de `immh` (`0001`=byte,`001x`=
-    /// halfword,`01xx`=word,`1xxx`=doubleword; `0000` é UNALLOCATED — G8), e o deslocamento é
-    /// resolvido AQUI a partir de `immh:immb` (7 bits, `esize=8<<esz`): à DIREITA
-    /// `shift=2*esize-combined` (`1`-`esize`); à ESQUERDA `shift=combined-esize` (`0`-`esize-1`) —
-    /// fórmula conferida contra o pseudocódigo real do manual (`ARM DDI 0487`, "shift amount").
-    private Ir64Op decodeAdvancedSimdShiftByImmediate(int word, long address) {
-        int prefix = (word >>> ADVSIMD_INT_PREFIX_SHIFT) & ADVSIMD_INT_PREFIX_MASK;
-        boolean scalar = prefix == ADVSIMD_SHIFT_PREFIX_SCALAR_PATTERN;
-        if (((word >>> ADVSIMD_SHIFT_BIT23_SHIFT) & 1) != 0) { // `bit10=1` já garantido pelo chamador
-            throw unsupported(word, address);
-        }
-        boolean q = !scalar && ((word >>> ADVSIMD_INT_Q_SHIFT) & 1) != 0;
-        boolean u = ((word >>> ADVSIMD_INT_U_SHIFT) & 1) != 0;
-        int immh = (word >>> ADVSIMD_SHIFT_IMMH_SHIFT) & ADVSIMD_SHIFT_IMMH_MASK;
-        int immb = (word >>> ADVSIMD_SHIFT_IMMB_SHIFT) & ADVSIMD_SHIFT_IMMB_MASK;
-        int esz = highestSetImmhBit(immh);
-        if (!scalar && isSingleDoublewordArrangement(esz, q)) {
-            // E15.9c: `immh<3>=1` com `Q=0` (arranjo `.1d`) é reservado em TODA a classe vetorial —
-            // antes só as conversões FP↔ponto fixo e o grupo estreita/alarga recusavam (G8).
-            throw unsupported(word, address);
-        }
-        if (esz < 0) {
-            // B19.6 bloco G: `immh=0000` é EXATAMENTE onde `Vimm`/`FMOVI_v_h` moram (mesmo achado
-            // já registrado do lado A32, B13.7/B13.9: "1-reg-and-modified-immediate" reusa o MESMO
-            // prefixo "shift by immediate", `immh=0` é o marcador).
-            Ir64Op modifiedImmediate = decodeAdvSimdModifiedImmediate(word, address, scalar, q);
-            if (modifiedImmediate != null) {
-                return modifiedImmediate;
-            }
-            throw unsupported(word, address); // UNALLOCATED real (G8).
-        }
-        int opcode = (word >>> ADVSIMD_INT_OPCODE_SHIFT) & ADVSIMD_INT_OPCODE_MASK;
-        int rn = (word >>> RN_SHIFT) & REGISTER_FIELD_MASK;
-        int rd = word & REGISTER_FIELD_MASK;
-        int combined = (immh << 3) | immb;
-        int esize = 8 << esz;
-        int rightShift = 2 * esize - combined;
-        int leftShift = combined - esize;
-
-        // Grupo estreitando (`SHRN`/.../`SQRSHRUN`) e alargando (`SSHLL`/`USHLL`) — `esz` variável
-        // real mas restrito a `0`-`2` (não há forma `Q`↔`D`); checado ANTES do grupo geral porque
-        // usa records/enums diferentes.
-        Ir64VectorShiftNarrowOp narrowOp = switch (opcode) {
-            case 0b1_0000 -> u ? Ir64VectorShiftNarrowOp.SQSHRUN : Ir64VectorShiftNarrowOp.SHRN;
-            case 0b1_0001 -> u ? Ir64VectorShiftNarrowOp.SQRSHRUN : Ir64VectorShiftNarrowOp.RSHRN;
-            case 0b1_0010 -> u ? Ir64VectorShiftNarrowOp.UQSHRN : Ir64VectorShiftNarrowOp.SQSHRN;
-            case 0b1_0011 -> u ? Ir64VectorShiftNarrowOp.UQRSHRN : Ir64VectorShiftNarrowOp.SQRSHRN;
-            default -> null;
-        };
-        if (narrowOp != null) {
-            if (esz == ADVSIMD_INT_SCALAR_ESZ) {
-                throw unsupported(word, address);
-            }
-            if (scalar && (narrowOp == Ir64VectorShiftNarrowOp.SHRN || narrowOp == Ir64VectorShiftNarrowOp.RSHRN)) {
-                // `SHRN`/`RSHRN` não têm forma escalar real (só as saturantes têm) — G8.
-                throw unsupported(word, address);
-            }
-            return new AdvSimdIntegerOp64.ShiftNarrowImmediate(narrowOp, scalar, q, esz, rightShift, rd, rn);
-        }
-        if (opcode == 0b1_0100) {
-            // `SSHLL`/`USHLL` — sem forma escalar real (G8).
-            if (scalar || esz == ADVSIMD_INT_SCALAR_ESZ) {
-                throw unsupported(word, address);
-            }
-            Ir64VectorShiftWidenOp widenOp = u ? Ir64VectorShiftWidenOp.USHLL : Ir64VectorShiftWidenOp.SSHLL;
-            return new AdvSimdIntegerOp64.ShiftWidenImmediate(widenOp, q, esz, leftShift, rd, rn);
-        }
-
-        Ir64VectorShiftOp op = switch (opcode) {
-            case 0b0_0000 -> u ? Ir64VectorShiftOp.USHR : Ir64VectorShiftOp.SSHR;
-            case 0b0_0010 -> u ? Ir64VectorShiftOp.USRA : Ir64VectorShiftOp.SSRA;
-            case 0b0_0100 -> u ? Ir64VectorShiftOp.URSHR : Ir64VectorShiftOp.SRSHR;
-            case 0b0_0110 -> u ? Ir64VectorShiftOp.URSRA : Ir64VectorShiftOp.SRSRA;
-            case 0b0_1000 -> u ? Ir64VectorShiftOp.SRI : null;
-            case 0b0_1010 -> u ? Ir64VectorShiftOp.SLI : Ir64VectorShiftOp.SHL;
-            case 0b0_1100 -> u ? Ir64VectorShiftOp.SQSHLU : null;
-            case 0b0_1110 -> u ? Ir64VectorShiftOp.UQSHL : Ir64VectorShiftOp.SQSHL;
-            default -> null;
-        };
-        if (op == null) {
-            // B19.3: `SCVTF`/`UCVTF`/`FCVTZS`/`FCVTZU` na forma FP↔ponto fixo (`@fcvt_fixed`,
-            // com `#fbits`) moram nesta MESMA classe "shift by immediate" (`bit10=1`),
-            // discriminadas pelos opcodes `0b1_1100`/`0b1_1111` que a tabela acima devolve `null`.
-            // Só forma ESCALAR nesta task — a vetorial `_vf` é B19.4.
-            if (opcode == ADVSIMD_SHIFT_FCVT_FIXED_TO_FLOAT_OPCODE
-                    || opcode == ADVSIMD_SHIFT_FCVT_FIXED_TO_INT_OPCODE) {
-                // B19.5.3: `esz==1` (meia precisão) só é aceito com `FEAT_FP16` presente — sem a
-                // feature, byte a byte o `throw` de sempre (G3/zero-diff em v8.0/v8.1). `esz==0`
-                // continua UNDEFINED sempre (G8: não é conversão FP↔fixo real).
-                if (esz == ADVSIMD_ESZ_HALFWORD) {
-                    if (!architecture.has(Aarch64Feature.FP16)) {
-                        throw unsupported(word, address);
-                    }
-                } else if (esz != ADVSIMD_ESZ_WORD && esz != ADVSIMD_INT_SCALAR_ESZ) {
-                    throw unsupported(word, address);
-                }
-                // B19.4: a forma VETORIAL (`_vf`, `!scalar`) reaproveita o MESMO record com `q` real
-                // (`immh<3>==1 && Q==0` já recusado no topo do método, E15.9c).
-                boolean toFloat = opcode == ADVSIMD_SHIFT_FCVT_FIXED_TO_FLOAT_OPCODE;
-                // `rightShift` (`2*esize - immh:immb`, já calculado) é EXATAMENTE o `#fbits` do
-                // `@fcvt_fixed`/`@fcvtq_{s,d}` (faixa `1..esize`); `!u` = variante assinada.
-                return new AdvSimdFpOp64.FpConvertFixedPoint(scalar, q, esz, rightShift, toFloat, !u, rd, rn);
-            }
-            throw unsupported(word, address);
-        }
-        boolean isRightShift = op == Ir64VectorShiftOp.SSHR || op == Ir64VectorShiftOp.USHR
-                || op == Ir64VectorShiftOp.SSRA || op == Ir64VectorShiftOp.USRA
-                || op == Ir64VectorShiftOp.SRSHR || op == Ir64VectorShiftOp.URSHR
-                || op == Ir64VectorShiftOp.SRSRA || op == Ir64VectorShiftOp.URSRA
-                || op == Ir64VectorShiftOp.SRI;
-        // `SQSHL`/`UQSHL`/`SQSHLU` aceitam qualquer `esz` (`0`-`3`); o resto desta tabela é D-only
-        // na forma escalar (`@shri_d`/`@shli_d` reais — nunca `@shri_b/h/s`/`@shli_b/h/s`).
-        boolean acceptsAnyScalarEsz = op == Ir64VectorShiftOp.SQSHL || op == Ir64VectorShiftOp.UQSHL
-                || op == Ir64VectorShiftOp.SQSHLU;
-        if (scalar && !acceptsAnyScalarEsz && esz != ADVSIMD_INT_SCALAR_ESZ) {
-            throw unsupported(word, address);
-        }
-        int shift = isRightShift ? rightShift : leftShift;
-        return new AdvSimdIntegerOp64.ShiftImmediate(op, scalar, q, esz, shift, rd, rn);
-    }
-
-    /// Posição (`0`-`3`) do bit mais alto setado de `immh` (4 bits) — `-1` se `immh=0000`
-    /// (UNALLOCATED). `0`=byte,`1`=halfword,`2`=word,`3`=doubleword (`ARM DDI 0487`, "shift by
-    /// immediate": o tamanho do elemento é sempre derivado assim, nunca um campo `size` solto).
-    private static int highestSetImmhBit(int immh) {
-        for (int bit = 3; bit >= 0; bit--) {
-            if (((immh >>> bit) & 1) != 0) {
-                return bit;
-            }
-        }
-        return -1;
-    }
-
     /// `VFPExpandImm`-equivalente de A64 (Armadilhas da task B6.5.3): MESMO algoritmo conceitual
     /// do precedente VFP32 (`StandardIrBuilder#vfpExpandImm`, `vfp_expand_imm` do QEMU) — sinal
     /// (bit7) + expoente replicado (bit6 invertido, {@code notBit6}) + mantissa (bits5:0) — mas
@@ -1049,56 +862,6 @@ public final class Aarch64Decoder {
         }
         long high16 = (sign ? 0x8000L : 0) | (notBit6 ? 0x4000L : 0x3e00L) | ((long) low6 << 3);
         return (high16 << 16) & 0xFFFF_FFFFL;
-    }
-
-    /// `MOVI`/`MVNI`/`ORR`/`BIC` imediato (`Vimm`) + `FMOV` de meia precisão imediato
-    /// (`FMOVI_v_h`, `FEAT_FP16`) — B19.6 bloco G, irmão A64 direto de `Vimm_1r`/B13.9. `imm8` é
-    /// remontado pelo `%abcdefgh` real do `a64.decode` (posição física diferente da usada por
-    /// o `FMOV` imediato de {@link ScalarFpRows}, MESMO valor semântico). Devolve `null` (nunca um encoding
-    /// ERRADO, G8) para os dois casos em que o chamador deve continuar tratando como UNALLOCATED:
-    /// forma escalar (Vimm/FMOVI_v_h só existem sob o prefixo vetorial) e `bits[11:10]` reservado
-    /// dentro deste subespaço.
-    private Ir64Op decodeAdvSimdModifiedImmediate(int word, long address, boolean scalar, boolean q) {
-        if (scalar) {
-            return null;
-        }
-        int imm8 = (((word >>> ADVSIMD_MODIFIED_IMM_TOP_SHIFT) & 0b111) << 5)
-                | ((word >>> ADVSIMD_MODIFIED_IMM_BOTTOM_SHIFT) & 0b1_1111);
-        int rd = word & REGISTER_FIELD_MASK;
-        int suffix6 = (word >>> ADVSIMD_MODIFIED_IMM_SUFFIX_SHIFT) & 0b11_1111;
-        int op = (word >>> ADVSIMD_MODIFIED_IMM_OP_SHIFT) & 1;
-        if (suffix6 == ADVSIMD_MODIFIED_IMM_FMOVI_H_SUFFIX) {
-            // E15.9c: `FMOV` de meia precisão é `op=0`; com `op=1` o slot não é alocado (G8).
-            if (op != 0) {
-                return null;
-            }
-            // `FMOVI_v_h` (`FEAT_FP16`): imediato de meia precisão replicado por todas as lanes
-            // `H` de 64 bits (4 cópias) — igual à disciplina do MOV puro, nunca recalculado depois.
-            if (!architecture.has(Aarch64Feature.FP16)) {
-                throw unsupported(word, address);
-            }
-            long half16 = expandFpImmediateHalf(imm8);
-            long imm64 = half16 | (half16 << 16) | (half16 << 32) | (half16 << 48);
-            return new AdvSimdMoveOp64.ModifiedImmediate64(AdvSimdModifiedImmediateOp.MOV, q, rd, imm64);
-        }
-        int fixedTwoBits = (word >>> ADVSIMD_MODIFIED_IMM_FIXED2_SHIFT) & 0b11;
-        if (fixedTwoBits != ADVSIMD_MODIFIED_IMM_FIXED2_PATTERN) {
-            return null;
-        }
-        int cmode = (word >>> ADVSIMD_MODIFIED_IMM_CMODE_SHIFT) & 0b1111;
-        if (AdvSimdModifiedImmediate.isReservedInAarch32(cmode, op)) {
-            // E15.9c: só existe `.2d` (`Q=1`).
-            if (!q) {
-                return null;
-            }
-            // `cmode=1111,op=1`: reservado em AArch32, em AArch64 é `FMOV` (vector, immediate) de
-            // 64 bits — reaproveita {@link #expandFpImmediate} (MESMO algoritmo VFPExpandImm de
-            // o `FMOV` imediato de {@link ScalarFpRows}, só o `imm8` já reconstruído acima).
-            long imm64 = expandFpImmediate(imm8, true);
-            return new AdvSimdMoveOp64.ModifiedImmediate64(AdvSimdModifiedImmediateOp.MOV, q, rd, imm64);
-        }
-        AdvSimdModifiedImmediate.Expanded expanded = AdvSimdModifiedImmediate.expand(imm8, cmode, op);
-        return new AdvSimdMoveOp64.ModifiedImmediate64(expanded.op(), q, rd, expanded.imm64());
     }
 
     /// `VFPExpandImm`-equivalente de meia precisão (`FMOVI_v_h`, B19.6 bloco G) — mesmo pseudocódigo
