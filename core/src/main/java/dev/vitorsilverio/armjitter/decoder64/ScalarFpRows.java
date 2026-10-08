@@ -1,7 +1,8 @@
 package dev.vitorsilverio.armjitter.decoder64;
 
+import dev.vitorsilverio.armjitter.decodetable.DecodeRow;
 import dev.vitorsilverio.armjitter.arch64.Aarch64Feature;
-import dev.vitorsilverio.armjitter.decoder64.DecodeRow.WordDecoder;
+import dev.vitorsilverio.armjitter.decodetable.DecodeRow.WordDecoder;
 import dev.vitorsilverio.armjitter.ir64.FpOp64;
 import dev.vitorsilverio.armjitter.ir64.FpOp64.Fp64Conversion;
 import dev.vitorsilverio.armjitter.ir64.FpOp64.Fp64HalfPrecisionConversion;
@@ -62,7 +63,7 @@ final class ScalarFpRows {
 
     /// As linhas. Colunas: `M|sf 0 S 11110 type 1 ...` (os campos de cada família no comentário); `type` `0.` é
     /// simples/dupla (`bit22` = dupla).
-    static final List<DecodeRow<Ir64Op>> ROWS = List.of(
+    static final List<DecodeRow<Aarch64Feature, Ir64Op>> ROWS = List.of(
             // 3-source — 0 0 0 11111 type o1 Rm o0 Ra Rn Rd
             row("0 0 0 11111 0. . ..... . ..... ..... .....", ScalarFpRows::multiplyAdd),
             // ponto fixo — sf 0 0 11110 type 0 rmode:opcode scale Rn Rd (32 bits: scale ≥ 32, bit15=1)
@@ -140,11 +141,11 @@ final class ScalarFpRows {
     private ScalarFpRows() {
     }
 
-    private static DecodeRow<Ir64Op> row(String pattern, WordDecoder<Ir64Op> build) {
+    private static DecodeRow<Aarch64Feature, Ir64Op> row(String pattern, WordDecoder<Ir64Op> build) {
         return DecodeRow.of(pattern, null, build);
     }
 
-    private static DecodeRow<Ir64Op> row(String pattern, Aarch64Feature requires, WordDecoder<Ir64Op> build) {
+    private static DecodeRow<Aarch64Feature, Ir64Op> row(String pattern, Aarch64Feature requires, WordDecoder<Ir64Op> build) {
         return DecodeRow.of(pattern, requires, build);
     }
 
@@ -158,13 +159,13 @@ final class ScalarFpRows {
     }
 
     /// `sf=1`: escala de 6 bits, `fbits = 64 - scale`. `Z` já é o nome: sempre trunca para zero.
-    private static DecodeRow<Ir64Op> fixedPointWide(String opcode, boolean toFloat, boolean signed) {
+    private static DecodeRow<Aarch64Feature, Ir64Op> fixedPointWide(String opcode, boolean toFloat, boolean signed) {
         return row("1 0 0 11110 0. 0 " + opcode + " ...... ..... .....", (word, address) ->
                 fixedPoint(word, toFloat, signed, Long.SIZE - ((word >>> SCALE_SHIFT) & SCALE_MASK)));
     }
 
     /// `sf=0`: `bit15=1` (escala ≥ 32) e `fbits = 32 - scale<4:0>` (`%fcvt_shift32`).
-    private static DecodeRow<Ir64Op> fixedPointNarrow(String opcode, boolean toFloat, boolean signed) {
+    private static DecodeRow<Aarch64Feature, Ir64Op> fixedPointNarrow(String opcode, boolean toFloat, boolean signed) {
         return row("0 0 0 11110 0. 0 " + opcode + " 1..... ..... .....", (word, address) ->
                 fixedPoint(word, toFloat, signed, Integer.SIZE - ((word >>> SCALE_SHIFT) & SCALE_NARROW_MASK)));
     }

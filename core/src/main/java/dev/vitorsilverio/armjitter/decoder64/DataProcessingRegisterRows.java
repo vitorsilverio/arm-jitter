@@ -1,7 +1,8 @@
 package dev.vitorsilverio.armjitter.decoder64;
 
+import dev.vitorsilverio.armjitter.decodetable.DecodeRow;
 import dev.vitorsilverio.armjitter.arch64.Aarch64Feature;
-import dev.vitorsilverio.armjitter.decoder64.DecodeRow.WordDecoder;
+import dev.vitorsilverio.armjitter.decodetable.DecodeRow.WordDecoder;
 import dev.vitorsilverio.armjitter.ir64.IntegerOp64;
 import dev.vitorsilverio.armjitter.ir64.Ir64AluExtendType;
 import dev.vitorsilverio.armjitter.ir64.Ir64AluOp;
@@ -99,7 +100,7 @@ final class DataProcessingRegisterRows {
     private static final Aarch64Feature FLAGM = Aarch64Feature.FLAG_MANIPULATION;
 
     /// As linhas. Colunas: `sf op S 1 op1 101 op2 ...` (os campos de cada família no comentário).
-    static final List<DecodeRow<Ir64Op>> ROWS = List.of(
+    static final List<DecodeRow<Aarch64Feature, Ir64Op>> ROWS = List.of(
             // logical deslocado — sf opc 01010 shift N Rm imm6 Rn Rd (imm6 < 32 em 32 bits)
             row("1 .. 01010 .. . ..... ...... ..... .....", DataProcessingRegisterRows::logical),
             row("0 .. 01010 .. . ..... 0..... ..... .....", DataProcessingRegisterRows::logical),
@@ -163,11 +164,11 @@ final class DataProcessingRegisterRows {
     private DataProcessingRegisterRows() {
     }
 
-    private static DecodeRow<Ir64Op> row(String pattern, WordDecoder<Ir64Op> build) {
+    private static DecodeRow<Aarch64Feature, Ir64Op> row(String pattern, WordDecoder<Ir64Op> build) {
         return DecodeRow.of(pattern, null, build);
     }
 
-    private static DecodeRow<Ir64Op> row(String pattern, Aarch64Feature requires, WordDecoder<Ir64Op> build) {
+    private static DecodeRow<Aarch64Feature, Ir64Op> row(String pattern, Aarch64Feature requires, WordDecoder<Ir64Op> build) {
         return DecodeRow.of(pattern, requires, build);
     }
 

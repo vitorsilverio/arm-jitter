@@ -1,5 +1,6 @@
 package dev.vitorsilverio.armjitter.decoder64;
 
+import dev.vitorsilverio.armjitter.decodetable.DecodeRow;
 import dev.vitorsilverio.armjitter.arch64.Aarch64Feature;
 import dev.vitorsilverio.armjitter.ir64.AdvSimdFpOp64;
 import dev.vitorsilverio.armjitter.ir64.Ir64Op;
@@ -59,13 +60,13 @@ final class AdvSimdThreeSameFpRows {
         }
     }
 
-    static final List<DecodeRow<Ir64Op>> ROWS = rows();
+    static final List<DecodeRow<Aarch64Feature, Ir64Op>> ROWS = rows();
 
     private AdvSimdThreeSameFpRows() {
     }
 
-    private static List<DecodeRow<Ir64Op>> rows() {
-        List<DecodeRow<Ir64Op>> rows = new ArrayList<>();
+    private static List<DecodeRow<Aarch64Feature, Ir64Op>> rows() {
+        List<DecodeRow<Aarch64Feature, Ir64Op>> rows = new ArrayList<>();
         // vetorial — 0 Q U 01110 a sz 1 Rm opcode 1 Rn Rd
         vector(rows, "0", "0", "11000", Ir64VectorFpThreeSameOp.MAXNM);
         vector(rows, "0", "1", "11000", Ir64VectorFpThreeSameOp.MINNM);
@@ -115,7 +116,7 @@ final class AdvSimdThreeSameFpRows {
     }
 
     /// Uma linha por par `Q sz` de `sizes`: `0 Q U prefixo a sz 1 Rm opcode 1 Rn Rd`.
-    private static void add(List<DecodeRow<Ir64Op>> rows, String prefix, String u, String a, String opcode,
+    private static void add(List<DecodeRow<Aarch64Feature, Ir64Op>> rows, String prefix, String u, String a, String opcode,
             Sizes sizes, Aarch64Feature requires, DecodeRow.WordDecoder<Ir64Op> build) {
         for (String qSz : sizes.qSz) {
             String q = qSz.substring(0, 1);
@@ -125,25 +126,25 @@ final class AdvSimdThreeSameFpRows {
         }
     }
 
-    private static void vector(List<DecodeRow<Ir64Op>> rows, String u, String a, String opcode,
+    private static void vector(List<DecodeRow<Aarch64Feature, Ir64Op>> rows, String u, String a, String opcode,
             Ir64VectorFpThreeSameOp op) {
         add(rows, VECTOR_PREFIX, u, a, opcode, Sizes.VECTOR, null, (word, address) ->
                 new AdvSimdFpOp64.FpArithmeticThreeSame(op, false, q(word), esz(word), rd(word), rn(word), rm(word)));
     }
 
-    private static void scalar(List<DecodeRow<Ir64Op>> rows, String u, String a, String opcode,
+    private static void scalar(List<DecodeRow<Aarch64Feature, Ir64Op>> rows, String u, String a, String opcode,
             Ir64VectorFpThreeSameOp op) {
         add(rows, SCALAR_PREFIX, u, a, opcode, Sizes.SCALAR, null, (word, address) ->
                 new AdvSimdFpOp64.FpArithmeticThreeSame(op, true, false, esz(word), rd(word), rn(word), rm(word)));
     }
 
-    private static void pairwise(List<DecodeRow<Ir64Op>> rows, String a, String opcode, Ir64VectorFpPairwiseOp op) {
+    private static void pairwise(List<DecodeRow<Aarch64Feature, Ir64Op>> rows, String a, String opcode, Ir64VectorFpPairwiseOp op) {
         add(rows, VECTOR_PREFIX, "1", a, opcode, Sizes.VECTOR, null, (word, address) ->
                 new AdvSimdFpOp64.FpArithmeticPairwise(op, false, q(word), esz(word), rd(word), rn(word), rm(word)));
     }
 
     /// `FMLAL`/`FMLSL` (`top=false`) ou `FMLAL2`/`FMLSL2` (`top=true`): uma linha por `a` (soma/subtração).
-    private static void multiplyAddLong(List<DecodeRow<Ir64Op>> rows, String u, String opcode, boolean top) {
+    private static void multiplyAddLong(List<DecodeRow<Aarch64Feature, Ir64Op>> rows, String u, String opcode, boolean top) {
         for (boolean subtract : new boolean[] {false, true}) {
             add(rows, VECTOR_PREFIX, u, subtract ? "1" : "0", opcode, Sizes.VECTOR_SZ0,
                     Aarch64Feature.FP16_FUSED_MULTIPLY_ADD_LONG, (word, address) ->
@@ -151,7 +152,7 @@ final class AdvSimdThreeSameFpRows {
         }
     }
 
-    private static void absoluteMaxMin(List<DecodeRow<Ir64Op>> rows, String u, boolean max) {
+    private static void absoluteMaxMin(List<DecodeRow<Aarch64Feature, Ir64Op>> rows, String u, boolean max) {
         add(rows, VECTOR_PREFIX, u, "1", ABSOLUTE_MAX_MIN_OPCODE, Sizes.VECTOR, Aarch64Feature.FP_ABSOLUTE_MAX_MIN,
                 (word, address) -> new AdvSimdFpOp64.FpAbsoluteMaxMin(max, q(word), esz(word), rd(word), rn(word),
                         rm(word)));

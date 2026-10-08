@@ -1,5 +1,8 @@
 package dev.vitorsilverio.armjitter.decoder64;
 
+import dev.vitorsilverio.armjitter.decodetable.DecodeRow;
+import dev.vitorsilverio.armjitter.decodetable.DecodeTable;
+import dev.vitorsilverio.armjitter.decodetable.DecodeTableInvariants;
 import dev.vitorsilverio.armjitter.arch64.Aarch64Architecture;
 import dev.vitorsilverio.armjitter.arch64.Aarch64Feature;
 import dev.vitorsilverio.armjitter.ir64.CryptoOp64;
@@ -43,7 +46,7 @@ class CryptoRowsTest {
 
     @Test
     void everyRowIsReachable() {
-        DecodeTable<Ir64Op> table = DecodeTable.forArchitecture(CryptoRows.ROWS, NO_SME);
+        DecodeTable<Aarch64Feature, Ir64Op> table = DecodeTable.forFeatures(CryptoRows.ROWS, NO_SME::has);
         assertEquals(ROW_COUNT, table.rows().size());
         DecodeTableInvariants.assertReachable(table, 0, 0xE1515AL);
     }
@@ -52,7 +55,7 @@ class CryptoRowsTest {
     void everyRowIsReachableThroughTheDecoder() {
         Aarch64Decoder decoder = new Aarch64Decoder(NO_SME);
         SplittableRandom random = new SplittableRandom(0xE1515AL);
-        for (DecodeRow<Ir64Op> row : CryptoRows.ROWS) {
+        for (DecodeRow<Aarch64Feature, Ir64Op> row : CryptoRows.ROWS) {
             int word = row.value() | (random.nextInt() & ~row.mask());
             assertEquals(row.build().decode(word, ADDRESS), decodeWord(decoder, word), Integer.toHexString(word));
         }
@@ -60,8 +63,8 @@ class CryptoRowsTest {
 
     @Test
     void baseArchitectureKeepsOnlyTheRowsWithoutFeature() {
-        assertEquals(BASE_ROW_COUNT, DecodeTable.forArchitecture(CryptoRows.ROWS,
-                Aarch64Architecture.ARMV8_0_A).rows().size());
+        assertEquals(BASE_ROW_COUNT, DecodeTable.forFeatures(CryptoRows.ROWS,
+                Aarch64Architecture.ARMV8_0_A::has).rows().size());
     }
 
     /// Conferidos contra o `objdump` 2.46 do devkitA64.

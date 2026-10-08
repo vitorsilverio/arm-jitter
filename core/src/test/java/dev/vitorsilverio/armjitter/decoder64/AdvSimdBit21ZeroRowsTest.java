@@ -1,5 +1,8 @@
 package dev.vitorsilverio.armjitter.decoder64;
 
+import dev.vitorsilverio.armjitter.decodetable.DecodeRow;
+import dev.vitorsilverio.armjitter.decodetable.DecodeTable;
+import dev.vitorsilverio.armjitter.decodetable.DecodeTableInvariants;
 import dev.vitorsilverio.armjitter.arch64.Aarch64Architecture;
 import dev.vitorsilverio.armjitter.arch64.Aarch64Feature;
 import dev.vitorsilverio.armjitter.ir64.AdvSimdFpOp64;
@@ -46,7 +49,7 @@ class AdvSimdBit21ZeroRowsTest {
 
     @Test
     void everyRowIsReachableThroughTheTable() {
-        DecodeTable<Ir64Op> table = DecodeTable.forArchitecture(AdvSimdBit21ZeroRows.ROWS, ALL_FEATURES);
+        DecodeTable<Aarch64Feature, Ir64Op> table = DecodeTable.forFeatures(AdvSimdBit21ZeroRows.ROWS, ALL_FEATURES::has);
         assertEquals(ROW_COUNT, table.rows().size());
         DecodeTableInvariants.assertReachable(table, 0, 0xE159L);
     }
@@ -55,7 +58,7 @@ class AdvSimdBit21ZeroRowsTest {
     void everyRowIsReachableThroughTheDecoder() {
         Aarch64Decoder decoder = new Aarch64Decoder(ALL_FEATURES);
         SplittableRandom random = new SplittableRandom(0xE159L);
-        for (DecodeRow<Ir64Op> row : AdvSimdBit21ZeroRows.ROWS) {
+        for (DecodeRow<Aarch64Feature, Ir64Op> row : AdvSimdBit21ZeroRows.ROWS) {
             int word = row.value() | (random.nextInt() & ~row.mask());
             assertEquals(row.build().decode(word, 0L), decodeWord(decoder, word), Integer.toHexString(word));
         }
@@ -64,7 +67,7 @@ class AdvSimdBit21ZeroRowsTest {
     @Test
     void everyRowFixesBit31ToZero() {
         Aarch64Decoder decoder = new Aarch64Decoder(ALL_FEATURES);
-        for (DecodeRow<Ir64Op> row : AdvSimdBit21ZeroRows.ROWS) {
+        for (DecodeRow<Aarch64Feature, Ir64Op> row : AdvSimdBit21ZeroRows.ROWS) {
             assertEquals(BIT31, row.mask() & BIT31, Integer.toHexString(row.value()));
             int word = row.value() | BIT31;
             assertThrows(UnsupportedOperationException.class, () -> decodeWord(decoder, word),
@@ -74,7 +77,7 @@ class AdvSimdBit21ZeroRowsTest {
 
     @Test
     void presetWithoutTheFeaturesKeepsNoRow() {
-        assertEquals(0, DecodeTable.forArchitecture(AdvSimdBit21ZeroRows.ROWS, Aarch64Architecture.ARMV8_0_A)
+        assertEquals(0, DecodeTable.forFeatures(AdvSimdBit21ZeroRows.ROWS, Aarch64Architecture.ARMV8_0_A::has)
                 .rows().size());
     }
 
@@ -84,7 +87,7 @@ class AdvSimdBit21ZeroRowsTest {
         // a cascata antiga ignorava o bit14 e devolvia FADD.
         Aarch64Decoder decoder = new Aarch64Decoder(ALL_FEATURES);
         assertThrows(UnsupportedOperationException.class, () -> decodeWord(decoder, 0x4e405400));
-        for (DecodeRow<Ir64Op> row : AdvSimdBit21ZeroRows.ROWS) {
+        for (DecodeRow<Aarch64Feature, Ir64Op> row : AdvSimdBit21ZeroRows.ROWS) {
             if (row.requires() != Aarch64Feature.FP16) {
                 continue;
             }

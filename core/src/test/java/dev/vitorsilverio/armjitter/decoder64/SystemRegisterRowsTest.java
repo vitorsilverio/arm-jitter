@@ -1,5 +1,7 @@
 package dev.vitorsilverio.armjitter.decoder64;
 
+import dev.vitorsilverio.armjitter.decodetable.DecodeTable;
+import dev.vitorsilverio.armjitter.decodetable.DecodeTableInvariants;
 import dev.vitorsilverio.armjitter.arch64.Aarch64Architecture;
 import dev.vitorsilverio.armjitter.ir64.Aarch64SystemRegisterId;
 import dev.vitorsilverio.armjitter.ir64.Ir64Op;
@@ -50,9 +52,9 @@ class SystemRegisterRowsTest {
 
     @Test
     void everyRowIsReachable() {
-        DecodeTableInvariants.assertReachable(DecodeTable.forArchitecture(SystemRegisterRows.ROWS, ALL), 0, 0xE1511L);
+        DecodeTableInvariants.assertReachable(DecodeTable.forFeatures(SystemRegisterRows.ROWS, ALL::has), 0, 0xE1511L);
         DecodeTableInvariants.assertReachable(
-                DecodeTable.forArchitecture(SystemRegisterRows.FALLBACK_ROWS, ALL), 0, 0xE1511L);
+                DecodeTable.forFeatures(SystemRegisterRows.FALLBACK_ROWS, ALL::has), 0, 0xE1511L);
     }
 
     /// `MRS` e `MSR` de cada registrador nomeado, pelo decoder, com todas as features.

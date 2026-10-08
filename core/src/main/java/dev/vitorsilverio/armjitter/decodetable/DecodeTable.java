@@ -1,14 +1,13 @@
-package dev.vitorsilverio.armjitter.decoder64;
-
-import dev.vitorsilverio.armjitter.arch64.Aarch64Architecture;
+package dev.vitorsilverio.armjitter.decodetable;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.function.Predicate;
 
 /// E15.9 (D5 do épico E15): decoder por tabela — generaliza o laço `mask`/`value` dos
 /// `Sme*Rows`, com a feature como coluna da linha ({@link DecodeRow}).
 ///
-/// **Construção por arquitetura:** {@link #forArchitecture} mantém só as linhas cuja feature o
+/// **Construção por arquitetura:** {@link #forFeatures} mantém só as linhas cuja feature o
 /// preset declara, então o decode não pergunta `has()` nenhuma vez (D8).
 ///
 /// **Buckets:** `keyMask` reúne bits fixos em TODAS as linhas mantidas, escolhidos pelos que mais
@@ -19,38 +18,43 @@ import java.util.List;
 /// A tabela não tem prioridade entre linhas: duas linhas que casam a mesma palavra são erro de
 /// especificação, apontado pelo teste de sobreposição (`DecodeTableInvariants`, nos testes).
 ///
+/// @param <F> tipo da feature das linhas
 /// @param <T> tipo da operação decodificada
-final class DecodeTable<T> {
+public final class DecodeTable<F, T> {
     /// Teto de bits da chave de bucket (1024 buckets).
-    static final int MAX_KEY_BITS = 10;
+    public static final int MAX_KEY_BITS = 10;
 
-    private final List<DecodeRow<T>> rows;
+    private final List<DecodeRow<F, T>> rows;
     private final int keyMask;
-    private final DecodeRow<T>[][] buckets;
+    private final DecodeRow<F, T>[][] buckets;
 
-    /// Monta a tabela com as linhas de `rows` que `architecture` suporta, na ordem dada.
-    static <T> DecodeTable<T> forArchitecture(List<DecodeRow<T>> rows, Aarch64Architecture architecture) {
-        List<DecodeRow<T>> kept = new ArrayList<>();
-        for (DecodeRow<T> row : rows) {
-            if (row.supportedBy(architecture)) {
+    /// Monta a tabela com as linhas de `rows` que `has` suporta, na ordem dada. Linha sem a feature
+    /// some, ou — quando declara {@link DecodeRow#whenAbsent} — fica e passa a construir por ele.
+    public static <F, T> DecodeTable<F, T> forFeatures(List<DecodeRow<F, T>> rows, Predicate<? super F> has) {
+        List<DecodeRow<F, T>> kept = new ArrayList<>();
+        for (DecodeRow<F, T> row : rows) {
+            if (row.supportedBy(has)) {
                 kept.add(row);
+            } else if (row.whenAbsent() != null) {
+                kept.add(new DecodeRow<>(row.mask(), row.value(), row.requires(), row.alsoRequires(),
+                        row.whenAbsent(), row.whenAbsent()));
             }
         }
         return new DecodeTable<>(kept);
     }
 
     @SuppressWarnings("unchecked")
-    private DecodeTable(List<DecodeRow<T>> rows) {
+    private DecodeTable(List<DecodeRow<F, T>> rows) {
         this.rows = List.copyOf(rows);
         this.keyMask = chooseKeyMask(this.rows);
-        List<List<DecodeRow<T>>> lists = new ArrayList<>();
+        List<List<DecodeRow<F, T>>> lists = new ArrayList<>();
         for (int i = 0; i < 1 << Integer.bitCount(keyMask); i++) {
             lists.add(new ArrayList<>());
         }
-        for (DecodeRow<T> row : this.rows) {
+        for (DecodeRow<F, T> row : this.rows) {
             lists.get(Integer.compress(row.value(), keyMask)).add(row);
         }
-        this.buckets = (DecodeRow<T>[][]) new DecodeRow<?>[lists.size()][];
+        this.buckets = (DecodeRow<F, T>[][]) new DecodeRow<?, ?>[lists.size()][];
         for (int i = 0; i < lists.size(); i++) {
             buckets[i] = lists.get(i).toArray(DecodeRow[]::new);
         }
@@ -59,15 +63,15 @@ final class DecodeTable<T> {
     /// Bits comuns a todas as máscaras, os {@link #MAX_KEY_BITS} que mais dividem as linhas
     /// (empate: o bit mais alto). Bit com o mesmo valor em todas as linhas não entra — não separa
     /// nada. Tabela vazia → `0` (um bucket só, vazio).
-    private static int chooseKeyMask(List<? extends DecodeRow<?>> rows) {
+    private static int chooseKeyMask(List<? extends DecodeRow<?, ?>> rows) {
         int common = -1;
-        for (DecodeRow<?> row : rows) {
+        for (DecodeRow<?, ?> row : rows) {
             common &= row.mask();
         }
         int[] balance = new int[Integer.SIZE];
         for (int bit = 0; bit < Integer.SIZE; bit++) {
             int ones = 0;
-            for (DecodeRow<?> row : rows) {
+            for (DecodeRow<?, ?> row : rows) {
                 ones += (row.value() >>> bit) & 1;
             }
             balance[bit] = ((common >>> bit) & 1) == 0 ? 0 : Math.min(ones, rows.size() - ones);
@@ -91,8 +95,8 @@ final class DecodeTable<T> {
 
     /// Decodifica `word` (lida em `address`) pela linha que casa, ou devolve `null` quando nenhuma
     /// casa (o chamador segue para o resto do espaço ou recusa a palavra, G8).
-    T decode(int word, long address) {
-        for (DecodeRow<T> row : buckets[Integer.compress(word, keyMask)]) {
+    public T decode(int word, long address) {
+        for (DecodeRow<F, T> row : buckets[Integer.compress(word, keyMask)]) {
             if (row.matches(word)) {
                 return row.build().decode(word, address);
             }
@@ -100,13 +104,13 @@ final class DecodeTable<T> {
         return null;
     }
 
-    /// As linhas mantidas, na ordem de declaração.
-    List<DecodeRow<T>> rows() {
+    /// As linhas mantidas (as sem feature, já com o construtor de ausência), na ordem de declaração.
+    public List<DecodeRow<F, T>> rows() {
         return rows;
     }
 
     /// Os bits usados como chave de bucket.
-    int keyMask() {
+    public int keyMask() {
         return keyMask;
     }
 }

@@ -1,5 +1,6 @@
 package dev.vitorsilverio.armjitter.decoder64;
 
+import dev.vitorsilverio.armjitter.decodetable.DecodeRow;
 import dev.vitorsilverio.armjitter.arch64.Aarch64Feature;
 import dev.vitorsilverio.armjitter.ir64.AdvSimdFpOp64;
 import dev.vitorsilverio.armjitter.ir64.AdvSimdIntegerOp64;
@@ -65,13 +66,13 @@ final class AdvSimdIndexedElementRows {
     private static final int ESZ_WORD = 2;
     private static final int ESZ_DOUBLEWORD = 3;
 
-    static final List<DecodeRow<Ir64Op>> ROWS = rows();
+    static final List<DecodeRow<Aarch64Feature, Ir64Op>> ROWS = rows();
 
     private AdvSimdIndexedElementRows() {
     }
 
-    private static List<DecodeRow<Ir64Op>> rows() {
-        List<DecodeRow<Ir64Op>> rows = new ArrayList<>();
+    private static List<DecodeRow<Aarch64Feature, Ir64Op>> rows() {
+        List<DecodeRow<Aarch64Feature, Ir64Op>> rows = new ArrayList<>();
         // ponto flutuante — escalar e vetorial; meia precisão = FEAT_FP16
         fp(rows, "0", "1001", Ir64VectorFpThreeSameOp.MUL);
         fp(rows, "1", "1001", Ir64VectorFpThreeSameOp.MULX);
@@ -103,7 +104,7 @@ final class AdvSimdIndexedElementRows {
     }
 
     /// Uma linha por valor de `L` (`l = "."` vira `0` e `1`): `0 Q U prefixo size L M Rm opcode H 0 Rn Rd` (`M` sempre livre).
-    private static void add(List<DecodeRow<Ir64Op>> rows, String q, String u, String prefix, String size, String l,
+    private static void add(List<DecodeRow<Aarch64Feature, Ir64Op>> rows, String q, String u, String prefix, String size, String l,
             String opcode, String h, Aarch64Feature requires, DecodeRow.WordDecoder<Ir64Op> build) {
         for (String lValue : l.equals(".") ? new String[] {"0", "1"} : new String[] {l}) {
             rows.add(DecodeRow.of("0 " + q + " " + u + " " + prefix + " " + size + " " + lValue + " . .... "
@@ -112,7 +113,7 @@ final class AdvSimdIndexedElementRows {
     }
 
     /// `FMUL`/`FMULX`/`FMLA`/`FMLS`: `H` (meia precisão, `FEAT_FP16`), `S` e `D` (vetorial só `.2d`).
-    private static void fp(List<DecodeRow<Ir64Op>> rows, String u, String opcode, Ir64VectorFpThreeSameOp op) {
+    private static void fp(List<DecodeRow<Aarch64Feature, Ir64Op>> rows, String u, String opcode, Ir64VectorFpThreeSameOp op) {
         add(rows, ".", u, VECTOR_PREFIX, SIZE_H_FP16, ".", opcode, ".", Aarch64Feature.FP16, (word, address) ->
                 new AdvSimdFpOp64.FpArithmeticThreeSameByElement(op, false, q(word), ESZ_HALFWORD, rd(word), rn(word),
                         rmH(word), indexHlm(word)));
@@ -134,7 +135,7 @@ final class AdvSimdIndexedElementRows {
     }
 
     /// Inteiro não alargante, `H` e `S`; `scalar` diz se a forma escalar existe.
-    private static void integer(List<DecodeRow<Ir64Op>> rows, String u, String opcode, Ir64VectorThreeSameOp op,
+    private static void integer(List<DecodeRow<Aarch64Feature, Ir64Op>> rows, String u, String opcode, Ir64VectorThreeSameOp op,
             boolean scalar, Aarch64Feature requires) {
         add(rows, ".", u, VECTOR_PREFIX, SIZE_H, ".", opcode, ".", requires, (word, address) ->
                 new AdvSimdIntegerOp64.ArithmeticThreeSameByElement(op, false, q(word), ESZ_HALFWORD, rd(word),
@@ -153,7 +154,7 @@ final class AdvSimdIndexedElementRows {
     }
 
     /// Inteiro alargante, `H` e `S` (o tamanho é o do elemento estreito); `scalar` diz se a forma escalar existe.
-    private static void widening(List<DecodeRow<Ir64Op>> rows, String u, String opcode, Ir64VectorWideningOp op,
+    private static void widening(List<DecodeRow<Aarch64Feature, Ir64Op>> rows, String u, String opcode, Ir64VectorWideningOp op,
             boolean scalar) {
         add(rows, ".", u, VECTOR_PREFIX, SIZE_H, ".", opcode, ".", null, (word, address) ->
                 new AdvSimdIntegerOp64.ArithmeticWideningByElement(op, false, q(word), ESZ_HALFWORD, rd(word),
@@ -173,7 +174,7 @@ final class AdvSimdIndexedElementRows {
 
     /// `FCMLA_vi` (`FEAT_FCMA`, `opcode = 0 rot 1`, `U=1`): `.4h` (índice `L`, `H=0`), `.8h` (índice `H:L`) e
     /// `.4s` (índice `H`, `L=0`) — `Rm` de 5 bits nas três (`a64.decode`, `FCMLA_vi`).
-    private static void complexMultiplyAccumulate(List<DecodeRow<Ir64Op>> rows) {
+    private static void complexMultiplyAccumulate(List<DecodeRow<Aarch64Feature, Ir64Op>> rows) {
         Aarch64Feature fcma = Aarch64Feature.COMPLEX_NUMBER_ARITHMETIC;
         add(rows, "0", "1", VECTOR_PREFIX, SIZE_H, ".", "0..1", "0", fcma, (word, address) ->
                 new AdvSimdFpOp64.FpComplexMultiplyAccumulateByElement(false, ESZ_HALFWORD, rotation(word), rd(word),
@@ -188,7 +189,7 @@ final class AdvSimdIndexedElementRows {
 
     /// `opcode=1111`/`1110`, `@qrrx_s`: `BFDOT_vi` (`FEAT_BF16`), `USDOT_vi`/`SUDOT_vi` (`FEAT_I8MM`, `U=0`, o
     /// `size` separa) e `SDOT_vi`/`UDOT_vi` (`FEAT_DotProd`, o `U` separa).
-    private static void dotProducts(List<DecodeRow<Ir64Op>> rows) {
+    private static void dotProducts(List<DecodeRow<Aarch64Feature, Ir64Op>> rows) {
         add(rows, ".", "0", VECTOR_PREFIX, SIZE_H, ".", "1111", ".", Aarch64Feature.BFLOAT16, (word, address) ->
                 new AdvSimdFpOp64.FpDotProductBFloat16ByElement(q(word), rd(word), rn(word), rm(word), indexHl(word)));
         add(rows, ".", "0", VECTOR_PREFIX, SIZE_S, ".", "1111", ".", Aarch64Feature.INT8_MATRIX_MULTIPLY,
@@ -207,7 +208,7 @@ final class AdvSimdIndexedElementRows {
 
     /// `@qrrx_h`, só vetorial: `FMLAL`/`FMLSL`/`FMLAL2`/`FMLSL2` (`FEAT_FHM`, `size=10`, `U` = bit `top` do
     /// `opcode`) e `BFMLALB`/`BFMLALT` (`FEAT_BF16`, `size=11`, `Q` = `top`).
-    private static void multiplyAddLong(List<DecodeRow<Ir64Op>> rows) {
+    private static void multiplyAddLong(List<DecodeRow<Aarch64Feature, Ir64Op>> rows) {
         Aarch64Feature fhm = Aarch64Feature.FP16_FUSED_MULTIPLY_ADD_LONG;
         for (String opcode : new String[] {"0000", "0100", "1000", "1100"}) {
             boolean top = opcode.charAt(0) == '1';
@@ -224,7 +225,7 @@ final class AdvSimdIndexedElementRows {
     /// FP8, só vetorial: `FMLALB`/`FMLALT` (`FMLAL_hb_vi`, `size=11`, `U=0`, `idxn = Q`) e `FMLALL*`
     /// (`FMLALL_sb_vi`, `U=1`, `bit23=0`, `idxn = Q:bit22`) com o layout `%hlm4` (`FEAT_FP8FMA`); `FDOT` `.4h`
     /// (`FDOT_hb_vi`, `@qrrx_h`, `FEAT_FP8DOT2`) e `.2s`/`.4s` (`FDOT_sb_vi`, `@qrrx_s`, `FEAT_FP8DOT4`).
-    private static void fp8(List<DecodeRow<Ir64Op>> rows) {
+    private static void fp8(List<DecodeRow<Aarch64Feature, Ir64Op>> rows) {
         Aarch64Feature fma = Aarch64Feature.FP8_FUSED_MULTIPLY_ADD;
         add(rows, ".", "0", VECTOR_PREFIX, SIZE_D, ".", "0000", ".", fma, (word, address) ->
                 new AdvSimdFpOp64.Fp8FusedMultiplyAddLongByElement(false, bit(word, Q_SHIFT), rd(word), rn(word),

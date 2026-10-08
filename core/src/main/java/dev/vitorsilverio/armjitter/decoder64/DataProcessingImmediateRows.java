@@ -1,6 +1,8 @@
 package dev.vitorsilverio.armjitter.decoder64;
 
-import dev.vitorsilverio.armjitter.decoder64.DecodeRow.WordDecoder;
+import dev.vitorsilverio.armjitter.arch64.Aarch64Feature;
+import dev.vitorsilverio.armjitter.decodetable.DecodeRow;
+import dev.vitorsilverio.armjitter.decodetable.DecodeRow.WordDecoder;
 import dev.vitorsilverio.armjitter.ir64.IntegerOp64;
 import dev.vitorsilverio.armjitter.ir64.Ir64AluOp;
 import dev.vitorsilverio.armjitter.ir64.Ir64BitfieldOp;
@@ -61,7 +63,7 @@ final class DataProcessingImmediateRows {
     private static final int REGISTER_MASK = 0b1_1111;
 
     /// As 28 linhas. Colunas: `sf op S 100 op0 ...` (os campos de cada família no comentário).
-    static final List<DecodeRow<Ir64Op>> ROWS = List.of(
+    static final List<DecodeRow<Aarch64Feature, Ir64Op>> ROWS = List.of(
             // PC-relative — op immlo 10000 immhi Rd
             row("0 .. 10000 ................... .....", DataProcessingImmediateRows::pcRelative),
             row("1 .. 10000 ................... .....", DataProcessingImmediateRows::pcRelative),
@@ -101,7 +103,7 @@ final class DataProcessingImmediateRows {
     private DataProcessingImmediateRows() {
     }
 
-    private static DecodeRow<Ir64Op> row(String pattern, WordDecoder<Ir64Op> build) {
+    private static DecodeRow<Aarch64Feature, Ir64Op> row(String pattern, WordDecoder<Ir64Op> build) {
         return DecodeRow.of(pattern, null, build);
     }
 

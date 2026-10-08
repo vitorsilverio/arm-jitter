@@ -1,5 +1,8 @@
 package dev.vitorsilverio.armjitter.decoder64;
 
+import dev.vitorsilverio.armjitter.decodetable.DecodeRow;
+import dev.vitorsilverio.armjitter.decodetable.DecodeTable;
+import dev.vitorsilverio.armjitter.decodetable.DecodeTableInvariants;
 import dev.vitorsilverio.armjitter.arch64.Aarch64Architecture;
 import dev.vitorsilverio.armjitter.arch64.Aarch64Feature;
 import dev.vitorsilverio.armjitter.ir64.AdvSimdFpOp64.FpAbsoluteMaxMin;
@@ -46,12 +49,12 @@ class AdvSimdThreeSameFpRowsTest {
     @Test
     void featureRowsAreFilteredByThePreset() {
         assertEquals(BASE_ROW_COUNT,
-                DecodeTable.forArchitecture(AdvSimdThreeSameFpRows.ROWS, Aarch64Architecture.ARMV8_0_A).rows().size());
+                DecodeTable.forFeatures(AdvSimdThreeSameFpRows.ROWS, Aarch64Architecture.ARMV8_0_A::has).rows().size());
     }
 
     @Test
     void everyRowIsReachable() {
-        DecodeTable<Ir64Op> table = DecodeTable.forArchitecture(AdvSimdThreeSameFpRows.ROWS, FEATURES);
+        DecodeTable<Aarch64Feature, Ir64Op> table = DecodeTable.forFeatures(AdvSimdThreeSameFpRows.ROWS, FEATURES::has);
         assertEquals(ROW_COUNT, table.rows().size());
         DecodeTableInvariants.assertReachable(table, 0, 0xE1515CL);
     }
@@ -60,7 +63,7 @@ class AdvSimdThreeSameFpRowsTest {
     void everyRowIsReachableThroughTheDecoder() {
         Aarch64Decoder decoder = new Aarch64Decoder(FEATURES);
         SplittableRandom random = new SplittableRandom(0xE1515CL);
-        for (DecodeRow<Ir64Op> row : AdvSimdThreeSameFpRows.ROWS) {
+        for (DecodeRow<Aarch64Feature, Ir64Op> row : AdvSimdThreeSameFpRows.ROWS) {
             int word = row.value() | (random.nextInt() & ~row.mask());
             assertEquals(row.build().decode(word, ADDRESS), decodeWord(decoder, word), Integer.toHexString(word));
         }

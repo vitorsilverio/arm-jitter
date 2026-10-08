@@ -71,7 +71,6 @@ class TamanhoDeFonteGuardTest {
             entry("advsimd/AdvSimdLanes.java", 3677),
             entry("core64/Aarch64Core.java", 1848),
             entry("ir/StandardIrBuilder.java", 1352),
-            entry("decoder/ArmDecoder.java", 1174),
             entry("codegen64/jvm64/Ir64BlockCompiler.java", 1161),
             entry("decoder/VfpDecoder.java", 1131),
             entry("decoder64/Aarch64SveDecoder.java", 1101),

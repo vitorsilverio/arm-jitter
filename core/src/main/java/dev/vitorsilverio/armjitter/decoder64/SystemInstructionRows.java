@@ -1,7 +1,8 @@
 package dev.vitorsilverio.armjitter.decoder64;
 
+import dev.vitorsilverio.armjitter.decodetable.DecodeRow;
 import dev.vitorsilverio.armjitter.arch64.Aarch64Feature;
-import dev.vitorsilverio.armjitter.decoder64.DecodeRow.WordDecoder;
+import dev.vitorsilverio.armjitter.decodetable.DecodeRow.WordDecoder;
 import dev.vitorsilverio.armjitter.ir64.Aarch64AddressTranslateForm;
 import dev.vitorsilverio.armjitter.ir64.IntegerOp64;
 import dev.vitorsilverio.armjitter.ir64.Ir64FlagConversionOp;
@@ -39,7 +40,7 @@ final class SystemInstructionRows {
     private static final Aarch64Feature FLAGM2 = Aarch64Feature.FLAG_MANIPULATION_2;
 
     /// Linhas específicas, sem sobreposição. Colunas: `1101010100 L op0 op1 CRn CRm op2 Rt`.
-    static final List<DecodeRow<Ir64Op>> ROWS = List.of(
+    static final List<DecodeRow<Aarch64Feature, Ir64Op>> ROWS = List.of(
             // WFI — hint #3 (os outros hints são o NOP do fallback)
             row("1101010100 0 00 011 0010 0000 011 11111", null, system(Ir64SystemInstructionOp.WFI)),
             // WFET/WFIT — mesmo tratamento de WFE (NOP)/WFI sem timeout; Rt (prazo) ignorado
@@ -96,7 +97,7 @@ final class SystemInstructionRows {
     );
 
     /// Restos de espaço, consultados só quando {@link #ROWS} não casa. Sem sobreposição entre si.
-    static final List<DecodeRow<Ir64Op>> FALLBACK_ROWS = List.of(
+    static final List<DecodeRow<Aarch64Feature, Ir64Op>> FALLBACK_ROWS = List.of(
             // hints — RES NOP por definição (ARM DDI 0487 C6.2.132); sem event-stream, WFE/SEV/SEVL são NOP
             row("1101010100 0 00 011 0010 .... ... 11111", null, system(Ir64SystemInstructionOp.NOP_HINT)),
             // manutenção de cache CRn=0111 — sem cache modelada, NOP; fora: AT (CRm=1000) e DC ZVA
@@ -121,15 +122,15 @@ final class SystemInstructionRows {
     private SystemInstructionRows() {
     }
 
-    private static DecodeRow<Ir64Op> row(String pattern, Aarch64Feature requires, WordDecoder<Ir64Op> build) {
+    private static DecodeRow<Aarch64Feature, Ir64Op> row(String pattern, Aarch64Feature requires, WordDecoder<Ir64Op> build) {
         return DecodeRow.of(pattern, requires, build);
     }
 
-    private static DecodeRow<Ir64Op> cache(String pattern) {
+    private static DecodeRow<Aarch64Feature, Ir64Op> cache(String pattern) {
         return row(pattern, null, system(Ir64SystemInstructionOp.CACHE_MAINTENANCE_NOP));
     }
 
-    private static DecodeRow<Ir64Op> unmodeled(String pattern) {
+    private static DecodeRow<Aarch64Feature, Ir64Op> unmodeled(String pattern) {
         return row(pattern, null, system(Ir64SystemInstructionOp.MAINTENANCE_UNMODELED_NOP));
     }
 

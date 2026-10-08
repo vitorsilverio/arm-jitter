@@ -1,5 +1,7 @@
 package dev.vitorsilverio.armjitter.decoder64;
 
+import dev.vitorsilverio.armjitter.arch64.Aarch64Feature;
+import dev.vitorsilverio.armjitter.decodetable.DecodeRow;
 import dev.vitorsilverio.armjitter.ir64.AdvSimdIntegerOp64;
 import dev.vitorsilverio.armjitter.ir64.Ir64Op;
 import dev.vitorsilverio.armjitter.ir64.Ir64VectorNarrowOp;
@@ -50,13 +52,13 @@ final class AdvSimdThreeDifferentRows {
         }
     }
 
-    static final List<DecodeRow<Ir64Op>> ROWS = rows();
+    static final List<DecodeRow<Aarch64Feature, Ir64Op>> ROWS = rows();
 
     private AdvSimdThreeDifferentRows() {
     }
 
-    private static List<DecodeRow<Ir64Op>> rows() {
-        List<DecodeRow<Ir64Op>> rows = new ArrayList<>();
+    private static List<DecodeRow<Aarch64Feature, Ir64Op>> rows() {
+        List<DecodeRow<Aarch64Feature, Ir64Op>> rows = new ArrayList<>();
         // alargando — 0 Q U 01110 size 1 Rm opcode 00 Rn Rd
         widening(rows, "0000", Ir64VectorWideningOp.SADDL, Ir64VectorWideningOp.UADDL);
         widening(rows, "0010", Ir64VectorWideningOp.SSUBL, Ir64VectorWideningOp.USUBL);
@@ -82,38 +84,38 @@ final class AdvSimdThreeDifferentRows {
     }
 
     /// Uma linha por par `Q size` de `sizes`: `0 Q U prefixo size 1 Rm opcode 00 Rn Rd`.
-    private static void add(List<DecodeRow<Ir64Op>> rows, String prefix, String u, String opcode, Sizes sizes,
+    private static void add(List<DecodeRow<Aarch64Feature, Ir64Op>> rows, String prefix, String u, String opcode, Sizes sizes,
             DecodeRow.WordDecoder<Ir64Op> build) {
         for (String qSize : sizes.qSize) {
             add(rows, prefix, u, qSize.substring(0, 1), qSize.substring(2), opcode, build);
         }
     }
 
-    private static void add(List<DecodeRow<Ir64Op>> rows, String prefix, String u, String q, String size,
+    private static void add(List<DecodeRow<Aarch64Feature, Ir64Op>> rows, String prefix, String u, String q, String size,
             String opcode, DecodeRow.WordDecoder<Ir64Op> build) {
         rows.add(DecodeRow.of("0 " + q + " " + u + " " + prefix + " " + size + " 1 ..... " + opcode
                 + " 00 ..... .....", null, build));
     }
 
-    private static void widening(List<DecodeRow<Ir64Op>> rows, String opcode, Ir64VectorWideningOp signed,
+    private static void widening(List<DecodeRow<Aarch64Feature, Ir64Op>> rows, String opcode, Ir64VectorWideningOp signed,
             Ir64VectorWideningOp unsigned) {
         vectorWidening(rows, "0", opcode, signed, Sizes.BHS);
         vectorWidening(rows, "1", opcode, unsigned, Sizes.BHS);
     }
 
-    private static void saturatingDoubling(List<DecodeRow<Ir64Op>> rows, String opcode, Ir64VectorWideningOp op) {
+    private static void saturatingDoubling(List<DecodeRow<Aarch64Feature, Ir64Op>> rows, String opcode, Ir64VectorWideningOp op) {
         vectorWidening(rows, "0", opcode, op, Sizes.HS);
         add(rows, SCALAR_PREFIX, "0", opcode, Sizes.SCALAR_HS, (word, address) ->
                 new AdvSimdIntegerOp64.ArithmeticWidening(op, true, false, esz(word), rd(word), rn(word), rm(word)));
     }
 
-    private static void vectorWidening(List<DecodeRow<Ir64Op>> rows, String u, String opcode,
+    private static void vectorWidening(List<DecodeRow<Aarch64Feature, Ir64Op>> rows, String u, String opcode,
             Ir64VectorWideningOp op, Sizes sizes) {
         add(rows, VECTOR_PREFIX, u, opcode, sizes, (word, address) ->
                 new AdvSimdIntegerOp64.ArithmeticWidening(op, false, q(word), esz(word), rd(word), rn(word), rm(word)));
     }
 
-    private static void wide(List<DecodeRow<Ir64Op>> rows, String opcode, Ir64VectorWideOp signed,
+    private static void wide(List<DecodeRow<Aarch64Feature, Ir64Op>> rows, String opcode, Ir64VectorWideOp signed,
             Ir64VectorWideOp unsigned) {
         for (Ir64VectorWideOp op : new Ir64VectorWideOp[] {signed, unsigned}) {
             add(rows, VECTOR_PREFIX, op == signed ? "0" : "1", opcode, Sizes.BHS, (word, address) ->
@@ -122,7 +124,7 @@ final class AdvSimdThreeDifferentRows {
     }
 
     /// `rounding` é a forma `U=1` (`RADDHN`/`RSUBHN`).
-    private static void narrow(List<DecodeRow<Ir64Op>> rows, String opcode, Ir64VectorNarrowOp truncating,
+    private static void narrow(List<DecodeRow<Aarch64Feature, Ir64Op>> rows, String opcode, Ir64VectorNarrowOp truncating,
             Ir64VectorNarrowOp rounding) {
         for (Ir64VectorNarrowOp op : new Ir64VectorNarrowOp[] {truncating, rounding}) {
             add(rows, VECTOR_PREFIX, op == truncating ? "0" : "1", opcode, Sizes.BHS, (word, address) ->
@@ -130,7 +132,7 @@ final class AdvSimdThreeDifferentRows {
         }
     }
 
-    private static void polynomialMultiplyLong(List<DecodeRow<Ir64Op>> rows, String size, boolean doubleword) {
+    private static void polynomialMultiplyLong(List<DecodeRow<Aarch64Feature, Ir64Op>> rows, String size, boolean doubleword) {
         add(rows, VECTOR_PREFIX, "0", ".", size, POLYNOMIAL_MULTIPLY_OPCODE, (word, address) ->
                 new AdvSimdIntegerOp64.PolynomialMultiplyLong(doubleword, q(word), rd(word), rn(word), rm(word)));
     }

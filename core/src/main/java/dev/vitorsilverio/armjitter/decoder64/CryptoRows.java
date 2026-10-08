@@ -1,5 +1,6 @@
 package dev.vitorsilverio.armjitter.decoder64;
 
+import dev.vitorsilverio.armjitter.decodetable.DecodeRow;
 import dev.vitorsilverio.armjitter.arch64.Aarch64Feature;
 import dev.vitorsilverio.armjitter.ir64.CryptoOp64;
 import dev.vitorsilverio.armjitter.ir64.Ir64CryptoAesOp;
@@ -48,7 +49,7 @@ final class CryptoRows {
 
     /// Colunas: "three-register SHA" = `0 1 0 11110 00 0 Rm opcode(15:10) Rn Rd`; prefixo `11001110` =
     /// `11001110 op0(23:21) Rm bits[15:10] Rn Rd`.
-    static final List<DecodeRow<Ir64Op>> ROWS = List.of(
+    static final List<DecodeRow<Aarch64Feature, Ir64Op>> ROWS = List.of(
             // three-register SHA
             row("0 1 0 11110 00 0 ..... 000000 ..... .....", null, sha(Ir64CryptoShaThreeRegisterOp.SHA1C)),
             row("0 1 0 11110 00 0 ..... 000100 ..... .....", null, sha(Ir64CryptoShaThreeRegisterOp.SHA1P)),
@@ -99,7 +100,7 @@ final class CryptoRows {
         Ir64Op decode(int word);
     }
 
-    private static DecodeRow<Ir64Op> row(String pattern, Aarch64Feature requires, AddressFree build) {
+    private static DecodeRow<Aarch64Feature, Ir64Op> row(String pattern, Aarch64Feature requires, AddressFree build) {
         return DecodeRow.of(pattern, requires, (word, address) -> build.decode(word));
     }
 

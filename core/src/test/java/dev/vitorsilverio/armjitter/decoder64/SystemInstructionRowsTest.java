@@ -1,5 +1,9 @@
 package dev.vitorsilverio.armjitter.decoder64;
 
+import dev.vitorsilverio.armjitter.arch64.Aarch64Feature;
+import dev.vitorsilverio.armjitter.decodetable.DecodeRow;
+import dev.vitorsilverio.armjitter.decodetable.DecodeTable;
+import dev.vitorsilverio.armjitter.decodetable.DecodeTableInvariants;
 import dev.vitorsilverio.armjitter.arch64.Aarch64Architecture;
 import dev.vitorsilverio.armjitter.ir64.Aarch64AddressTranslateForm;
 import dev.vitorsilverio.armjitter.ir64.Ir64Op;
@@ -34,9 +38,9 @@ class SystemInstructionRowsTest {
 
     @Test
     void everyRowIsReachable() {
-        DecodeTableInvariants.assertReachable(DecodeTable.forArchitecture(SystemInstructionRows.ROWS, ALL), 0, 0xE1511L);
+        DecodeTableInvariants.assertReachable(DecodeTable.forFeatures(SystemInstructionRows.ROWS, ALL::has), 0, 0xE1511L);
         DecodeTableInvariants.assertReachable(
-                DecodeTable.forArchitecture(SystemInstructionRows.FALLBACK_ROWS, ALL), 0, 0xE1511L);
+                DecodeTable.forFeatures(SystemInstructionRows.FALLBACK_ROWS, ALL::has), 0, 0xE1511L);
     }
 
     /// Palavras do fallback que nenhuma linha específica casa decodificam pelo fallback; as que casam uma
@@ -45,13 +49,13 @@ class SystemInstructionRowsTest {
     void everyRowIsReachableThroughTheDecoder() {
         Aarch64Decoder decoder = new Aarch64Decoder(ALL);
         SplittableRandom random = new SplittableRandom(0xE1511L);
-        for (DecodeRow<Ir64Op> row : SystemInstructionRows.ROWS) {
+        for (DecodeRow<Aarch64Feature, Ir64Op> row : SystemInstructionRows.ROWS) {
             int word = row.value() | (random.nextInt() & ~row.mask());
             assertEquals(row.build().decode(word, 0L), decodeWord(decoder, word), Integer.toHexString(word));
         }
-        for (DecodeRow<Ir64Op> row : SystemInstructionRows.FALLBACK_ROWS) {
+        for (DecodeRow<Aarch64Feature, Ir64Op> row : SystemInstructionRows.FALLBACK_ROWS) {
             int word = row.value() | (random.nextInt() & ~row.mask());
-            DecodeRow<Ir64Op> owner = SystemInstructionRows.ROWS.stream().filter(r -> r.matches(word)).findFirst()
+            DecodeRow<Aarch64Feature, Ir64Op> owner = SystemInstructionRows.ROWS.stream().filter(r -> r.matches(word)).findFirst()
                     .orElse(row);
             assertEquals(owner.build().decode(word, 0L), decodeWord(decoder, word), Integer.toHexString(word));
         }

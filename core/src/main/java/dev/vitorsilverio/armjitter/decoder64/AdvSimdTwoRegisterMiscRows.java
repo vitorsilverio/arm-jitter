@@ -1,5 +1,6 @@
 package dev.vitorsilverio.armjitter.decoder64;
 
+import dev.vitorsilverio.armjitter.decodetable.DecodeRow;
 import dev.vitorsilverio.armjitter.arch64.Aarch64Feature;
 import dev.vitorsilverio.armjitter.ir64.AdvSimdFpOp64;
 import dev.vitorsilverio.armjitter.ir64.AdvSimdIntegerOp64;
@@ -89,13 +90,13 @@ final class AdvSimdTwoRegisterMiscRows {
         }
     }
 
-    static final List<DecodeRow<Ir64Op>> ROWS = rows();
+    static final List<DecodeRow<Aarch64Feature, Ir64Op>> ROWS = rows();
 
     private AdvSimdTwoRegisterMiscRows() {
     }
 
-    private static List<DecodeRow<Ir64Op>> rows() {
-        List<DecodeRow<Ir64Op>> rows = new ArrayList<>();
+    private static List<DecodeRow<Aarch64Feature, Ir64Op>> rows() {
+        List<DecodeRow<Aarch64Feature, Ir64Op>> rows = new ArrayList<>();
         // inteiro vetorial — 0 Q U 01110 size 10000 opcode 10 Rn Rd
         integer(rows, "0", "00000", Ir64VectorUnaryOp.REV64, Sizes.BHS);
         integer(rows, "1", "00000", Ir64VectorUnaryOp.REV32, Sizes.BH);
@@ -201,39 +202,39 @@ final class AdvSimdTwoRegisterMiscRows {
         return List.copyOf(rows);
     }
 
-    private static DecodeRow<Ir64Op> row(String q, String u, String prefix, String size, String slot, String opcode,
+    private static DecodeRow<Aarch64Feature, Ir64Op> row(String q, String u, String prefix, String size, String slot, String opcode,
             Aarch64Feature requires, DecodeRow.WordDecoder<Ir64Op> build) {
         return DecodeRow.of("0 " + q + " " + u + " " + prefix + " " + size + " " + slot + " " + opcode
                 + " 10 ..... .....", requires, build);
     }
 
     /// Uma linha por par `Q size` de `sizes`, no slot do inteiro.
-    private static void add(List<DecodeRow<Ir64Op>> rows, String prefix, String u, String opcode, Sizes sizes,
+    private static void add(List<DecodeRow<Aarch64Feature, Ir64Op>> rows, String prefix, String u, String opcode, Sizes sizes,
             Aarch64Feature requires, DecodeRow.WordDecoder<Ir64Op> build) {
         for (String qSize : sizes.qSize) {
             rows.add(row(qSize.substring(0, 1), u, prefix, qSize.substring(2), SLOT, opcode, requires, build));
         }
     }
 
-    private static void integer(List<DecodeRow<Ir64Op>> rows, String u, String opcode, Ir64VectorUnaryOp op,
+    private static void integer(List<DecodeRow<Aarch64Feature, Ir64Op>> rows, String u, String opcode, Ir64VectorUnaryOp op,
             Sizes sizes) {
         add(rows, VECTOR_PREFIX, u, opcode, sizes, null, (word, address) ->
                 new AdvSimdIntegerOp64.ArithmeticUnary(op, false, q(word), size(word), rd(word), rn(word)));
     }
 
-    private static void integerScalar(List<DecodeRow<Ir64Op>> rows, String u, String opcode, Ir64VectorUnaryOp op,
+    private static void integerScalar(List<DecodeRow<Aarch64Feature, Ir64Op>> rows, String u, String opcode, Ir64VectorUnaryOp op,
             Sizes sizes) {
         add(rows, SCALAR_PREFIX, u, opcode, sizes, null, (word, address) ->
                 new AdvSimdIntegerOp64.ArithmeticUnary(op, true, false, size(word), rd(word), rn(word)));
     }
 
     /// `CNT`/`NOT`/`RBIT`: `size` é o seletor da operação (uma linha, `Q` livre).
-    private static void byteOnly(List<DecodeRow<Ir64Op>> rows, String u, String size, Ir64VectorUnaryOp op) {
+    private static void byteOnly(List<DecodeRow<Aarch64Feature, Ir64Op>> rows, String u, String size, Ir64VectorUnaryOp op) {
         rows.add(row(".", u, VECTOR_PREFIX, size, SLOT, BYTE_ONLY_OPCODE, null, (word, address) ->
                 new AdvSimdIntegerOp64.ArithmeticUnary(op, false, q(word), BYTE_ESZ, rd(word), rn(word))));
     }
 
-    private static void narrow(List<DecodeRow<Ir64Op>> rows, String prefix, String u, String opcode,
+    private static void narrow(List<DecodeRow<Aarch64Feature, Ir64Op>> rows, String prefix, String u, String opcode,
             Ir64VectorNarrowUnaryOp op, Sizes sizes) {
         boolean scalar = SCALAR_PREFIX.equals(prefix);
         add(rows, prefix, u, opcode, sizes, null, (word, address) ->
@@ -242,7 +243,7 @@ final class AdvSimdTwoRegisterMiscRows {
     }
 
     /// FP `_sd` vetorial (`.2s`/`.4s`/`.2d`), a forma escalar `s`/`d` se `hasScalar`, e as mesmas em FP16.
-    private static void fp(List<DecodeRow<Ir64Op>> rows, String a, String u, String opcode, Ir64VectorFpUnaryOp op,
+    private static void fp(List<DecodeRow<Aarch64Feature, Ir64Op>> rows, String a, String u, String opcode, Ir64VectorFpUnaryOp op,
             boolean hasScalar) {
         fpVector(rows, a, u, opcode, op, null);
         rows.add(row(".", u, VECTOR_PREFIX, a + "1", FP16_SLOT, opcode, Aarch64Feature.FP16, (word, address) ->
@@ -256,7 +257,7 @@ final class AdvSimdTwoRegisterMiscRows {
     }
 
     /// FP `_sd` vetorial: `sz=0` em qualquer `Q`, `sz=1` só com `Q=1` (sem `.1d`).
-    private static void fpVector(List<DecodeRow<Ir64Op>> rows, String a, String u, String opcode,
+    private static void fpVector(List<DecodeRow<Aarch64Feature, Ir64Op>> rows, String a, String u, String opcode,
             Ir64VectorFpUnaryOp op, Aarch64Feature requires) {
         DecodeRow.WordDecoder<Ir64Op> build = (word, address) ->
                 new AdvSimdFpOp64.FpArithmeticUnary(op, false, q(word), SINGLE_ESZ + sz(word), rd(word), rn(word));
@@ -265,7 +266,7 @@ final class AdvSimdTwoRegisterMiscRows {
     }
 
     /// Conversão de precisão vetorial: o record leva o lado estreito, `HALF_ESZ + sz` (`BFCVTN` tem `sz=0`).
-    private static void precision(List<DecodeRow<Ir64Op>> rows, String u, String size, String opcode,
+    private static void precision(List<DecodeRow<Aarch64Feature, Ir64Op>> rows, String u, String size, String opcode,
             Aarch64Feature requires, Ir64VectorFpConvertPrecisionOp op) {
         rows.add(row(".", u, VECTOR_PREFIX, size, SLOT, opcode, requires, (word, address) ->
                 new AdvSimdFpOp64.FpConvertPrecision(op, q(word), HALF_ESZ + sz(word), rd(word), rn(word))));

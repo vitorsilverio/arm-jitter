@@ -1,5 +1,8 @@
 package dev.vitorsilverio.armjitter.decoder64;
 
+import dev.vitorsilverio.armjitter.decodetable.DecodeRow;
+import dev.vitorsilverio.armjitter.decodetable.DecodeTable;
+import dev.vitorsilverio.armjitter.decodetable.DecodeTableInvariants;
 import dev.vitorsilverio.armjitter.arch64.Aarch64Architecture;
 import dev.vitorsilverio.armjitter.arch64.Aarch64Feature;
 import dev.vitorsilverio.armjitter.ir64.BranchOp64;
@@ -50,7 +53,7 @@ class BranchExceptionRowsTest {
 
     @Test
     void everyRowIsReachable() {
-        DecodeTable<Ir64Op> table = DecodeTable.forArchitecture(BranchExceptionRows.ROWS, ALL);
+        DecodeTable<Aarch64Feature, Ir64Op> table = DecodeTable.forFeatures(BranchExceptionRows.ROWS, ALL::has);
         assertEquals(ROW_COUNT, table.rows().size());
         DecodeTableInvariants.assertReachable(table, 0, 0xE1511L);
     }
@@ -59,7 +62,7 @@ class BranchExceptionRowsTest {
     void everyRowIsReachableThroughTheDecoder() {
         Aarch64Decoder decoder = new Aarch64Decoder(ALL);
         SplittableRandom random = new SplittableRandom(0xE1511L);
-        for (DecodeRow<Ir64Op> row : BranchExceptionRows.ROWS) {
+        for (DecodeRow<Aarch64Feature, Ir64Op> row : BranchExceptionRows.ROWS) {
             int word = row.value() | (random.nextInt() & ~row.mask());
             assertEquals(row.build().decode(word, 0L), decodeWord(decoder, word), Integer.toHexString(word));
         }
@@ -68,7 +71,7 @@ class BranchExceptionRowsTest {
     @Test
     void baseArchitectureKeepsOnlyTheRowsWithoutFeature() {
         assertEquals(ROW_COUNT - 8 - 6,
-                DecodeTable.forArchitecture(BranchExceptionRows.ROWS, Aarch64Architecture.ARMV8_0_A).rows().size());
+                DecodeTable.forFeatures(BranchExceptionRows.ROWS, Aarch64Architecture.ARMV8_0_A::has).rows().size());
     }
 
     @Test

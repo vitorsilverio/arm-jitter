@@ -8,6 +8,10 @@ o projeto segue [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 Próxima versão: **`2.0.0`** — o refactor estrutural (épico `E15`) quebra nomes de tipo da API pública.
 
 ### Adicionado
+- **Pacote `decodetable`** (`E15.16a`): `DecodeRow<F, T>` e `DecodeTable<F, T>`, a infra de decoder por tabela que era
+  interna do `decoder64`, agora compartilhada com o `ArmDecoder` (32 bits) e genérica no tipo da feature. `DecodeRow`
+  ganhou a coluna `whenAbsent` (o que a linha constrói quando o preset não declara a feature). O `ArmDecoder` passou a
+  decodificar por tabela (`A32*Rows`, internas) — mesmo resultado em todas as 2³² palavras, em todos os presets.
 - **`Aarch64SystemRegisterId#encoding()`/`#requires()` e `NO_ENCODING`** (`E15.11`): cada registrador de sistema declara
   os 16 bits `op0:op1:CRn:CRm:op2` (os `bits[20:5]` de `MRS`/`MSR`) e a `Aarch64Feature` sem a qual é UNDEFINED. O decoder A64
   monta uma linha de tabela por constante em vez da cascata de `if` por campo (comportamento idêntico, conferido por oráculo).

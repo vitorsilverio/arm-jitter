@@ -1,5 +1,9 @@
 package dev.vitorsilverio.armjitter.decoder64;
 
+import dev.vitorsilverio.armjitter.arch64.Aarch64Feature;
+import dev.vitorsilverio.armjitter.decodetable.DecodeRow;
+import dev.vitorsilverio.armjitter.decodetable.DecodeTable;
+import dev.vitorsilverio.armjitter.decodetable.DecodeTableInvariants;
 import dev.vitorsilverio.armjitter.arch64.Aarch64Architecture;
 import dev.vitorsilverio.armjitter.ir64.FpOp64;
 import dev.vitorsilverio.armjitter.ir64.FpOp64.Fp64Conversion;
@@ -41,7 +45,7 @@ class ScalarFpRowsTest {
 
     @Test
     void everyRowIsReachable() {
-        DecodeTable<Ir64Op> table = DecodeTable.forArchitecture(ScalarFpRows.ROWS, NO_SME);
+        DecodeTable<Aarch64Feature, Ir64Op> table = DecodeTable.forFeatures(ScalarFpRows.ROWS, NO_SME::has);
         assertEquals(ROW_COUNT, table.rows().size());
         DecodeTableInvariants.assertReachable(table, 0, 0xE1514L);
     }
@@ -50,7 +54,7 @@ class ScalarFpRowsTest {
     void everyRowIsReachableThroughTheDecoder() {
         Aarch64Decoder decoder = new Aarch64Decoder(NO_SME);
         SplittableRandom random = new SplittableRandom(0xE1514L);
-        for (DecodeRow<Ir64Op> row : ScalarFpRows.ROWS) {
+        for (DecodeRow<Aarch64Feature, Ir64Op> row : ScalarFpRows.ROWS) {
             int word = row.value() | (random.nextInt() & ~row.mask());
             assertEquals(row.build().decode(word, ADDRESS), decodeWord(decoder, word), Integer.toHexString(word));
         }
@@ -58,8 +62,8 @@ class ScalarFpRowsTest {
 
     @Test
     void baseArchitectureKeepsOnlyTheRowsWithoutFeature() {
-        assertEquals(BASE_ROW_COUNT, DecodeTable.forArchitecture(ScalarFpRows.ROWS,
-                Aarch64Architecture.ARMV8_0_A).rows().size());
+        assertEquals(BASE_ROW_COUNT, DecodeTable.forFeatures(ScalarFpRows.ROWS,
+                Aarch64Architecture.ARMV8_0_A::has).rows().size());
     }
 
     /// Os campos que a cascata calculava com `switch`/`if`, conferidos contra o `objdump` 2.46 do devkitA64.

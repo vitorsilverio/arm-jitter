@@ -1,5 +1,6 @@
 package dev.vitorsilverio.armjitter.decoder64;
 
+import dev.vitorsilverio.armjitter.decodetable.DecodeRow;
 import dev.vitorsilverio.armjitter.arch64.Aarch64Feature;
 import dev.vitorsilverio.armjitter.ir64.AdvSimdFpOp64;
 import dev.vitorsilverio.armjitter.ir64.AdvSimdIntegerOp64;
@@ -49,13 +50,13 @@ final class AdvSimdAcrossLanesRows {
     /// Pares `Q size` (`bit30`, `bits[23:22]`) do "across lanes" inteiro: `B`/`H` em qualquer `Q`, `S` só com `Q=1`.
     private static final List<String> INTEGER_SIZES = List.of(". 0.", "1 10");
 
-    static final List<DecodeRow<Ir64Op>> ROWS = rows();
+    static final List<DecodeRow<Aarch64Feature, Ir64Op>> ROWS = rows();
 
     private AdvSimdAcrossLanesRows() {
     }
 
-    private static List<DecodeRow<Ir64Op>> rows() {
-        List<DecodeRow<Ir64Op>> rows = new ArrayList<>();
+    private static List<DecodeRow<Aarch64Feature, Ir64Op>> rows() {
+        List<DecodeRow<Aarch64Feature, Ir64Op>> rows = new ArrayList<>();
         // across lanes inteiro — 0 Q U 01110 size 11000 opcode 10 Rn Rd
         integer(rows, "0", "00011", Ir64VectorAcrossLanesOp.SADDLV);
         integer(rows, "1", "00011", Ir64VectorAcrossLanesOp.UADDLV);
@@ -80,13 +81,13 @@ final class AdvSimdAcrossLanesRows {
         return List.copyOf(rows);
     }
 
-    private static DecodeRow<Ir64Op> row(String q, String u, String prefix, String size, String opcode,
+    private static DecodeRow<Aarch64Feature, Ir64Op> row(String q, String u, String prefix, String size, String opcode,
             Aarch64Feature requires, DecodeRow.WordDecoder<Ir64Op> build) {
         return DecodeRow.of("0 " + q + " " + u + " " + prefix + " " + size + " 11000 " + opcode + " 10 ..... .....",
                 requires, build);
     }
 
-    private static void integer(List<DecodeRow<Ir64Op>> rows, String u, String opcode, Ir64VectorAcrossLanesOp op) {
+    private static void integer(List<DecodeRow<Aarch64Feature, Ir64Op>> rows, String u, String opcode, Ir64VectorAcrossLanesOp op) {
         for (String qSize : INTEGER_SIZES) {
             rows.add(row(qSize.substring(0, 1), u, VECTOR_PREFIX, qSize.substring(2), opcode, null, (word, address) ->
                     new AdvSimdIntegerOp64.AcrossLanes(op, q(word), esz(word), rd(word), rn(word))));
@@ -94,7 +95,7 @@ final class AdvSimdAcrossLanesRows {
     }
 
     /// `_s` (`U=1`, só `.4s`) e `_h` (`U=0`, `FEAT_FP16`); `a` é o bit23.
-    private static void fpAcrossLanes(List<DecodeRow<Ir64Op>> rows, String a, String opcode,
+    private static void fpAcrossLanes(List<DecodeRow<Aarch64Feature, Ir64Op>> rows, String a, String opcode,
             Ir64VectorFpAcrossLanesOp op) {
         rows.add(row("1", "1", VECTOR_PREFIX, a + "0", opcode, null, (word, address) ->
                 new AdvSimdFpOp64.FpAcrossLanes(op, true, SINGLE_ESZ, rd(word), rn(word))));
@@ -103,7 +104,7 @@ final class AdvSimdAcrossLanesRows {
     }
 
     /// `_sd` (`U=1`, `sz` livre) e `_h` (`U=0`, `sz=0`, `FEAT_FP16`); `a` é o bit23.
-    private static void fpScalarPairwise(List<DecodeRow<Ir64Op>> rows, String a, String opcode,
+    private static void fpScalarPairwise(List<DecodeRow<Aarch64Feature, Ir64Op>> rows, String a, String opcode,
             Ir64VectorFpPairwiseOp op) {
         rows.add(row("1", "1", SCALAR_PREFIX, a + ".", opcode, null, (word, address) ->
                 new AdvSimdFpOp64.FpArithmeticPairwise(op, true, false, SINGLE_ESZ + (esz(word) & 1), rd(word),

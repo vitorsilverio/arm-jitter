@@ -1,5 +1,8 @@
 package dev.vitorsilverio.armjitter.decoder64;
 
+import dev.vitorsilverio.armjitter.decodetable.DecodeRow;
+import dev.vitorsilverio.armjitter.decodetable.DecodeTable;
+import dev.vitorsilverio.armjitter.decodetable.DecodeTableInvariants;
 import dev.vitorsilverio.armjitter.arch64.Aarch64Architecture;
 import dev.vitorsilverio.armjitter.arch64.Aarch64Feature;
 import dev.vitorsilverio.armjitter.ir64.AdvSimdMoveOp64;
@@ -42,8 +45,8 @@ class LoadStoreRowsTest {
     /// Linhas sem feature em cada lista.
     private static final int BASE_ROWS = (REGISTER_ROWS - 6) + (EXCLUSIVE_ROWS - 10) + ADVSIMD_ROWS;
 
-    static List<DecodeRow<Ir64Op>> allRows() {
-        List<DecodeRow<Ir64Op>> rows = new ArrayList<>(LoadStoreRegisterRows.ROWS);
+    static List<DecodeRow<Aarch64Feature, Ir64Op>> allRows() {
+        List<DecodeRow<Aarch64Feature, Ir64Op>> rows = new ArrayList<>(LoadStoreRegisterRows.ROWS);
         rows.addAll(LoadStoreExclusiveRows.ROWS);
         rows.addAll(MemoryOperationRows.ROWS);
         rows.addAll(AdvSimdLoadStoreRows.ROWS);
@@ -51,7 +54,7 @@ class LoadStoreRowsTest {
     }
 
     /// `LDCLRP`/`LDSETP`/`SWPP`: o construtor recusa `Rt`/`Rt2` iguais ou `XZR` — o alcance sorteado não serve.
-    private static boolean isAtomicPair(DecodeRow<Ir64Op> row) {
+    private static boolean isAtomicPair(DecodeRow<Aarch64Feature, Ir64Op> row) {
         return (row.value() >>> 24) == 0b0001_1001 && ((row.value() >>> 21) & 1) == 1;
     }
 
@@ -70,8 +73,8 @@ class LoadStoreRowsTest {
 
     @Test
     void everyRowIsReachable() {
-        List<DecodeRow<Ir64Op>> rows = allRows().stream().filter(row -> !isAtomicPair(row)).toList();
-        DecodeTable<Ir64Op> table = DecodeTable.forArchitecture(rows, NO_SME);
+        List<DecodeRow<Aarch64Feature, Ir64Op>> rows = allRows().stream().filter(row -> !isAtomicPair(row)).toList();
+        DecodeTable<Aarch64Feature, Ir64Op> table = DecodeTable.forFeatures(rows, NO_SME::has);
         assertEquals(rows.size(), table.rows().size());
         DecodeTableInvariants.assertReachable(table, 0, 0xE1512L);
     }
@@ -80,7 +83,7 @@ class LoadStoreRowsTest {
     void everyRowIsReachableThroughTheDecoder() {
         Aarch64Decoder decoder = new Aarch64Decoder(NO_SME);
         SplittableRandom random = new SplittableRandom(0xE1512L);
-        for (DecodeRow<Ir64Op> row : allRows()) {
+        for (DecodeRow<Aarch64Feature, Ir64Op> row : allRows()) {
             int free = random.nextInt() & ~row.mask();
             // Par de 128 bits: Rt=0 e Rt2=1, sempre válidos.
             int word = isAtomicPair(row) ? row.value() | (free & ~0x1F_001F) | 1 << 16 : row.value() | free;
@@ -91,7 +94,7 @@ class LoadStoreRowsTest {
 
     @Test
     void baseArchitectureKeepsOnlyTheRowsWithoutFeature() {
-        assertEquals(BASE_ROWS, DecodeTable.forArchitecture(allRows(), Aarch64Architecture.ARMV8_0_A).rows().size());
+        assertEquals(BASE_ROWS, DecodeTable.forFeatures(allRows(), Aarch64Architecture.ARMV8_0_A::has).rows().size());
     }
 
     @Test

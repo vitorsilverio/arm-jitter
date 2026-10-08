@@ -1,5 +1,7 @@
 package dev.vitorsilverio.armjitter.decoder64;
 
+import dev.vitorsilverio.armjitter.decodetable.DecodeRow;
+import dev.vitorsilverio.armjitter.decodetable.DecodeTable;
 import dev.vitorsilverio.armjitter.arch64.Aarch64Feature;
 import dev.vitorsilverio.armjitter.ir64.AdvSimdFpOp64;
 import dev.vitorsilverio.armjitter.ir64.AdvSimdIntegerOp64;
@@ -82,7 +84,7 @@ final class AdvSimdBit21ZeroRows {
     private static final Aarch64Feature LUT = Aarch64Feature.LOOKUP_TABLE;
 
     /// As 53 linhas do piloto e as 13 da E15.15a. Colunas do padrão: `b31 Q U prefixo a b22 b21 Rm opcode b10 Rn Rd`.
-    static final List<DecodeRow<Ir64Op>> ROWS = List.of(
+    static final List<DecodeRow<Aarch64Feature, Ir64Op>> ROWS = List.of(
             // RDM — vetorial e escalar, esz H/S
             row("0 . 1 01110 01 0 ..... 10000 1 ..... .....", RDM, rdm(Ir64VectorThreeSameOp.SQRDMLAH)),
             row("0 . 1 01110 10 0 ..... 10000 1 ..... .....", RDM, rdm(Ir64VectorThreeSameOp.SQRDMLAH)),
@@ -178,7 +180,7 @@ final class AdvSimdBit21ZeroRows {
         Ir64Op decode(int word);
     }
 
-    private static DecodeRow<Ir64Op> row(String pattern, Aarch64Feature requires, AddressFree build) {
+    private static DecodeRow<Aarch64Feature, Ir64Op> row(String pattern, Aarch64Feature requires, AddressFree build) {
         return DecodeRow.of(pattern, requires, (word, address) -> build.decode(word));
     }
 

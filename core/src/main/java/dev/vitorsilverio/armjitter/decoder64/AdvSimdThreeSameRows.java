@@ -1,5 +1,7 @@
 package dev.vitorsilverio.armjitter.decoder64;
 
+import dev.vitorsilverio.armjitter.arch64.Aarch64Feature;
+import dev.vitorsilverio.armjitter.decodetable.DecodeRow;
 import dev.vitorsilverio.armjitter.ir64.AdvSimdIntegerOp64;
 import dev.vitorsilverio.armjitter.ir64.Ir64Op;
 import dev.vitorsilverio.armjitter.ir64.Ir64VectorPairwiseOp;
@@ -64,13 +66,13 @@ final class AdvSimdThreeSameRows {
         }
     }
 
-    static final List<DecodeRow<Ir64Op>> ROWS = rows();
+    static final List<DecodeRow<Aarch64Feature, Ir64Op>> ROWS = rows();
 
     private AdvSimdThreeSameRows() {
     }
 
-    private static List<DecodeRow<Ir64Op>> rows() {
-        List<DecodeRow<Ir64Op>> rows = new ArrayList<>();
+    private static List<DecodeRow<Aarch64Feature, Ir64Op>> rows() {
+        List<DecodeRow<Aarch64Feature, Ir64Op>> rows = new ArrayList<>();
         // vetorial — 0 Q U 01110 size 1 Rm opcode 1 Rn Rd
         vector(rows, "0", "00000", Ir64VectorThreeSameOp.SHADD, Sizes.BHS);
         vector(rows, "1", "00000", Ir64VectorThreeSameOp.UHADD, Sizes.BHS);
@@ -154,7 +156,7 @@ final class AdvSimdThreeSameRows {
     }
 
     /// Uma linha por par `Q size` de `sizes`: `0 Q U prefixo size 1 Rm opcode 1 Rn Rd`.
-    private static void add(List<DecodeRow<Ir64Op>> rows, String prefix, String u, String opcode, Sizes sizes,
+    private static void add(List<DecodeRow<Aarch64Feature, Ir64Op>> rows, String prefix, String u, String opcode, Sizes sizes,
             DecodeRow.WordDecoder<Ir64Op> build) {
         for (String qSize : sizes.qSize) {
             String q = qSize.substring(0, 1);
@@ -164,26 +166,26 @@ final class AdvSimdThreeSameRows {
         }
     }
 
-    private static void vector(List<DecodeRow<Ir64Op>> rows, String u, String opcode, Ir64VectorThreeSameOp op,
+    private static void vector(List<DecodeRow<Aarch64Feature, Ir64Op>> rows, String u, String opcode, Ir64VectorThreeSameOp op,
             Sizes sizes) {
         add(rows, VECTOR_PREFIX, u, opcode, sizes, (word, address) -> new AdvSimdIntegerOp64.ArithmeticThreeSame(
                 op, false, q(word), size(word), rd(word), rn(word), rm(word)));
     }
 
-    private static void pairwise(List<DecodeRow<Ir64Op>> rows, String u, String opcode, Ir64VectorPairwiseOp op,
+    private static void pairwise(List<DecodeRow<Aarch64Feature, Ir64Op>> rows, String u, String opcode, Ir64VectorPairwiseOp op,
             Sizes sizes) {
         add(rows, VECTOR_PREFIX, u, opcode, sizes, (word, address) -> new AdvSimdIntegerOp64.ArithmeticPairwise(
                 op, q(word), size(word), rd(word), rn(word), rm(word)));
     }
 
     /// Lógico: `size` é o seletor `opc` da operação (uma linha, `Q` livre).
-    private static void logical(List<DecodeRow<Ir64Op>> rows, String u, String opc, Ir64VectorThreeSameOp op) {
+    private static void logical(List<DecodeRow<Aarch64Feature, Ir64Op>> rows, String u, String opc, Ir64VectorThreeSameOp op) {
         rows.add(DecodeRow.of("0 . " + u + " " + VECTOR_PREFIX + " " + opc + " 1 ..... " + LOGICAL_OPCODE
                 + " 1 ..... .....", null, (word, address) -> new AdvSimdIntegerOp64.ArithmeticThreeSame(op, false,
                 q(word), BITWISE_ESZ, rd(word), rn(word), rm(word))));
     }
 
-    private static void scalar(List<DecodeRow<Ir64Op>> rows, String u, String opcode, Ir64VectorThreeSameOp op,
+    private static void scalar(List<DecodeRow<Aarch64Feature, Ir64Op>> rows, String u, String opcode, Ir64VectorThreeSameOp op,
             Sizes sizes) {
         add(rows, SCALAR_PREFIX, u, opcode, sizes, (word, address) -> new AdvSimdIntegerOp64.ArithmeticThreeSame(
                 op, true, false, size(word), rd(word), rn(word), rm(word)));

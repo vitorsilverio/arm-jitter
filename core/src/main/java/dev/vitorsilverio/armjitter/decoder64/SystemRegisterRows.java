@@ -1,6 +1,8 @@
 package dev.vitorsilverio.armjitter.decoder64;
 
-import dev.vitorsilverio.armjitter.decoder64.DecodeRow.WordDecoder;
+import dev.vitorsilverio.armjitter.arch64.Aarch64Feature;
+import dev.vitorsilverio.armjitter.decodetable.DecodeRow;
+import dev.vitorsilverio.armjitter.decodetable.DecodeRow.WordDecoder;
 import dev.vitorsilverio.armjitter.ir64.Aarch64SystemRegisterId;
 import dev.vitorsilverio.armjitter.ir64.Ir64Op;
 import dev.vitorsilverio.armjitter.ir64.SystemOp64;
@@ -30,10 +32,10 @@ final class SystemRegisterRows {
     private static final int RT_MASK = 0b1_1111;
 
     /// Uma linha por registrador com encoding, na ordem do enum.
-    static final List<DecodeRow<Ir64Op>> ROWS = namedRows();
+    static final List<DecodeRow<Aarch64Feature, Ir64Op>> ROWS = namedRows();
 
     /// Escaninhos, consultados só quando {@link #ROWS} não casa. Sem sobreposição entre si.
-    static final List<DecodeRow<Ir64Op>> FALLBACK_ROWS = List.of(
+    static final List<DecodeRow<Aarch64Feature, Ir64Op>> FALLBACK_ROWS = List.of(
             DecodeRow.of("1101010100 . 10 ... .... .... ... .....", null,
                     access(Aarch64SystemRegisterId.DEBUG_UNMODELED)),
             DecodeRow.of("1101010100 . 11 000 0000 0001 ... .....", null,
@@ -47,8 +49,8 @@ final class SystemRegisterRows {
     private SystemRegisterRows() {
     }
 
-    private static List<DecodeRow<Ir64Op>> namedRows() {
-        List<DecodeRow<Ir64Op>> rows = new ArrayList<>();
+    private static List<DecodeRow<Aarch64Feature, Ir64Op>> namedRows() {
+        List<DecodeRow<Aarch64Feature, Ir64Op>> rows = new ArrayList<>();
         for (Aarch64SystemRegisterId register : Aarch64SystemRegisterId.values()) {
             if (register.encoding() != Aarch64SystemRegisterId.NO_ENCODING) {
                 rows.add(new DecodeRow<>(NAMED_MASK, SYSTEM_REGISTER_PREFIX | register.encoding() << ENCODING_SHIFT,

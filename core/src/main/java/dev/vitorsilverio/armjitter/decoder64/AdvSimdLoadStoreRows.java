@@ -1,6 +1,8 @@
 package dev.vitorsilverio.armjitter.decoder64;
 
-import dev.vitorsilverio.armjitter.decoder64.DecodeRow.WordDecoder;
+import dev.vitorsilverio.armjitter.arch64.Aarch64Feature;
+import dev.vitorsilverio.armjitter.decodetable.DecodeRow;
+import dev.vitorsilverio.armjitter.decodetable.DecodeRow.WordDecoder;
 import dev.vitorsilverio.armjitter.ir64.AdvSimdMoveOp64;
 import dev.vitorsilverio.armjitter.ir64.Ir64Op;
 
@@ -45,13 +47,13 @@ final class AdvSimdLoadStoreRows {
     private static final int[][] MULTIPLE_SHAPES = {{1, 4}, {4, 1}, {1, 3}, {3, 1}, {1, 1}, {1, 2}, {2, 1}};
 
     /// As linhas: múltiplo (`0 Q 001100 p L 0 Rm opcode size Rn Rt`) e único (`0 Q 001101 p L R Rm opc S size Rn Rt`).
-    static final List<DecodeRow<Ir64Op>> ROWS = rows();
+    static final List<DecodeRow<Aarch64Feature, Ir64Op>> ROWS = rows();
 
     private AdvSimdLoadStoreRows() {
     }
 
-    private static List<DecodeRow<Ir64Op>> rows() {
-        List<DecodeRow<Ir64Op>> rows = new ArrayList<>();
+    private static List<DecodeRow<Aarch64Feature, Ir64Op>> rows() {
+        List<DecodeRow<Aarch64Feature, Ir64Op>> rows = new ArrayList<>();
         for (int i = 0; i < MULTIPLE_OPCODES.length; i++) {
             WordDecoder<Ir64Op> build = multiple(MULTIPLE_SHAPES[i][0], MULTIPLE_SHAPES[i][1]);
             // selem>1: `.1D` (Q=0, size=11) não existe — Q=1 com qualquer size, Q=0 com size 0x/10.
@@ -83,7 +85,7 @@ final class AdvSimdLoadStoreRows {
                 single(BYTE_LOG2), single(HALF_LOG2), single(WORD_LOG2), single(DOUBLEWORD_LOG2)};
     }
 
-    private static DecodeRow<Ir64Op> row(String pattern, WordDecoder<Ir64Op> build) {
+    private static DecodeRow<Aarch64Feature, Ir64Op> row(String pattern, WordDecoder<Ir64Op> build) {
         return DecodeRow.of(pattern, null, build);
     }
 

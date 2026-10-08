@@ -1,5 +1,9 @@
 package dev.vitorsilverio.armjitter.decoder64;
 
+import dev.vitorsilverio.armjitter.arch64.Aarch64Feature;
+import dev.vitorsilverio.armjitter.decodetable.DecodeRow;
+import dev.vitorsilverio.armjitter.decodetable.DecodeTable;
+import dev.vitorsilverio.armjitter.decodetable.DecodeTableInvariants;
 import dev.vitorsilverio.armjitter.arch64.Aarch64Architecture;
 import dev.vitorsilverio.armjitter.ir64.AdvSimdFpOp64;
 import dev.vitorsilverio.armjitter.ir64.AdvSimdIntegerOp64;
@@ -31,8 +35,8 @@ class AdvSimdPermuteCopyRowsTest {
     }
 
     /// As linhas que o `Aarch64Decoder` junta na `advSimdTable`.
-    static List<DecodeRow<Ir64Op>> advSimdTableRows() {
-        List<DecodeRow<Ir64Op>> rows = new ArrayList<>(AdvSimdBit21ZeroRows.ROWS);
+    static List<DecodeRow<Aarch64Feature, Ir64Op>> advSimdTableRows() {
+        List<DecodeRow<Aarch64Feature, Ir64Op>> rows = new ArrayList<>(AdvSimdBit21ZeroRows.ROWS);
         rows.addAll(AdvSimdPermuteCopyRows.ROWS);
         rows.addAll(CryptoRows.ROWS);
         rows.addAll(AdvSimdThreeSameRows.ROWS);
@@ -59,7 +63,7 @@ class AdvSimdPermuteCopyRowsTest {
 
     @Test
     void everyRowIsReachable() {
-        DecodeTable<Ir64Op> table = DecodeTable.forArchitecture(AdvSimdPermuteCopyRows.ROWS, Aarch64Architecture.ARMV8_0_A);
+        DecodeTable<Aarch64Feature, Ir64Op> table = DecodeTable.forFeatures(AdvSimdPermuteCopyRows.ROWS, Aarch64Architecture.ARMV8_0_A::has);
         assertEquals(ROW_COUNT, table.rows().size());
         DecodeTableInvariants.assertReachable(table, 0, 0xE1515AL);
     }
@@ -68,7 +72,7 @@ class AdvSimdPermuteCopyRowsTest {
     void everyRowIsReachableThroughTheDecoder() {
         Aarch64Decoder decoder = new Aarch64Decoder(Aarch64Architecture.ARMV8_0_A);
         SplittableRandom random = new SplittableRandom(0xE1515AL);
-        for (DecodeRow<Ir64Op> row : AdvSimdPermuteCopyRows.ROWS) {
+        for (DecodeRow<Aarch64Feature, Ir64Op> row : AdvSimdPermuteCopyRows.ROWS) {
             int word = row.value() | (random.nextInt() & ~row.mask());
             assertEquals(row.build().decode(word, ADDRESS), decodeWord(decoder, word), Integer.toHexString(word));
         }

@@ -1,7 +1,8 @@
 package dev.vitorsilverio.armjitter.decoder64;
 
+import dev.vitorsilverio.armjitter.decodetable.DecodeRow;
 import dev.vitorsilverio.armjitter.arch64.Aarch64Feature;
-import dev.vitorsilverio.armjitter.decoder64.DecodeRow.WordDecoder;
+import dev.vitorsilverio.armjitter.decodetable.DecodeRow.WordDecoder;
 import dev.vitorsilverio.armjitter.ir64.Ir64AddressingMode;
 import dev.vitorsilverio.armjitter.ir64.Ir64MemSize;
 import dev.vitorsilverio.armjitter.ir64.Ir64Op;
@@ -55,7 +56,7 @@ final class MemoryOperationRows {
     private static final Aarch64Feature MTE = Aarch64Feature.MEMORY_TAGGING;
 
     /// As linhas, bit 31 → 0 (os campos de cada família no comentário).
-    static final List<DecodeRow<Ir64Op>> ROWS = List.of(
+    static final List<DecodeRow<Aarch64Feature, Ir64Op>> ROWS = List.of(
             // SET*/SETG* — 00 011 G 01110 Rs phase nontemp unpriv 01 Rn Rd
             DecodeRow.of("00 011 0 01110 ..... 0. .. 01 ..... .....", MOPS, MemoryOperationRows::memorySet),
             DecodeRow.of("00 011 0 01110 ..... 10 .. 01 ..... .....", MOPS, MemoryOperationRows::memorySet),

@@ -1,5 +1,7 @@
 package dev.vitorsilverio.armjitter.decoder64;
 
+import dev.vitorsilverio.armjitter.arch64.Aarch64Feature;
+import dev.vitorsilverio.armjitter.decodetable.DecodeRow;
 import dev.vitorsilverio.armjitter.ir64.AdvSimdMoveOp64;
 import dev.vitorsilverio.armjitter.ir64.Ir64Op;
 import dev.vitorsilverio.armjitter.ir64.Ir64VectorPermuteOp;
@@ -41,7 +43,7 @@ final class AdvSimdPermuteCopyRows {
     private static final int REGISTER_MASK = 0b1_1111;
 
     /// Colunas: `b31 Q U prefixo size b21 imm5 b15 imm4 b10 Rn Rd`.
-    static final List<DecodeRow<Ir64Op>> ROWS = List.of(
+    static final List<DecodeRow<Aarch64Feature, Ir64Op>> ROWS = List.of(
             // EXT: imm3 (Q=0) / imm4 (Q=1)
             row("0 0 1 01110 00 0 ..... 0 0... 0 ..... .....", AdvSimdPermuteCopyRows::extract),
             row("0 1 1 01110 00 0 ..... 0 .... 0 ..... .....", AdvSimdPermuteCopyRows::extract),
@@ -111,7 +113,7 @@ final class AdvSimdPermuteCopyRows {
         Ir64Op decode(int word);
     }
 
-    private static DecodeRow<Ir64Op> row(String pattern, AddressFree build) {
+    private static DecodeRow<Aarch64Feature, Ir64Op> row(String pattern, AddressFree build) {
         return DecodeRow.of(pattern, null, (word, address) -> build.decode(word));
     }
 

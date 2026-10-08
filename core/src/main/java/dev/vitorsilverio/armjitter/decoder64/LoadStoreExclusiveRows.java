@@ -1,7 +1,8 @@
 package dev.vitorsilverio.armjitter.decoder64;
 
+import dev.vitorsilverio.armjitter.decodetable.DecodeRow;
 import dev.vitorsilverio.armjitter.arch64.Aarch64Feature;
-import dev.vitorsilverio.armjitter.decoder64.DecodeRow.WordDecoder;
+import dev.vitorsilverio.armjitter.decodetable.DecodeRow.WordDecoder;
 import dev.vitorsilverio.armjitter.ir64.Ir64AddressingMode;
 import dev.vitorsilverio.armjitter.ir64.Ir64AtomicOp;
 import dev.vitorsilverio.armjitter.ir64.Ir64MemSize;
@@ -51,7 +52,7 @@ final class LoadStoreExclusiveRows {
     private static final Aarch64Feature LRCPC2 = Aarch64Feature.LRCPC2;
 
     /// As linhas, bit 31 → 0 (os campos de cada família no comentário).
-    static final List<DecodeRow<Ir64Op>> ROWS = List.of(
+    static final List<DecodeRow<Aarch64Feature, Ir64Op>> ROWS = List.of(
             // Exclusivo/ordenado/CAS — sz 001000 o2 L o1 Rs o0 Rt2 Rn Rt
             row(".. 001000 0 0 0 ..... . ..... ..... .....", LoadStoreExclusiveRows::storeExclusive),
             row(".. 001000 0 1 0 ..... . ..... ..... .....", LoadStoreExclusiveRows::loadExclusive),
@@ -77,7 +78,7 @@ final class LoadStoreExclusiveRows {
     private LoadStoreExclusiveRows() {
     }
 
-    private static DecodeRow<Ir64Op> row(String pattern, WordDecoder<Ir64Op> build) {
+    private static DecodeRow<Aarch64Feature, Ir64Op> row(String pattern, WordDecoder<Ir64Op> build) {
         return DecodeRow.of(pattern, null, build);
     }
 

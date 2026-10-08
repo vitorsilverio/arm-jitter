@@ -1,5 +1,6 @@
 package dev.vitorsilverio.armjitter.decoder64;
 
+import dev.vitorsilverio.armjitter.decodetable.DecodeRow;
 import dev.vitorsilverio.armjitter.advsimd.AdvSimdModifiedImmediate;
 import dev.vitorsilverio.armjitter.advsimd.AdvSimdModifiedImmediateOp;
 import dev.vitorsilverio.armjitter.arch64.Aarch64Feature;
@@ -92,13 +93,13 @@ final class AdvSimdShiftImmediateRows {
         }
     }
 
-    static final List<DecodeRow<Ir64Op>> ROWS = rows();
+    static final List<DecodeRow<Aarch64Feature, Ir64Op>> ROWS = rows();
 
     private AdvSimdShiftImmediateRows() {
     }
 
-    private static List<DecodeRow<Ir64Op>> rows() {
-        List<DecodeRow<Ir64Op>> rows = new ArrayList<>();
+    private static List<DecodeRow<Aarch64Feature, Ir64Op>> rows() {
+        List<DecodeRow<Aarch64Feature, Ir64Op>> rows = new ArrayList<>();
         // deslocamento — 0 Q U 01111 0 immh immb opcode 1 Rn Rd; escalar só D
         shift(rows, "00000", Ir64VectorShiftOp.SSHR, Ir64VectorShiftOp.USHR);
         shift(rows, "00010", Ir64VectorShiftOp.SSRA, Ir64VectorShiftOp.USRA);
@@ -126,7 +127,7 @@ final class AdvSimdShiftImmediateRows {
     }
 
     /// Uma linha por par `Q immh` de `sizes`: `0 Q U prefixo 0 immh immb opcode 1 Rn Rd`.
-    private static void add(List<DecodeRow<Ir64Op>> rows, String prefix, String u, String opcode, Sizes sizes,
+    private static void add(List<DecodeRow<Aarch64Feature, Ir64Op>> rows, String prefix, String u, String opcode, Sizes sizes,
             Aarch64Feature requires, DecodeRow.WordDecoder<Ir64Op> build) {
         for (String qImmh : sizes.qImmh) {
             rows.add(DecodeRow.of("0 " + qImmh.charAt(0) + " " + u + " " + prefix + " 0 " + qImmh.substring(2)
@@ -135,31 +136,31 @@ final class AdvSimdShiftImmediateRows {
     }
 
     /// `signed` é a forma `U=0`, `unsigned` a `U=1`.
-    private static void shift(List<DecodeRow<Ir64Op>> rows, String opcode, Ir64VectorShiftOp signed,
+    private static void shift(List<DecodeRow<Aarch64Feature, Ir64Op>> rows, String opcode, Ir64VectorShiftOp signed,
             Ir64VectorShiftOp unsigned) {
         shift(rows, opcode, "0", signed);
         shift(rows, opcode, "1", unsigned);
     }
 
-    private static void shift(List<DecodeRow<Ir64Op>> rows, String opcode, String u, Ir64VectorShiftOp op) {
+    private static void shift(List<DecodeRow<Aarch64Feature, Ir64Op>> rows, String opcode, String u, Ir64VectorShiftOp op) {
         vectorShift(rows, opcode, u, op);
         scalarShift(rows, opcode, u, op, Sizes.SCALAR_D);
     }
 
-    private static void saturatingShiftLeft(List<DecodeRow<Ir64Op>> rows, String opcode, String u,
+    private static void saturatingShiftLeft(List<DecodeRow<Aarch64Feature, Ir64Op>> rows, String opcode, String u,
             Ir64VectorShiftOp op) {
         vectorShift(rows, opcode, u, op);
         scalarShift(rows, opcode, u, op, Sizes.SCALAR_BHSD);
     }
 
-    private static void vectorShift(List<DecodeRow<Ir64Op>> rows, String opcode, String u, Ir64VectorShiftOp op) {
+    private static void vectorShift(List<DecodeRow<Aarch64Feature, Ir64Op>> rows, String opcode, String u, Ir64VectorShiftOp op) {
         boolean left = isLeftShift(op);
         add(rows, VECTOR_PREFIX, u, opcode, Sizes.VECTOR_BHSD, null, (word, address) ->
                 new AdvSimdIntegerOp64.ShiftImmediate(op, false, q(word), esz(word), shiftAmount(left, word), rd(word),
                         rn(word)));
     }
 
-    private static void scalarShift(List<DecodeRow<Ir64Op>> rows, String opcode, String u, Ir64VectorShiftOp op,
+    private static void scalarShift(List<DecodeRow<Aarch64Feature, Ir64Op>> rows, String opcode, String u, Ir64VectorShiftOp op,
             Sizes sizes) {
         boolean left = isLeftShift(op);
         add(rows, SCALAR_PREFIX, u, opcode, sizes, null, (word, address) ->
@@ -168,7 +169,7 @@ final class AdvSimdShiftImmediateRows {
     }
 
     /// `signed` é a forma `U=0`, `unsigned` a `U=1`; `SHRN`/`RSHRN` não têm forma escalar.
-    private static void narrow(List<DecodeRow<Ir64Op>> rows, String opcode, Ir64VectorShiftNarrowOp signed,
+    private static void narrow(List<DecodeRow<Aarch64Feature, Ir64Op>> rows, String opcode, Ir64VectorShiftNarrowOp signed,
             Ir64VectorShiftNarrowOp unsigned) {
         for (Ir64VectorShiftNarrowOp op : new Ir64VectorShiftNarrowOp[] {signed, unsigned}) {
             String u = op == signed ? "0" : "1";
@@ -183,13 +184,13 @@ final class AdvSimdShiftImmediateRows {
         }
     }
 
-    private static void widen(List<DecodeRow<Ir64Op>> rows, String u, Ir64VectorShiftWidenOp op) {
+    private static void widen(List<DecodeRow<Aarch64Feature, Ir64Op>> rows, String u, Ir64VectorShiftWidenOp op) {
         add(rows, VECTOR_PREFIX, u, "10100", Sizes.VECTOR_BHS, null, (word, address) ->
                 new AdvSimdIntegerOp64.ShiftWidenImmediate(op, q(word), esz(word), leftShift(word), rd(word), rn(word)));
     }
 
     /// `U=0` é a forma com sinal (`SCVTF`/`FCVTZS`); a meia precisão exige `FEAT_FP16`.
-    private static void fixedPoint(List<DecodeRow<Ir64Op>> rows, String opcode, boolean toFloat) {
+    private static void fixedPoint(List<DecodeRow<Aarch64Feature, Ir64Op>> rows, String opcode, boolean toFloat) {
         for (String u : new String[] {"0", "1"}) {
             boolean signed = u.equals("0");
             DecodeRow.WordDecoder<Ir64Op> vector = (word, address) ->
@@ -207,7 +208,7 @@ final class AdvSimdShiftImmediateRows {
 
     /// `MOVI`/`MVNI`/`ORR`/`BIC` (`cmode` menos `1111`, `o2=0`), `FMOV` simples (`cmode=1111`, `op=0`), `FMOV`
     /// dupla (`cmode=1111`, `op=1`, só `.2d`) e `FMOV` meia precisão (`cmode=1111`, `o2=1`, `op=0`, `FEAT_FP16`).
-    private static void modifiedImmediate(List<DecodeRow<Ir64Op>> rows) {
+    private static void modifiedImmediate(List<DecodeRow<Aarch64Feature, Ir64Op>> rows) {
         DecodeRow.WordDecoder<Ir64Op> expand = (word, address) -> {
             AdvSimdModifiedImmediate.Expanded expanded =
                     AdvSimdModifiedImmediate.expand(imm8(word), cmode(word), (word >>> OP_SHIFT) & 1);
@@ -229,7 +230,7 @@ final class AdvSimdShiftImmediateRows {
         });
     }
 
-    private static void modifiedImmediate(List<DecodeRow<Ir64Op>> rows, String q, String op, String cmode, String o2,
+    private static void modifiedImmediate(List<DecodeRow<Aarch64Feature, Ir64Op>> rows, String q, String op, String cmode, String o2,
             Aarch64Feature requires, DecodeRow.WordDecoder<Ir64Op> build) {
         rows.add(DecodeRow.of("0 " + q + " " + op + " " + VECTOR_PREFIX + " 0 0000 ... " + cmode + " " + o2
                 + " 1 ..... .....", requires, build));

@@ -1,5 +1,6 @@
 package dev.vitorsilverio.armjitter.decoder64;
 
+import dev.vitorsilverio.armjitter.decodetable.DecodeTable;
 import dev.vitorsilverio.armjitter.arch64.Aarch64Architecture;
 import dev.vitorsilverio.armjitter.arch64.Aarch64Feature;
 import dev.vitorsilverio.armjitter.ir64.AdvSimdMoveOp64;
@@ -54,22 +55,22 @@ public final class Aarch64Decoder {
     /// shift by immediate e modified immediate ({@link AdvSimdShiftImmediateRows}); E15.15g: indexed element
     /// ({@link AdvSimdIndexedElementRows}) — já filtrados por
     /// {@link #architecture}.
-    private final DecodeTable<Ir64Op> advSimdTable;
+    private final DecodeTable<Aarch64Feature, Ir64Op> advSimdTable;
     /// E15.10: a classe "Data Processing — Immediate" inteira (`bits[28:26]=100`).
-    private final DecodeTable<Ir64Op> dataProcessingImmediateTable;
+    private final DecodeTable<Aarch64Feature, Ir64Op> dataProcessingImmediateTable;
     /// E15.13: a classe "Data Processing — Register" (`op0 = x101`, `bit26=0`).
-    private final DecodeTable<Ir64Op> dataProcessingRegisterTable;
+    private final DecodeTable<Aarch64Feature, Ir64Op> dataProcessingRegisterTable;
     /// E15.14: o FP escalar (`bits[30:24]=0011110` e o 3-source `bits[31:24]=00011111`).
-    private final DecodeTable<Ir64Op> scalarFpTable;
+    private final DecodeTable<Aarch64Feature, Ir64Op> scalarFpTable;
     /// E15.12: a classe "Loads and Stores" inteira (`op0 = x1x0`).
-    private final DecodeTable<Ir64Op> loadStoreTable;
+    private final DecodeTable<Aarch64Feature, Ir64Op> loadStoreTable;
     /// E15.11: classe branch/exceção/sistema fora do espaço `1101010100`.
-    private final DecodeTable<Ir64Op> branchExceptionTable;
+    private final DecodeTable<Aarch64Feature, Ir64Op> branchExceptionTable;
     /// E15.11: espaço de sistema `1101010100` — instruções (`op0=0x`) e registradores (`op0=1x`).
-    private final DecodeTable<Ir64Op> systemTable;
+    private final DecodeTable<Aarch64Feature, Ir64Op> systemTable;
     /// E15.11: restos de espaço do sistema (hint/cache/`SYS` NOP, escaninhos de debug e de ID),
     /// consultados só quando {@link #systemTable} não casa.
-    private final DecodeTable<Ir64Op> systemFallbackTable;
+    private final DecodeTable<Aarch64Feature, Ir64Op> systemFallbackTable;
 
     /// Cria um decoder para {@link Aarch64Architecture#ARMV8_0_A} — equivalente ao comportamento
     /// deste decoder antes de B11.2 (tudo que está implementado, incondicional).
@@ -84,21 +85,21 @@ public final class Aarch64Decoder {
         this.streamingModeRestrictions = architecture.has(Aarch64Feature.SCALABLE_MATRIX_EXTENSION);
         this.sveDecoder = new Aarch64SveDecoder(architecture);
         this.smeDecoder = new Aarch64SmeDecoder(architecture);
-        this.advSimdTable = DecodeTable.forArchitecture(concat(concat(AdvSimdBit21ZeroRows.ROWS,
+        this.advSimdTable = DecodeTable.forFeatures(concat(concat(AdvSimdBit21ZeroRows.ROWS,
                 AdvSimdPermuteCopyRows.ROWS), concat(concat(CryptoRows.ROWS, concat(AdvSimdThreeSameRows.ROWS,
                 AdvSimdThreeSameFpRows.ROWS)), concat(concat(AdvSimdThreeDifferentRows.ROWS,
                 AdvSimdAcrossLanesRows.ROWS), concat(AdvSimdTwoRegisterMiscRows.ROWS,
-                concat(AdvSimdShiftImmediateRows.ROWS, AdvSimdIndexedElementRows.ROWS))))), architecture);
-        this.dataProcessingImmediateTable = DecodeTable.forArchitecture(DataProcessingImmediateRows.ROWS, architecture);
-        this.dataProcessingRegisterTable = DecodeTable.forArchitecture(DataProcessingRegisterRows.ROWS, architecture);
-        this.scalarFpTable = DecodeTable.forArchitecture(ScalarFpRows.ROWS, architecture);
-        this.loadStoreTable = DecodeTable.forArchitecture(concat(concat(LoadStoreRegisterRows.ROWS,
-                LoadStoreExclusiveRows.ROWS), concat(MemoryOperationRows.ROWS, AdvSimdLoadStoreRows.ROWS)), architecture);
-        this.branchExceptionTable = DecodeTable.forArchitecture(BranchExceptionRows.ROWS, architecture);
-        this.systemTable = DecodeTable.forArchitecture(
-                concat(SystemInstructionRows.ROWS, SystemRegisterRows.ROWS), architecture);
-        this.systemFallbackTable = DecodeTable.forArchitecture(
-                concat(SystemInstructionRows.FALLBACK_ROWS, SystemRegisterRows.FALLBACK_ROWS), architecture);
+                concat(AdvSimdShiftImmediateRows.ROWS, AdvSimdIndexedElementRows.ROWS))))), architecture::has);
+        this.dataProcessingImmediateTable = DecodeTable.forFeatures(DataProcessingImmediateRows.ROWS, architecture::has);
+        this.dataProcessingRegisterTable = DecodeTable.forFeatures(DataProcessingRegisterRows.ROWS, architecture::has);
+        this.scalarFpTable = DecodeTable.forFeatures(ScalarFpRows.ROWS, architecture::has);
+        this.loadStoreTable = DecodeTable.forFeatures(concat(concat(LoadStoreRegisterRows.ROWS,
+                LoadStoreExclusiveRows.ROWS), concat(MemoryOperationRows.ROWS, AdvSimdLoadStoreRows.ROWS)), architecture::has);
+        this.branchExceptionTable = DecodeTable.forFeatures(BranchExceptionRows.ROWS, architecture::has);
+        this.systemTable = DecodeTable.forFeatures(
+                concat(SystemInstructionRows.ROWS, SystemRegisterRows.ROWS), architecture::has);
+        this.systemFallbackTable = DecodeTable.forFeatures(
+                concat(SystemInstructionRows.FALLBACK_ROWS, SystemRegisterRows.FALLBACK_ROWS), architecture::has);
     }
 
     private static <T> List<T> concat(List<T> first, List<T> second) {
