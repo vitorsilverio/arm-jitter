@@ -95,7 +95,7 @@ public final class StandardIrBlockLifter implements IrBlockLifter {
             // IT block, mesmo mecanismo genérico de guard usado em toda a IR.
             boolean governedByIt = ItState.inProgress(currentItState);
             if (governedByIt) {
-                instruction = instruction.withCondition(ItState.condition(currentItState));
+                instruction = instruction.withItContext(ItState.condition(currentItState));
             }
 
             builder.lift(instruction, block);

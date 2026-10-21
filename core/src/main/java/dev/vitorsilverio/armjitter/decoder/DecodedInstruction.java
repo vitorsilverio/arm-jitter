@@ -243,6 +243,26 @@ public record DecodedInstruction(
                 unprivileged, liftedOp);
     }
 
+    /// Cria uma cópia adaptada ao contexto de um Thumb-2 IT block ativo: sobrepõe a condição
+    /// (como {@link #withCondition}) e, para as instruções Thumb de **16 bits** de processamento
+    /// de dados, apaga {@link #setFlags}. O ARM ARM define `setflags = !InITBlock()` nas
+    /// codificações T1/T2 de 16 bits (MOVS/ADDS/SUBS imediato e registrador, shifts, AND, EOR,
+    /// ADC, SBC, ROR, RSB, ORR, MUL, BIC, MVN...): dentro de um IT block elas NÃO atualizam NZCV.
+    /// `CMP`/`CMN`/`TST` sempre atualizam e são preservados. As formas de 32 bits (`raw < 0`, a
+    /// primeira halfword fica nos bits altos) carregam o bit `S` explícito e não mudam. O decoder
+    /// permanece stateless; este é o único ponto de aplicação do IT (lifter e interpretador).
+    public DecodedInstruction withItContext(Condition newCondition) {
+        DecodedInstruction conditioned = withCondition(newCondition);
+        if (!setFlags || instructionSet != InstructionSet.THUMB || raw < 0
+                || kind == InstructionKind.CMP || kind == InstructionKind.CMN || kind == InstructionKind.TST) {
+            return conditioned;
+        }
+        return new DecodedInstruction(address, raw, instructionSet, newCondition, kind, destinationRegister,
+                sourceRegister, secondSourceRegister, immediate, immediateOperand, false, link,
+                accessSizeBytes, signedAccess, writeback, postIndexed, blockTransferMode, emptyRegisterList,
+                unprivileged, liftedOp);
+    }
+
     /// Cria uma cópia com o conjunto de instruções substituído, preservando todos os outros
     /// campos. Usado por decoders que delegam a um sub-decoder compartilhado entre ARM e Thumb-2
     /// (B2.7 PR3, `Thumb2CoprocessorDecoder` delegando a `CoprocessorDecoder`, que sempre marca

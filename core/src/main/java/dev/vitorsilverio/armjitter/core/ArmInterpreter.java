@@ -80,7 +80,7 @@ public final class ArmInterpreter {
         int itState = core.cpsr().itState();
         boolean governedByIt = ItState.inProgress(itState);
         if (governedByIt) {
-            instruction = instruction.withCondition(ItState.condition(itState));
+            instruction = instruction.withItContext(ItState.condition(itState));
         }
         IrBlock.Builder block = IrBlock.builder(pc);
         irBuilder.lift(instruction, block);
