@@ -81,7 +81,7 @@ Coordenadas Maven atuais:
 <dependency>
     <groupId>dev.vitorsilverio</groupId>
     <artifactId>arm-jitter</artifactId>
-    <version>1.4.0</version>
+    <version>1.5.0</version>
 </dependency>
 ```
 

@@ -5,6 +5,19 @@ o projeto segue [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 
 ## [Não lançado]
 
+## [1.5.0] — 2026-10-21
+
+Versão de manutenção da linha 1.x, feita na branch `v1_x_x` a partir da `1.4.0` (a `master` segue no refactor da `2.0.0`).
+
+### Corrigido
+- **Flags de instruções Thumb de 16 bits dentro de bloco `IT`**: as formas T1/T2 de processamento de dados
+  (`MOVS`, `ADDS`, `SUBS`, `ANDS`, `EORS`, `LSLS`/`LSRS`/`ASRS`/`RORS`, `ADCS`, `SBCS`, `RSBS`, `ORRS`, `MULS`, `BICS`,
+  `MVNS`) atualizavam `NZCV` mesmo dentro de `IT`, onde o ARM ARM define `setflags = !InITBlock()`. Exemplo: em
+  `ite eq` / `moveq r3, #1` / `movne r3, #0`, o `moveq` apagava `Z` e o `movne` também executava. Afetava interpretador,
+  JIT (backends JVM e ASM) e o modo `--check`. Novo `DecodedInstruction#withItContext(Condition)` aplica a condição do
+  `ITSTATE` e apaga `setFlags` nessas formas, preservando `CMP`/`CMN`/`TST` e as formas `.W` de 32 bits. Presente desde a
+  `1.0.0`. Teste: `Thumb16ItSetFlagsTest`.
+
 ## [1.4.0] — 2026-10-01
 
 Cobertura de ISA completa: `docs/COBERTURA-ISA.md` mede 100% (29619/29619 células aplicáveis decodificam).
