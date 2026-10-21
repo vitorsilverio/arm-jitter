@@ -83,15 +83,6 @@
                     <artifactId>maven-surefire-plugin</artifactId>
                     <version>3.5.3</version>
                 </plugin>
-                <!-- Fixado: o Maven do runner do GitHub passou a usar o install 3.2.0 por padrão e,
-                     com ele, o central-publishing 0.11.0 deixou os maven-metadata fora das pastas de
-                     versão no bundle ("Bundle has content that does NOT have a .pom file"). A 1.4.0
-                     publicou com o 3.1.4. -->
-                <plugin>
-                    <groupId>org.apache.maven.plugins</groupId>
-                    <artifactId>maven-install-plugin</artifactId>
-                    <version>3.1.4</version>
-                </plugin>
                 <plugin>
                     <groupId>org.apache.maven.plugins</groupId>
                     <artifactId>maven-source-plugin</artifactId>
@@ -128,7 +119,7 @@
                 <plugin>
                     <groupId>org.sonatype.central</groupId>
                     <artifactId>central-publishing-maven-plugin</artifactId>
-                    <version>0.11.0</version>
+                    <version>0.12.0</version>
                 </plugin>
                 <!-- Ver memória do agente feedback-testes-falhando-prioridade-cobertura (2026-09-18):
                      "os testes cobrem todos os fluxos?" se responde rodando coverage, não relendo o
